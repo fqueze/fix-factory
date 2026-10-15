@@ -1,0 +1,6 @@
+Bug 1787024 - Wait for the tab to finish closing before checking the session state, r=#sessionstore-reviewers,dao.
+
+The flush message can arrive after the tab is removed, so the test read a stale
+closed-tabs list. The skip-if being removed was added in bug 1787024.
+
+Differential Revision: https://phabricator.services.mozilla.com/D333321

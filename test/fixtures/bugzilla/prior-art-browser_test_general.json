@@ -1,0 +1,236 @@
+{
+ "http": {
+  "https://bugzilla.mozilla.org/rest/bug?quicksearch=browser_test_general.js&include_fields=id,summary,status,product,component,keywords,assigned_to,last_change_time&limit=50": {
+   "bugs": [
+    {
+     "keywords": [
+      "intermittent-failure",
+      "intermittent-testcase"
+     ],
+     "status": "REOPENED",
+     "summary": "Intermittent accessible/tests/browser/hittest/browser_test_general.js | single tracking bug",
+     "product": "Core",
+     "assigned_to": "nobody@mozilla.org",
+     "last_change_time": "2026-10-13T16:41:59Z",
+     "id": 1781926,
+     "component": "Disability Access APIs",
+     "assigned_to_detail": {
+      "email": "nobody@mozilla.org",
+      "real_name": "Nobody; OK to take it and work on it",
+      "nick": "nobody",
+      "id": 1,
+      "name": "nobody@mozilla.org"
+     }
+    },
+    {
+     "assigned_to_detail": {
+      "real_name": "Florian Quèze [:florian]",
+      "email": "florian@mozilla.com",
+      "name": "florian@mozilla.com",
+      "id": 149052,
+      "nick": "florian"
+     },
+     "component": "Disability Access APIs",
+     "id": 2081341,
+     "last_change_time": "2026-10-13T21:44:52Z",
+     "assigned_to": "florian@mozilla.com",
+     "summary": "Frequent macOS shipp accessible/tests/browser/hittest/browser_test_general.js | Timeout while waiting for cache update",
+     "product": "Core",
+     "status": "ASSIGNED",
+     "keywords": [
+      "intermittent-failure",
+      "intermittent-testcase"
+     ]
+    }
+   ]
+  },
+  "https://bugzilla.mozilla.org/rest/bug/1781926/attachment?include_fields=file_name,content_type,is_obsolete": {
+   "bugs": {
+    "1781926": [
+     {
+      "is_obsolete": 0,
+      "content_type": "text/x-phabricator-request",
+      "file_name": "phabricator-D177413-url.txt"
+     },
+     {
+      "file_name": "file_1781926.txt",
+      "content_type": "text/html",
+      "is_obsolete": 1
+     },
+     {
+      "is_obsolete": 0,
+      "content_type": "text/x-phabricator-request",
+      "file_name": "phabricator-D232763-url.txt"
+     }
+    ]
+   },
+   "attachments": {}
+  },
+  "https://bugzilla.mozilla.org/rest/bug/2081341/attachment?include_fields=file_name,content_type,is_obsolete": {
+   "attachments": {},
+   "bugs": {
+    "2081341": [
+     {
+      "file_name": "phabricator-D333361-url.txt",
+      "content_type": "text/x-phabricator-request",
+      "is_obsolete": 0
+     }
+    ]
+   }
+  }
+ },
+ "conduit": [
+  {
+   "method": "differential.revision.search",
+   "params": {
+    "constraints": {
+     "ids": [
+      177413,
+      232763,
+      333361
+     ]
+    },
+    "limit": 100
+   },
+   "result": {
+    "data": [
+     {
+      "id": 333361,
+      "type": "DREV",
+      "phid": "PHID-DREV-d5bqdrn3xt6ibqm6z67q",
+      "fields": {
+       "stackGraph": {
+        "PHID-DREV-d5bqdrn3xt6ibqm6z67q": [
+         "PHID-DREV-fgpsxetvu6kyhnf6dqzc"
+        ],
+        "PHID-DREV-fgpsxetvu6kyhnf6dqzc": []
+       },
+       "title": "Bug 2081341 - Wait in addAccessibleTask until a remote document's cached bounds match its browser's size. r?Jamie",
+       "uri": "https://phabricator.services.mozilla.com/D333361",
+       "authorPHID": "PHID-USER-4jlttcsengdawi5jugb4",
+       "status": {
+        "value": "needs-review",
+        "name": "Needs Review",
+        "closed": false,
+        "color.ansi": "magenta"
+       },
+       "repositoryPHID": "PHID-REPO-wxrrnneqyw2v3wcqbkfj",
+       "diffPHID": "PHID-DIFF-5h6gj5xnlu4zj5olgpjx",
+       "diffID": "1405048",
+       "summary": "\nA new remote document can load and send its accessibility cache before the\nbrowser has sent its size, so tasks could read bounds from a 0x0 layout.",
+       "testPlan": "",
+       "isDraft": false,
+       "holdAsDraft": false,
+       "dateCreated": 1791916371,
+       "dateModified": 1791942129,
+       "policy": {
+        "view": "public",
+        "edit": "PHID-PROJ-njo5uuqyyq3oijbkhy55"
+       },
+       "bugzilla.bug-id": "2081341",
+       "merge.conflict.status": {
+        "status": "clean",
+        "reason": "Merges cleanly when merged against target branch tip 3d7a306db34a, starting from 590945268fe4, the commit that landed D333360.",
+        "reasonCode": null,
+        "baseDiffCreationMethod": "moz-phab-git",
+        "baseDiffSourceControlSystem": "git",
+        "checkedAgainstCommit": "3d7a306db34a44d754856527a49fa4b8b8775df7",
+        "checkedAgainstBaseCommit": "590945268fe4b6a7e7ad24f4e3899893e7879c1e",
+        "checkedAgainstBaseRevisionPHID": "PHID-DREV-fgpsxetvu6kyhnf6dqzc",
+        "checkedAgainstDiffPHID": "PHID-DIFF-5h6gj5xnlu4zj5olgpjx",
+        "checkedAgainstDiffID": 1405048,
+        "epoch": 1791971646,
+        "isStale": false,
+        "hint": null
+       },
+       "uplift.request": []
+      },
+      "attachments": {}
+     },
+     {
+      "id": 232763,
+      "type": "DREV",
+      "phid": "PHID-DREV-fxcdfsghm4bp55hdwyab",
+      "fields": {
+       "stackGraph": {
+        "PHID-DREV-fxcdfsghm4bp55hdwyab": []
+       },
+       "title": "Bug 1781926 - Temporarily disable tests on macOS 10.15 debug for frequent failures r=#intermittent-reviewers,nlapre",
+       "uri": "https://phabricator.services.mozilla.com/D232763",
+       "authorPHID": "PHID-USER-saypikgwxfapv3bicurp",
+       "status": {
+        "value": "published",
+        "name": "Closed",
+        "closed": true,
+        "color.ansi": "cyan"
+       },
+       "repositoryPHID": "PHID-REPO-saax4qdxlbbhahhp2kg5",
+       "diffPHID": "PHID-DIFF-cqsltrubxawditfolod4",
+       "diffID": "963394",
+       "summary": "",
+       "testPlan": "",
+       "isDraft": false,
+       "holdAsDraft": false,
+       "dateCreated": 1734727645,
+       "dateModified": 1756848112,
+       "policy": {
+        "view": "public",
+        "edit": "PHID-PROJ-njo5uuqyyq3oijbkhy55"
+       },
+       "bugzilla.bug-id": "1781926",
+       "merge.conflict.status": null,
+       "uplift.request": []
+      },
+      "attachments": {}
+     },
+     {
+      "id": 177413,
+      "type": "DREV",
+      "phid": "PHID-DREV-bvp2udsqwobkf7m7sibw",
+      "fields": {
+       "stackGraph": {
+        "PHID-DREV-bvp2udsqwobkf7m7sibw": []
+       },
+       "title": "Bug 1781926: Verify image map exists before hittesting its conetnts r?Jamie",
+       "uri": "https://phabricator.services.mozilla.com/D177413",
+       "authorPHID": "PHID-USER-lmegrwffx67e2xxsnkfv",
+       "status": {
+        "value": "published",
+        "name": "Closed",
+        "closed": true,
+        "color.ansi": "cyan"
+       },
+       "repositoryPHID": "PHID-REPO-saax4qdxlbbhahhp2kg5",
+       "diffPHID": "PHID-DIFF-yqz22idab2egjge3u6ix",
+       "diffID": "733575",
+       "summary": "",
+       "testPlan": "",
+       "isDraft": false,
+       "holdAsDraft": false,
+       "dateCreated": 1683578272,
+       "dateModified": 1756848112,
+       "policy": {
+        "view": "public",
+        "edit": "PHID-PROJ-njo5uuqyyq3oijbkhy55"
+       },
+       "bugzilla.bug-id": "1781926",
+       "merge.conflict.status": null,
+       "uplift.request": []
+      },
+      "attachments": {}
+     }
+    ],
+    "maps": {},
+    "query": {
+     "queryKey": null
+    },
+    "cursor": {
+     "limit": 100,
+     "after": null,
+     "before": null,
+     "order": null
+    }
+   }
+  }
+ ]
+}

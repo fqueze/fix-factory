@@ -1,0 +1,7 @@
+Bug 1787024 - Fix the test r?sessionstore-reviewers
+The test fails 12/12 on linux, see Foo.cpp:359 and
+https://treeherder.mozilla.org/jobs?repo=try&revision=abc.
+The root cause is a race; this patch does not address the leak.
+The previous patch in the stack handles the other case.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
