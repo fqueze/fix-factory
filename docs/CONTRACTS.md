@@ -79,7 +79,7 @@ cache/artifacts/<taskId>/...      # downloaded try logs and profiles
 ## Agents
 
 - `src/agents/run.ts` builds the command `config.claudeCommand + ["-p", "--output-format", "stream-json",
-  "--verbose", "--session-id", id, "--model", model, "--json-schema", schema]` and runs it as a job in the item's
+  "--verbose", "--session-id", id, "--model", model, "--json-schema", schema, "--settings", <2 h command limit>]` and runs it as a job in the item's
   worktree. The rendered prompt is written to `jobs/<jobId>/prompt.md` and passed as stdin (job spec `stdinFile`),
   because Linux limits one argument to 128 KiB. A follow-up uses `--resume <id>` in place of `--session-id`.
 - **Result:** the last stream-json line, `type: "result"`, carries `structured_output` (the report),

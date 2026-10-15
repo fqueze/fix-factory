@@ -39,6 +39,10 @@ export type AgentCommandOptions = {
   schema: object | string; // a parsed schema, or its JSON text
 } & ({ sessionId: string; resume?: undefined } | { resume: string; sessionId?: undefined });
 
+// Builds and test runs take longer than Claude Code's 10-minute command limit. Without a higher one,
+// agents run them in the background, and a headless session ends before they finish.
+const AGENT_SETTINGS = JSON.stringify({ env: { BASH_DEFAULT_TIMEOUT_MS: "7200000", BASH_MAX_TIMEOUT_MS: "7200000" } });
+
 export function buildAgentCommand(config: Pick<FactoryConfig, "claudeCommand">, opts: AgentCommandOptions): string[] {
   const schema = typeof opts.schema === "string" ? opts.schema : JSON.stringify(opts.schema);
   const session = opts.resume !== undefined ? ["--resume", opts.resume] : ["--session-id", opts.sessionId];
@@ -53,6 +57,8 @@ export function buildAgentCommand(config: Pick<FactoryConfig, "claudeCommand">, 
     opts.model,
     "--json-schema",
     schema,
+    "--settings",
+    AGENT_SETTINGS,
   ];
 }
 
