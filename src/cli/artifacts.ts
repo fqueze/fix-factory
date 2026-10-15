@@ -1,10 +1,13 @@
 // artifacts.ts: downloads a test job's logs and profiles from Taskcluster.
 //
 //   node src/cli/artifacts.ts fetch <taskId> [--run N] --into <dir>
-//     → {taskId, run, files: [{kind, name, path, bytes, skipped?}], missing: [{name, reason}]}
+//     → {taskId, run, state, files: [{kind, name, path, bytes, skipped?}], missing: [{name, reason}]}
 //       kind: "log" (live_backing.log) | "errorsummary" | "test-profile" (profile_<test>.json[.gz],
 //       including the retry's profile_<test>-2…) | "resource-profile" (profile_resource-usage.json).
-//       name is the artifact's file name, and the file is saved as <dir>/<name>.
+//       name is the artifact's file name, and the file is saved as <dir>/<run>/<name>: a retried
+//       task's runs each have their own logs.
+//       state: the run's Taskcluster state. A run that hasn't finished (pending or running) is refused,
+//       since its artifacts aren't all uploaded yet.
 //       skipped: the file was already there (fetch is idempotent).
 //       missing: a profile or error summary named by an `Artifact` marker of the resource-usage
 //       profile that couldn't be downloaded, or no resource-usage profile at all (a job killed
@@ -18,7 +21,7 @@ import { createWriteStream, existsSync, mkdirSync, readFileSync, renameSync, rmS
 import { join } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
-import { log, runCli } from "../lib/cli.ts";
+import { log, runCli, UsageError } from "../lib/cli.ts";
 
 export const QUEUE = "https://firefox-ci-tc.services.mozilla.com/api/queue/v1";
 const TEST_INFO = "public/test_info/";
@@ -36,6 +39,7 @@ export interface FetchedFile {
 export interface FetchResult {
   taskId: string;
   run: number;
+  state: string;
   files: FetchedFile[];
   missing: { name: string; reason: string }[];
 }
@@ -70,11 +74,15 @@ async function getJson(url: string, fetchImpl: Fetch): Promise<unknown> {
   return res.json();
 }
 
-export async function latestRun(taskId: string, fetchImpl: Fetch = fetch): Promise<number> {
-  const s = (await getJson(`${QUEUE}/task/${taskId}/status`, fetchImpl)) as { status: { runs?: { runId: number }[] } };
+const FINISHED = new Set(["completed", "failed", "exception"]);
+
+// The requested run (the latest by default) and its state.
+export async function runState(taskId: string, run: number | undefined, fetchImpl: Fetch = fetch): Promise<{ run: number; state: string }> {
+  const s = (await getJson(`${QUEUE}/task/${taskId}/status`, fetchImpl)) as { status: { runs?: { runId: number; state: string }[] } };
   const runs = s.status.runs ?? [];
-  if (!runs.length) throw new Error(`task ${taskId} has no runs`);
-  return runs[runs.length - 1].runId;
+  const r = run === undefined ? runs[runs.length - 1] : runs.find((x) => x.runId === run);
+  if (!r) throw new Error(run === undefined ? `task ${taskId} has no runs` : `task ${taskId} has no run ${run}`);
+  return { run: r.runId, state: r.state };
 }
 
 export async function listArtifacts(taskId: string, run: number, fetchImpl: Fetch = fetch): Promise<Artifact[]> {
@@ -155,8 +163,10 @@ export async function fetchArtifacts(
   opts: { run?: number; into: string; fetchImpl?: Fetch },
 ): Promise<FetchResult> {
   const fetchImpl = opts.fetchImpl ?? fetch;
-  const run = opts.run ?? (await latestRun(taskId, fetchImpl));
-  mkdirSync(opts.into, { recursive: true });
+  const { run, state } = await runState(taskId, opts.run, fetchImpl);
+  if (!FINISHED.has(state)) throw new Error(`run ${run} of task ${taskId} is ${state}: fetch its artifacts once it has finished`);
+  const dir = join(opts.into, String(run));
+  mkdirSync(dir, { recursive: true });
   const listing = await listArtifacts(taskId, run, fetchImpl);
   const wanted = selectArtifacts(listing);
   const files: FetchedFile[] = [];
@@ -164,7 +174,7 @@ export async function fetchArtifacts(
 
   const get = async (name: string, kind: ArtifactKind): Promise<boolean> => {
     const base = baseName(name);
-    const path = join(opts.into, base);
+    const path = join(dir, base);
     if (existsSync(path)) {
       files.push({ kind, name: base, path, bytes: statSync(path).size, skipped: true });
       return true;
@@ -183,7 +193,7 @@ export async function fetchArtifacts(
   const resource = wanted.find((w) => w.kind === "resource-profile");
   let markerNames: string[] = [];
   if (resource && (await get(resource.name, resource.kind))) {
-    markerNames = artifactMarkerFilenames(readFileSync(join(opts.into, baseName(resource.name)), "utf8"));
+    markerNames = artifactMarkerFilenames(readFileSync(join(dir, baseName(resource.name)), "utf8"));
   } else if (!resource) {
     missing.push({ name: "profile_resource-usage.json", reason: "not in the artifact listing" });
   }
@@ -198,7 +208,7 @@ export async function fetchArtifacts(
     log(`${fileName} is named by an Artifact marker but not in the listing; fetching it directly`);
     await get(name, kind);
   }
-  return { taskId, run, files, missing };
+  return { taskId, run, state, files, missing };
 }
 
 if (import.meta.main) {
@@ -206,9 +216,9 @@ if (import.meta.main) {
     {
       fetch: async ([taskId], values) => {
         const into = values.into as string | undefined;
-        if (!taskId || !into) throw new Error("usage: fetch <taskId> [--run N] --into <dir>");
+        if (!taskId || !into) throw new UsageError("usage: fetch <taskId> [--run N] --into <dir>");
         const run = values.run === undefined ? undefined : Number(values.run);
-        if (run !== undefined && !Number.isInteger(run)) throw new Error(`--run must be a run number, got ${values.run}`);
+        if (run !== undefined && !Number.isInteger(run)) throw new UsageError(`--run must be a run number, got ${values.run}`);
         return fetchArtifacts(taskId, { run, into });
       },
     },

@@ -6,7 +6,6 @@ import {
   cluster,
   collect,
   configOf,
-  FxTestsError,
   GENERIC_MESSAGES,
   history,
   isGeneric,
@@ -40,12 +39,12 @@ function deps(capture: Partial<TryCapture>, tests: Record<string, unknown> = {},
       if (cmd === "try") return capture.try;
       if (cmd === "task") {
         const r = capture.tasks?.[arg];
-        if (!r) throw new FxTestsError(`no fixture for task ${arg}`, 2);
-        if (!r.ok) throw new FxTestsError(r.error, 3);
+        if (!r) throw new Error(`no fixture for task ${arg}`);
+        if (!r.ok) throw new Error(r.error);
         return r.task;
       }
       if (cmd === "test") {
-        if (!tests[arg]) throw new FxTestsError(`fx-tests: no such test ${arg}`, 2);
+        if (!tests[arg]) throw new Error(`fx-tests: no such test ${arg}`);
         return tests[arg];
       }
       if (cmd === "flaky") return flaky;
@@ -189,12 +188,69 @@ test("buildTryTable: a failed job with no test failure is unparsed", () => {
   assert.deepEqual(t.unparsed, [
     {
       taskId: "HdfZH6_BTgWPiHJkv4ntMg",
+      retryId: 0,
       jobName: "test-android-em-14-x86_64/opt-geckoview-xpcshell-2",
       config: "test-android-em-14-x86_64/opt-geckoview-xpcshell",
       result: "testfailed",
       reason: "fx-tests attributed no failure to a test in this job",
     },
   ]);
+});
+
+test("try-table: a job fx-tests can't read falls back to the push view and stays unparsed", async () => {
+  const capture: TryCapture = load("try-b0e7e1700424.json");
+  const linux = "RZLa8YCLTly4eYhOPFYYyA";
+  capture.tasks[`${linux}.0`] = { ok: false, error: "fx-tests task RZLa8YCLTly4eYhOPFYYyA.0 --json --quiet exited with 3: fx-tests: upstream unavailable" };
+  const t = await tryTable("b0e7e1700424", {}, deps(capture));
+  const cell = (test: string) => t.rows.find((r) => r.test === test && r.config === "test-linux2404-64/opt-xpcshell");
+  // Blamed by the push view: still a failure.
+  assert.equal(cell("memory/replace/dmd/test/test_dmd.js")?.result, "fail");
+  // Its other tests have no result: not-run, and the job is listed.
+  assert.equal(cell("intl/uconv/tests/unit/test_encode_8859-4.js")?.result, "not-run");
+  assert.deepEqual(t.unparsed, [
+    { taskId: linux, retryId: 0, jobName: "test-linux2404-64/opt-xpcshell", config: "test-linux2404-64/opt-xpcshell", result: "testfailed", reason: "upstream unavailable" },
+  ]);
+});
+
+test("try-table: a green job fx-tests can't read is unparsed too", async () => {
+  const capture: TryCapture = load("try-b0e7e1700424.json");
+  capture.tasks["aLDCVvafRYuahrJawvWhZg.0"] = { ok: false, error: "fx-tests: profile expired" };
+  const t = await tryTable("b0e7e1700424", {}, deps(capture));
+  assert.deepEqual(
+    t.unparsed.map((u) => [u.taskId, u.retryId, u.result]),
+    [["aLDCVvafRYuahrJawvWhZg", 0, "success"]],
+  );
+});
+
+test("try-table: a run with result retry is ignored in favour of its rerun", async () => {
+  const capture: TryCapture = load("try-b0e7e1700424.json");
+  const names = capture.jobs.job_property_names;
+  const [taskIdx, retryIdx, resultIdx] = ["task_id", "retry_id", "result"].map((n) => names.indexOf(n));
+  const linux = "RZLa8YCLTly4eYhOPFYYyA";
+  const row = capture.jobs.results.find((r) => r[taskIdx] === linux)!;
+  const retried = [...row];
+  retried[resultIdx] = "retry";
+  row[retryIdx] = 1;
+  capture.jobs.results.push(retried);
+  const r = capture.tasks[`${linux}.0`];
+  assert.ok(r.ok);
+  delete capture.tasks[`${linux}.0`]; // reading run 0 would throw in deps()
+  capture.tasks[`${linux}.1`] = { ok: true, task: { ...r.task, retryId: 1 } };
+  const before = await tryTable("b0e7e1700424", {}, deps(load("try-b0e7e1700424.json")));
+  const t = await tryTable("b0e7e1700424", {}, deps(capture));
+  assert.deepEqual(t.unparsed, []);
+  assert.deepEqual(t.rows, before.rows);
+});
+
+test("try-table: a failure with passing retriggers lists them", async () => {
+  const capture: TryCapture = load("try-fbbe37af13b3.json");
+  const t = await tryTable("fbbe37af13b3", {}, deps(capture));
+  const row = t.rows.find(
+    (r) => r.test === "accessible/tests/browser/bounds/browser_test_simple_transform.js" && r.config === "test-macosx1500-aarch64/debug-mochitest-browser-a11y",
+  );
+  assert.equal(row?.result, "fail");
+  assert.ok(row.passTaskIds && row.passTaskIds.length >= 1);
+  assert.ok(row.passTaskIds.every((id) => !row.taskIds.includes(id) || row.passedOnRerun));
 });
 
 // ---------------------------------------------------------------------------
@@ -275,6 +331,12 @@ test("normalizeMessage strips numbers, hex, uuids, paths, timings, pids and port
   assert.equal(normalizeMessage("Connection to http://localhost:49152/foo refused after 1500ms"), normalizeMessage("Connection to http://localhost:8080/foo refused after 3 s"));
   assert.equal(normalizeMessage("[Parent 1234, Main Thread] WARNING"), normalizeMessage("[Parent 98, Main Thread] WARNING"));
   assert.equal(normalizeMessage("Failed to load URL: 804b0014"), "failed to load url: <hex>");
+  // Only the port after a host; line and column numbers stay part of the URL.
+  assert.equal(
+    normalizeMessage("error at resource://testing-common/sinon-7.2.7.js:1234:56"),
+    "error at resource://testing-common/sinon-<n>.<n>.js:<n>:<n>",
+  );
+  assert.equal(normalizeMessage("GET http://127.0.0.1:8888/tests/dom/a/b.html failed"), "get http://<n>.<n>:<port>/tests/dom/a/b.html failed");
 });
 
 test("generic messages", () => {
@@ -290,6 +352,10 @@ test("generic messages", () => {
     "(no message recorded, status FAIL)",
     "[run_test : 11] false == true",
     "[test : 322] 6 == 9",
+    " - Got 2, expected 3",
+    "undefined - Got 2, expected 3",
+    "uncaught exception: [object Object]",
+    "Test timed out.",
     "",
   ]) {
     assert.ok(isGeneric(m), m);
@@ -300,6 +366,8 @@ test("generic messages", () => {
     'uncaught rejection: Phase "profile-before-change" is finished, it is too late to register completion',
     "[test_menu_onInstalled : 42] stored menus size - 3 == 0",
     "TypeError: can't convert symbol to string at /builds/worker/head.js:996",
+    "Number of tabs - Got 2, expected 3",
+    "Test timed out waiting for the popup to open",
   ]) {
     assert.ok(!isGeneric(m), m);
   }
@@ -335,13 +403,28 @@ test("cluster groups specific messages across tests, never generic ones", () => 
   assert.equal(b?.ratePerWeek, 6);
 });
 
-test("cluster: the same rate on one test and config counts once", () => {
+test("cluster: a per-test rate counts once per config, per-message rates add up", () => {
+  const perTest = cluster([
+    { test: "t.js", config: "c", message: "[f : 1] Got 3 items", taskIds: ["x"], count: 1, rate: 5, rateScope: "test" },
+    { test: "t.js", config: "c", message: "[f : 2] Got 4 items", taskIds: ["y"], count: 1, rate: 5, rateScope: "test" },
+  ]);
+  assert.equal(perTest.groups.length, 1);
+  assert.equal(perTest.groups[0].ratePerWeek, 5);
+  const perMessage = cluster([
+    { test: "t.js", config: "c", message: "[f : 1] Got 3 items", taskIds: ["x"], count: 1, rate: 5, rateScope: "message" },
+    { test: "t.js", config: "c", message: "[f : 2] Got 4 items", taskIds: ["y"], count: 1, rate: 2, rateScope: "message" },
+  ]);
+  assert.equal(perMessage.groups[0].ratePerWeek, 7);
+});
+
+test("cluster: messages differing only by a number group together", () => {
+  // Deliberately coarse: merge-clusters.md reviews the groups, and can split this one.
   const { groups } = cluster([
-    { test: "t.js", config: "c", message: "[f : 1] Got 3 items", taskIds: ["x"], count: 1, rate: 5 },
-    { test: "t.js", config: "c", message: "[f : 2] Got 4 items", taskIds: ["y"], count: 1, rate: 5 },
+    { test: "a.js", config: "c", message: "Request failed with status code: 404", taskIds: ["x"], count: 1 },
+    { test: "b.js", config: "c", message: "Request failed with status code: 500", taskIds: ["y"], count: 1 },
   ]);
   assert.equal(groups.length, 1);
-  assert.equal(groups[0].ratePerWeek, 5);
+  assert.deepEqual(groups[0].tests, ["a.js", "b.js"]);
 });
 
 test("cluster on a real push groups the migration tests' shared failure", async () => {

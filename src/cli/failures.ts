@@ -1,7 +1,7 @@
 // failures.ts: everything built on `fx-tests --json`.
 //
 //   node src/cli/failures.ts collect <rev|folder>
-//     → CollectedFailure[]: [{test, config, message, taskIds, count, rate?, failPercent?, runs?}]
+//     → CollectedFailure[]: [{test, config, message, taskIds, count, rate?, rateScope?, failPercent?, runs?}]
 //       taskIds: every failing task for a try push, the MAX_TASK_IDS most recent for a folder.
 //       One entry per (test, config, message). `config` is the job name without its chunk number.
 //       For a folder (mozilla-central history, fx-tests' 21-day window): count = failures in the window,
@@ -24,39 +24,27 @@
 //
 //   node src/cli/failures.ts try-table <rev> [--test <path>]...
 //     → TryTable: {rev, pushId, project, complete, pending, configs, rows, unparsed}
-//       rows: [{test, config, result: "pass"|"fail"|"not-run", failures: [message], taskIds, passedOnRerun?}]
-//       unparsed: [{taskId, jobName, config, result, reason}]
+//       rows: [{test, config, result: "pass"|"fail"|"not-run", failures: [message], taskIds, passedOnRerun?, passTaskIds?}]
+//       unparsed: [{taskId, retryId, jobName, config, result, reason}]
 //       Rows cover every test that failed somewhere on the push, plus the --test ones, on each config
 //       of their suite the push targeted. "not-run" = no recorded execution there (skipped, pending,
 //       not scheduled, or in a job whose results fx-tests couldn't read): absence is never a pass.
 //       unparsed = failed jobs where fx-tests attributed no failure to any test (harness crash, hang
-//       with no test_end, setup failure, killed for exceeding max run time), plus failed non-test jobs.
+//       with no test_end, setup failure, killed for exceeding max run time), finished test jobs fx-tests
+//       couldn't read even if green, and failed non-test jobs. Runs with result "retry" are superseded
+//       by their rerun and ignored.
 
 import { readFileSync } from "node:fs";
-import { exec } from "../lib/exec.ts";
-import { log, runCli } from "../lib/cli.ts";
+import { execJson } from "../lib/exec.ts";
+import { log, runCli, UsageError } from "../lib/cli.ts";
 import type { FailureGroup } from "../types.ts";
 
 // ---------------------------------------------------------------------------
 // Running fx-tests
 
-export class FxTestsError extends Error {
-  code: number;
-  constructor(message: string, code: number) {
-    super(message);
-    this.code = code;
-  }
-}
-
 export type FxRunner = (args: string[]) => Promise<unknown>;
 
-export const runFxTests: FxRunner = async (args) => {
-  const r = await exec(["fx-tests", ...args, "--json", "--quiet"]);
-  if (r.code !== 0) {
-    throw new FxTestsError(`fx-tests ${args.join(" ")} exited with ${r.code}: ${r.stderr.trim().slice(0, 2000)}`, r.code);
-  }
-  return JSON.parse(r.stdout);
-};
+export const runFxTests: FxRunner = (args) => execJson(["fx-tests", ...args, "--json", "--quiet"]);
 
 export type JsonFetcher = (url: string) => Promise<unknown>;
 
@@ -111,8 +99,6 @@ interface FxTry {
   revision: string;
   pushId: number;
   project: string;
-  jobCount: number;
-  failedJobCount: number;
   unblamedJobCount?: number;
   permaFails: FxTryFailure[];
   knownIntermittents: FxTryFailure[];
@@ -217,6 +203,7 @@ export interface CollectedFailure {
   taskIds: string[]; // for a folder, the MAX_TASK_IDS most recent
   count: number;
   rate?: number; // failures per week
+  rateScope?: "message" | "test"; // what rate counts: failures with this message, or any failure of the test
   failPercent?: number;
   runs?: number;
 }
@@ -269,6 +256,7 @@ export function failuresFromHistory(t: FxTest): CollectedFailure[] {
   for (const f of byKey.values()) {
     f.taskIds = f.taskIds.slice(-MAX_TASK_IDS);
     f.rate = round((f.count / days) * 7);
+    f.rateScope = "message";
     const runs = runsByConfig.get(f.config);
     if (runs) {
       f.runs = runs;
@@ -341,6 +329,7 @@ export async function collectTry(rev: string, deps: Deps = defaultDeps): Promise
     const failCount = runs.reduce((s, c) => s + c.failCount, 0);
     f.runs = runCount;
     f.rate = round((failCount / (h.metadata.dayCount || 1)) * 7);
+    f.rateScope = "test";
     f.failPercent = runCount ? round((100 * failCount) / runCount) : 0;
   }
   return out.sort((a, b) => a.test.localeCompare(b.test) || a.config.localeCompare(b.config));
@@ -392,7 +381,7 @@ export function historyFrom(t: FxTest): History {
       const config = configOf(c.jobName);
       const s = seen.get(config);
       return {
-        config: c.jobName === config ? config : c.jobName,
+        config,
         runs: c.runCount,
         failures: c.failCount,
         failPercent: round(c.failRate),
@@ -448,7 +437,7 @@ export const GENERIC_MESSAGES: { pattern: RegExp; why: string }[] = [
   { pattern: /^$/, why: "empty" },
   { pattern: /^\(no message recorded/, why: "fx-tests found no message" },
   { pattern: /^failure details not recorded/, why: "fx-tests found no message" },
-  { pattern: /^test timed out\b/, why: "timeout, without what was being waited for" },
+  { pattern: /^test timed out\.?( -)?$/, why: "timeout, without what was being waited for" },
   { pattern: /^test exceeded (the )?time limit/, why: "timeout" },
   { pattern: /^this test exceeded the timeout threshold/, why: "slowness warning" },
   { pattern: /^application timed out after <n>( seconds)? with no output/, why: "harness timeout" },
@@ -460,7 +449,7 @@ export const GENERIC_MESSAGES: { pattern: RegExp; why: string }[] = [
   { pattern: /^(leakcheck \| )?\S* ?(process: )?<n> bytes leaked$/, why: "leak total without the leaked objects" },
   { pattern: /^(leakcheck \| )?missing output line for total leaks/, why: "leak check infrastructure" },
   { pattern: /^unexpected exception undefined\b/, why: "no exception message" },
-  { pattern: /^(uncaught exception|uncaught rejection|a promise chain failed to handle a rejection)( -|:)? ?(undefined|null|\(unable to convert rejection reason to string\.?\))?$/, why: "no reason given" },
+  { pattern: /^(uncaught exception|uncaught rejection|a promise chain failed to handle a rejection)( -|:)? ?(undefined|null|\[object object\]|\(unable to convert rejection reason to string\.?\))?$/, why: "no reason given" },
   { pattern: /^assertion count <n> is (greater|less) than expected/, why: "count only" },
   { pattern: /^shutdown hang\b|^shutdown timeout\b/, why: "hang without a stack" },
   { pattern: /^\[unknown\]$/, why: "crash without a signature" },
@@ -468,6 +457,10 @@ export const GENERIC_MESSAGES: { pattern: RegExp; why: string }[] = [
   {
     pattern: /^\[[\w$.]+ : <n>\] (<n>|true|false|null|undefined|"[^"]*") (==|===|!=|!==|deepequal|>|<|>=|<=) (<n>|true|false|null|undefined|"[^"]*")$/,
     why: "assertion without a description: only the function name says where",
+  },
+  {
+    pattern: /^(\[[\w$.]+ : <n>\] )?((undefined|null) )?- got [^,]*, expected .*$/,
+    why: "assertion without a description",
   },
 ];
 
@@ -479,13 +472,17 @@ export function normalizeMessage(message: string): string {
   let m = message.trim();
   m = m.replace(/^TEST-UNEXPECTED-[A-Z]+ \| [^|]+ \| /, "");
   m = m.replace(/\{?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\}?/gi, "<uuid>");
-  m = m.replace(/\b(?:file|resource|chrome|moz-extension|https?):\/\/[^\s'"()]*/gi, (url) => url.replace(/:\d+/g, ":<port>"));
-  // Unix and Windows paths with at least two components. A source file keeps its name, which says
-  // where the code failed; any other path (profile dirs, test data) becomes <path>.
-  m = m.replace(/(?<![\w:])(?:[A-Za-z]:)?(?:[\\/][\w.@~+-]+){2,}/g, (p) => {
-    const base = p.split(/[\\/]/).pop() ?? "";
-    return SOURCE_FILE.test(base) ? base : "<path>";
-  });
+  // URLs keep their path, with the port after the host normalized. Unix and Windows paths with at
+  // least two components become <path>, except a source file, which keeps its name: it says where
+  // the code failed, while other paths (profile dirs, test data) differ between runs.
+  m = m.replace(
+    /\b((?:file|resource|chrome|moz-extension|https?):\/\/[^\s'"()`]*)|(?<![\w:])(?:[A-Za-z]:)?(?:[\\/][\w.@~+-]+){2,}/gi,
+    (match, url: string | undefined) => {
+      if (url) return url.replace(/^([a-z-]+:\/\/[^/:]*):\d+/i, "$1:<port>");
+      const base = match.split(/[\\/]/).pop() ?? "";
+      return SOURCE_FILE.test(base) ? base : "<path>";
+    },
+  );
   m = m.replace(/\b0x[0-9a-f]+\b/gi, "<hex>");
   m = m.replace(/\b(?=[0-9a-f]*\d)(?=[0-9a-f]*[a-f])[0-9a-f]{8,}\b/gi, "<hex>");
   m = m.replace(/\d+(\.\d+)?/g, "<n>");
@@ -522,10 +519,11 @@ function addTo(a: Acc, f: CollectedFailure): void {
   a.configs.add(f.config);
   for (const t of f.taskIds ?? []) a.taskIds.add(t);
   if (f.rate !== undefined) {
-    // For a try push, rate is the test's central rate on the config whatever the message, so two
-    // messages of one test on one config carry the same rate: count it once.
     const k = `${f.test}\n${f.config}`;
-    a.rates.set(k, Math.max(a.rates.get(k) ?? 0, f.rate));
+    const prev = a.rates.get(k) ?? 0;
+    // A per-test rate (try push) is the same for every message of one test on one config: count it
+    // once. Per-message rates (folder history) add up.
+    a.rates.set(k, f.rateScope === "test" ? Math.max(prev, f.rate) : prev + f.rate);
   }
 }
 
@@ -576,10 +574,12 @@ export interface TryRow {
   failures: string[];
   taskIds: string[];
   passedOnRerun?: boolean;
+  passTaskIds?: string[]; // jobs of this config where it passed, e.g. retriggers of an intermittent
 }
 
 export interface UnparsedJob {
   taskId: string;
+  retryId: number;
   jobName: string;
   config: string;
   result: string;
@@ -693,9 +693,12 @@ export function buildTryTable(t: FxTry, jobs: TreeherderJob[], tasks: Map<string
   // Only for jobs fx-tests task couldn't read: the push view mixes the messages of every config.
   for (const f of tryFailures(t)) {
     for (const x of f.taskIds ?? []) {
-      if (tasks.get(`${x.taskId}.${x.retryId}`)?.ok) continue;
+      const id = `${x.taskId}.${x.retryId}`;
+      const r = tasks.get(id);
+      if (r?.ok) continue;
       addFail(f.path, configOf(x.jobName), messagesOf(f), x.taskId);
-      blamed.add(`${x.taskId}.${x.retryId}`);
+      // A job fx-tests task couldn't read stays unparsed: its other tests have no result at all.
+      if (!r) blamed.add(id);
     }
   }
 
@@ -709,7 +712,15 @@ export function buildTryTable(t: FxTry, jobs: TreeherderJob[], tasks: Map<string
       if (c && c.fail.size) {
         const ids = new Set<string>();
         for (const s of c.fail.values()) for (const id of s) ids.add(id);
-        rows.push({ test, config, result: "fail", failures: [...c.fail.keys()], taskIds: [...ids], ...(c.passedOnRerun ? { passedOnRerun: true } : {}) });
+        rows.push({
+          test,
+          config,
+          result: "fail",
+          failures: [...c.fail.keys()],
+          taskIds: [...ids],
+          ...(c.passedOnRerun ? { passedOnRerun: true } : {}),
+          ...(c.pass.size ? { passTaskIds: [...c.pass] } : {}),
+        });
       } else if (c && c.pass.size) {
         rows.push({ test, config, result: "pass", failures: [], taskIds: [...c.pass] });
       } else {
@@ -720,16 +731,19 @@ export function buildTryTable(t: FxTry, jobs: TreeherderJob[], tasks: Map<string
 
   const unparsed: UnparsedJob[] = [];
   for (const j of jobs) {
-    if (j.state !== "completed" || !FAILED_RESULTS.has(j.result)) continue;
+    if (j.state !== "completed") continue;
     const id = `${j.task_id}.${j.retry_id}`;
-    if (blamed.has(id)) continue;
     const r = tasks.get(id);
-    const reason = !j.job_type_name.startsWith("test-")
-      ? "not a test job"
-      : r && !r.ok
-        ? firstLine(r.error)
-        : "fx-tests attributed no failure to a test in this job";
-    unparsed.push({ taskId: j.task_id, jobName: j.job_type_name, config: configOf(j.job_type_name), result: j.result, reason });
+    let reason: string;
+    if (r && !r.ok) {
+      // Green jobs too: none of their tests has a result.
+      reason = firstLine(r.error);
+    } else if (FAILED_RESULTS.has(j.result) && !blamed.has(id)) {
+      reason = j.job_type_name.startsWith("test-") ? "fx-tests attributed no failure to a test in this job" : "not a test job";
+    } else {
+      continue;
+    }
+    unparsed.push({ taskId: j.task_id, retryId: j.retry_id, jobName: j.job_type_name, config: configOf(j.job_type_name), result: j.result, reason });
   }
 
   const pending = jobs.filter((j) => j.state !== "completed").length;
@@ -746,20 +760,20 @@ if (import.meta.main) {
   await runCli(
     {
       collect: async ([target]) => {
-        if (!target) throw new Error("usage: collect <rev|folder>");
+        if (!target) throw new UsageError("usage: collect <rev|folder>");
         return collect(target);
       },
       history: async ([test]) => {
-        if (!test) throw new Error("usage: history <test>");
+        if (!test) throw new UsageError("usage: history <test>");
         return history(test);
       },
       cluster: async ([file]) => {
-        if (!file) throw new Error("usage: cluster <failures.json|->");
+        if (!file) throw new UsageError("usage: cluster <failures.json|->");
         const text = readFileSync(file === "-" ? 0 : file, "utf8");
         return cluster(JSON.parse(text) as CollectedFailure[]);
       },
       "try-table": async ([rev], values) => {
-        if (!rev) throw new Error("usage: try-table <rev> [--test <path>]...");
+        if (!rev) throw new UsageError("usage: try-table <rev> [--test <path>]...");
         return tryTable(rev, { tests: (values.test as string[] | undefined) ?? [] });
       },
     },
