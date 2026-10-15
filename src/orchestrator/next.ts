@@ -832,6 +832,15 @@ class Planner {
       this.resumeAuthor(item.id, `author:${item.id}${e}:lint:${author.job}`, "lint", `lint-text.ts found these problems:\n${list}\n\nFix them, amending your commit (keep everything else), then end with the JSON report again.`);
       return;
     }
+    const reviewed = () => {
+      if (!WITH_PATCHES.includes(item.state) || item.state === "addressing review comments") this.setItem(item.id, "reviewed");
+    };
+    // The nits pass, and any lint fixes after it, only get the lint again: no new critical review.
+    const jobs = this.authorJobs(item.id);
+    if (jobs.slice(0, jobs.indexOf(author) + 1).findLast((j) => j.purpose.reason !== "lint")?.purpose.reason === "nits") {
+      reviewed();
+      return;
+    }
     const reviews = patches.map((p) =>
       this.wantAgent(`review:${p.id}:${author.job}`, "review", "review-patch", { sha: p.sha, worktree: cwd, report: reportPath(this.config, this.s.id, author.job) }, {
         cwd,
@@ -846,10 +855,15 @@ class Planner {
       const rep = this.rep<ReviewPatchReport>(r!);
       return rep.verdict === "findings" ? rep.findings.map((f) => ({ ...f, job: r! })) : [];
     });
-    // Nits don't send the patch back (the review handler notes them); must-fix findings do.
+    if (findings.length === 0) {
+      reviewed();
+      return;
+    }
+    const list = findings.map((f) => `- [${f.severity}]${f.file ? ` ${f.file}${f.line ? `:${f.line}` : ""}` : ""} ${f.text}`).join("\n");
+    // Nits alone get one author pass that isn't a round: counting them used up REVIEW_ROUNDS.
     const mustFix = findings.filter((f) => f.severity === "must-fix");
     if (mustFix.length === 0) {
-      if (!WITH_PATCHES.includes(item.state) || item.state === "addressing review comments") this.setItem(item.id, "reviewed");
+      this.resumeAuthor(item.id, `author:${item.id}${e}:nits:${author.job}`, "nits", `A critical reviewer left these nits on your patch:\n${list}\n\nThey're nits: address each one by amending your commit, or say in one line in the report's summary why not. Then end with the JSON report again.`, "review findings");
       return;
     }
     const key = `author:${item.id}${e}:review:${author.job}`;
@@ -860,8 +874,7 @@ class Planner {
       this.setItem(item.id, "blocked", "critical review");
       return;
     }
-    const list = mustFix.map((f) => `- [${f.severity}]${f.file ? ` ${f.file}${f.line ? `:${f.line}` : ""}` : ""} ${f.text}`).join("\n");
-    this.resumeAuthor(item.id, key, "review", `A critical reviewer found these problems in your patch:\n${list}\n\nAddress them by amending your commit, then end with the JSON report again. Where you disagree with a finding, say why in the report's summary.`, "review findings");
+    this.resumeAuthor(item.id, key, "review", `A critical reviewer found these problems in your patch:\n${list}\n\nAddress them by amending your commit, then end with the JSON report again. Must-fix findings have to be fixed; where you disagree with one, say why in the report's summary. For nits, address them or say in one line why not.`, "review findings");
   }
 
   // -------------------------------------------------------------------------
@@ -1413,10 +1426,12 @@ class Planner {
   private afterAddress(p: PatchView): void {
     const item = this.s.items[p.item!];
     const author = this.authorReport(item.id);
-    if (!author || author.job.name !== "address-review" || item.state !== "reviewed") return;
+    // Review rounds and the nits pass after the answer resume its session under the first prompt's name.
+    const answer = this.authorJobs(item.id).findLast((j) => j.purpose.reason === "initial" || j.purpose.reason === "start" || j.name === "address-review");
+    if (!author || answer?.name !== "address-review" || item.state !== "reviewed") return;
     const st = Object.values(this.s.stacks).find((x) => x.order.includes(p.id));
     if (!st) return;
-    const previous = this.authorJobs(item.id).filter((j) => succeeded(j) && j.startedAt < author.job.startedAt && commitsOf(j.name, this.rep(j)).length > 0).at(-1);
+    const previous = this.authorJobs(item.id).filter((j) => succeeded(j) && j.startedAt < answer.startedAt && commitsOf(j.name, this.rep(j)).length > 0).at(-1);
     const index = author.commits.findIndex((_, i) => patchId(item.id, i) === p.id);
     const oldSha = previous ? commitsOf(previous.name, this.rep(previous))[index] : undefined;
     const rw = this.want(`rewrite-review:${st.id}:${author.job.job}`, () =>
@@ -1433,7 +1448,7 @@ class Planner {
       );
       if (!inter) return;
     }
-    const replies = (this.rep<AddressReviewReport>(author.job).replies ?? []).length;
+    const replies = (this.rep<AddressReviewReport>(answer).replies ?? []).length;
     this.raise(`resubmit:${st.id}:${author.job.job}`, {
       action: `${replies ? `Post ${replies} ${replies === 1 ? "reply" : "replies"}, then resubmit` : "Resubmit"} D${p.revision}`,
       detail: "comments addressed and re-reviewed (Opus) · interdiff below",

@@ -210,7 +210,7 @@ export function handleFinished(input: HandlerInput): HandlerResult {
     }
     case "review": {
       const nits = (input.report as ReviewPatchReport).findings.filter((f) => f.severity === "nit");
-      if (nits.length) ev("note", { text: `Review nits for ${purpose.patch} (not sent back): ${nits.map((f) => `${f.file ? `${f.file}${f.line ? `:${f.line}` : ""}: ` : ""}${f.text}`).join("; ")}`.slice(0, 2000) });
+      if (nits.length) ev("note", { text: `Review nits for ${purpose.patch}: ${nits.map((f) => `${f.file ? `${f.file}${f.line ? `:${f.line}` : ""}: ` : ""}${f.text}`).join("; ")}`.slice(0, 2000) });
       break;
     }
     case "review-stack": {
