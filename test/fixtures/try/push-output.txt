@@ -1,0 +1,5 @@
+Task configuration changed, generating target task set
+Using 4f3c2b1a0e9d8c7b6a5f4e3d2c1b0a9f8e7d6c5b as the git base commit.
+Submitting stack of 2 nodes and the try commit.
+try submission success in 14.2s:
+ https://treeherder.mozilla.org/jobs?repo=try&landoInstance=lando-prod-2025&landoCommitID=103624

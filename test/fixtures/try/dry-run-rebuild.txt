@@ -1,0 +1,30 @@
+Commit message:
+Fuzzy query='xpcshell 'linux2404-64/opt !ccov !tsan !asan&query='xpcshell 'macosx1500 'opt !ccov
+
+mach try command: `./mach try fuzzy -q "'xpcshell 'linux2404-64/opt !ccov !tsan !asan" -q "'xpcshell 'macosx1500 'opt !ccov" --show-chunk-numbers --rebuild 3 --artifact --no-push`
+
+Pushed via `mach try fuzzy`
+Calculated try_task_config.json:
+{
+    "parameters": {
+        "optimize_target_tasks": false,
+        "try_task_config": {
+            "disable-pgo": true,
+            "env": {
+                "TRY_SELECTOR": "fuzzy"
+            },
+            "rebuild": 3,
+            "tasks": [
+                "test-linux2404-64/opt-xpcshell-1",
+                "test-linux2404-64/opt-xpcshell-2",
+                "test-macosx1500-aarch64-vms/opt-xpcshell-1",
+                "test-macosx1500-aarch64-vms/opt-xpcshell-2",
+                "test-macosx1500-aarch64/opt-xpcshell-1",
+                "test-macosx1500-aarch64/opt-xpcshell-2"
+            ],
+            "use-artifact-builds": true
+        }
+    },
+    "version": 2
+}
+
