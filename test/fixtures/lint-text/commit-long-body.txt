@@ -1,0 +1,27 @@
+Bug 2032569 - Stop browser_history_multiselect.js from racing background history refreshes, r=jsudiaman.
+
+A history refresh rebuilds the sidebar's cards, so the `sidebar-tab-list`
+elements and their rows are replaced. The test captured the lists once in
+add_setup, then waited for mutations on elements that could by then be detached,
+so the waits never resolved and the task timed out. While the cards were being
+rebuilt there was no list at that index at all, which is the
+`firstList is undefined` failure seen in test-verify. It also counted rows the
+previous task had left `selected`, because `resetSelection` clears the tracked
+selection but only requests the re-render that drops the attribute.
+
+- Look the lists up right before using them, and wait for a rebuilt list to
+  render its rows.
+- Wait for the selection to be cleared in the DOM after resetting it, and for
+  the focused row through the list rather than for an event on a captured row.
+- Wait for the tabs opened by test_open_all_in_tabs to load and flush the
+  pending Places writes, so the visits they record are settled there. Every
+  waitForNewTab listener resolves on the first TabOpen, so poll for the tabs
+  instead of registering one listener per tab.
+- Settle the rebuild that removing a page triggers, and assert the selection
+  test_open_all_in_tabs_warn depends on, so a missing warning dialog fails on
+  that assertion instead of timing out.
+- Run the tasks that mutate history after the ones that need a stable row set,
+  so their churn cannot land in an unrelated task.
+
+Differential Revision: https://phabricator.services.mozilla.com/D321494
+
