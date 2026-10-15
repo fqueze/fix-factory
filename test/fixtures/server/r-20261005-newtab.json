@@ -1,0 +1,345 @@
+{
+  "id": "r-20261005-newtab",
+  "kind": "burndown",
+  "text": "",
+  "createdAt": "2026-10-05T08:00:00.000Z",
+  "updatedAt": "2026-10-15T09:00:00.000Z",
+  "step": "review comments",
+  "config": {},
+  "items": {
+    "i-panel": {
+      "id": "i-panel",
+      "folder": "browser/extensions/newtab/test/browser",
+      "group": {
+        "message": "Test wrote into its own directory",
+        "tests": [
+          "browser/extensions/newtab/test/browser/browser_panel_list.js"
+        ],
+        "configs": [
+          "linux64/debug",
+          "windows11-64/opt"
+        ],
+        "ratePerWeek": 4
+      },
+      "state": "waiting for review",
+      "jobs": []
+    },
+    "i-sponsored": {
+      "id": "i-sponsored",
+      "folder": "browser/extensions/newtab/test/browser",
+      "group": {
+        "message": "Test wrote into its own directory",
+        "tests": [
+          "browser/extensions/newtab/test/browser/browser_topsites_sponsored.js"
+        ],
+        "configs": [
+          "linux64/debug",
+          "windows11-64/opt"
+        ],
+        "ratePerWeek": 7
+      },
+      "state": "waiting for review",
+      "jobs": []
+    },
+    "i-glean": {
+      "id": "i-glean",
+      "folder": "browser/extensions/newtab/test/browser",
+      "group": {
+        "message": "Test wrote into its own directory",
+        "tests": [
+          "browser/extensions/newtab/test/browser/browser_trainhop.js"
+        ],
+        "configs": [
+          "linux64/debug",
+          "windows11-64/opt"
+        ],
+        "ratePerWeek": 2
+      },
+      "state": "addressing review comments",
+      "jobs": [
+        "j-address"
+      ]
+    },
+    "i-nimbus": {
+      "id": "i-nimbus",
+      "folder": "browser/extensions/newtab/test/browser",
+      "group": {
+        "message": "Test wrote into its own directory",
+        "tests": [
+          "browser/extensions/newtab/test/browser/browser_nimbus.js"
+        ],
+        "configs": [
+          "linux64/debug",
+          "windows11-64/opt"
+        ],
+        "ratePerWeek": 3
+      },
+      "state": "waiting for review",
+      "jobs": []
+    },
+    "i-old": {
+      "id": "i-old",
+      "folder": "browser/extensions/newtab/test/browser",
+      "group": {
+        "message": "Test wrote into its own directory",
+        "tests": [
+          "browser/extensions/newtab/test/browser/browser_old.js"
+        ],
+        "configs": [
+          "linux64/debug",
+          "windows11-64/opt"
+        ],
+        "ratePerWeek": 1
+      },
+      "state": "landed",
+      "jobs": []
+    }
+  },
+  "patches": {
+    "p-old": {
+      "id": "p-old",
+      "sha": "p-old00000000000000000000000000000000000",
+      "worktree": "/build/worktrees/x",
+      "title": "Bug 2025700 - Wait for the old thing, r=mconley.",
+      "bug": 2025700,
+      "deps": [],
+      "replyDrafts": [],
+      "item": "i-old",
+      "revision": 327001,
+      "review": {
+        "revision": 327001,
+        "status": "accepted",
+        "reviewers": [
+          {
+            "name": "mconley",
+            "status": "accepted"
+          }
+        ],
+        "comments": []
+      }
+    },
+    "p-panel": {
+      "id": "p-panel",
+      "sha": "p-panel000000000000000000000000000000000",
+      "worktree": "/build/worktrees/x",
+      "title": "Bug 2025752 - Wait on panel-list's shown/hidden events instead of its open attribute, r=#home-newtab-reviewers.",
+      "bug": 2025752,
+      "deps": [],
+      "replyDrafts": [],
+      "item": "i-panel",
+      "revision": 327083,
+      "effort": 1,
+      "review": {
+        "revision": 327083,
+        "status": "accepted",
+        "reviewers": [
+          {
+            "name": "mconley",
+            "status": "accepted"
+          }
+        ],
+        "comments": []
+      }
+    },
+    "p-sponsored": {
+      "id": "p-sponsored",
+      "sha": "p-sponsored00000000000000000000000000000",
+      "worktree": "/build/worktrees/x",
+      "title": "Bug 2011958 - Count the sponsored tiles rather than the whole row, r=mconley.",
+      "bug": 2011958,
+      "deps": [],
+      "replyDrafts": [
+        {
+          "commentId": 1873402,
+          "text": "Done."
+        }
+      ],
+      "item": "i-sponsored",
+      "revision": 327101,
+      "effort": 1,
+      "review": {
+        "revision": 327101,
+        "status": "accepted with comments",
+        "reviewers": [
+          {
+            "name": "mconley",
+            "status": "accepted"
+          }
+        ],
+        "comments": [
+          {
+            "id": 1873402,
+            "author": "mconley",
+            "file": "browser_topsites_sponsored.js",
+            "line": 41,
+            "text": "Could we select the sponsored tiles directly instead of subtracting?",
+            "done": true,
+            "kind": "change request"
+          },
+          {
+            "id": 1873410,
+            "author": "mconley",
+            "text": "Nit: trailing <space>",
+            "done": false,
+            "kind": "nit",
+            "suggestion": "  is(sponsored.length, 2);"
+          }
+        ]
+      },
+      "interdiffFile": "interdiffs/p-sponsored.diff"
+    },
+    "p-glean": {
+      "id": "p-glean",
+      "sha": "p-glean000000000000000000000000000000000",
+      "worktree": "/build/worktrees/x",
+      "title": "Bug 2067207 - Check version.txt before recording the train-hop Glean metric, r=mconley.",
+      "bug": 2067207,
+      "deps": [
+        {
+          "patch": "p-glean",
+          "needs": "p-panel",
+          "kind": "soft",
+          "reason": "the skip-if removal for browser_topsites_section.js is here because this lands after D327083",
+          "source": "textual"
+        }
+      ],
+      "replyDrafts": [],
+      "item": "i-glean",
+      "revision": 327095,
+      "effort": 3,
+      "review": {
+        "revision": 327095,
+        "status": "changes requested",
+        "reviewers": [
+          {
+            "name": "mconley",
+            "status": "blocking"
+          },
+          {
+            "name": "#home-newtab-reviewers",
+            "status": "resigned"
+          }
+        ],
+        "comments": [
+          {
+            "id": 1873500,
+            "author": "mconley",
+            "text": "What happens when version.txt is missing?",
+            "done": false,
+            "kind": "question"
+          }
+        ]
+      }
+    },
+    "p-nimbus": {
+      "id": "p-nimbus",
+      "sha": "p-nimbus00000000000000000000000000000000",
+      "worktree": "/build/worktrees/x",
+      "title": "Bug 1780305 - Wait for ExperimentManager.onStartup() before enrolling in NimbusTestUtils, r=beth.",
+      "bug": 1780305,
+      "deps": [
+        {
+          "patch": "p-nimbus",
+          "needs": "p-glean",
+          "kind": "hard",
+          "reason": "uses the helper added there",
+          "source": "agent"
+        }
+      ],
+      "replyDrafts": [],
+      "item": "i-nimbus",
+      "revision": 327088,
+      "effort": 2,
+      "review": {
+        "revision": 327088,
+        "status": "needs review",
+        "reviewers": [
+          {
+            "name": "beth",
+            "status": "pending"
+          }
+        ],
+        "comments": []
+      }
+    }
+  },
+  "stacks": {
+    "newtab": {
+      "id": "newtab",
+      "folder": "browser/extensions/newtab/test/browser",
+      "branch": "ff/newtab",
+      "worktree": "/build/worktrees/newtab",
+      "order": [
+        "p-old",
+        "p-panel",
+        "p-sponsored",
+        "p-glean",
+        "p-nimbus"
+      ]
+    }
+  },
+  "pushes": {
+    "v2": {
+      "id": "v2",
+      "purpose": "Verify the rewritten Glean patch",
+      "command": [
+        "./mach",
+        "try",
+        "fuzzy"
+      ],
+      "rev": "dbfcf15fdf1f",
+      "progress": {
+        "done": 412,
+        "total": 440,
+        "failures": 0
+      }
+    }
+  },
+  "jobs": {
+    "j-address": {
+      "job": "j-address",
+      "kind": "agent",
+      "name": "address-review",
+      "cmd": [
+        "node"
+      ],
+      "cwd": "/build/fix-factory-state",
+      "pid": 1000,
+      "pidStartTime": 1,
+      "startedAt": "2026-10-15T07:00:00.000Z",
+      "item": "i-glean",
+      "model": "opus"
+    },
+    "j-reply": {
+      "job": "j-reply",
+      "kind": "agent",
+      "name": "draft-reply",
+      "cmd": [
+        "node"
+      ],
+      "cwd": "/build/fix-factory-state",
+      "pid": 1000,
+      "pidStartTime": 1,
+      "startedAt": "2026-10-15T06:00:00.000Z",
+      "item": "i-sponsored",
+      "model": "sonnet",
+      "endedAt": "2026-10-15T06:01:00.000Z",
+      "exitCode": 0,
+      "durationMs": 60000,
+      "costUsd": 0.05
+    }
+  },
+  "needsUser": [
+    {
+      "key": "resubmit:newtab",
+      "action": "Post 1 reply, then resubmit D327101",
+      "detail": "comments addressed and re-reviewed (Opus) · interdiff below",
+      "since": "2026-10-15T07:30:00.000Z",
+      "stack": "newtab",
+      "patch": "p-sponsored"
+    }
+  ],
+  "recoveryPlans": [],
+  "notes": [],
+  "folder": "browser/extensions/newtab/test/browser"
+}

@@ -1,0 +1,18 @@
+{
+  "id": "r-20261016-popups",
+  "kind": "burndown",
+  "text": "",
+  "createdAt": "2026-10-15T08:58:00.000Z",
+  "updatedAt": "2026-10-15T08:58:00.000Z",
+  "step": "request",
+  "config": {},
+  "items": {},
+  "patches": {},
+  "stacks": {},
+  "pushes": {},
+  "jobs": {},
+  "needsUser": [],
+  "recoveryPlans": [],
+  "notes": [],
+  "folder": "browser/base/content/test/popups"
+}

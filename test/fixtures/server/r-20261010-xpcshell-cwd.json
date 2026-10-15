@@ -1,0 +1,396 @@
+{
+  "id": "r-20261010-xpcshell-cwd",
+  "kind": "try-push",
+  "text": "xpcshell tests writing to the test directory",
+  "createdAt": "2026-10-10T08:00:00.000Z",
+  "updatedAt": "2026-10-15T09:00:00.000Z",
+  "step": "verify on try",
+  "config": {
+    "scope": "xpcshell tests that write into their own directory"
+  },
+  "items": {
+    "i-prefs": {
+      "id": "i-prefs",
+      "folder": "storage/test/unit",
+      "group": {
+        "message": "Test wrote into its own directory",
+        "tests": [
+          "storage/test/unit/test_libPrefs.js"
+        ],
+        "configs": [
+          "linux64/debug",
+          "windows11-64/opt"
+        ],
+        "ratePerWeek": 31
+      },
+      "state": "reviewed",
+      "jobs": []
+    },
+    "i-storage": {
+      "id": "i-storage",
+      "folder": "storage/test/unit",
+      "group": {
+        "message": "Test wrote into its own directory",
+        "tests": [
+          "storage/test/unit/test_storage_service.js",
+          "storage/test/unit/test_vacuum.js"
+        ],
+        "configs": [
+          "linux64/debug",
+          "windows11-64/opt"
+        ],
+        "ratePerWeek": 24
+      },
+      "state": "reviewed",
+      "jobs": []
+    },
+    "i-copydir": {
+      "id": "i-copydir",
+      "folder": "storage/test/unit",
+      "group": {
+        "message": "Test wrote into its own directory",
+        "tests": [
+          "storage/test/unit/test_backup.js"
+        ],
+        "configs": [
+          "linux64/debug",
+          "windows11-64/opt"
+        ],
+        "ratePerWeek": 40
+      },
+      "state": "reviewed",
+      "jobs": []
+    },
+    "i-fixture": {
+      "id": "i-fixture",
+      "folder": "storage/test/unit",
+      "group": {
+        "message": "Test wrote into its own directory",
+        "tests": [
+          "storage/test/unit/test_fixture_copy.js"
+        ],
+        "configs": [
+          "linux64/debug",
+          "windows11-64/opt"
+        ],
+        "ratePerWeek": 12
+      },
+      "state": "reviewed",
+      "jobs": []
+    },
+    "i-migration": {
+      "id": "i-migration",
+      "folder": "browser/components/migration/tests/unit",
+      "group": {
+        "message": "Test wrote into its own directory",
+        "tests": [
+          "browser/components/migration/tests/unit/test_0.js",
+          "browser/components/migration/tests/unit/test_1.js",
+          "browser/components/migration/tests/unit/test_2.js",
+          "browser/components/migration/tests/unit/test_3.js",
+          "browser/components/migration/tests/unit/test_4.js",
+          "browser/components/migration/tests/unit/test_5.js",
+          "browser/components/migration/tests/unit/test_6.js",
+          "browser/components/migration/tests/unit/test_7.js",
+          "browser/components/migration/tests/unit/test_8.js",
+          "browser/components/migration/tests/unit/test_9.js",
+          "browser/components/migration/tests/unit/test_10.js",
+          "browser/components/migration/tests/unit/test_11.js",
+          "browser/components/migration/tests/unit/test_12.js",
+          "browser/components/migration/tests/unit/test_13.js",
+          "browser/components/migration/tests/unit/test_14.js",
+          "browser/components/migration/tests/unit/test_15.js",
+          "browser/components/migration/tests/unit/test_16.js",
+          "browser/components/migration/tests/unit/test_17.js",
+          "browser/components/migration/tests/unit/test_18.js",
+          "browser/components/migration/tests/unit/test_19.js",
+          "browser/components/migration/tests/unit/test_20.js",
+          "browser/components/migration/tests/unit/test_21.js",
+          "browser/components/migration/tests/unit/test_22.js",
+          "browser/components/migration/tests/unit/test_23.js",
+          "browser/components/migration/tests/unit/test_24.js",
+          "browser/components/migration/tests/unit/test_25.js",
+          "browser/components/migration/tests/unit/test_26.js",
+          "browser/components/migration/tests/unit/test_27.js",
+          "browser/components/migration/tests/unit/test_28.js",
+          "browser/components/migration/tests/unit/test_29.js",
+          "browser/components/migration/tests/unit/test_30.js"
+        ],
+        "configs": [
+          "linux64/debug",
+          "windows11-64/opt"
+        ]
+      },
+      "state": "investigating",
+      "jobs": [
+        "j-inv-mig"
+      ]
+    },
+    "i-update": {
+      "id": "i-update",
+      "folder": "toolkit/mozapps/update/tests",
+      "group": {
+        "message": "Test wrote into its own directory",
+        "tests": [
+          "toolkit/mozapps/update/tests/unit_aus_update/a.js",
+          "toolkit/mozapps/update/tests/unit_aus_update/b.js"
+        ],
+        "configs": [
+          "linux64/debug",
+          "windows11-64/opt"
+        ]
+      },
+      "state": "review findings",
+      "detail": "the continue file is still written next to the test",
+      "jobs": []
+    },
+    "i-ssl": {
+      "id": "i-ssl",
+      "folder": "security/manager/ssl/tests/unit",
+      "group": {
+        "message": "Test wrote into its own directory",
+        "tests": [
+          "security/manager/ssl/tests/unit/test_cert_db.js"
+        ],
+        "configs": [
+          "linux64/debug",
+          "windows11-64/opt"
+        ]
+      },
+      "state": "in critical review",
+      "jobs": []
+    }
+  },
+  "patches": {
+    "p-prefs": {
+      "id": "p-prefs",
+      "sha": "p-prefs000000000000000000000000000000000",
+      "worktree": "/build/worktrees/x",
+      "title": "Bug XXXXXXX - Save the prefs file of test_libPrefs.js in the temp dir, r=gstoll.",
+      "bug": null,
+      "deps": [],
+      "replyDrafts": [],
+      "item": "i-prefs",
+      "effort": 1,
+      "testOnly": true
+    },
+    "p-storage": {
+      "id": "p-storage",
+      "sha": "p-storage0000000000000000000000000000000",
+      "worktree": "/build/worktrees/x",
+      "title": "Bug XXXXXXX - Don't write into the test directory in storage xpcshell tests, r=mak.",
+      "bug": null,
+      "deps": [],
+      "replyDrafts": [],
+      "item": "i-storage",
+      "effort": 1,
+      "testOnly": true
+    },
+    "p-copydir": {
+      "id": "p-copydir",
+      "sha": "p-copydir0000000000000000000000000000000",
+      "worktree": "/build/worktrees/x",
+      "title": "Bug XXXXXXX - Make nsLocalFile::CopyDirectoryTo copy the contents of read-only directories, r=#xpcom-reviewers.",
+      "bug": null,
+      "deps": [],
+      "replyDrafts": [],
+      "item": "i-copydir",
+      "effort": 3,
+      "bugDraft": {
+        "product": "Core",
+        "component": "XPCOM",
+        "summary": "CopyDirectoryTo leaves a read-only source directory's contents behind",
+        "description": "nsLocalFile::CopyDirectoryTo creates the target directory with the source's read-only permissions, then fails to copy anything into it.\n\nSteps: make a directory read-only, copy it with nsIFile.copyTo.",
+        "blocks": [
+          2081200
+        ]
+      }
+    },
+    "p-fixture": {
+      "id": "p-fixture",
+      "sha": "p-fixture0000000000000000000000000000000",
+      "worktree": "/build/worktrees/x",
+      "title": "Bug XXXXXXX - Run the storage tests on a per-test copy of their fixture dir, r=mak.",
+      "bug": null,
+      "deps": [
+        {
+          "patch": "p-fixture",
+          "needs": "p-copydir",
+          "kind": "hard",
+          "reason": "copying read-only fixtures loses their contents",
+          "source": "agent"
+        },
+        {
+          "patch": "p-fixture",
+          "needs": "a newer sqlite on the try builders",
+          "kind": "soft",
+          "reason": "the vacuum test is slow without it",
+          "source": "agent"
+        }
+      ],
+      "replyDrafts": [],
+      "item": "i-fixture",
+      "effort": 2,
+      "testOnly": true
+    }
+  },
+  "stacks": {
+    "storage-unit": {
+      "id": "storage-unit",
+      "folder": "storage/test/unit",
+      "branch": "ff/storage-unit",
+      "worktree": "/build/worktrees/storage-unit",
+      "order": [
+        "p-prefs",
+        "p-storage",
+        "p-copydir",
+        "p-fixture"
+      ],
+      "summary": "Stack review (Opus): no findings."
+    }
+  },
+  "pushes": {
+    "initial": {
+      "id": "initial",
+      "purpose": "Make test dirs read-only to find every test writing to them",
+      "command": [],
+      "rev": "27999ea83b92",
+      "url": "https://treeherder.mozilla.org/jobs?repo=try&revision=27999ea83b92",
+      "result": "failures",
+      "summary": "291 failures, 12 groups"
+    },
+    "A": {
+      "id": "A",
+      "purpose": "Same configs and paths as the un-skip push, so results are comparable · xpcshell, 14 configs, --rebuild 5",
+      "command": [
+        "./mach",
+        "try",
+        "fuzzy",
+        "--rebuild",
+        "5",
+        "storage/test/unit"
+      ],
+      "taskCount": 312
+    },
+    "B": {
+      "id": "B",
+      "purpose": "The CopyDirectoryTo product change: xpcom gtests + xpcshell on all desktop platforms, --no-artifact",
+      "command": [
+        "./mach",
+        "try",
+        "fuzzy",
+        "--no-artifact",
+        "-q",
+        "'gtest | 'xpcshell"
+      ],
+      "taskCount": 96
+    }
+  },
+  "jobs": {
+    "j-watch0": {
+      "job": "j-watch0",
+      "kind": "try-watch",
+      "name": "try.ts watch",
+      "cmd": [
+        "node"
+      ],
+      "cwd": "/build/fix-factory-state",
+      "pid": 1000,
+      "pidStartTime": 1,
+      "startedAt": "2026-10-10T08:05:00.000Z",
+      "endedAt": "2026-10-10T11:05:00.000Z",
+      "exitCode": 0,
+      "durationMs": 10800000
+    },
+    "j-inv-mig": {
+      "job": "j-inv-mig",
+      "kind": "agent",
+      "name": "investigate-and-fix",
+      "cmd": [
+        "node"
+      ],
+      "cwd": "/build/fix-factory-state",
+      "pid": 1000,
+      "pidStartTime": 1,
+      "startedAt": "2026-10-15T08:08:00.000Z",
+      "item": "i-migration",
+      "model": "opus"
+    },
+    "j-inv-copy": {
+      "job": "j-inv-copy",
+      "kind": "agent",
+      "name": "investigate-and-fix",
+      "cmd": [
+        "node"
+      ],
+      "cwd": "/build/fix-factory-state",
+      "pid": 1000,
+      "pidStartTime": 1,
+      "startedAt": "2026-10-12T09:00:00.000Z",
+      "item": "i-copydir",
+      "model": "opus",
+      "endedAt": "2026-10-12T10:15:00.000Z",
+      "exitCode": 0,
+      "durationMs": 4500000,
+      "costUsd": 6.4
+    },
+    "j-build-ssl": {
+      "job": "j-build-ssl",
+      "kind": "build",
+      "name": "worktree.ts create --build artifact",
+      "cmd": [
+        "node"
+      ],
+      "cwd": "/build/fix-factory-state",
+      "pid": 1000,
+      "pidStartTime": 1,
+      "startedAt": "2026-10-12T08:40:00.000Z",
+      "item": "i-ssl",
+      "endedAt": "2026-10-12T08:52:00.000Z",
+      "exitCode": 1,
+      "durationMs": 720000,
+      "error": "mach build: out of disk space"
+    },
+    "j-rev-ssl": {
+      "job": "j-rev-ssl",
+      "kind": "agent",
+      "name": "review-patch",
+      "cmd": [
+        "node"
+      ],
+      "cwd": "/build/fix-factory-state",
+      "pid": 1000,
+      "pidStartTime": 1,
+      "startedAt": "2026-10-15T08:30:00.000Z",
+      "item": "i-ssl",
+      "model": "opus"
+    }
+  },
+  "needsUser": [
+    {
+      "key": "approve-push:A",
+      "action": "Approve try push A for storage/test/unit",
+      "detail": "312 tasks, comparable with the un-skip push",
+      "since": "2026-10-15T07:30:00.000Z",
+      "push": "A"
+    },
+    {
+      "key": "approve-push:B",
+      "action": "Approve try push B for storage/test/unit",
+      "detail": "96 tasks, for the CopyDirectoryTo product change",
+      "since": "2026-10-15T07:30:00.000Z",
+      "push": "B"
+    },
+    {
+      "key": "file-bug:p-copydir",
+      "action": "File the CopyDirectoryTo bug",
+      "detail": "Core::XPCOM, checked by lint-text.ts",
+      "since": "2026-10-15T07:30:00.000Z",
+      "patch": "p-copydir",
+      "item": "i-copydir"
+    }
+  ],
+  "recoveryPlans": [],
+  "notes": [],
+  "rev": "27999ea83b92"
+}

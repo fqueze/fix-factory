@@ -1,0 +1,82 @@
+{
+  "id": "r-20261007-focus",
+  "kind": "try-push",
+  "text": "Focus left in the urlbar by earlier tests",
+  "createdAt": "2026-10-07T08:00:00.000Z",
+  "updatedAt": "2026-10-15T09:00:00.000Z",
+  "step": "submit",
+  "config": {},
+  "items": {
+    "i-focus": {
+      "id": "i-focus",
+      "folder": "browser/components/urlbar/tests/browser",
+      "group": {
+        "message": "Test wrote into its own directory",
+        "tests": [
+          "browser/components/urlbar/tests/browser/browser_focus.js"
+        ],
+        "configs": [
+          "linux64/debug",
+          "windows11-64/opt"
+        ],
+        "ratePerWeek": 9
+      },
+      "state": "reviewed",
+      "jobs": []
+    }
+  },
+  "patches": {
+    "p-focus": {
+      "id": "p-focus",
+      "sha": "p-focus000000000000000000000000000000000",
+      "worktree": "/build/worktrees/x",
+      "title": "Bug 2080500 - Blur the urlbar at the end of browser_focus.js, r=mak.",
+      "bug": 2080500,
+      "deps": [],
+      "replyDrafts": [],
+      "item": "i-focus",
+      "effort": 1,
+      "testOnly": true
+    }
+  },
+  "stacks": {
+    "focus": {
+      "id": "focus",
+      "folder": "browser/components/urlbar/tests/browser",
+      "branch": "ff/focus",
+      "worktree": "/build/worktrees/focus",
+      "base": "central",
+      "order": [
+        "p-focus"
+      ],
+      "summary": "| Patch | Effort | Value |\n|---|---|---|\n| Blur the urlbar at the end of browser_focus.js | 1 | 9/wk |"
+    }
+  },
+  "pushes": {
+    "v1": {
+      "id": "v1",
+      "purpose": "Verify the blur",
+      "command": [
+        "./mach",
+        "try",
+        "fuzzy"
+      ],
+      "rev": "f00dfeedbeef",
+      "result": "green",
+      "summary": "green"
+    }
+  },
+  "jobs": {},
+  "needsUser": [
+    {
+      "key": "submit:focus",
+      "action": "Review in stack-viewer, then submit",
+      "detail": "pre-submit checks pass · reviewers: mak",
+      "since": "2026-10-15T07:30:00.000Z",
+      "stack": "focus"
+    }
+  ],
+  "recoveryPlans": [],
+  "notes": [],
+  "rev": "a1b2c3d4e5f6"
+}

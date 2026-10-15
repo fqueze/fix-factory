@@ -1,0 +1,39 @@
+{
+  "id": "r-20261015-sessionstore",
+  "kind": "burndown",
+  "text": "Burn down browser/components/sessionstore/test, skip the mac pools for now",
+  "createdAt": "2026-10-15T08:55:00.000Z",
+  "updatedAt": "2026-10-15T09:00:00.000Z",
+  "step": "request",
+  "config": {
+    "scope": "browser/components/sessionstore/test",
+    "platforms": [
+      "linux",
+      "windows"
+    ],
+    "constraints": "no mac pools"
+  },
+  "items": {},
+  "patches": {},
+  "stacks": {},
+  "pushes": {},
+  "jobs": {
+    "j-parse": {
+      "job": "j-parse",
+      "kind": "agent",
+      "name": "parse-request",
+      "cmd": [
+        "node"
+      ],
+      "cwd": "/build/fix-factory-state",
+      "pid": 1000,
+      "pidStartTime": 1,
+      "startedAt": "2026-10-15T08:55:10.000Z",
+      "model": "sonnet"
+    }
+  },
+  "needsUser": [],
+  "recoveryPlans": [],
+  "notes": [],
+  "folder": "browser/components/sessionstore/test"
+}

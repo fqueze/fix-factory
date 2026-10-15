@@ -1,0 +1,47 @@
+{
+  "id": "r-20260930-errorsummary",
+  "kind": "try-push",
+  "text": "Errorsummary crashes on retried tests",
+  "createdAt": "2026-09-30T08:00:00.000Z",
+  "updatedAt": "2026-10-13T16:00:00.000Z",
+  "step": "done",
+  "config": {},
+  "items": {
+    "i-es": {
+      "id": "i-es",
+      "folder": "testing/mozbase",
+      "group": {
+        "message": "Test wrote into its own directory",
+        "tests": [
+          "testing/mozbase/mozlog/tests/test_errorsummary.py"
+        ],
+        "configs": [
+          "linux64/debug",
+          "windows11-64/opt"
+        ]
+      },
+      "state": "landed",
+      "jobs": []
+    }
+  },
+  "patches": {
+    "p-es": {
+      "id": "p-es",
+      "sha": "p-es000000000000000000000000000000000000",
+      "worktree": "/build/worktrees/x",
+      "title": "Bug 2050001 - Don't crash errorsummary on retried tests, r=jmaher.",
+      "bug": 2050001,
+      "deps": [],
+      "replyDrafts": [],
+      "item": "i-es",
+      "revision": 325000
+    }
+  },
+  "stacks": {},
+  "pushes": {},
+  "jobs": {},
+  "needsUser": [],
+  "recoveryPlans": [],
+  "notes": [],
+  "rev": "0badc0ffee00"
+}

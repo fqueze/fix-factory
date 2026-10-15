@@ -1,0 +1,154 @@
+{
+  "id": "r-20261008-permissions",
+  "kind": "try-push",
+  "text": "Permissions left changed by browser-chrome tests",
+  "createdAt": "2026-10-08T08:00:00.000Z",
+  "updatedAt": "2026-10-15T09:00:00.000Z",
+  "step": "meta bug",
+  "config": {},
+  "items": {
+    "i-webrtc": {
+      "id": "i-webrtc",
+      "folder": "browser/base/content/test/webrtc",
+      "group": {
+        "message": "Test wrote into its own directory",
+        "tests": [
+          "browser/base/content/test/webrtc/browser_devices_get_user_media.js"
+        ],
+        "configs": [
+          "linux64/debug",
+          "windows11-64/opt"
+        ],
+        "ratePerWeek": 8
+      },
+      "state": "reviewed",
+      "jobs": []
+    },
+    "i-captive": {
+      "id": "i-captive",
+      "folder": "browser/base/content/test/captivePortal",
+      "group": {
+        "message": "Test wrote into its own directory",
+        "tests": [
+          "browser/base/content/test/captivePortal/browser_captivePortal_certErrorUI.js"
+        ],
+        "configs": [
+          "linux64/debug",
+          "windows11-64/opt"
+        ],
+        "ratePerWeek": 5
+      },
+      "state": "reviewed",
+      "jobs": []
+    },
+    "i-perm": {
+      "id": "i-perm",
+      "folder": "browser/components/permissions",
+      "group": {
+        "message": "Test wrote into its own directory",
+        "tests": [
+          "browser/components/permissions/test/browser_permission_delegate.js"
+        ],
+        "configs": [
+          "linux64/debug",
+          "windows11-64/opt"
+        ],
+        "ratePerWeek": 2
+      },
+      "state": "reviewed",
+      "jobs": []
+    }
+  },
+  "patches": {
+    "p-webrtc": {
+      "id": "p-webrtc",
+      "sha": "p-webrtc00000000000000000000000000000000",
+      "worktree": "/build/worktrees/x",
+      "title": "Bug XXXXXXX - Reset the camera permission after the webrtc device tests, r=jib.",
+      "bug": null,
+      "deps": [],
+      "replyDrafts": [],
+      "item": "i-webrtc",
+      "effort": 1,
+      "testOnly": true
+    },
+    "p-captive": {
+      "id": "p-captive",
+      "sha": "p-captive0000000000000000000000000000000",
+      "worktree": "/build/worktrees/x",
+      "title": "Bug XXXXXXX - Clear the captive portal permission in the cert error UI test, r=nhnt11.",
+      "bug": null,
+      "deps": [],
+      "replyDrafts": [],
+      "item": "i-captive",
+      "effort": 1,
+      "testOnly": true
+    },
+    "p-perm": {
+      "id": "p-perm",
+      "sha": "p-perm0000000000000000000000000000000000",
+      "worktree": "/build/worktrees/x",
+      "title": "Bug 2079001 - Remove the delegated permission at the end of the test, r=pbz.",
+      "bug": 2079001,
+      "deps": [],
+      "replyDrafts": [],
+      "item": "i-perm",
+      "effort": 2,
+      "testOnly": true
+    }
+  },
+  "stacks": {
+    "permissions": {
+      "id": "permissions",
+      "folder": "browser (several folders)",
+      "branch": "ff/permissions",
+      "worktree": "/build/worktrees/permissions",
+      "order": [
+        "p-webrtc",
+        "p-captive",
+        "p-perm"
+      ],
+      "summary": "Patches in review order:\n| Patch | Effort | Value |\n|---|---|---|\n| Reset the camera permission | 1 | 8/wk |\n| Clear the captive portal permission | 1 | 5/wk |\n| Remove the delegated permission | 2 | 2/wk |"
+    }
+  },
+  "pushes": {
+    "v1": {
+      "id": "v1",
+      "purpose": "Verify the webrtc and captive portal cleanups",
+      "command": [
+        "./mach",
+        "try",
+        "fuzzy"
+      ],
+      "rev": "c91e44d2b6f0",
+      "result": "green",
+      "summary": "green"
+    }
+  },
+  "jobs": {},
+  "needsUser": [
+    {
+      "key": "meta-bug:permissions",
+      "action": "File the meta bug, then review and submit",
+      "detail": "the meta-bug comment lists the stack in review order, with effort, value and repro",
+      "since": "2026-10-15T07:30:00.000Z",
+      "stack": "permissions"
+    }
+  ],
+  "recoveryPlans": [],
+  "notes": [],
+  "rev": "c91e44d2b6f0",
+  "metaBug": {
+    "bug": null,
+    "draft": {
+      "product": "Testing",
+      "component": "General",
+      "summary": "[meta] Permissions left changed by browser-chrome tests",
+      "bugType": "task",
+      "keywords": [
+        "meta"
+      ],
+      "description": "Tests that leave permissions changed make later tests fail.\n\n| patch | effort | value |\n|---|---|---|\n| webrtc | 1 | 8/wk |"
+    }
+  }
+}
