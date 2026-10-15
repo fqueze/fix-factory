@@ -109,6 +109,45 @@ describe("Orchestrator", () => {
     }
   });
 
+  it("shows a request it can't plan on its page, once per error, and goes on with the others", async () => {
+    const { root, config, o } = setup();
+    try {
+      // annotations.ts "succeeded" with no output: next() can't parse it.
+      add(config.stateDir, { type: "request-created", request: "r-a", kind: "burndown", text: "", folder: "a" });
+      add(config.stateDir, { type: "step", request: "r-a", step: "first signal" });
+      add(config.stateDir, { type: "job-started", request: "r-a", job: "j-ann", kind: "script", name: "annotations.ts list", pid: 1, pidStartTime: 1, cmd: [], cwd: root, codeVersion: "t", purpose: { key: "annotations", what: "annotations" } });
+      add(config.stateDir, { type: "job-finished", request: "r-a", job: "j-ann", exitCode: 0, durationMs: 1 });
+      add(config.stateDir, { type: "request-created", request: "r-b", kind: "try-push", text: "", rev: "abc" });
+      await o.startup();
+      await o.tick();
+      await o.tick();
+      const a = readEvents(config.stateDir, "r-a");
+      const flags = a.filter((e): e is Extract<Event, { type: "needs-user" }> => e.type === "needs-user");
+      assert.equal(flags.length, 1);
+      assert.match(flags[0].key, /^failed:plan:/);
+      assert.match(flags[0].detail, /JSON/);
+      assert.equal(a.filter((e) => e.type === "note").length, 1);
+      assert.ok(readEvents(config.stateDir, "r-b").some((e) => e.type === "job-started"));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("records a command that fails as failed and goes on with the next one", async () => {
+    const { root, config, o } = setup({ maxAgents: 0 });
+    try {
+      add(config.stateDir, { type: "request-created", request: "r-a", kind: "try-push", text: "", rev: "abc" });
+      await o.startup();
+      const bad = appendCommand(config.stateDir, { cmd: "set-bug", request: "r-a", patch: "p-nope", bug: 1 });
+      const good = appendCommand(config.stateDir, { cmd: "approve-push", request: "r-a", push: "A" });
+      await o.tick();
+      const executed = readEvents(config.stateDir, "r-a").filter((e): e is Extract<Event, { type: "command-executed" }> => e.type === "command-executed");
+      assert.deepEqual(executed.map((e) => [e.command, e.ok]), [[bad.id, false], [good.id, true]]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("is present for 30 min after a visible page's last presence command", async () => {
     let now = Date.parse("2026-10-15T10:00:00Z");
     const { root, config, o } = setup({}, () => now);

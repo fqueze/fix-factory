@@ -15,7 +15,8 @@
 //   `push`, or the list index) when one has the same try config and commits.
 //
 // node src/cli/try.ts push --cwd <worktree> [--lando-timeout <s>] [--expect-commits <sha,sha...>] -- <selector> <mach try args...>
-//   --expect-commits: the dry run's commits (newest first); refuses to push a stack that differs.
+//   --expect-commits: the dry run's commits (newest first); refuses to push a stack that differs, with an
+//   error starting with "not pushed: commits changed".
 //   Under --dry-run, or when the config has dryRun, refuses and prints
 //   {dryRun: true, command, cwd}. Otherwise runs `./mach try <args>` and prints
 //   {landoJobId, landoUrl, treeherderUrl, rev?}. rev is missing when Lando hasn't
@@ -309,6 +310,9 @@ function runStreaming(cmd: string[], cwd: string, input: string, onLine: (line: 
   });
 }
 
+// The start of push's error when --expect-commits doesn't match: nothing was pushed.
+export const COMMITS_CHANGED = "not pushed: commits changed";
+
 export async function push(
   cwd: string,
   args: string[],
@@ -323,7 +327,7 @@ export async function push(
     // What was approved is the dry run: a stack rewritten since then is a different push.
     const commits = await stackCommits(cwd, opts.exec ?? exec);
     if (commits.join() !== opts.expectCommits.join()) {
-      throw new Error(`the stack changed since the approved dry run: expected ${opts.expectCommits.join(",") || "no commits"}, found ${commits.join(",") || "no commits"}`);
+      throw new Error(`${COMMITS_CHANGED} since the approved dry run: expected ${opts.expectCommits.join(",") || "no commits"}, found ${commits.join(",") || "no commits"}`);
     }
   }
   const run = opts.run ?? runStreaming;

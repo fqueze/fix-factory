@@ -21,7 +21,7 @@ import { commandEffects } from "./commands.ts";
 import { appendEventSafe } from "./event-data.ts";
 import { handleWatchLines } from "./handlers.ts";
 import { CANCELLED, next, type Action, type Ctx } from "./next.ts";
-import { DEFAULT_PRIORITY, type JobPlan } from "./plan.ts";
+import { DEFAULT_PRIORITY, shortHash, type JobPlan } from "./plan.ts";
 import { defaultCliCommand, finishJob, jsonLines, readOut, readReport, startPlan, type RunnerDeps } from "./runner.ts";
 import { buildView, type JobRecord, type View } from "./view.ts";
 
@@ -50,7 +50,8 @@ export class Orchestrator {
   private readonly now: () => number;
   private readonly dryRun: boolean;
   private readonly watchOffsets = new Map<JobId, number>();
-  private presenceTimes: number[] = []; // visible=true presence commands, in order
+  private presenceTimes: number[] = [];
+  private readonly planErrors = new Set<string>(); // failed:plan:<hash> keys raised by this process // visible=true presence commands, in order
   private ticking: Promise<void> | undefined;
   private again = false;
   private watchers: FSWatcher[] = [];
@@ -151,7 +152,20 @@ export class Orchestrator {
   // -------------------------------------------------------------------------
   // Commands
 
+  // A command that fails is recorded as failed, so the cursor moves on and the loop goes on.
   private async execute(c: Command): Promise<void> {
+    try {
+      await this.executeCommand(c);
+    } catch (e) {
+      const detail = `failed: ${e instanceof Error ? e.message : String(e)}`.slice(0, 500);
+      process.stderr.write(`command ${c.id} (${c.cmd}) ${detail}\n`);
+      if (c.request !== undefined && this.requests().includes(c.request)) {
+        appendEventSafe(this.config.stateDir, { type: "command-executed", request: c.request, command: c.id, ok: false, detail });
+      }
+    }
+  }
+
+  private async executeCommand(c: Command): Promise<void> {
     if (c.cmd === "presence") {
       this.notePresence(c);
       return;
@@ -252,6 +266,16 @@ export class Orchestrator {
     startPlan(this.deps, request, this.dryRun ? withDryRun(plan) : plan);
   }
 
+  private planningFailed(request: RequestId, e: unknown): void {
+    const message = (e instanceof Error ? e.message : String(e)).slice(0, 500);
+    process.stderr.write(`planning ${request} failed: ${e instanceof Error ? e.stack : message}\n`);
+    const key = `failed:plan:${shortHash([message])}`;
+    if (this.planErrors.has(key)) return;
+    this.planErrors.add(key);
+    appendEventSafe(this.config.stateDir, { type: "note", request, text: `The orchestrator can't plan this request: ${message}` });
+    appendEventSafe(this.config.stateDir, { type: "needs-user", request, key, action: "The orchestrator can't plan this request", detail: message });
+  }
+
   // Runs next() for every request (or one, for start-now, which also skips the caps) until it
   // stops writing events, then starts its jobs within the caps.
   plan(only?: RequestId): void {
@@ -272,8 +296,8 @@ export class Orchestrator {
             }
           }
         } catch (e) {
-          // One request's trouble doesn't stop the others.
-          process.stderr.write(`planning ${id} failed: ${e instanceof Error ? e.stack : String(e)}\n`);
+          // One request's trouble doesn't stop the others; it shows on its page, once per error.
+          this.planningFailed(id, e);
         }
       }
       if (!wrote) break;

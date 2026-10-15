@@ -201,6 +201,22 @@ describe("try pushes, failing", () => {
     assert.deepEqual(sc.open(), [`failed:${job}`]);
     assert.match(sc.state().needsUser[0].action, /not retried/);
   });
+
+  it("asks for a new plan when the push was refused because the stack changed since its dry run", () => {
+    const sc = new Scenario("try-push", { rev: "abc" });
+    sc.step();
+    sc.complete("parse", { report: parse });
+    sc.settle();
+    sc.add({ type: "try-planned", request: ID, push: "A", purpose: "p", command: ["./mach", "try", "fuzzy"] });
+    sc.startJob({ purpose: { key: "dry-run:A", what: "dry-run", push: "A", args: ["fuzzy", "-q", "x"], cwd: "/wt/s" }, kind: "script", name: "try.ts dry-run", cwd: "/wt/s", cli: { tool: "try.ts", args: [] } });
+    sc.complete("dry-run:A", { output: { command: ["./mach", "try", "fuzzy"], taskCount: 1, tasks: [], tryTaskConfig: {}, commits: ["a"], warnings: [] } });
+    sc.add({ type: "user-done", request: ID, key: "approve-push:A" });
+    sc.settle();
+    const job = sc.complete("push:A", { exitCode: 1, error: "not pushed: commits changed since the approved dry run: expected a, found b" });
+    assert.deepEqual(sc.settle(), []);
+    assert.deepEqual(sc.open(), [`failed:${job}`]);
+    assert.match(sc.state().needsUser[0].action, /^Push A not made: the stack changed since its dry run/);
+  });
 });
 
 describe("3. work list", () => {

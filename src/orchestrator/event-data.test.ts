@@ -28,7 +28,10 @@ test("an event over 4 KB keeps its envelope and moves its biggest values to data
     assert.equal(s.stacks.s.summary, "x".repeat(10_000));
     assert.equal(s.patches.p, undefined);
     assert.deepEqual((readEvents(dir, request)[1] as { comments: unknown }).comments, comments);
-    assert.throws(() => internalizeEvent(dir, { dataFile: "../../etc/passwd" }), /outside event-data/);
+    // Look-alikes in a payload stay as they are.
+    appendEventSafe(dir, { type: "agent-report", request, job: "j-1", prompt: "recover", report: { a: { dataFile: "x" }, b: { dataFile: "requests/r-2/event-data/y.json" } } });
+    assert.deepEqual((readEvents(dir, request).at(-1) as { report: unknown }).report, { a: { dataFile: "x" }, b: { dataFile: "requests/r-2/event-data/y.json" } });
+    assert.deepEqual(internalizeEvent(dir, request, { dataFile: "../../etc/passwd" }), { dataFile: "../../etc/passwd" });
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

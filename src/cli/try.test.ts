@@ -526,7 +526,7 @@ test("push refuses a stack that differs from the approved dry run's commits", as
       return { code: 1, stdout: "", stderr: "stop here" };
     },
   });
-  await assert.rejects(push("/wt", ["fuzzy", "-q", "x"], opts("ccc\naaa\n")), /the stack changed since the approved dry run: expected bbb,aaa, found ccc,aaa/);
+  await assert.rejects(push("/wt", ["fuzzy", "-q", "x"], opts("ccc\naaa\n")), /^Error: not pushed: commits changed since the approved dry run: expected bbb,aaa, found ccc,aaa/);
   assert.equal(ran, false);
   await assert.rejects(push("/wt", ["fuzzy", "-q", "x"], opts("bbb\naaa\n")), /mach try exited with 1/);
   assert.equal(ran, true);
