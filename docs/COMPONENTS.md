@@ -119,6 +119,8 @@ review in `orchestrate-parallel-fixes`.
 >
 > Look for:
 > - dead code, leftover instrumentation or debug logging;
+> - new code more complicated than the fix needs: abstractions, helpers or options used once, null checks or
+>   other defensive code with no known reason, a bigger change than the cause requires;
 > - comments in the code that add nothing, and padding in the commit message;
 > - a message claiming a mechanism the evidence doesn't show, or not saying why an apparently healthy file is
 >   edited;

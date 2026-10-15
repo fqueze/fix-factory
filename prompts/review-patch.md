@@ -2,6 +2,7 @@ Review commit {sha} in {worktree}, diff and message together, as a demanding Fir
 
 Look for:
 - dead code, leftover instrumentation or debug logging;
+- new code more complicated than the fix needs: abstractions, helpers or options used once, null checks or other defensive code with no known reason, a bigger change than the cause requires;
 - comments in the code that add nothing, and padding in the commit message;
 - a message claiming a mechanism the evidence doesn't show, or not saying why an apparently healthy file is edited;
 - a guard on the victim's side where the leaker should have been fixed, or a test change that hides a product bug;
