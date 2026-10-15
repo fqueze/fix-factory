@@ -323,8 +323,13 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.ok(h.includes(cmd({ cmd: "dismiss", key: "refused:c-7", request: "r-20261013-tab-failures" })));
   });
 
-  it("4. investigate and fix: Bug to file link and the paste-number/comment box", () => {
-    const h = expanded("r-20261010-xpcshell-cwd");
+  it("7. bugs: Bug to file link and the paste-number/comment box, only once try is green", () => {
+    const early = structuredClone(get("r-20261010-xpcshell-cwd"));
+    early.needsUser = early.needsUser.filter((n) => !n.key.startsWith("file-bug:"));
+    assert.doesNotMatch(renderRequest(early, ctx, true).value, /class="bug tofile"|Bug draft ·/, "before step 7, no bug to file");
+    const r = structuredClone(get("r-20261010-xpcshell-cwd"));
+    r.step = "meta bug";
+    const h = renderRequest(r, ctx, true).value;
     assert.match(h, /<a class="bug tofile" href="https:\/\/bugzilla\.mozilla\.org\/enter_bug\.cgi\?product=Core&amp;component=XPCOM&amp;short_desc=CopyDirectoryTo\+leaves/);
     assert.match(h, /blocked=2081200/);
     assert.match(h, /Bug draft · Core::XPCOM · “CopyDirectoryTo leaves a read-only source directory&#39;s contents behind”/);

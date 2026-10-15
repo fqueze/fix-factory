@@ -145,6 +145,11 @@ export function stackPatches(r: RequestState, s: StackView): PatchView[] {
   return s.order.map((id) => r.patches[id]).filter((p) => p !== undefined);
 }
 
+// A group whose patches are in a stack is shown by the stack's rows, not by a group row.
+export function isStackedItem(r: RequestState, item: string): boolean {
+  return Object.values(r.stacks).some((s) => s.order.some((id) => r.patches[id]?.item === item));
+}
+
 export function patchesOutsideStacks(r: RequestState): PatchView[] {
   const stacked = new Set(Object.values(r.stacks).flatMap((s) => s.order));
   return Object.values(r.patches).filter((p) => !stacked.has(p.id));

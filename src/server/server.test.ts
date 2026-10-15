@@ -337,3 +337,23 @@ describe("GET /stacks/:stack/review", () => {
     assert.equal((await fetch(`${base}/stacks/nope/review`)).status, 404);
   });
 });
+
+describe("GET /requests/:id/patches/:patch/view", () => {
+  it("runs stack-viewer on the patch alone, in its worktree, with a button sending comments to its author", async () => {
+    const p = state.getRequest("r-20261010-xpcshell-cwd")!.patches["p-prefs"];
+    const r = await fetch(`${base}/requests/r-20261010-xpcshell-cwd/patches/p-prefs/view`);
+    assert.equal(r.status, 200);
+    const page = await r.text();
+    const args = JSON.parse(page.match(/<pre id="args">(.*?)<\/pre>/)![1]);
+    assert.deepEqual(args.slice(0, 3), ["--no-open", "-R", p.worktree]);
+    assert.equal(args.at(-1), `${p.sha}^..${p.sha}`);
+    const cfg = JSON.parse(page.match(/<script type="application\/json" id="ff-review-config">(.*?)<\/script>/)![1]);
+    assert.deepEqual(cfg, { request: "r-20261010-xpcshell-cwd", patch: "p-prefs", shas: { [p.sha]: "p-prefs" } });
+    assert.match(page, /cmd: "comment-fix"/);
+  });
+
+  it("refuses unknown requests and patches", async () => {
+    assert.equal((await fetch(`${base}/requests/r-20261010-xpcshell-cwd/patches/nope/view`)).status, 404);
+    assert.equal((await fetch(`${base}/requests/nope/patches/p-prefs/view`)).status, 404);
+  });
+});

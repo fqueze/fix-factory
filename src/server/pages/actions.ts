@@ -1,7 +1,7 @@
 import type { NeedsUser, PlannedCommand, PushView, RefusedCommand, RequestState, StackView } from "../../types.ts";
 import { canDismiss, isPushJob, reviewLimitFlag } from "../../state/flags.ts";
 import { html, join, type Html } from "../html.ts";
-import { actionKind, COMMAND_LABELS, commandFields, enterBugUrl, groupLabel, jobLabel, jobNoun, refusedOf, requestUrl, stackOfPatch, submitChecks } from "./common.ts";
+import { actionKind, COMMAND_LABELS, commandFields, enterBugUrl, groupLabel, isStackedItem, jobLabel, jobNoun, refusedOf, requestUrl, stackOfPatch, submitChecks } from "./common.ts";
 
 // The ⚑ area of one open needs-user entry: what you're asked, why, and the buttons.
 export function renderAction(r: RequestState, n: NeedsUser): Html {
@@ -286,7 +286,8 @@ export function actionsSummary(r: RequestState): Html {
   );
 }
 
+// The group row a ⚑ is handled on; none when the group is shown by a stack (the ⚑ keeps its buttons in the header).
 function flagItem(r: RequestState, n: NeedsUser): string | undefined {
   const item = n.item ?? (n.job === undefined ? undefined : r.jobs[n.job]?.item);
-  return item !== undefined && item in r.items ? item : undefined;
+  return item !== undefined && item in r.items && !isStackedItem(r, item) ? item : undefined;
 }

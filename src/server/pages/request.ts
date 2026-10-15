@@ -2,7 +2,7 @@ import type { BugDraft, InvestigateReport, ItemView, JobView, PatchView, PushVie
 import { html, join, type Html } from "../html.ts";
 import { actionsSummary, approvePushControls, bugBox, commandDetails, continueBox, copyButton, recoveryPlan, recoveryPlanFor, hasAuthorSession, stackViewerLink, stopButton, summaryId, youSaid } from "./actions.ts";
 import { watchDetails } from "./activity.ts";
-import { IDLE, itemSentence, progressLine, requestProgress, runningJobOf, workLabel } from "./progress.ts";
+import { itemSentence, progressLine, requestProgress, runningJobOf, workLabel } from "./progress.ts";
 import { isPushJob } from "../../state/flags.ts";
 import {
   bugUrl,
@@ -246,10 +246,12 @@ function patchRow(r: RequestState, p: PatchView, columns: PatchColumns, ctx: Ren
   const item = itemOf(r, p);
   const rate = item?.group.ratePerWeek;
   return html`<tr data-patch="${p.id}" id="patch-${p.id}">
-    <td>${p.revision ? html`<a class="phab" href="${phabUrl(p.revision)}" title="D${p.revision}" target="_blank" rel="noopener">${PHAB_ICON}</a>` : null}${bugLabel(p)} ${patchTitle(p)}${
+    <td>${p.revision ? html`<a class="phab" href="${phabUrl(p.revision)}" title="D${p.revision}" target="_blank" rel="noopener">${PHAB_ICON}</a>` : null}${
+      FILING_STEPS.has(r.step) || hasBug(p) ? bugLabel(p) : html`<span class="bug none">no bug yet</span>`
+    } ${patchTitle(p)}${
       !hasBug(p) && !p.bugDraft && p.testOnly ? html` <span class="sub">(meta bug)</span>` : null
-    } ${viewLink(r, p)}${item ? html`<div class="sub">fixes <a href="#item-${item.id}">${groupLabel(r, item)}</a>: ${item.group.message}</div>` : null}
-      ${!hasBug(p) && p.bugDraft ? bugDraftBox(r.id, p, back) : null}
+    } ${viewLink(r, p)}${item ? html`<div class="sub">fixes ${groupLabel(r, item)}: ${item.group.message}</div>` : null}
+      ${FILING_STEPS.has(r.step) && !hasBug(p) && p.bugDraft ? bugDraftBox(r.id, p, back) : null}
       ${p.deps.map((d) => depLine(r, d))}
       ${reviewBox(r, p, back, p.interdiffFile === undefined ? undefined : ctx.interdiff?.(p))}
     </td>
