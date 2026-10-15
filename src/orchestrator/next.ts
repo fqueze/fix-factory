@@ -514,11 +514,12 @@ class Planner {
   }
 
   private workList(): void {
-    if (at(this.s.step) < at("work list")) return;
+    // The push's final run can still add items while the first ones are in their stacks.
+    if (at(this.s.step) < at("work list") || at(this.s.step) > at("verify on try")) return;
     const pushes = this.signalPushes();
     const goal = this.s.text.trim() || "find the failures to fix";
     let firstRunDone = false;
-    if (pushes.length === 0) {
+    if (pushes.length === 0 && this.s.kind === "burndown") {
       const groups = this.groups("folder", "folder", this.s.folder ?? "");
       if (groups) {
         this.createItems(groups);

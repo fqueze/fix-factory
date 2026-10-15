@@ -1,6 +1,9 @@
 // Plays the orchestrator's loop without processes, for the tests of next(), handlers and commands:
 // next() → its events appended and its jobs "started"; complete() finishes a job through the
 // handlers as the runner would.
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { renderPrompt } from "../agents/run.ts";
 import type { EventInput } from "../state/events.ts";
 import { foldEvents } from "../state/fold.ts";
 import type { Event, FactoryConfig, JobId, RequestKind, RequestState } from "../types.ts";
@@ -92,6 +95,8 @@ export class Scenario {
   }
 
   startJob(plan: JobPlan): JobId {
+    // As the runner would: a missing placeholder throws.
+    if (plan.agent?.vars) renderPrompt(readFileSync(fileURLToPath(new URL(`../../prompts/${plan.name}.md`, import.meta.url)), "utf8"), plan.agent.vars);
     const job = `j-${++this.n}`;
     this.add({
       type: "job-started",
