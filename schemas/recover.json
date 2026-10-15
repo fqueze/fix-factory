@@ -1,0 +1,292 @@
+{
+  "type": "object",
+  "properties": {
+    "plan": {
+      "type": "array",
+      "items": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "cmd": {
+                "type": "string",
+                "enum": [
+                  "retry-job"
+                ]
+              },
+              "job": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "cmd",
+              "job",
+              "reason"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "cmd": {
+                "type": "string",
+                "enum": [
+                  "cancel-job"
+                ]
+              },
+              "job": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "cmd",
+              "job",
+              "reason"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "cmd": {
+                "type": "string",
+                "enum": [
+                  "resume-agent"
+                ]
+              },
+              "item": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "cmd",
+              "item",
+              "message",
+              "reason"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "cmd": {
+                "type": "string",
+                "enum": [
+                  "start-agent"
+                ]
+              },
+              "item": {
+                "type": "string"
+              },
+              "prompt": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "cmd",
+              "item",
+              "prompt",
+              "reason"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "cmd": {
+                "type": "string",
+                "enum": [
+                  "set-state"
+                ]
+              },
+              "item": {
+                "type": "string"
+              },
+              "state": {
+                "type": "string",
+                "enum": [
+                  "not started",
+                  "waiting for a build slot",
+                  "investigating",
+                  "fix verified locally",
+                  "in critical review",
+                  "review findings",
+                  "reviewed",
+                  "in stack",
+                  "in try",
+                  "waiting for review",
+                  "addressing review comments",
+                  "blocked",
+                  "fixed",
+                  "left as-is",
+                  "handed back",
+                  "landed"
+                ]
+              },
+              "reason": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "cmd",
+              "item",
+              "state",
+              "reason"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "cmd": {
+                "type": "string",
+                "enum": [
+                  "redo-step"
+                ]
+              },
+              "item": {
+                "type": "string"
+              },
+              "step": {
+                "type": "string",
+                "enum": [
+                  "request",
+                  "first signal",
+                  "work list",
+                  "investigate and fix",
+                  "stack",
+                  "verify on try",
+                  "meta bug",
+                  "submit",
+                  "review comments",
+                  "landing",
+                  "done"
+                ]
+              },
+              "reason": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "cmd",
+              "step",
+              "reason"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "cmd": {
+                "type": "string",
+                "enum": [
+                  "edit-config"
+                ]
+              },
+              "config": {
+                "type": "object"
+              },
+              "reason": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "cmd",
+              "config",
+              "reason"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "cmd": {
+                "type": "string",
+                "enum": [
+                  "shell"
+                ]
+              },
+              "cwd": {
+                "type": "string"
+              },
+              "command": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "cmd",
+              "cwd",
+              "command",
+              "reason"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      }
+    },
+    "cannotDo": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "questions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "feedback": {
+      "type": "array",
+      "description": "Problems with the tools or inputs you used, one entry per problem.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "target": {
+            "type": "string",
+            "enum": [
+              "fx-tests",
+              "profiler-cli",
+              "searchfox-cli",
+              "factory",
+              "inputs"
+            ]
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "target",
+          "text"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "plan",
+    "cannotDo",
+    "questions",
+    "feedback"
+  ],
+  "additionalProperties": false
+}
