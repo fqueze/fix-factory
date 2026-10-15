@@ -1,0 +1,1613 @@
+[
+ {
+  "method": "differential.revision.search",
+  "params": {
+   "constraints": {
+    "ids": [
+     333041,
+     329684
+    ]
+   },
+   "attachments": {
+    "reviewers": true
+   }
+  },
+  "result": {
+   "data": [
+    {
+     "id": 333041,
+     "type": "DREV",
+     "phid": "PHID-DREV-42hmfhtmjpmmdmxn73ou",
+     "fields": {
+      "stackGraph": {
+       "PHID-DREV-42hmfhtmjpmmdmxn73ou": []
+      },
+      "title": "Bug 2080975 - Keep failures of tests that will be retried as FAIL in resource usage profile markers. r?ahal",
+      "uri": "https://phabricator.services.mozilla.com/D333041",
+      "authorPHID": "PHID-USER-4jlttcsengdawi5jugb4",
+      "status": {
+       "value": "published",
+       "name": "Closed",
+       "closed": true,
+       "color.ansi": "cyan"
+      },
+      "repositoryPHID": "PHID-REPO-wxrrnneqyw2v3wcqbkfj",
+      "diffPHID": "PHID-DIFF-e3im5r25skysglsdiyac",
+      "diffID": "1404076",
+      "summary": "\nThe harnesses make expected match status when a test will be retried, so the\nfailure arrived looking like a todo() and became KNOWN-FAIL.",
+      "testPlan": "",
+      "isDraft": false,
+      "holdAsDraft": false,
+      "dateCreated": 1791841222,
+      "dateModified": 1791994114,
+      "policy": {
+       "view": "public",
+       "edit": "PHID-PROJ-njo5uuqyyq3oijbkhy55"
+      },
+      "bugzilla.bug-id": "2080975",
+      "merge.conflict.status": null,
+      "uplift.request": []
+     },
+     "attachments": {
+      "reviewers": {
+       "reviewers": [
+        {
+         "reviewerPHID": "PHID-USER-quoh3mwvqjdpzkhrtcuf",
+         "status": "added",
+         "isBlocking": false,
+         "actorPHID": null
+        },
+        {
+         "reviewerPHID": "PHID-USER-xzwtemgjb3abai5r6iul",
+         "status": "accepted",
+         "isBlocking": false,
+         "actorPHID": "PHID-USER-xzwtemgjb3abai5r6iul"
+        }
+       ]
+      }
+     }
+    },
+    {
+     "id": 329684,
+     "type": "DREV",
+     "phid": "PHID-DREV-5jo35geyazizlxzexbwi",
+     "fields": {
+      "stackGraph": {
+       "PHID-DREV-5jo35geyazizlxzexbwi": []
+      },
+      "title": "Bug 1869154 - Don't start CSS animation and transition markers before the animation started playing. r?#layout-reviewers",
+      "uri": "https://phabricator.services.mozilla.com/D329684",
+      "authorPHID": "PHID-USER-4jlttcsengdawi5jugb4",
+      "status": {
+       "value": "needs-revision",
+       "name": "Needs Revision",
+       "closed": false,
+       "color.ansi": "red"
+      },
+      "repositoryPHID": "PHID-REPO-wxrrnneqyw2v3wcqbkfj",
+      "diffPHID": "PHID-DIFF-oydb7ycgtrdswqmlyvw2",
+      "diffID": "1391310",
+      "summary": "\nSubtracting the elapsed time from the event time gives a marker start before\nthe animation started playing when it was seeked (e.g. with finish()), which\nunderflows to a null TimeStamp if that is before the machine booted.",
+      "testPlan": "",
+      "isDraft": false,
+      "holdAsDraft": false,
+      "dateCreated": 1790650160,
+      "dateModified": 1791996989,
+      "policy": {
+       "view": "public",
+       "edit": "PHID-PROJ-njo5uuqyyq3oijbkhy55"
+      },
+      "bugzilla.bug-id": "1869154",
+      "merge.conflict.status": {
+       "status": "clean",
+       "reason": "Merges cleanly when merged against target branch tip b5ae95b7e131, starting from b333202cd8d8.",
+       "reasonCode": null,
+       "baseDiffCreationMethod": "moz-phab-git",
+       "baseDiffSourceControlSystem": "git",
+       "checkedAgainstCommit": "b5ae95b7e1315f85a11a4a63a9699b6141413193",
+       "checkedAgainstBaseCommit": "b333202cd8d8",
+       "checkedAgainstBaseRevisionPHID": null,
+       "checkedAgainstDiffPHID": "PHID-DIFF-oydb7ycgtrdswqmlyvw2",
+       "checkedAgainstDiffID": 1391310,
+       "epoch": 1791317451,
+       "isStale": false,
+       "hint": null
+      },
+      "uplift.request": []
+     },
+     "attachments": {
+      "reviewers": {
+       "reviewers": [
+        {
+         "reviewerPHID": "PHID-PROJ-eq3xkdzr25tjzkci5bjj",
+         "status": "rejected",
+         "isBlocking": false,
+         "actorPHID": "PHID-USER-zp4gy3jjzfehipsktf6x"
+        },
+        {
+         "reviewerPHID": "PHID-PROJ-pwrmk742pgas56l5uqix",
+         "status": "blocking",
+         "isBlocking": true,
+         "actorPHID": null
+        },
+        {
+         "reviewerPHID": "PHID-USER-zp4gy3jjzfehipsktf6x",
+         "status": "rejected",
+         "isBlocking": false,
+         "actorPHID": "PHID-USER-zp4gy3jjzfehipsktf6x"
+        }
+       ]
+      }
+     }
+    }
+   ],
+   "maps": {},
+   "query": {
+    "queryKey": null
+   },
+   "cursor": {
+    "limit": 100,
+    "after": null,
+    "before": null,
+    "order": null
+   }
+  }
+ },
+ {
+  "method": "transaction.search",
+  "params": {
+   "objectIdentifier": "PHID-DREV-42hmfhtmjpmmdmxn73ou"
+  },
+  "result": {
+   "data": [
+    {
+     "id": 11593026,
+     "phid": "PHID-XACT-DREV-nhki3l6kqjbq6iq",
+     "type": null,
+     "authorPHID": "PHID-RIDT-mo4cgnuze6omszqccd4s",
+     "objectPHID": "PHID-DREV-42hmfhtmjpmmdmxn73ou",
+     "dateCreated": 1791994114,
+     "dateModified": 1791994114,
+     "groupID": "dyzkiwtgofcvh6c5ylmdlgs66tsmkurz",
+     "comments": [],
+     "fields": {}
+    },
+    {
+     "id": 11592459,
+     "phid": "PHID-XACT-DREV-ruwt76jdyjm25ja",
+     "type": null,
+     "authorPHID": "PHID-USER-4jlttcsengdawi5jugb4",
+     "objectPHID": "PHID-DREV-42hmfhtmjpmmdmxn73ou",
+     "dateCreated": 1791992484,
+     "dateModified": 1791992484,
+     "groupID": "vhxnqzlmrt7ugqcjteh2h7aezudzialk",
+     "comments": [],
+     "fields": {}
+    },
+    {
+     "id": 11573819,
+     "phid": "PHID-XACT-DREV-dewloeeb6qs24nb",
+     "type": "close",
+     "authorPHID": "PHID-RIDT-syhc7dttjlbrf7ilxude",
+     "objectPHID": "PHID-DREV-42hmfhtmjpmmdmxn73ou",
+     "dateCreated": 1791879972,
+     "dateModified": 1791879972,
+     "groupID": "ev4ofxtkva6czaauz7jhhvpepm5zifdb",
+     "comments": [],
+     "fields": {
+      "commitPHIDs": [
+       "PHID-CMIT-2d6sqwmmlijgrlz63qk2"
+      ]
+     }
+    },
+    {
+     "id": 11573818,
+     "phid": "PHID-XACT-DREV-64urz63f3wxqgsa",
+     "type": null,
+     "authorPHID": "PHID-RIDT-syhc7dttjlbrf7ilxude",
+     "objectPHID": "PHID-DREV-42hmfhtmjpmmdmxn73ou",
+     "dateCreated": 1791879972,
+     "dateModified": 1791879972,
+     "groupID": "ev4ofxtkva6czaauz7jhhvpepm5zifdb",
+     "comments": [],
+     "fields": {}
+    },
+    {
+     "id": 11573817,
+     "phid": "PHID-XACT-DREV-ywgjak5lqyuodvd",
+     "type": "update",
+     "authorPHID": "PHID-RIDT-syhc7dttjlbrf7ilxude",
+     "objectPHID": "PHID-DREV-42hmfhtmjpmmdmxn73ou",
+     "dateCreated": 1791879972,
+     "dateModified": 1791879972,
+     "groupID": "ev4ofxtkva6czaauz7jhhvpepm5zifdb",
+     "comments": [],
+     "fields": {
+      "old": "PHID-DIFF-dbk3ucpsnpebbnqpyfom",
+      "new": "PHID-DIFF-e3im5r25skysglsdiyac",
+      "commitPHIDs": [
+       "PHID-CMIT-2d6sqwmmlijgrlz63qk2"
+      ]
+     }
+    },
+    {
+     "id": 11573508,
+     "phid": "PHID-XACT-DREV-fmftg5ur6wmkpbv",
+     "type": null,
+     "authorPHID": "PHID-APPS-PhabricatorHarbormasterApplication",
+     "objectPHID": "PHID-DREV-42hmfhtmjpmmdmxn73ou",
+     "dateCreated": 1791877481,
+     "dateModified": 1791877481,
+     "groupID": "uborep4nycrgiuj2hxwee6e73ipc7nqi",
+     "comments": [],
+     "fields": {}
+    },
+    {
+     "id": 11573500,
+     "phid": "PHID-XACT-DREV-gcy6tss2vqizmff",
+     "type": "status",
+     "authorPHID": "PHID-USER-xzwtemgjb3abai5r6iul",
+     "objectPHID": "PHID-DREV-42hmfhtmjpmmdmxn73ou",
+     "dateCreated": 1791877271,
+     "dateModified": 1791877271,
+     "groupID": null,
+     "comments": [],
+     "fields": {
+      "old": "needs-review",
+      "new": "accepted"
+     }
+    },
+    {
+     "id": 11573499,
+     "phid": "PHID-XACT-DREV-arvaemdln6edmru",
+     "type": "accept",
+     "authorPHID": "PHID-USER-xzwtemgjb3abai5r6iul",
+     "objectPHID": "PHID-DREV-42hmfhtmjpmmdmxn73ou",
+     "dateCreated": 1791877271,
+     "dateModified": 1791877271,
+     "groupID": "ggcqpuwevcevw3i2jcfbpflj2e3ixnt5",
+     "comments": [],
+     "fields": {}
+    },
+    {
+     "id": 11573429,
+     "phid": "PHID-XACT-DREV-pq7emrmp73nqow7",
+     "type": "comment",
+     "authorPHID": "PHID-USER-4jlttcsengdawi5jugb4",
+     "objectPHID": "PHID-DREV-42hmfhtmjpmmdmxn73ou",
+     "dateCreated": 1791877033,
+     "dateModified": 1791877033,
+     "groupID": "mgxtvpnvdxnzcujbhflymkmuatuhkbwf",
+     "comments": [
+      {
+       "id": 1767070,
+       "phid": "PHID-XCMT-ltzcwkyuzeq72yd2wajo",
+       "version": 1,
+       "authorPHID": "PHID-USER-4jlttcsengdawi5jugb4",
+       "dateCreated": 1791877033,
+       "dateModified": 1791877033,
+       "removed": false,
+       "content": {
+        "raw": ">>! In D333041#11573301, @jcristau wrote:\n> I don't really understand why we seem to be marking \"expected failure\" as \"will retry\", so I'm a bit confused about what this is doing...\n\n[Claude's reply]\nThese aren't expected failures. When a test fails in automation and the harness is going to retry it, `_mark_as_expected` (and `log_full_output` for xpcshell) rewrites `expected` to equal `status` so the first attempt doesn't fail the job. mozlog then drops `expected`, and since bug 2073873 the resource monitor reads a missing `expected` as a todo(), so these real failures became `KNOWN-FAIL` markers and dashboards lost their messages. The flag marks the messages the harness rewrote, so the monitor can still show them as `FAIL`. A real todo() never has `expected` set, so the harness never touches it.\n\n[My addition to it]\nThis is part of a pile of hacks I would like to eventually clean up once Treeherder reads only structured data, but currently what these test harnesses try to do is:\n- mark the failures as \"known\" for the serialized plain text logs, so treeherder doesn't mark the tests that failed initially and passed on retry as the reason why the job got failed.\n- mark the failures as actual fails for resource usage profiles, so these tests are colored as orange when looking at profiles, and so tests.firefox.dev (that also takes into account the \"parallel\" and \"retry\" markers) can aggregate these low frequency failures that don't happen on retry."
+       }
+      }
+     ],
+     "fields": {}
+    },
+    {
+     "id": 11573329,
+     "phid": "PHID-XACT-DREV-lncqsto6hfc6xtf",
+     "type": null,
+     "authorPHID": "PHID-USER-4jlttcsengdawi5jugb4",
+     "objectPHID": "PHID-DREV-42hmfhtmjpmmdmxn73ou",
+     "dateCreated": 1791876671,
+     "dateModified": 1791876671,
+     "groupID": "ejchigbeocrcxittil5gkwfj2mc57k5f",
+     "comments": [],
+     "fields": {}
+    },
+    {
+     "id": 11573328,
+     "phid": "PHID-XACT-DREV-ljo2r3gzb4xmn7n",
+     "type": "update",
+     "authorPHID": "PHID-USER-4jlttcsengdawi5jugb4",
+     "objectPHID": "PHID-DREV-42hmfhtmjpmmdmxn73ou",
+     "dateCreated": 1791876671,
+     "dateModified": 1791876671,
+     "groupID": "ejchigbeocrcxittil5gkwfj2mc57k5f",
+     "comments": [],
+     "fields": {
+      "old": "PHID-DIFF-26gph2grma4kq5r45py3",
+      "new": "PHID-DIFF-dbk3ucpsnpebbnqpyfom",
+      "commitPHIDs": []
+     }
+    },
+    {
+     "id": 11573303,
+     "phid": "PHID-XACT-DREV-ofbj2uefwudbpci",
+     "type": "inline",
+     "authorPHID": "PHID-USER-xzwtemgjb3abai5r6iul",
+     "objectPHID": "PHID-DREV-42hmfhtmjpmmdmxn73ou",
+     "dateCreated": 1791876202,
+     "dateModified": 1791876202,
+     "groupID": "gtthw3eoalijloj43kp2ojmpxclh3wil",
+     "comments": [
+      {
+       "id": 1767046,
+       "phid": "PHID-XCMT-5ti6knxih2f2apyfwpk5",
+       "version": 1,
+       "authorPHID": "PHID-USER-xzwtemgjb3abai5r6iul",
+       "dateCreated": 1791876047,
+       "dateModified": 1791876609,
+       "removed": false,
+       "content": {
+        "raw": ""
+       }
+      }
+     ],
+     "fields": {
+      "diff": {
+       "id": 1403712,
+       "phid": "PHID-DIFF-26gph2grma4kq5r45py3"
+      },
+      "path": "testing/mozbase/mozsystemmonitor/mozsystemmonitor/resourcemonitor.py",
+      "line": 1521,
+      "length": 1,
+      "isNewFile": true,
+      "replyToCommentPHID": null,
+      "isDone": true,
+      "hasSuggestion": true,
+      "suggestionText": "                data.get(\"extra\", {})\n"
+     }
+    },
+    {
+     "id": 11573302,
+     "phid": "PHID-XACT-DREV-nze3yj25kepgbri",
+     "type": "inline",
+     "authorPHID": "PHID-USER-xzwtemgjb3abai5r6iul",
+     "objectPHID": "PHID-DREV-42hmfhtmjpmmdmxn73ou",
+     "dateCreated": 1791876202,
+     "dateModified": 1791876202,
+     "groupID": "gtthw3eoalijloj43kp2ojmpxclh3wil",
+     "comments": [
+      {
+       "id": 1767043,
+       "phid": "PHID-XCMT-72njwjntzwimo4ldou44",
+       "version": 1,
+       "authorPHID": "PHID-USER-xzwtemgjb3abai5r6iul",
+       "dateCreated": 1791875894,
+       "dateModified": 1791876608,
+       "removed": false,
+       "content": {
+        "raw": "same for the xpcshell hunk"
+       }
+      }
+     ],
+     "fields": {
+      "diff": {
+       "id": 1403712,
+       "phid": "PHID-DIFF-26gph2grma4kq5r45py3"
+      },
+      "path": "testing/mochitest/runtests.py",
+      "line": 365,
+      "length": 1,
+      "isNewFile": true,
+      "replyToCommentPHID": null,
+      "isDone": true,
+      "hasSuggestion": true,
+      "suggestionText": "            message.setdefault(\"extra\", {})[\"will_retry\"] = True\n"
+     }
+    },
+    {
+     "id": 11573301,
+     "phid": "PHID-XACT-DREV-yvf7hgknb5sjzyx",
+     "type": "comment",
+     "authorPHID": "PHID-USER-xzwtemgjb3abai5r6iul",
+     "objectPHID": "PHID-DREV-42hmfhtmjpmmdmxn73ou",
+     "dateCreated": 1791876202,
+     "dateModified": 1791876202,
+     "groupID": "gtthw3eoalijloj43kp2ojmpxclh3wil",
+     "comments": [
+      {
+       "id": 1767050,
+       "phid": "PHID-XCMT-mjhwpdg7vf272r6jpbcl",
+       "version": 1,
+       "authorPHID": "PHID-USER-xzwtemgjb3abai5r6iul",
+       "dateCreated": 1791876202,
+       "dateModified": 1791876202,
+       "removed": false,
+       "content": {
+        "raw": "I don't really understand why we seem to be marking \"expected failure\" as \"will retry\", so I'm a bit confused about what this is doing..."
+       }
+      }
+     ],
+     "fields": {}
+    },
+    {
+     "id": 11573300,
+     "phid": "PHID-XACT-DREV-3jebaz7v4kjrtev",
+     "type": "subscribers",
+     "authorPHID": "PHID-USER-xzwtemgjb3abai5r6iul",
+     "objectPHID": "PHID-DREV-42hmfhtmjpmmdmxn73ou",
+     "dateCreated": 1791876202,
+     "dateModified": 1791876202,
+     "groupID": "gtthw3eoalijloj43kp2ojmpxclh3wil",
+     "comments": [],
+     "fields": {
+      "operations": [
+       {
+        "operation": "add",
+        "phid": "PHID-USER-xzwtemgjb3abai5r6iul"
+       }
+      ]
+     }
+    },
+    {
+     "id": 11570439,
+     "phid": "PHID-XACT-DREV-i6gsomdqkc7bycc",
+     "type": null,
+     "authorPHID": "PHID-APPS-PhabricatorHarbormasterApplication",
+     "objectPHID": "PHID-DREV-42hmfhtmjpmmdmxn73ou",
+     "dateCreated": 1791841987,
+     "dateModified": 1791841987,
+     "groupID": "3qt3yvb2z73rtcwhqb5m3enzxffmaimk",
+     "comments": [],
+     "fields": {}
+    },
+    {
+     "id": 11570425,
+     "phid": "PHID-XACT-DREV-ui452mjpgvcknzy",
+     "type": "projects",
+     "authorPHID": "PHID-USER-cje4weq32o3xyuegalpj",
+     "objectPHID": "PHID-DREV-42hmfhtmjpmmdmxn73ou",
+     "dateCreated": 1791841966,
+     "dateModified": 1791841966,
+     "groupID": "kpz5pgp6e4m4e2ztnh4owgjpdw5iljen",
+     "comments": [],
+     "fields": {
+      "operations": [
+       {
+        "operation": "add",
+        "phid": "PHID-PROJ-h7y4cs7m2o67iczw62pp"
+       }
+      ]
+     }
+    },
+    {
+     "id": 11570401,
+     "phid": "PHID-XACT-DREV-lxvqeeowmnqpu7d",
+     "type": "comment",
+     "authorPHID": "PHID-USER-4jlttcsengdawi5jugb4",
+     "objectPHID": "PHID-DREV-42hmfhtmjpmmdmxn73ou",
+     "dateCreated": 1791841542,
+     "dateModified": 1791841542,
+     "groupID": "ihdybb2rawcqby4dthez5op7355dj36y",
+     "comments": [
+      {
+       "id": 1766688,
+       "phid": "PHID-XCMT-deuo7yopamcm4nr3u2av",
+       "version": 1,
+       "authorPHID": "PHID-USER-4jlttcsengdawi5jugb4",
+       "dateCreated": 1791841542,
+       "dateModified": 1791841542,
+       "removed": false,
+       "content": {
+        "raw": "Resource usage profile from a try push with the patch: https://share.firefox.dev/4hSqRuS"
+       }
+      }
+     ],
+     "fields": {}
+    },
+    {
+     "id": 11570390,
+     "phid": "PHID-XACT-DREV-wqqoudbhxzvg5xj",
+     "type": "projects",
+     "authorPHID": "PHID-USER-ub7ohlqtjctu4ofsjlb7",
+     "objectPHID": "PHID-DREV-42hmfhtmjpmmdmxn73ou",
+     "dateCreated": 1791841227,
+     "dateModified": 1791841227,
+     "groupID": "ls3sxewgd5kib3j4iqaqcfhakbu3cm2n",
+     "comments": [],
+     "fields": {
+      "operations": [
+       {
+        "operation": "remove",
+        "phid": "PHID-PROJ-wkydohdk6pajyfn2llkb"
+       }
+      ]
+     }
+    },
+    {
+     "id": 11570389,
+     "phid": "PHID-XACT-DREV-7yhqds2m2odh4fw",
+     "type": "request-review",
+     "authorPHID": "PHID-USER-ub7ohlqtjctu4ofsjlb7",
+     "objectPHID": "PHID-DREV-42hmfhtmjpmmdmxn73ou",
+     "dateCreated": 1791841227,
+     "dateModified": 1791841227,
+     "groupID": "ls3sxewgd5kib3j4iqaqcfhakbu3cm2n",
+     "comments": [],
+     "fields": {}
+    },
+    {
+     "id": 11570388,
+     "phid": "PHID-XACT-DREV-n3xxcfx3bcaulmc",
+     "type": null,
+     "authorPHID": "PHID-USER-ub7ohlqtjctu4ofsjlb7",
+     "objectPHID": "PHID-DREV-42hmfhtmjpmmdmxn73ou",
+     "dateCreated": 1791841227,
+     "dateModified": 1791841227,
+     "groupID": "ls3sxewgd5kib3j4iqaqcfhakbu3cm2n",
+     "comments": [],
+     "fields": {}
+    },
+    {
+     "id": 11570387,
+     "phid": "PHID-XACT-DREV-hcrq3fhm2yctymr",
+     "type": null,
+     "authorPHID": "PHID-USER-ub7ohlqtjctu4ofsjlb7",
+     "objectPHID": "PHID-DREV-42hmfhtmjpmmdmxn73ou",
+     "dateCreated": 1791841227,
+     "dateModified": 1791841227,
+     "groupID": "ls3sxewgd5kib3j4iqaqcfhakbu3cm2n",
+     "comments": [],
+     "fields": {}
+    },
+    {
+     "id": 11570386,
+     "phid": "PHID-XACT-DREV-67khgzw43nochh5",
+     "type": "projects",
+     "authorPHID": "PHID-APPS-PhabricatorHeraldApplication",
+     "objectPHID": "PHID-DREV-42hmfhtmjpmmdmxn73ou",
+     "dateCreated": 1791841223,
+     "dateModified": 1791841223,
+     "groupID": "t6xh6qctfguknzblitiuefuysgwrnpbz",
+     "comments": [],
+     "fields": {
+      "operations": [
+       {
+        "operation": "add",
+        "phid": "PHID-PROJ-wkydohdk6pajyfn2llkb"
+       }
+      ]
+     }
+    },
+    {
+     "id": 11570385,
+     "phid": "PHID-XACT-DREV-lramclvgen4htnm",
+     "type": "update",
+     "authorPHID": "PHID-USER-4jlttcsengdawi5jugb4",
+     "objectPHID": "PHID-DREV-42hmfhtmjpmmdmxn73ou",
+     "dateCreated": 1791841222,
+     "dateModified": 1791841222,
+     "groupID": "t6xh6qctfguknzblitiuefuysgwrnpbz",
+     "comments": [],
+     "fields": {
+      "old": null,
+      "new": "PHID-DIFF-26gph2grma4kq5r45py3",
+      "commitPHIDs": []
+     }
+    },
+    {
+     "id": 11570384,
+     "phid": "PHID-XACT-DREV-2yxxwtyextmmcpk",
+     "type": null,
+     "authorPHID": "PHID-USER-4jlttcsengdawi5jugb4",
+     "objectPHID": "PHID-DREV-42hmfhtmjpmmdmxn73ou",
+     "dateCreated": 1791841222,
+     "dateModified": 1791841222,
+     "groupID": "t6xh6qctfguknzblitiuefuysgwrnpbz",
+     "comments": [],
+     "fields": {}
+    },
+    {
+     "id": 11570383,
+     "phid": "PHID-XACT-DREV-lxeehqidbzswiy5",
+     "type": "reviewers",
+     "authorPHID": "PHID-USER-4jlttcsengdawi5jugb4",
+     "objectPHID": "PHID-DREV-42hmfhtmjpmmdmxn73ou",
+     "dateCreated": 1791841222,
+     "dateModified": 1791841222,
+     "groupID": "t6xh6qctfguknzblitiuefuysgwrnpbz",
+     "comments": [],
+     "fields": {
+      "operations": [
+       {
+        "operation": "add",
+        "phid": "PHID-USER-quoh3mwvqjdpzkhrtcuf",
+        "oldStatus": null,
+        "newStatus": "added",
+        "isBlocking": false
+       }
+      ]
+     }
+    },
+    {
+     "id": 11570382,
+     "phid": "PHID-XACT-DREV-phejxmk4udvt43y",
+     "type": "summary",
+     "authorPHID": "PHID-USER-4jlttcsengdawi5jugb4",
+     "objectPHID": "PHID-DREV-42hmfhtmjpmmdmxn73ou",
+     "dateCreated": 1791841222,
+     "dateModified": 1791841222,
+     "groupID": "t6xh6qctfguknzblitiuefuysgwrnpbz",
+     "comments": [],
+     "fields": {
+      "old": "",
+      "new": "\nThe harnesses make expected match status when a test will be retried, so the\nfailure arrived looking like a todo() and became KNOWN-FAIL."
+     }
+    },
+    {
+     "id": 11570381,
+     "phid": "PHID-XACT-DREV-2ksyvxbo22hjhhb",
+     "type": "title",
+     "authorPHID": "PHID-USER-4jlttcsengdawi5jugb4",
+     "objectPHID": "PHID-DREV-42hmfhtmjpmmdmxn73ou",
+     "dateCreated": 1791841222,
+     "dateModified": 1791841222,
+     "groupID": "t6xh6qctfguknzblitiuefuysgwrnpbz",
+     "comments": [],
+     "fields": {
+      "old": "",
+      "new": "Bug 2080975 - Keep failures of tests that will be retried as FAIL in resource usage profile markers. r?ahal"
+     }
+    },
+    {
+     "id": 11570380,
+     "phid": "PHID-XACT-DREV-smfngxt3aarszqs",
+     "type": "create",
+     "authorPHID": "PHID-USER-4jlttcsengdawi5jugb4",
+     "objectPHID": "PHID-DREV-42hmfhtmjpmmdmxn73ou",
+     "dateCreated": 1791841222,
+     "dateModified": 1791841222,
+     "groupID": "t6xh6qctfguknzblitiuefuysgwrnpbz",
+     "comments": [],
+     "fields": {}
+    }
+   ],
+   "cursor": {
+    "limit": 100,
+    "after": null,
+    "before": null
+   }
+  }
+ },
+ {
+  "method": "transaction.search",
+  "params": {
+   "objectIdentifier": "PHID-DREV-5jo35geyazizlxzexbwi"
+  },
+  "result": {
+   "data": [
+    {
+     "id": 11593732,
+     "phid": "PHID-XACT-DREV-hvy6hwuechqbyj5",
+     "type": "comment",
+     "authorPHID": "PHID-USER-4jlttcsengdawi5jugb4",
+     "objectPHID": "PHID-DREV-5jo35geyazizlxzexbwi",
+     "dateCreated": 1791996977,
+     "dateModified": 1791996977,
+     "groupID": "ne3pbsrnv64omuerb6zl7ce4dfqho6d5",
+     "comments": [
+      {
+       "id": 1769457,
+       "phid": "PHID-XCMT-lwcret4h5e34symn4qfs",
+       "version": 1,
+       "authorPHID": "PHID-USER-4jlttcsengdawi5jugb4",
+       "dateCreated": 1791996977,
+       "dateModified": 1791996977,
+       "removed": false,
+       "content": {
+        "raw": ">>! In D329684#11593137, @emilio wrote:\n> Yeah can't we use flow markers to let the profiler have the lifetime of the whole animation?\n\nI don't think the profiler front-end knows how to make anything useful with flow markers, so the answer is likely 'no'."
+       }
+      }
+     ],
+     "fields": {}
+    },
+    {
+     "id": 11593139,
+     "phid": "PHID-XACT-DREV-lzgj6tqhyd65hiz",
+     "type": "status",
+     "authorPHID": "PHID-USER-zp4gy3jjzfehipsktf6x",
+     "objectPHID": "PHID-DREV-5jo35geyazizlxzexbwi",
+     "dateCreated": 1791994561,
+     "dateModified": 1791994561,
+     "groupID": null,
+     "comments": [],
+     "fields": {
+      "old": "needs-review",
+      "new": "needs-revision"
+     }
+    },
+    {
+     "id": 11593138,
+     "phid": "PHID-XACT-DREV-xsmye7tsd6xp6oo",
+     "type": "comment",
+     "authorPHID": "PHID-USER-zp4gy3jjzfehipsktf6x",
+     "objectPHID": "PHID-DREV-5jo35geyazizlxzexbwi",
+     "dateCreated": 1791994561,
+     "dateModified": 1791994561,
+     "groupID": "yp65mukh3lf4uuffaz44353pu5myp3gf",
+     "comments": [
+      {
+       "id": 1769390,
+       "phid": "PHID-XCMT-w4tetm5v4obiezxk5hgs",
+       "version": 1,
+       "authorPHID": "PHID-USER-zp4gy3jjzfehipsktf6x",
+       "dateCreated": 1791994561,
+       "dateModified": 1791994561,
+       "removed": false,
+       "content": {
+        "raw": "Yeah can't we use flow markers to let the profiler have the lifetime of the whole animation?"
+       }
+      }
+     ],
+     "fields": {}
+    },
+    {
+     "id": 11593137,
+     "phid": "PHID-XACT-DREV-qbnv7pif2n6jewb",
+     "type": "request-changes",
+     "authorPHID": "PHID-USER-zp4gy3jjzfehipsktf6x",
+     "objectPHID": "PHID-DREV-5jo35geyazizlxzexbwi",
+     "dateCreated": 1791994561,
+     "dateModified": 1791994561,
+     "groupID": "yp65mukh3lf4uuffaz44353pu5myp3gf",
+     "comments": [],
+     "fields": {}
+    },
+    {
+     "id": 11545061,
+     "phid": "PHID-XACT-DREV-hwphmrm52psh756",
+     "type": "comment",
+     "authorPHID": "PHID-USER-c6de5rnxld25mqp4pngs",
+     "objectPHID": "PHID-DREV-5jo35geyazizlxzexbwi",
+     "dateCreated": 1791497751,
+     "dateModified": 1791497751,
+     "groupID": "q73imfufz2qcet6tfiemobt7svivco4q",
+     "comments": [
+      {
+       "id": 1763649,
+       "phid": "PHID-XCMT-77nv6lbsm3vl6owy6ts4",
+       "version": 1,
+       "authorPHID": "PHID-USER-c6de5rnxld25mqp4pngs",
+       "dateCreated": 1791497751,
+       "dateModified": 1791497751,
+       "removed": false,
+       "content": {
+        "raw": ">>! In D329684#11460087, @florian wrote:\n>>>! In D329684#11459853, @emilio wrote:\n>>>>! In D329684#11459806, @florian wrote:\n>>> We can avoid the debug-only crash, but the markers would still look completely wrong.\n>> \n>> Well it depends on what you want the marker to really mean tho, right? I.e., a CSS animation timeline can legitimately be changed. You seem to be using some timestamps from CSS vs some from actual events.\n> \n> I want the markers to show what's happening. Having an animation marker in the profile that starts before we started animating is clearly misleading. I initially introduced the animation markers as animating is something that keeps the refresh driver active and is power hungry. So I don't want these markers to be there when there was no animation.\n\nThe question raised by Emilio is fundamental, what the markers means, what the purpose is. Note that there are some animation related events dispatched before starting the animation, transitionrun for example, even if the animation hasn't yet started, the refresh driver keeps ticking for the animation."
+       }
+      }
+     ],
+     "fields": {}
+    },
+    {
+     "id": 11545060,
+     "phid": "PHID-XACT-DREV-whwzfocokff5spy",
+     "type": "subscribers",
+     "authorPHID": "PHID-USER-c6de5rnxld25mqp4pngs",
+     "objectPHID": "PHID-DREV-5jo35geyazizlxzexbwi",
+     "dateCreated": 1791497751,
+     "dateModified": 1791497751,
+     "groupID": "q73imfufz2qcet6tfiemobt7svivco4q",
+     "comments": [],
+     "fields": {
+      "operations": [
+       {
+        "operation": "add",
+        "phid": "PHID-USER-c6de5rnxld25mqp4pngs"
+       }
+      ]
+     }
+    },
+    {
+     "id": 11544954,
+     "phid": "PHID-XACT-DREV-fw6bh5nj5hv6zrb",
+     "type": "inline",
+     "authorPHID": "PHID-USER-uh7m7daa2eoi4muct5kh",
+     "objectPHID": "PHID-DREV-5jo35geyazizlxzexbwi",
+     "dateCreated": 1791496861,
+     "dateModified": 1791496861,
+     "groupID": "eufzt3fyuq6vxgqbithamzbcpu6bld2n",
+     "comments": [
+      {
+       "id": 1763636,
+       "phid": "PHID-XCMT-sxhyulb2cxv34si5vmp5",
+       "version": 1,
+       "authorPHID": "PHID-USER-uh7m7daa2eoi4muct5kh",
+       "dateCreated": 1791496544,
+       "dateModified": 1791496861,
+       "removed": false,
+       "content": {
+        "raw": "@emilio , I recall you mentioning [flow markers](https://firefox-source-docs.mozilla.org/tools/profiler/markers-guide.html#flow-markers) as well? If we treat animation start as flow marker and end/cancel as the terminating flow marker, would that serve the same purpose? That'd allow us to decouple from the animation timeline time, which does not map 1:1 to real time."
+       }
+      }
+     ],
+     "fields": {
+      "diff": {
+       "id": 1391310,
+       "phid": "PHID-DIFF-oydb7ycgtrdswqmlyvw2"
+      },
+      "path": "dom/animation/Animation.h",
+      "line": 673,
+      "length": 1,
+      "isNewFile": true,
+      "replyToCommentPHID": "PHID-XCMT-mddfticqxsyo7a23z27t",
+      "isDone": false,
+      "hasSuggestion": false,
+      "suggestionText": ""
+     }
+    },
+    {
+     "id": 11544953,
+     "phid": "PHID-XACT-DREV-iro4covymfoxjbp",
+     "type": "subscribers",
+     "authorPHID": "PHID-USER-uh7m7daa2eoi4muct5kh",
+     "objectPHID": "PHID-DREV-5jo35geyazizlxzexbwi",
+     "dateCreated": 1791496861,
+     "dateModified": 1791496861,
+     "groupID": "eufzt3fyuq6vxgqbithamzbcpu6bld2n",
+     "comments": [],
+     "fields": {
+      "operations": [
+       {
+        "operation": "add",
+        "phid": "PHID-USER-uh7m7daa2eoi4muct5kh"
+       }
+      ]
+     }
+    },
+    {
+     "id": 11544653,
+     "phid": "PHID-XACT-DREV-ordebsn6ccdblek",
+     "type": "inline",
+     "authorPHID": "PHID-USER-laiy2eaopxzo3vm6tath",
+     "objectPHID": "PHID-DREV-5jo35geyazizlxzexbwi",
+     "dateCreated": 1791495196,
+     "dateModified": 1791495196,
+     "groupID": "mq3vjipbksdwh7obwb6rvn7zdn44rd6j",
+     "comments": [
+      {
+       "id": 1763590,
+       "phid": "PHID-XCMT-mddfticqxsyo7a23z27t",
+       "version": 1,
+       "authorPHID": "PHID-USER-laiy2eaopxzo3vm6tath",
+       "dateCreated": 1791494638,
+       "dateModified": 1791496861,
+       "removed": false,
+       "content": {
+        "raw": "I suspect we may have to revisit this for scroll timeline.\n\nFor document-timeline, I'm wondering if it is possible to reuse `Animation::mStartTime`, which is a TimeDuration so we probably have to call `mTimeline->ToTimelineStamp(mStartTime)` to get the TimeStamp for this timeline. Or if it doesn't meet your condition?\n\nIf `mStartTime` is Null, it means this animation is paused so we probably have to use `mHoldTime`. However, per your use case, we may just skip this paused animation cause."
+       }
+      }
+     ],
+     "fields": {
+      "diff": {
+       "id": 1391310,
+       "phid": "PHID-DIFF-oydb7ycgtrdswqmlyvw2"
+      },
+      "path": "dom/animation/Animation.h",
+      "line": 673,
+      "length": 1,
+      "isNewFile": true,
+      "replyToCommentPHID": null,
+      "isDone": false,
+      "hasSuggestion": false,
+      "suggestionText": ""
+     }
+    },
+    {
+     "id": 11460087,
+     "phid": "PHID-XACT-DREV-b764oi7wipret37",
+     "type": "comment",
+     "authorPHID": "PHID-USER-4jlttcsengdawi5jugb4",
+     "objectPHID": "PHID-DREV-5jo35geyazizlxzexbwi",
+     "dateCreated": 1790686166,
+     "dateModified": 1790686166,
+     "groupID": "gtegwbdpa2fajkgm2tdo7cdwqaphyjnm",
+     "comments": [
+      {
+       "id": 1753972,
+       "phid": "PHID-XCMT-qchmuubzgwhho5vb4yxr",
+       "version": 1,
+       "authorPHID": "PHID-USER-4jlttcsengdawi5jugb4",
+       "dateCreated": 1790686166,
+       "dateModified": 1790686166,
+       "removed": false,
+       "content": {
+        "raw": ">>! In D329684#11459853, @emilio wrote:\n>>>! In D329684#11459806, @florian wrote:\n>> We can avoid the debug-only crash, but the markers would still look completely wrong.\n> \n> Well it depends on what you want the marker to really mean tho, right? I.e., a CSS animation timeline can legitimately be changed. You seem to be using some timestamps from CSS vs some from actual events.\n\nI want the markers to show what's happening. Having an animation marker in the profile that starts before we started animating is clearly misleading. I initially introduced the animation markers as animating is something that keeps the refresh driver active and is power hungry. So I don't want these markers to be there when there was no animation."
+       }
+      }
+     ],
+     "fields": {}
+    },
+    {
+     "id": 11459854,
+     "phid": "PHID-XACT-DREV-n7vi37ukwp6pexx",
+     "type": "inline",
+     "authorPHID": "PHID-USER-zp4gy3jjzfehipsktf6x",
+     "objectPHID": "PHID-DREV-5jo35geyazizlxzexbwi",
+     "dateCreated": 1790681224,
+     "dateModified": 1790681224,
+     "groupID": "mmd3mmouqim6ilqnprphhq7jpjz4xueo",
+     "comments": [
+      {
+       "id": 1753936,
+       "phid": "PHID-XCMT-n46z7j54x3hp2f445k4w",
+       "version": 1,
+       "authorPHID": "PHID-USER-zp4gy3jjzfehipsktf6x",
+       "dateCreated": 1790681130,
+       "dateModified": 1790681224,
+       "removed": false,
+       "content": {
+        "raw": "This is mixing the duration of the effect with the last time we called play() which can't be right is it?"
+       }
+      }
+     ],
+     "fields": {
+      "diff": {
+       "id": 1391310,
+       "phid": "PHID-DIFF-oydb7ycgtrdswqmlyvw2"
+      },
+      "path": "dom/animation/AnimationEventDispatcher.cpp",
+      "line": 160,
+      "length": 1,
+      "isNewFile": true,
+      "replyToCommentPHID": null,
+      "isDone": false,
+      "hasSuggestion": false,
+      "suggestionText": ""
+     }
+    },
+    {
+     "id": 11459853,
+     "phid": "PHID-XACT-DREV-fwdczwsr5pg5dlj",
+     "type": "comment",
+     "authorPHID": "PHID-USER-zp4gy3jjzfehipsktf6x",
+     "objectPHID": "PHID-DREV-5jo35geyazizlxzexbwi",
+     "dateCreated": 1790681224,
+     "dateModified": 1790681224,
+     "groupID": "mmd3mmouqim6ilqnprphhq7jpjz4xueo",
+     "comments": [
+      {
+       "id": 1753941,
+       "phid": "PHID-XCMT-eg2abkr7bo3wxsejtt57",
+       "version": 1,
+       "authorPHID": "PHID-USER-zp4gy3jjzfehipsktf6x",
+       "dateCreated": 1790681224,
+       "dateModified": 1790681224,
+       "removed": false,
+       "content": {
+        "raw": ">>! In D329684#11459806, @florian wrote:\n> We can avoid the debug-only crash, but the markers would still look completely wrong.\n\nWell it depends on what you want the marker to really mean tho, right? I.e., a CSS animation timeline can legitimately be changed. You seem to be using some timestamps from CSS vs some from actual events.\n\nThis code is already super messy, I'd rather not make it more complicated tbh, but..."
+       }
+      }
+     ],
+     "fields": {}
+    },
+    {
+     "id": 11459806,
+     "phid": "PHID-XACT-DREV-av3agx7aa5y45xu",
+     "type": "comment",
+     "authorPHID": "PHID-USER-4jlttcsengdawi5jugb4",
+     "objectPHID": "PHID-DREV-5jo35geyazizlxzexbwi",
+     "dateCreated": 1790680309,
+     "dateModified": 1790680309,
+     "groupID": "6qah3ajhmj7cpxuvorfqnbmacopt6bne",
+     "comments": [
+      {
+       "id": 1753929,
+       "phid": "PHID-XCMT-jzj6e63qwvyicvenym4d",
+       "version": 1,
+       "authorPHID": "PHID-USER-4jlttcsengdawi5jugb4",
+       "dateCreated": 1790680309,
+       "dateModified": 1790680309,
+       "removed": false,
+       "content": {
+        "raw": ">>! In D329684#11459709, @emilio wrote:\n> Can we deal with the null timestamp instead? Is this worth the extra storage?\n\nWe can avoid the debug-only crash, but the markers would still look completely wrong."
+       }
+      }
+     ],
+     "fields": {}
+    },
+    {
+     "id": 11459711,
+     "phid": "PHID-XACT-DREV-dkhrgvbkfwjmxea",
+     "type": "inline",
+     "authorPHID": "PHID-USER-zp4gy3jjzfehipsktf6x",
+     "objectPHID": "PHID-DREV-5jo35geyazizlxzexbwi",
+     "dateCreated": 1790679575,
+     "dateModified": 1790679575,
+     "groupID": "ckw6lhoc2u32ilqszeiw3iplo6aqnvmz",
+     "comments": [
+      {
+       "id": 1753922,
+       "phid": "PHID-XCMT-y5c2ymsdslvtfd2ssv3m",
+       "version": 1,
+       "authorPHID": "PHID-USER-zp4gy3jjzfehipsktf6x",
+       "dateCreated": 1790679418,
+       "dateModified": 1790679575,
+       "removed": false,
+       "content": {
+        "raw": "Let's not add marker only members if we can avoid it?"
+       }
+      }
+     ],
+     "fields": {
+      "diff": {
+       "id": 1391310,
+       "phid": "PHID-DIFF-oydb7ycgtrdswqmlyvw2"
+      },
+      "path": "dom/animation/Animation.h",
+      "line": 673,
+      "length": 1,
+      "isNewFile": true,
+      "replyToCommentPHID": null,
+      "isDone": false,
+      "hasSuggestion": false,
+      "suggestionText": ""
+     }
+    },
+    {
+     "id": 11459710,
+     "phid": "PHID-XACT-DREV-kexuq7leby6btne",
+     "type": "comment",
+     "authorPHID": "PHID-USER-zp4gy3jjzfehipsktf6x",
+     "objectPHID": "PHID-DREV-5jo35geyazizlxzexbwi",
+     "dateCreated": 1790679575,
+     "dateModified": 1790679575,
+     "groupID": "ckw6lhoc2u32ilqszeiw3iplo6aqnvmz",
+     "comments": [
+      {
+       "id": 1753923,
+       "phid": "PHID-XCMT-jcdew4zm2v3aa65ikonu",
+       "version": 1,
+       "authorPHID": "PHID-USER-zp4gy3jjzfehipsktf6x",
+       "dateCreated": 1790679575,
+       "dateModified": 1790679575,
+       "removed": false,
+       "content": {
+        "raw": "Can we deal with the null timestamp instead? Is this worth the extra storage?"
+       }
+      }
+     ],
+     "fields": {}
+    },
+    {
+     "id": 11459709,
+     "phid": "PHID-XACT-DREV-c3icmyimsdfppxc",
+     "type": "reviewers",
+     "authorPHID": "PHID-USER-zp4gy3jjzfehipsktf6x",
+     "objectPHID": "PHID-DREV-5jo35geyazizlxzexbwi",
+     "dateCreated": 1790679575,
+     "dateModified": 1790679575,
+     "groupID": "ckw6lhoc2u32ilqszeiw3iplo6aqnvmz",
+     "comments": [],
+     "fields": {
+      "operations": [
+       {
+        "operation": "add",
+        "phid": "PHID-PROJ-pwrmk742pgas56l5uqix",
+        "oldStatus": null,
+        "newStatus": "blocking",
+        "isBlocking": true
+       }
+      ]
+     }
+    },
+    {
+     "id": 11459708,
+     "phid": "PHID-XACT-DREV-hsmmr6hz7s4w24s",
+     "type": "subscribers",
+     "authorPHID": "PHID-USER-zp4gy3jjzfehipsktf6x",
+     "objectPHID": "PHID-DREV-5jo35geyazizlxzexbwi",
+     "dateCreated": 1790679575,
+     "dateModified": 1790679575,
+     "groupID": "ckw6lhoc2u32ilqszeiw3iplo6aqnvmz",
+     "comments": [],
+     "fields": {
+      "operations": [
+       {
+        "operation": "add",
+        "phid": "PHID-USER-zp4gy3jjzfehipsktf6x"
+       }
+      ]
+     }
+    },
+    {
+     "id": 11459176,
+     "phid": "PHID-XACT-DREV-vqbgv3ol3rd5mn7",
+     "type": "comment",
+     "authorPHID": "PHID-USER-4jlttcsengdawi5jugb4",
+     "objectPHID": "PHID-DREV-5jo35geyazizlxzexbwi",
+     "dateCreated": 1790671436,
+     "dateModified": 1790671436,
+     "groupID": "6nno5x3qrepr4gdslm75vqndynk3xmps",
+     "comments": [
+      {
+       "id": 1753841,
+       "phid": "PHID-XCMT-6ztwygnegbupk7zynzef",
+       "version": 1,
+       "authorPHID": "PHID-USER-4jlttcsengdawi5jugb4",
+       "dateCreated": 1790671436,
+       "dateModified": 1790671436,
+       "removed": false,
+       "content": {
+        "raw": "When running only `dom/animation/test/mozilla` on macOS aarch64 debug mochitest-plain, `test_restyles.html` crashed in 8 of 10 runs [without the patch](https://treeherder.mozilla.org/jobs?repo=try&revision=6acac247f09b177bfe2c4ea877fed252e25eb539) (versus [about 5% on trunk CI](https://tests.firefox.dev/test.html?test=dom%2Fanimation%2Ftest%2Fmozilla%2Ftest_restyles.html), where the test usually runs later after boot) and passed all 10 [with it](https://treeherder.mozilla.org/jobs?repo=try&revision=e74ec79fd1f32431fbc859e516b1e5ef9e3391d0)."
+       }
+      }
+     ],
+     "fields": {}
+    },
+    {
+     "id": 11458462,
+     "phid": "PHID-XACT-DREV-jiwysgaytgpumv3",
+     "type": null,
+     "authorPHID": "PHID-APPS-PhabricatorHarbormasterApplication",
+     "objectPHID": "PHID-DREV-5jo35geyazizlxzexbwi",
+     "dateCreated": 1790651386,
+     "dateModified": 1790651386,
+     "groupID": "hmzz5vr6tyo2xmr4ekjbmpfduno3vlyi",
+     "comments": [],
+     "fields": {}
+    },
+    {
+     "id": 11458364,
+     "phid": "PHID-XACT-DREV-joqcixggbu2wovz",
+     "type": "comment",
+     "authorPHID": "PHID-USER-4jlttcsengdawi5jugb4",
+     "objectPHID": "PHID-DREV-5jo35geyazizlxzexbwi",
+     "dateCreated": 1790650368,
+     "dateModified": 1790650368,
+     "groupID": "tfuhmvv2qvoyo5fswhajhimet2e3uctj",
+     "comments": [
+      {
+       "id": 1753754,
+       "phid": "PHID-XCMT-ddkkea3b5z7nltwrhon3",
+       "version": 1,
+       "authorPHID": "PHID-USER-4jlttcsengdawi5jugb4",
+       "dateCreated": 1790650368,
+       "dateModified": 1790650368,
+       "removed": false,
+       "content": {
+        "raw": "`mach test dom/animation/test/mozilla/test_restyles.html --profiler` profiles [without](https://share.firefox.dev/4iTmdz1) and [with the patch](https://share.firefox.dev/4hkswdB). Without the patch, notice the CSS animation markers that start before the process they are in."
+       }
+      }
+     ],
+     "fields": {}
+    },
+    {
+     "id": 11458360,
+     "phid": "PHID-XACT-DREV-bqac4fhzfnoqkto",
+     "type": "subscribers",
+     "authorPHID": "PHID-APPS-PhabricatorHeraldApplication",
+     "objectPHID": "PHID-DREV-5jo35geyazizlxzexbwi",
+     "dateCreated": 1790650214,
+     "dateModified": 1790650214,
+     "groupID": "wgiaa4hu4bftyrwsexk4ab2zfsqgaz55",
+     "comments": [],
+     "fields": {
+      "operations": [
+       {
+        "operation": "add",
+        "phid": "PHID-USER-gimobvy7wk3j4fgpsswz"
+       }
+      ]
+     }
+    },
+    {
+     "id": 11458359,
+     "phid": "PHID-XACT-DREV-sq7d4uiwmob6vxf",
+     "type": "projects",
+     "authorPHID": "PHID-USER-ub7ohlqtjctu4ofsjlb7",
+     "objectPHID": "PHID-DREV-5jo35geyazizlxzexbwi",
+     "dateCreated": 1790650214,
+     "dateModified": 1790650214,
+     "groupID": "wgiaa4hu4bftyrwsexk4ab2zfsqgaz55",
+     "comments": [],
+     "fields": {
+      "operations": [
+       {
+        "operation": "remove",
+        "phid": "PHID-PROJ-wkydohdk6pajyfn2llkb"
+       }
+      ]
+     }
+    },
+    {
+     "id": 11458358,
+     "phid": "PHID-XACT-DREV-6ixcmtzomwjj3e2",
+     "type": "request-review",
+     "authorPHID": "PHID-USER-ub7ohlqtjctu4ofsjlb7",
+     "objectPHID": "PHID-DREV-5jo35geyazizlxzexbwi",
+     "dateCreated": 1790650214,
+     "dateModified": 1790650214,
+     "groupID": "wgiaa4hu4bftyrwsexk4ab2zfsqgaz55",
+     "comments": [],
+     "fields": {}
+    },
+    {
+     "id": 11458357,
+     "phid": "PHID-XACT-DREV-24x7ubyz6zklkom",
+     "type": null,
+     "authorPHID": "PHID-USER-ub7ohlqtjctu4ofsjlb7",
+     "objectPHID": "PHID-DREV-5jo35geyazizlxzexbwi",
+     "dateCreated": 1790650214,
+     "dateModified": 1790650214,
+     "groupID": "wgiaa4hu4bftyrwsexk4ab2zfsqgaz55",
+     "comments": [],
+     "fields": {}
+    },
+    {
+     "id": 11458356,
+     "phid": "PHID-XACT-DREV-fluaj7yftzwugzw",
+     "type": null,
+     "authorPHID": "PHID-USER-ub7ohlqtjctu4ofsjlb7",
+     "objectPHID": "PHID-DREV-5jo35geyazizlxzexbwi",
+     "dateCreated": 1790650214,
+     "dateModified": 1790650214,
+     "groupID": "wgiaa4hu4bftyrwsexk4ab2zfsqgaz55",
+     "comments": [],
+     "fields": {}
+    },
+    {
+     "id": 11458355,
+     "phid": "PHID-XACT-DREV-pect2t2whlywlar",
+     "type": "projects",
+     "authorPHID": "PHID-APPS-PhabricatorHeraldApplication",
+     "objectPHID": "PHID-DREV-5jo35geyazizlxzexbwi",
+     "dateCreated": 1790650161,
+     "dateModified": 1790650161,
+     "groupID": "645oga43fbmhqgyxhkwcam6zr6amdojf",
+     "comments": [],
+     "fields": {
+      "operations": [
+       {
+        "operation": "add",
+        "phid": "PHID-PROJ-wkydohdk6pajyfn2llkb"
+       }
+      ]
+     }
+    },
+    {
+     "id": 11458354,
+     "phid": "PHID-XACT-DREV-a6j36itf3ecnshb",
+     "type": "subscribers",
+     "authorPHID": "PHID-APPS-PhabricatorHeraldApplication",
+     "objectPHID": "PHID-DREV-5jo35geyazizlxzexbwi",
+     "dateCreated": 1790650161,
+     "dateModified": 1790650161,
+     "groupID": "645oga43fbmhqgyxhkwcam6zr6amdojf",
+     "comments": [],
+     "fields": {
+      "operations": [
+       {
+        "operation": "add",
+        "phid": "PHID-USER-laiy2eaopxzo3vm6tath"
+       }
+      ]
+     }
+    },
+    {
+     "id": 11458353,
+     "phid": "PHID-XACT-DREV-bim6kjjyjbb6egy",
+     "type": "update",
+     "authorPHID": "PHID-USER-4jlttcsengdawi5jugb4",
+     "objectPHID": "PHID-DREV-5jo35geyazizlxzexbwi",
+     "dateCreated": 1790650160,
+     "dateModified": 1790650160,
+     "groupID": "645oga43fbmhqgyxhkwcam6zr6amdojf",
+     "comments": [],
+     "fields": {
+      "old": null,
+      "new": "PHID-DIFF-oydb7ycgtrdswqmlyvw2",
+      "commitPHIDs": []
+     }
+    },
+    {
+     "id": 11458352,
+     "phid": "PHID-XACT-DREV-bv3lqbkn3ayj7yq",
+     "type": null,
+     "authorPHID": "PHID-USER-4jlttcsengdawi5jugb4",
+     "objectPHID": "PHID-DREV-5jo35geyazizlxzexbwi",
+     "dateCreated": 1790650160,
+     "dateModified": 1790650160,
+     "groupID": "645oga43fbmhqgyxhkwcam6zr6amdojf",
+     "comments": [],
+     "fields": {}
+    },
+    {
+     "id": 11458351,
+     "phid": "PHID-XACT-DREV-kh3ebz47hctsohz",
+     "type": "reviewers",
+     "authorPHID": "PHID-USER-4jlttcsengdawi5jugb4",
+     "objectPHID": "PHID-DREV-5jo35geyazizlxzexbwi",
+     "dateCreated": 1790650160,
+     "dateModified": 1790650160,
+     "groupID": "645oga43fbmhqgyxhkwcam6zr6amdojf",
+     "comments": [],
+     "fields": {
+      "operations": [
+       {
+        "operation": "add",
+        "phid": "PHID-PROJ-eq3xkdzr25tjzkci5bjj",
+        "oldStatus": null,
+        "newStatus": "added",
+        "isBlocking": false
+       }
+      ]
+     }
+    },
+    {
+     "id": 11458350,
+     "phid": "PHID-XACT-DREV-7tiskmqd24yfwkc",
+     "type": "summary",
+     "authorPHID": "PHID-USER-4jlttcsengdawi5jugb4",
+     "objectPHID": "PHID-DREV-5jo35geyazizlxzexbwi",
+     "dateCreated": 1790650160,
+     "dateModified": 1790650160,
+     "groupID": "645oga43fbmhqgyxhkwcam6zr6amdojf",
+     "comments": [],
+     "fields": {
+      "old": "",
+      "new": "\nSubtracting the elapsed time from the event time gives a marker start before\nthe animation started playing when it was seeked (e.g. with finish()), which\nunderflows to a null TimeStamp if that is before the machine booted."
+     }
+    },
+    {
+     "id": 11458349,
+     "phid": "PHID-XACT-DREV-beucbrtgqyc6ont",
+     "type": "title",
+     "authorPHID": "PHID-USER-4jlttcsengdawi5jugb4",
+     "objectPHID": "PHID-DREV-5jo35geyazizlxzexbwi",
+     "dateCreated": 1790650160,
+     "dateModified": 1790650160,
+     "groupID": "645oga43fbmhqgyxhkwcam6zr6amdojf",
+     "comments": [],
+     "fields": {
+      "old": "",
+      "new": "Bug 1869154 - Don't start CSS animation and transition markers before the animation started playing. r?#layout-reviewers"
+     }
+    },
+    {
+     "id": 11458348,
+     "phid": "PHID-XACT-DREV-mxuybdx5aae3ogb",
+     "type": "create",
+     "authorPHID": "PHID-USER-4jlttcsengdawi5jugb4",
+     "objectPHID": "PHID-DREV-5jo35geyazizlxzexbwi",
+     "dateCreated": 1790650160,
+     "dateModified": 1790650160,
+     "groupID": "645oga43fbmhqgyxhkwcam6zr6amdojf",
+     "comments": [],
+     "fields": {}
+    }
+   ],
+   "cursor": {
+    "limit": 100,
+    "after": null,
+    "before": null
+   }
+  }
+ },
+ {
+  "method": "user.search",
+  "params": {
+   "constraints": {
+    "phids": [
+     "PHID-USER-laiy2eaopxzo3vm6tath",
+     "PHID-USER-quoh3mwvqjdpzkhrtcuf",
+     "PHID-USER-uh7m7daa2eoi4muct5kh",
+     "PHID-USER-xzwtemgjb3abai5r6iul",
+     "PHID-USER-zp4gy3jjzfehipsktf6x"
+    ]
+   }
+  },
+  "result": {
+   "data": [
+    {
+     "id": 3235,
+     "type": "USER",
+     "phid": "PHID-USER-uh7m7daa2eoi4muct5kh",
+     "fields": {
+      "username": "dshin",
+      "realName": "David Shin",
+      "roles": [
+       "verified",
+       "approved",
+       "activated"
+      ],
+      "dateCreated": 1647888479,
+      "dateModified": 1647888479,
+      "policy": {
+       "view": "public",
+       "edit": "no-one"
+      }
+     },
+     "attachments": {}
+    },
+    {
+     "id": 473,
+     "type": "USER",
+     "phid": "PHID-USER-xzwtemgjb3abai5r6iul",
+     "fields": {
+      "username": "jcristau",
+      "realName": "Julien Cristau",
+      "roles": [
+       "verified",
+       "approved",
+       "activated"
+      ],
+      "dateCreated": 1535465168,
+      "dateModified": 1535465210,
+      "policy": {
+       "view": "public",
+       "edit": "no-one"
+      }
+     },
+     "attachments": {}
+    },
+    {
+     "id": 265,
+     "type": "USER",
+     "phid": "PHID-USER-laiy2eaopxzo3vm6tath",
+     "fields": {
+      "username": "boris",
+      "realName": "Boris Chiou",
+      "roles": [
+       "verified",
+       "approved",
+       "activated"
+      ],
+      "dateCreated": 1531176648,
+      "dateModified": 1533629009,
+      "policy": {
+       "view": "public",
+       "edit": "no-one"
+      }
+     },
+     "attachments": {}
+    },
+    {
+     "id": 69,
+     "type": "USER",
+     "phid": "PHID-USER-quoh3mwvqjdpzkhrtcuf",
+     "fields": {
+      "username": "ahal",
+      "realName": "Andrew Halberstadt",
+      "roles": [
+       "verified",
+       "approved",
+       "activated"
+      ],
+      "dateCreated": 1510667571,
+      "dateModified": 1768937805,
+      "policy": {
+       "view": "public",
+       "edit": "no-one"
+      }
+     },
+     "attachments": {}
+    },
+    {
+     "id": 62,
+     "type": "USER",
+     "phid": "PHID-USER-zp4gy3jjzfehipsktf6x",
+     "fields": {
+      "username": "emilio",
+      "realName": "Emilio Cobos Álvarez",
+      "roles": [
+       "verified",
+       "approved",
+       "activated"
+      ],
+      "dateCreated": 1508430658,
+      "dateModified": 1758044058,
+      "policy": {
+       "view": "public",
+       "edit": "no-one"
+      }
+     },
+     "attachments": {}
+    }
+   ],
+   "maps": {},
+   "query": {
+    "queryKey": null
+   },
+   "cursor": {
+    "limit": 100,
+    "after": null,
+    "before": null,
+    "order": null
+   }
+  }
+ },
+ {
+  "method": "project.search",
+  "params": {
+   "constraints": {
+    "phids": [
+     "PHID-PROJ-eq3xkdzr25tjzkci5bjj",
+     "PHID-PROJ-pwrmk742pgas56l5uqix"
+    ]
+   }
+  },
+  "result": {
+   "data": [
+    {
+     "id": 98,
+     "type": "PROJ",
+     "phid": "PHID-PROJ-pwrmk742pgas56l5uqix",
+     "fields": {
+      "name": "firefox-animation-reviewers",
+      "slug": "firefox-animation-reviewers",
+      "subtype": "default",
+      "milestone": null,
+      "depth": 0,
+      "parent": null,
+      "icon": {
+       "key": "group",
+       "name": "Group",
+       "icon": "fa-users"
+      },
+      "color": {
+       "key": "blue",
+       "name": "Blue"
+      },
+      "spacePHID": null,
+      "dateCreated": 1551885604,
+      "dateModified": 1677307063,
+      "policy": {
+       "view": "users",
+       "edit": "PHID-PLCY-pzmfl5z73dvtppdp6mds",
+       "join": "no-one"
+      },
+      "description": "People who are allowed to review animation-related changes to Firefox."
+     },
+     "attachments": {}
+    },
+    {
+     "id": 126,
+     "type": "PROJ",
+     "phid": "PHID-PROJ-eq3xkdzr25tjzkci5bjj",
+     "fields": {
+      "name": "layout-reviewers",
+      "slug": "layout-reviewers",
+      "subtype": "default",
+      "milestone": null,
+      "depth": 0,
+      "parent": null,
+      "icon": {
+       "key": "group",
+       "name": "Group",
+       "icon": "fa-users"
+      },
+      "color": {
+       "key": "green",
+       "name": "Green"
+      },
+      "spacePHID": null,
+      "dateCreated": 1586808712,
+      "dateModified": 1772663992,
+      "policy": {
+       "view": "public",
+       "edit": "PHID-PLCY-4wftyp43bkhstt2xwuik",
+       "join": "no-one"
+      },
+      "description": "Layout Reviewers Group"
+     },
+     "attachments": {}
+    }
+   ],
+   "maps": {
+    "slugMap": {}
+   },
+   "query": {
+    "queryKey": null
+   },
+   "cursor": {
+    "limit": 100,
+    "after": null,
+    "before": null,
+    "order": null
+   }
+  }
+ }
+]

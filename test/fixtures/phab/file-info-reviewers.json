@@ -1,0 +1,31 @@
+{
+  "files": [
+    "browser/components/sessionstore/test/browser_async_remove_tab.js",
+    "toolkit/components/places/History.cpp"
+  ],
+  "mots_groups": [
+    {
+      "name": "places-reviewers",
+      "modules": [
+        "Bookmarks & History"
+      ]
+    },
+    {
+      "name": "sessionstore-reviewers",
+      "modules": [
+        "Session Restore"
+      ]
+    }
+  ],
+  "herald_groups": [
+    {
+      "name": "sessionstore-reviewers",
+      "blocking": false
+    },
+    {
+      "name": "sessionstore-reviewers-rotation",
+      "blocking": true
+    }
+  ],
+  "herald_individuals": []
+}
