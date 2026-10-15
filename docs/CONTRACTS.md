@@ -19,7 +19,7 @@ conventions around it. For compatibility, **only add** fields, event types or co
 
 ```
 commands.jsonl                    # every command, append-only
-commands-data/<id>[.<path>].txt   # a command string over 2 KB, referenced as {"textFile": ...}
+commands-data/<id>.<n>.txt        # long command strings; commands.jsonl holds {"textFile": ...} in their place
 commands.cursor.json              # last command executed by the orchestrator
 requests/<requestId>/events.jsonl # everything that happened to a request, append-only
 jobs/<jobId>/spec.json            # {cmd, cwd, env, stdinFile?, kind, name, request, item}
