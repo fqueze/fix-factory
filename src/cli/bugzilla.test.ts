@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { isDeepStrictEqual } from "node:util";
-import { bugInfo, enterBugUrl, priorArt, priorArtQuery, revisionsFromAttachments } from "./bugzilla.ts";
+import { bugInfo, enterBugUrl, isBot, priorArt, priorArtQuery, revisionsFromAttachments } from "./bugzilla.ts";
 import type { Conduit } from "./phab.ts";
 
 const fixtures = new URL("../../test/fixtures/bugzilla/", import.meta.url);
@@ -34,7 +34,7 @@ test("priorArt: open bugs, assignee, attached revisions with their status", asyn
     ],
   );
   const b = out.bugs[1];
-  assert.equal(b.lastChangeTime, "2026-10-13T21:44:52Z");
+  assert.deepEqual(b.lastHumanComment, { time: "2026-10-13T18:42:14Z", author: "florian@mozilla.com" });
   assert.equal(b.component, "Disability Access APIs");
   assert.deepEqual(b.revisions, [
     {
@@ -42,6 +42,7 @@ test("priorArt: open bugs, assignee, attached revisions with their status", asyn
       obsolete: false,
       title: "Bug 2081341 - Wait in addAccessibleTask until a remote document's cached bounds match its browser's size. r?Jamie",
       status: "needs-review",
+      modified: "2026-10-14T01:42:09.000Z",
     },
   ]);
 });
@@ -96,4 +97,11 @@ test("enterBugUrl matches file-bug.py's encoding", () => {
   );
   const meta = enterBugUrl({ product: "Testing", component: "General", summary: "m", description: "d", bugType: "task", keywords: ["meta", "leave-open"] });
   assert.ok(meta.endsWith("&bug_type=task&keywords=meta%2C%20leave-open"), meta);
+});
+
+test("isBot: Bugzilla automation accounts", () => {
+  for (const bot of ["intermittent-bug-filer@mozilla.bugs", "release-mgmt-account-bot@mozilla.tld", "update-bot@bmo.tld", "orangefactor@bots.tld"]) {
+    assert.ok(isBot(bot), bot);
+  }
+  assert.ok(!isBot("florian@mozilla.com"));
 });

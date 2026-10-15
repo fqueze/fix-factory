@@ -1,10 +1,12 @@
 // Bugzilla, read-only. Facts only, no verdict.
 //
 //   node src/cli/bugzilla.ts prior-art <test>
-//     → {test, query, bugs: [{id, summary, status, product, component, keywords, assignee, lastChangeTime,
-//         revisions: [{revision, obsolete, title?, status?}]}]}
+//     → {test, query, bugs: [{id, summary, status, product, component, keywords, assignee, lastHumanComment,
+//         revisions: [{revision, obsolete, title?, status?, modified?}]}]}
 //     Open bugs matching the test's file name (quicksearch). assignee is null for nobody@mozilla.org.
-//     revisions are the Phabricator revisions attached to the bug; title and status come from conduit.
+//     lastHumanComment is the latest comment not written by a bot ({time, author} or null): Bugzilla's
+//     last_change_time counts the intermittent-failure bot, so it says nothing about anyone working on it.
+//     revisions are the Phabricator revisions attached to the bug; title, status and modified come from conduit.
 //
 //   node src/cli/bugzilla.ts enter-url <draft.json>
 //     → {url}: a prefilled enter_bug.cgi URL for a BugDraft, with the field names of the bug-filing
@@ -52,6 +54,7 @@ export interface AttachedRevision {
   obsolete: boolean;
   title?: string;
   status?: string;
+  modified?: string; // last update of the revision on Phabricator
 }
 
 export interface PriorArtBug {
@@ -62,12 +65,23 @@ export interface PriorArtBug {
   component: string;
   keywords: string[];
   assignee: string | null;
-  lastChangeTime: string;
+  lastHumanComment: { time: string; author: string } | null;
   revisions: AttachedRevision[];
 }
 
 export function priorArtQuery(test: string): string {
   return test.split("/").pop()!;
+}
+
+// Bugzilla bot accounts: intermittent-bug-filer@mozilla.bugs, release-mgmt-account-bot@mozilla.tld,
+// update-bot@bmo.tld, orangefactor@bots.tld...
+export function isBot(email: string): boolean {
+  return /@(mozilla\.bugs|[\w.-]+\.tld)$/i.test(email);
+}
+
+export function lastHumanComment(comments: { creator: string; creation_time: string }[]): { time: string; author: string } | null {
+  const human = comments.filter((c) => !isBot(c.creator)).at(-1);
+  return human ? { time: human.creation_time, author: human.creator } : null;
 }
 
 export function revisionsFromAttachments(attachments: { content_type: string; file_name: string; is_obsolete: number }[]): AttachedRevision[] {
@@ -83,12 +97,15 @@ export function revisionsFromAttachments(attachments: { content_type: string; fi
 
 export async function priorArt(test: string, fetchFn: typeof fetch = fetch, conduit: Conduit = makeConduit()) {
   const query = priorArtQuery(test);
-  const fields = "id,summary,status,product,component,keywords,assigned_to,last_change_time";
+  const fields = "id,summary,status,product,component,keywords,assigned_to";
   // quicksearch only returns open bugs unless the query asks otherwise.
   const found = await getJson(`bug?quicksearch=${encodeURIComponent(query)}&include_fields=${fields}&limit=50`, fetchFn);
   const bugs: PriorArtBug[] = await Promise.all(
     found.bugs.map(async (b: any) => {
-      const att = await getJson(`bug/${b.id}/attachment?include_fields=file_name,content_type,is_obsolete`, fetchFn);
+      const [att, comments] = await Promise.all([
+        getJson(`bug/${b.id}/attachment?include_fields=file_name,content_type,is_obsolete`, fetchFn),
+        getJson(`bug/${b.id}/comment?include_fields=creator,creation_time`, fetchFn),
+      ]);
       return {
         id: b.id,
         summary: b.summary,
@@ -97,7 +114,7 @@ export async function priorArt(test: string, fetchFn: typeof fetch = fetch, cond
         component: b.component,
         keywords: b.keywords,
         assignee: b.assigned_to === "nobody@mozilla.org" ? null : b.assigned_to,
-        lastChangeTime: b.last_change_time,
+        lastHumanComment: lastHumanComment(comments.bugs[String(b.id)].comments),
         revisions: revisionsFromAttachments(att.bugs[String(b.id)] ?? []),
       };
     }),
@@ -111,6 +128,7 @@ export async function priorArt(test: string, fetchFn: typeof fetch = fetch, cond
       if (rev) {
         r.title = rev.fields.title;
         r.status = rev.fields.status.value;
+        r.modified = new Date(rev.fields.dateModified * 1000).toISOString();
       }
     }
   }

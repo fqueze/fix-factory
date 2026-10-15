@@ -47,9 +47,10 @@ Factory runtime (long-running, not CLIs):
 > such as "Test timed out" is never a shared cause. Give a one-line reason for each change.
 
 ### `prior-art-verdict.md` (Haiku) [A5]
-> Facts about existing bugs and revisions for {test}: {facts}. Decide whether someone is actively working on
-> it (activity in the last 30 days, or a revision in review), whether there's an open bug we should reuse, or
-> neither. Quote the fact your verdict rests on.
+> Facts about existing bugs and revisions for {test}: {facts}. Someone is actively working on it only if a
+> revision is in review or was updated in the last 30 days, or the bug is assigned to a person who commented in
+> the last 30 days; bot comments and automated changes never count. Otherwise, say whether there's an open bug we
+> should reuse, or neither. Quote the fact your verdict rests on.
 
 ### `classify-annotation.md` (Haiku) [A6]
 > The annotation `{annotation}` in {manifest} was added in bug {bug} ("{summary}"), whose first comment is: {comment}.
