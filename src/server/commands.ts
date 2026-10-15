@@ -49,6 +49,7 @@ type Field =
   | "string?"
   | "any-string"
   | "int"
+  | "boolean"
   | "string[]"
   | "object"
   | "comments"
@@ -59,6 +60,7 @@ type Field =
 const SPECS: Record<Command["cmd"], Record<string, Field>> = {
   "new-request": { kind: { oneOf: REQUEST_KINDS }, text: "any-string", folder: "string?", rev: "string?" },
   "approve-push": { push: "string" },
+  presence: { visible: "boolean" },
   "set-bug": { patch: "string", bug: "int" },
   "comment-bug-draft": { patch: "string", text: "string" },
   "stack-comments": { stack: "string", comments: "comments" },
@@ -101,6 +103,8 @@ function checkField(name: string, spec: Field, value: unknown): string | null {
       return typeof value === "string" && value.trim() !== "" ? null : `${name} must be a non-empty string`;
     case "int":
       return Number.isSafeInteger(value) && (value as number) > 0 ? null : `${name} must be a positive integer`;
+    case "boolean":
+      return typeof value === "boolean" ? null : `${name} must be true or false`;
     case "string[]":
       return Array.isArray(value) && value.every((v) => typeof v === "string") ? null : `${name} must be a list of strings`;
     case "object":

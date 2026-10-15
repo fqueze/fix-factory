@@ -17,6 +17,8 @@ export interface FactoryConfig {
   stateDir: string; // commands.jsonl, requests/, jobs/, feedback/, cache/
   firefoxRepo: string; // main checkout; worktrees are created next to it, never inside
   worktreesDir: string;
+  baseRef: string; // central-based ref worktrees and stacks start from, e.g. "origin/main"
+  phabPollHours?: number; // default 3, only while you are present
   claudeCommand: string[]; // e.g. ["mozsb", "claude"]; the runner appends -p and its flags
   stackViewerCommand: string[]; // e.g. ["stack-viewer"]
   profilerOrigin: string; // e.g. "http://localhost:4242" (a local profiler front end), for request profiles
@@ -193,6 +195,7 @@ export type Command =
   | (CommandBase & { cmd: "tell-factory"; text: string })
   | (CommandBase & { cmd: "reply-recovery"; job: JobId; text: string })
   | (CommandBase & { cmd: "start-now" })
+  | (CommandBase & { cmd: "presence"; visible: boolean }) // sent by a visible page, see docs/ORCHESTRATOR.md
   // Recovery commands: proposed by recover.md, executed after your approval.
   | (CommandBase & PlannedCommand);
 
