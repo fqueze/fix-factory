@@ -178,6 +178,7 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
       maxAgents: opts.config.maxAgents,
       maxBuilds: opts.config.maxBuilds,
       runningBuilds: opts.state.listRequests().reduce((n, r) => n + Object.values(r.jobs).filter((j) => j.kind === "build" && j.endedAt === undefined).length, 0),
+      runningAgents: opts.state.listRequests().reduce((n, r) => n + Object.values(r.jobs).filter((j) => j.kind === "agent" && j.endedAt === undefined).length, 0),
       open,
       interdiff: readInterdiff,
     };

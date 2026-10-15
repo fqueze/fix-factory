@@ -201,7 +201,11 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.ok(has("failed:j-fetch", { cmd: "retry", job: "j-fetch", request: D }));
     assert.ok(has("failed:j-fetch", { cmd: "continue", request: D, item: "i-fetch" }));
     assert.doesNotMatch(flag("failed:j-fetch"), />(Accept as reviewed|Dismiss)</);
-    assert.match(flag("stopped:j-author-slow"), /<span class="flag">Stopped by you: the investigation<\/span>/);
+    assert.match(flag("stopped:j-author-slow"), /<span class="flag">browser_download_slow\.js: the investigation stopped by you<\/span>/);
+    assert.match(flag("failed:j-fetch"), /<span class="flag">browser_download_fetch\.js: fetch test artifacts failed twice<\/span>/);
+    assert.match(flag("failed:j-review-race"), /<span class="flag">browser_download_race\.js: critical reviews didn&#39;t pass<\/span>/);
+    assert.match(flag("stopped:j-plan"), /<span class="flag">Plan try pushes stopped by you<\/span>/);
+    assert.match(flag("failed:j-fetch"), /title="Runs fetch test artifacts again">Retry</);
     for (const c of [{ cmd: "retry", job: "j-author-slow", request: D }, { cmd: "continue", request: D, item: "i-slow" }, { cmd: "dismiss", key: "stopped:j-author-slow", request: D }]) {
       assert.ok(has("stopped:j-author-slow", c), JSON.stringify(c));
     }
@@ -232,11 +236,20 @@ describe("one fixture per step of docs/MVP.md", () => {
       const start = h.indexOf(`<tr data-item="${item}">`);
       return h.slice(start, h.indexOf("</tr>", start));
     };
-    assert.match(row("i-race"), /<span class="st find">stuck: its critical reviews didn&#39;t pass — needs you<\/span><span class="detail">: the wait still races with the panel opening<\/span>/);
+    assert.match(row("i-race"), /<span class="st find">stuck: critical reviews didn&#39;t pass — needs you<\/span><span class="detail">: the wait still races with the panel opening<\/span>/);
     assert.match(row("i-race"), />Accept as reviewed</);
-    assert.match(row("i-fetch"), /stuck: fetch test artifacts failed — needs you/);
-    assert.match(row("i-slow"), /stuck: the investigation stopped by you — needs you<\/span><\/summary>|stuck: the investigation stopped by you — needs you<\/span>/);
+    assert.match(row("i-fetch"), /stuck: fetch test artifacts failed twice — needs you/);
+    assert.match(row("i-slow"), /stuck: the investigation stopped by you — needs you<\/span>/);
     assert.match(row("i-idle"), /<span class="st find">stalled: nothing running<\/span>/);
+    assert.match(row("i-idle"), /title="Resumes its author's session with your message; its patch then goes through lint and critical review again">Continue</);
+    const r = structuredClone(get("r-20261015-downloads-stuck"));
+    const atCap = renderRequest(r, { ...ctx, runningAgents: 10, maxAgents: 10 }, true).value;
+    assert.match(atCap, /<tr data-item="i-idle">[\s\S]*?<span class="st wait">waiting for an agent \(10\/10 running\)<\/span>/, "not stalled: waiting for a slot");
+    r.jobs["j-lint-idle"] = { ...r.jobs["j-fetch"], job: "j-lint-idle", item: "i-idle", name: "lint-text.ts commit", error: "cancelled by you", exitCode: -1 };
+    r.items["i-idle"].jobs.push("j-lint-idle");
+    const stopped = renderRequest(r, ctx, true).value;
+    assert.match(stopped, /<span class="st find">stalled after you stopped its lint message<\/span>/);
+    assert.match(stopped, /title="Runs lint message again">Retry</);
     assert.ok(row("i-idle").includes(cmd({ cmd: "continue", request: "r-20261015-downloads-stuck", item: "i-idle" })));
     assert.match(row("i-nits"), /<span class="st run">author addressing review nits · <span data-since="2026-10-15T08:58:00.000Z">2 min<\/span><\/span>/);
     assert.match(row("i-review"), /<span class="st run">being reviewed by Opus · <span data-since="2026-10-15T08:59:00.000Z">1 min<\/span><\/span>/);

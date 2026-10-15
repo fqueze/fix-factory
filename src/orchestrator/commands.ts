@@ -44,10 +44,15 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
   // With the item and job it was about: a refusal stays on the page until one like it succeeds.
   const about = { ...("item" in c && c.item !== undefined ? { item: c.item } : {}), ...("job" in c ? { job: c.job } : {}) };
   const done = (ok: boolean, detail?: string) => ev({ type: "command-executed", command: c.id, cmd: c.cmd, ...about, ok, ...(detail ? { detail: detail.slice(0, 500) } : {}) });
+  // Refusals are read on the page: a group by its test, not its id.
+  const itemName = (item: ItemId): string => {
+    const tests = s!.items[item]?.group.tests ?? [];
+    return tests.length === 1 ? tests[0].split("/").pop()! : tests.length > 1 ? `the group of ${tests.length} tests` : "this group";
+  };
   const resume = (item: ItemId, reason: string, message: string): string | undefined => {
     const plan = resumeAuthorPlan(s!.id, view!, item, reason, { message }, "investigating");
-    if (plan === undefined) return `${item} has no author session to resume`;
-    if (plan === "busy") return `the author of ${item} is running: send it again when it's done`;
+    if (plan === undefined) return `${itemName(item)} has no author session to resume`;
+    if (plan === "busy") return `the author of ${itemName(item)} is running: send it again when it's done`;
     plan.purpose.key = `author:${item}${itemEpochOf(view!, item)}:${reason.replace(/\s+/g, "-")}:${c.id}`;
     effects.push({ type: "start", plan });
     return undefined;
@@ -154,7 +159,7 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
     }
     case "comment-fix": {
       const item = s.patches[c.patch]?.item;
-      const error = item ? resume(item, "comment", `A comment on your fix:\n${c.text}\n\nAddress it by amending your commit, then end with the JSON report again.`) : `${c.patch} has no item`;
+      const error = item ? resume(item, "comment", `A comment on your fix:\n${c.text}\n\nAddress it by amending your commit, then end with the JSON report again.`) : "this patch has no group, so no author to tell";
       done(!error, error);
       break;
     }
@@ -170,7 +175,7 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
     case "reply-recovery": {
       const job = view.jobs.find((j) => j.job === c.job);
       if (!job?.sessionId) {
-        done(false, `no recover session for ${c.job}`);
+        done(false, "that recovery plan has no session to reply to");
         break;
       }
       effects.push({
@@ -195,7 +200,7 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
       const job = view.jobs.find((j) => j.job === c.job);
       const saved = ctx.plan(c.job);
       if (!job || !saved) {
-        done(false, `unknown job ${c.job}`);
+        done(false, "that job is unknown");
         break;
       }
       // Like next(), never again on its own: the push may have happened. A recovery plan can still ask for it.
@@ -204,7 +209,7 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
         break;
       }
       if (job.sessionId && view.jobs.some((j) => j.sessionId === job.sessionId && !j.end)) {
-        done(false, `the session of ${c.job} is running: retry it once it's done`);
+        done(false, `${job.name}${job.item ? ` of ${itemName(job.item)}` : ""} is still running: retry it once it's done`);
         break;
       }
       // The same plan through the same path, so a dry run still adds --dry-run (or refuses).
@@ -225,7 +230,7 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
     case "stop": {
       const job = s.jobs[c.job];
       if (!job || job.endedAt !== undefined) {
-        done(false, `${c.job} isn't running`);
+        done(false, "that job isn't running anymore");
         break;
       }
       if (isPushJob(job)) {
@@ -242,7 +247,7 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
     }
     case "accept-review":
       if (!reviewLimitFlag(s, c.item)) {
-        done(false, `${c.item} isn't waiting for you after its critical review rounds`);
+        done(false, `${itemName(c.item)} isn't waiting for you after its critical review rounds`);
         break;
       }
       ev({ type: "item-state", item: c.item, state: "reviewed", detail: "accepted by you" });
@@ -279,7 +284,7 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
       const item = s.items[c.item];
       const session = authorJobsOf(view, c.item).find((j) => j.purpose.reason === "initial");
       if (!item || !session || c.item === ANNOTATIONS_ITEM) {
-        done(false, `start-agent only starts a new ${session?.name ?? "investigate-and-fix"} on an item that already had one`);
+        done(false, `the investigation of ${itemName(c.item)} can only be restarted after a first one`);
         break;
       }
       // A fresh session in the same worktree, with the first run's inputs plus what you said.

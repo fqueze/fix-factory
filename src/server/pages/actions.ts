@@ -1,7 +1,7 @@
 import type { NeedsUser, PlannedCommand, PushView, RefusedCommand, RequestState, StackView } from "../../types.ts";
 import { canDismiss, isPushJob, reviewLimitFlag } from "../../state/flags.ts";
 import { html, join, type Html } from "../html.ts";
-import { actionKind, COMMAND_LABELS, commandFields, enterBugUrl, jobLabel, jobNoun, refusedOf, requestUrl, stackOfPatch, submitChecks } from "./common.ts";
+import { actionKind, COMMAND_LABELS, commandFields, enterBugUrl, groupLabel, jobLabel, jobNoun, refusedOf, requestUrl, stackOfPatch, submitChecks } from "./common.ts";
 
 // The ⚑ area of one open needs-user entry: what you're asked, why, and the buttons.
 export function renderAction(r: RequestState, n: NeedsUser): Html {
@@ -14,8 +14,24 @@ export function renderAction(r: RequestState, n: NeedsUser): Html {
 
 // A stopped job by its label rather than its tool or prompt name.
 function flagTitle(r: RequestState, n: NeedsUser): string {
+  const text = flagText(r, n);
+  const item = n.item ?? (n.job === undefined ? undefined : r.jobs[n.job]?.item);
+  return item !== undefined && item in r.items ? `${groupLabel(r, r.items[item])}: ${text}` : text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+// What a ⚑ is about, with plain job names ("fetch test artifacts failed twice", not the tool's name).
+export function flagText(r: RequestState, n: NeedsUser): string {
   const job = n.job === undefined ? undefined : r.jobs[n.job];
-  return actionKind(n, r) === "stopped" && job ? `Stopped by you: ${jobNoun(job.name)}` : n.action;
+  if (n.item !== undefined && reviewLimitFlag(r, n.item) === n) {
+    return "critical reviews didn't pass";
+  }
+  if (!job) {
+    return n.action;
+  }
+  if (actionKind(n, r) === "stopped") {
+    return `${jobNoun(job.name)} stopped by you`;
+  }
+  return n.action.includes(job.name) ? n.action.replace(job.name, jobNoun(job.name)) : n.action;
 }
 
 // The buttons of a ⚑ (also on its group row): every ⚑ has a way out.
@@ -23,7 +39,7 @@ export function flagControls(r: RequestState, n: NeedsUser): Html | null {
   const back = requestUrl(r.id);
   const job = n.job === undefined ? undefined : r.jobs[n.job];
   const item = n.item ?? job?.item;
-  const retry = job && !isPushJob(job) ? commandButton(r.id, { cmd: "retry", job: job.job }, "Retry", back, true) : null;
+  const retry = job && !isPushJob(job) ? commandButton(r.id, { cmd: "retry", job: job.job }, "Retry", back, true, `Runs ${jobNoun(job.name)} again`) : null;
   const talk = item !== undefined && hasAuthorSession(r, item) ? continueBox(r.id, item, back) : null;
   let controls: Html | null = null;
   switch (actionKind(n, r)) {
@@ -100,8 +116,8 @@ export function renderRefused(r: RequestState, x: RefusedCommand): Html {
   return html`<div class="action" data-key="${x.key}"><span class="flag">Your ${x.cmd ? COMMAND_LABELS[x.cmd] : "command"} was refused</span> <span class="why">${x.detail ?? ""}</span>${dismissButton(r.id, x.key, requestUrl(r.id))}</div>`;
 }
 
-function commandButton(request: string, c: object, label: string, back: string, primary = false): Html {
-  return html`<form class="inline cmd" method="post" action="/api/commands">${commandFields([{ ...c, request }], back)}<button class="btn small${primary ? " primary" : ""}">${label}</button></form>`;
+function commandButton(request: string, c: object, label: string, back: string, primary = false, title?: string): Html {
+  return html`<form class="inline cmd" method="post" action="/api/commands">${commandFields([{ ...c, request }], back)}<button class="btn small${primary ? " primary" : ""}"${title ? html` title="${title}"` : null}>${label}</button></form>`;
 }
 
 function dismissButton(request: string, key: string, back: string): Html {
@@ -114,7 +130,7 @@ export function stopButton(request: string, job: string, back: string): Html {
 
 // Resumes the item's author with what you type.
 export function continueBox(request: string, item: string, back: string): Html {
-  return html`<form class="inline cmd" method="post" action="/api/commands">${commandFields([{ cmd: "continue", request, item }], back)}<input type="text" name="text" required placeholder="Tell its author what to do…"><button class="btn small">Continue</button></form>`;
+  return html`<form class="inline cmd" method="post" action="/api/commands">${commandFields([{ cmd: "continue", request, item }], back)}<input type="text" name="text" required placeholder="Tell its author what to do…"><button class="btn small" title="Resumes its author's session with your message; its patch then goes through lint and critical review again">Continue</button></form>`;
 }
 
 // The plan a recovery entry asks about: its job's latest plan, or the latest plan

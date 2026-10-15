@@ -82,7 +82,7 @@ describe("commands", () => {
     assert.match(plan.agent?.message ?? "", /drop the timeout/);
     assert.equal(sc.state().items["i-a"].state, "investigating");
     run(sc, cmd({ cmd: "stack-comments", stack: "a", comments: [{ patch: "p-a", text: "nit" }] }));
-    assert.deepEqual(executed(sc).at(-1), { ok: false, detail: "the author of i-a is running: send it again when it's done" });
+    assert.deepEqual(executed(sc).at(-1), { ok: false, detail: "the author of test_a.js is running: send it again when it's done" });
   });
 
   it("a global tell-factory creates a request to route, named from its text; one for an unknown request does nothing", () => {
@@ -186,7 +186,7 @@ describe("commands", () => {
     const refused = sc.state().refused!;
     assert.equal(refused.length, 1);
     assert.equal(refused[0].cmd, "start-agent");
-    assert.match(refused[0].detail!, /only starts a new investigate-and-fix/);
+    assert.equal(refused[0].detail, "the investigation of this group can only be restarted after a first one");
     run(sc, cmd({ cmd: "dismiss", key: refused[0].key }));
     assert.deepEqual(sc.state().refused, []);
   });

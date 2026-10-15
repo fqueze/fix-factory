@@ -1,9 +1,9 @@
 // What each group is doing, in plain words, and what a request (or the whole factory) is doing: working,
 // waiting for you, or done. No internal state names.
-import { isPushJob, reviewLimitFlag } from "../../state/flags.ts";
-import type { ItemState, ItemView, JobView, NeedsUser, RequestState } from "../../types.ts";
+import { isPushJob } from "../../state/flags.ts";
+import type { ItemState, ItemView, JobView, RequestState } from "../../types.ts";
 import { html, join, type Html } from "../html.ts";
-import { continueBox, flagControls, hasAuthorSession } from "./actions.ts";
+import { continueBox, flagControls, flagText, hasAuthorSession } from "./actions.ts";
 import { elapsed, groupLabel, jobLabel, jobNoun, modelLabel, refusedOf, requestUrl, type RenderContext, type StateClass } from "./common.ts";
 
 // What a running job does to its group. Author runs say why they were resumed (purpose.reason).
@@ -80,37 +80,39 @@ export function itemSentence(r: RequestState, i: ItemView, ctx: RenderContext): 
   }
   const flag = r.needsUser.find((n) => n.item === i.id);
   if (flag) {
-    return { text: html`stuck: ${flagSentence(r, i, flag)} — needs you`, cls: "find", controls: flagControls(r, flag), detail: flag.key.startsWith("stopped:") ? undefined : flag.detail };
+    return { text: html`stuck: ${flagText(r, flag)} — needs you`, cls: "find", controls: flagControls(r, flag), detail: flag.key.startsWith("stopped:") ? undefined : flag.detail };
   }
   const idle = IDLE[i.state];
   if (idle.active) {
-    return { text: html`stalled: nothing running`, cls: "find", controls: stalledControls(r, i), detail: i.detail };
+    // At the agent cap, next() is only waiting for a slot.
+    if (ctx.maxAgents !== undefined && ctx.runningAgents !== undefined && ctx.runningAgents >= ctx.maxAgents) {
+      return { text: html`waiting for an agent (${ctx.runningAgents}/${ctx.maxAgents} running)`, cls: "wait", controls: null, detail: i.detail };
+    }
+    return { text: html`${stalledText(r, i)}`, cls: "find", controls: stalledControls(r, i), detail: i.detail };
   }
   const builds = ctx.runningBuilds ?? Object.values(r.jobs).filter((j) => j.kind === "build" && j.endedAt === undefined).length;
   return { text: html`${idle.text(i, builds)}`, cls: DONE.includes(i.state) ? (i.state === "fixed" || i.state === "landed" ? "ok" : "closed") : "wait", controls: null, detail: i.detail };
 }
 
-function flagSentence(r: RequestState, i: ItemView, n: NeedsUser): string {
-  if (reviewLimitFlag(r, i.id) === n) {
-    return "its critical reviews didn't pass";
+// Nothing runs and nothing asks you: talk to its author, or run its last job again.
+// Why it stalled, when its last job tells.
+function stalledText(r: RequestState, i: ItemView): string {
+  const last = i.jobs.map((j) => r.jobs[j]).at(-1);
+  if (last?.error?.startsWith("cancelled by you")) {
+    return `stalled after you stopped ${last.name === "investigate-and-fix" ? "its investigation" : `its ${jobLabel(last.name)}`}`;
   }
-  const job = n.job === undefined ? undefined : r.jobs[n.job];
-  if (n.key.startsWith("stopped:")) {
-    return job ? `${jobNoun(job.name)} stopped by you` : "stopped by you";
+  if (last?.exitCode !== undefined && last.exitCode !== 0) {
+    return `stalled after ${jobNoun(last.name)} failed`;
   }
-  if (n.key.startsWith("failed:") && job) {
-    return `${jobNoun(job.name)} failed`;
-  }
-  return n.action;
+  return "stalled: nothing running";
 }
 
-// Nothing runs and nothing asks you: talk to its author, or run its last job again.
 function stalledControls(r: RequestState, i: ItemView): Html | null {
   const back = requestUrl(r.id);
   const last = i.jobs.map((j) => r.jobs[j]).at(-1);
   const retry =
     last && last.exitCode !== 0 && !isPushJob(last)
-      ? html`<form class="inline cmd" method="post" action="/api/commands"><input type="hidden" name="command" value="${JSON.stringify({ cmd: "retry", job: last.job, request: r.id })}"><input type="hidden" name="back" value="${back}"><button class="btn small">Retry</button></form>`
+      ? html`<form class="inline cmd" method="post" action="/api/commands"><input type="hidden" name="command" value="${JSON.stringify({ cmd: "retry", job: last.job, request: r.id })}"><input type="hidden" name="back" value="${back}"><button class="btn small" title="Runs ${jobNoun(last.name)} again">Retry</button></form>`
       : null;
   const talk = hasAuthorSession(r, i.id) ? continueBox(r.id, i.id, back) : null;
   return retry || talk ? html`${retry}${talk}` : null;

@@ -10,6 +10,7 @@ export interface RenderContext {
   maxAgents?: number;
   maxBuilds?: number;
   runningBuilds?: number; // across requests, for "waiting for a build slot (N builds running)"
+  runningAgents?: number; // across requests, for "waiting for an agent (N/M running)"
   open?: string; // request id to show expanded
   // The text of a patch's interdiffFile, read by the server inside stateDir.
   interdiff?: (p: PatchView) => string | undefined;
