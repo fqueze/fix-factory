@@ -44,7 +44,8 @@ function matching(rule: string, lines: string[], re: RegExp, from = 0): Violatio
 // ---------------------------------------------------------------------------
 // Commit message rules. Each takes the message split into lines.
 
-const FIRST_LINE = /^Bug (\d+|XXXXXXX) - \S.*, r=([^\s,]+(?:,[^\s,]+)*)\.$/;
+// The description can't contain ", r=", so a second "r=" can't hide in it.
+const FIRST_LINE = /^Bug (\d+|XXXXXXX) - \S(?:(?!, r=).)*, r=([^\s,=]+(?:,\s*[^\s,=]+)*)\.$/;
 
 export const firstLineFormat: Rule = (lines) =>
   FIRST_LINE.test(lines[0] ?? "") ? [] : [{ rule: "firstLineFormat", line: 1, text: `expected "Bug N - <text>, r=<reviewers>.": ${lines[0] ?? ""}` }];
@@ -56,7 +57,7 @@ export const reviewerGroupHash: Rule = (lines) => {
   const m = FIRST_LINE.exec(lines[0] ?? "");
   if (!m) return [];
   return m[2]
-    .split(",")
+    .split(/,\s*/)
     .filter((r) => !r.startsWith("#") && /reviewers/.test(r))
     .map((r) => ({ rule: "reviewerGroupHash", line: 1, text: `group ${r} needs a "#": #${r.replace(/!$/, "")}` }));
 };
@@ -74,7 +75,7 @@ const FILE_LINE = new RegExp(`[\\w./-]+\\.(?:${CODE_EXT}):\\d+`);
 
 export const noFileLineRefs: Rule = (lines) => matching("noFileLineRefs", lines, FILE_LINE);
 
-export const noTryLinks: Rule = (lines) => matching("noTryLinks", lines, /treeherder|hg\.mozilla\.org\/try|repo=try\b|taskcluster|firefox-ci-tc/i);
+export const noTryLinks: Rule = (lines) => matching("noTryLinks", lines, /https?:\/\/\S*(treeherder\.mozilla\.org|taskcluster|firefox-ci-tc|hg\.mozilla\.org\/try)/i);
 
 export const noMeasurements: Rule = (lines) => matching("noMeasurements", lines, /\d+%|\b\d+\/\d+\b|\bout of \d+/i);
 
@@ -105,7 +106,7 @@ export const CAUSE_CLAIMS = ["root cause", "belongs in", "the cause is", "marks 
 export const noCauseClaims: Rule = (lines) => matching("noCauseClaims", lines, new RegExp(CAUSE_CLAIMS.join("|"), "i"));
 
 export const noStackCrossRefs: Rule = (lines) =>
-  matching("noStackCrossRefs", lines, /\b(previous|next|earlier|later|last|first) (patch|commit)\b|\bthis (series|stack)\b|\bin the stack\b/i);
+  matching("noStackCrossRefs", lines, /\b(previous|next) patch\b|\bthis (series|stack)\b/i);
 
 export const noAiAttribution: Rule = (lines) =>
   matching("noAiAttribution", lines, /co-authored-by|generated (with|by) .*(claude|ai\b|gpt)|noreply@anthropic\.com|\u{1F916}/iu);
@@ -162,7 +163,7 @@ export function lintBug(draft: Partial<BugDraft>): LintResult {
     ...requiredFields(draft),
     ...summaryLength(draft.summary ?? ""),
     ...descriptionLength(description),
-    ...noAiAttribution(splitLines(description)),
+    ...noAiAttribution([draft.summary ?? "", ...splitLines(description)]),
   ]);
 }
 
@@ -197,7 +198,7 @@ function main() {
   let kind: string | undefined;
   let file: string | undefined;
   try {
-    const { values, positionals } = parseArgs({ options: { kind: { type: "string" }, "dry-run": { type: "boolean" } }, allowPositionals: true });
+    const { values, positionals } = parseArgs({ options: { kind: { type: "string" } }, allowPositionals: true });
     kind = values.kind;
     file = positionals[0];
     if (!["commit", "bug", "reply"].includes(kind ?? "") || positionals.length !== 1) throw new Error();

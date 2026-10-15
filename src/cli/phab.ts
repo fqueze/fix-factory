@@ -5,23 +5,32 @@
 //         length, text, suggestion?, done, replyTo?}]}]
 //     status is the revision status value ("needs-review", "accepted", "needs-revision", "published", ...).
 //     Reviewer names are usernames, or "#slug" for groups. Reviewer status: accepted | blocking (requested
-//     changes) | pending (not acted yet, blocking reviewers included) | resigned.
+//     changes, while the revision needs revision) | pending (not acted yet, blocking reviewers included, or
+//     requested changes on a diff since updated) | resigned.
 //     comments: inline comments, sorted by file and line; id is the one used in D…#inline-<id> links;
 //     replyTo is the id of the comment it answers; suggestion is the "suggest edit" replacement text.
 //
-//   node src/cli/phab.ts reviewers <file...> --repo <checkout>
-//     → {files, suggestions: [{name, source: "mots"|"herald"|"recent", blocking?, modules?, count?}]}
+//   node src/cli/phab.ts reviewers <file...> [--repo <checkout>]   (default: config.firefoxRepo)
+//     →{files, suggestions: [{name, source: "mots"|"herald"|"recent", blocking?, modules?, count?}]}
 //     from `./mach file-info reviewers --format json`, in the order mach suggests them (mots groups first).
 //
 // Token: ~/.arcrc. Suggested edits come from transaction.search, which now exposes hasSuggestion and
 // suggestionText, so the changeset AJAX scraping of phab-suggestions.py is no longer needed.
 
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
-import { runCli } from "../lib/cli.ts";
+import { join, resolve } from "node:path";
+import { runCli, UsageError } from "../lib/cli.ts";
 import { execOk } from "../lib/exec.ts";
+import { loadConfig } from "../config.ts";
 import type { InlineComment, ReviewerStatus } from "../types.ts";
+
+// --repo, or config.firefoxRepo when a factory config exists.
+export function repoArg(value: unknown): string | undefined {
+  if (typeof value === "string") return resolve(value);
+  const path = process.env.FACTORY_CONFIG ?? "factory.config.json";
+  return existsSync(path) ? loadConfig(path).firefoxRepo : undefined;
+}
 
 export const PHAB = "https://phabricator.services.mozilla.com/";
 const API = PHAB + "api/";
@@ -29,12 +38,16 @@ const API = PHAB + "api/";
 export type Conduit = (method: string, params: Record<string, unknown>) => Promise<any>;
 
 export function arcToken(arcrc = join(homedir(), ".arcrc")): string {
-  return JSON.parse(readFileSync(arcrc, "utf8")).hosts[API].token;
+  const token = JSON.parse(readFileSync(arcrc, "utf8")).hosts?.[API]?.token;
+  if (typeof token !== "string") throw new Error(`no token for ${API} in ${arcrc}`);
+  return token;
 }
 
-export function makeConduit(fetchFn: typeof fetch = fetch, token: () => string = () => arcToken()): Conduit {
+export function makeConduit(fetchFn: typeof fetch = fetch, getToken: () => string = () => arcToken()): Conduit {
+  let token: string | undefined;
   return async (method, params) => {
-    const body = new URLSearchParams({ params: JSON.stringify({ ...params, __conduit__: { token: token() } }), output: "json" });
+    token ??= getToken();
+    const body = new URLSearchParams({ params: JSON.stringify({ ...params, __conduit__: { token } }), output: "json" });
     const res = await fetchFn(API + method, { method: "POST", body });
     if (!res.ok) {
       throw new Error(`${method}: HTTP ${res.status}`);
@@ -59,14 +72,14 @@ async function searchAll(conduit: Conduit, method: string, params: Record<string
   return out;
 }
 
-export function reviewerStatus(phabStatus: string): ReviewerStatus["status"] {
+// Conduit keeps reporting "rejected" after the author updates the diff and the revision goes back to
+// needs-review, so it only blocks while the revision still needs revision.
+export function reviewerStatus(phabStatus: string, revisionStatus: string): ReviewerStatus["status"] {
   switch (phabStatus) {
     case "accepted":
-    case "accepted-older":
       return "accepted";
     case "rejected":
-    case "rejected-older":
-      return "blocking";
+      return revisionStatus === "needs-revision" ? "blocking" : "pending";
     case "resigned":
       return "resigned";
     default:
@@ -169,7 +182,7 @@ export async function poll(revisions: number[], conduit: Conduit = makeConduit()
       status: r.fields.status.value,
       reviewers: r.attachments.reviewers.reviewers.map((rv: any) => ({
         name: nameOf.get(rv.reviewerPHID) ?? rv.reviewerPHID,
-        status: reviewerStatus(rv.status),
+        status: reviewerStatus(rv.status, r.fields.status.value),
       })),
       comments,
     };
@@ -224,12 +237,19 @@ async function main() {
   await runCli(
     {
       poll: async (args) => {
-        if (!args.length) throw new Error("usage: poll <D-number...>");
-        return poll(args.map(parseRevision));
+        if (!args.length) throw new UsageError("usage: poll <D-number...>");
+        let revisions: number[];
+        try {
+          revisions = args.map(parseRevision);
+        } catch (e) {
+          throw new UsageError((e as Error).message);
+        }
+        return poll(revisions);
       },
       reviewers: async (args, values) => {
-        if (!args.length || typeof values.repo !== "string") throw new Error("usage: reviewers <file...> --repo <checkout>");
-        return reviewers(args, values.repo);
+        const repo = repoArg(values.repo);
+        if (!args.length || !repo) throw new UsageError("usage: reviewers <file...> [--repo <checkout>]");
+        return reviewers(args, repo);
       },
     },
     { repo: { type: "string" } },

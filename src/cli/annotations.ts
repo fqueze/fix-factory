@@ -1,24 +1,31 @@
 // Skip and failure annotations of a folder's test manifests.
 //
-//   node src/cli/annotations.ts list <folder> --repo <firefox checkout>
+//   node src/cli/annotations.ts list <folder> [--repo <firefox checkout>]   (default: config.firefoxRepo)
 //     → [{manifest, test, kind, condition, comment?, line, commit, bug, commentBugs}]
 //     manifest: path relative to the repo. test: the manifest section; "DEFAULT" applies to every test of the
 //     manifest. kind: "skip-if" | "fail-if". condition: the condition string. comment: the trailing "# ..."
 //     comment of the condition's line. line: 1-based line in the manifest.
 //     commit: {sha, date, author, subject} of the first commit whose diff adds or removes the condition's
-//       line (`git log -S`, path-limited to the manifest), or null. Manifests converted from .ini or
-//       rewritten by a mass cleanup report that commit, which is why commentBugs is there too.
+//       line (`git log -S`, path-limited to the manifest), or null.
 //     bug: the bug of that commit's subject, as {id, summary, firstComment} or {id, error}, or null.
 //     commentBugs: same shape, for the bugs named in the comment ("# Bug 1787024").
+//
+//     The first commit is often not the one that added the skip: the .ini → .toml conversion (bug 1853243)
+//     and mass manifest rewrites (bug 1995583, new os_version values) re-add every line. On
+//     browser/components/sessionstore/test, most commits are such rewrites, and commentBugs is usually the
+//     real source.
+//
+// Not done yet: whether a condition is dead (matches no CI configuration), and `write`.
 //
 // The TOML parsing is limited to what test manifests use: [sections], and skip-if / fail-if arrays of
 // strings with trailing comments.
 
 import { readdirSync, readFileSync } from "node:fs";
 import { isAbsolute, join, relative, resolve } from "node:path";
-import { runCli } from "../lib/cli.ts";
+import { runCli, UsageError } from "../lib/cli.ts";
 import { exec } from "../lib/exec.ts";
 import { bugInfo, type BugInfo } from "./bugzilla.ts";
+import { repoArg } from "./phab.ts";
 
 export type AnnotationKind = "skip-if" | "fail-if";
 
@@ -240,8 +247,9 @@ async function main() {
   await runCli(
     {
       list: async (args, values) => {
-        if (args.length !== 1 || typeof values.repo !== "string") throw new Error("usage: list <folder> --repo <checkout>");
-        return list(args[0], resolve(values.repo));
+        const repo = repoArg(values.repo);
+        if (args.length !== 1 || !repo) throw new UsageError("usage: list <folder> [--repo <checkout>]");
+        return list(args[0], repo);
       },
     },
     { repo: { type: "string" } },

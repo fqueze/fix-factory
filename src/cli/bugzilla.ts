@@ -8,10 +8,10 @@
 //
 //   node src/cli/bugzilla.ts enter-url <draft.json>
 //     → {url}: a prefilled enter_bug.cgi URL for a BugDraft, with the field names of the bug-filing
-//     skill's file-bug.py (product, component, short_desc, comment, blocked).
+//     skill's file-bug.py (product, component, short_desc, comment, blocked, bug_type, keywords).
 
 import { readFileSync } from "node:fs";
-import { runCli } from "../lib/cli.ts";
+import { runCli, UsageError } from "../lib/cli.ts";
 import type { BugDraft } from "../types.ts";
 import { makeConduit, type Conduit } from "./phab.ts";
 
@@ -86,21 +86,22 @@ export async function priorArt(test: string, fetchFn: typeof fetch = fetch, cond
   const fields = "id,summary,status,product,component,keywords,assigned_to,last_change_time";
   // quicksearch only returns open bugs unless the query asks otherwise.
   const found = await getJson(`bug?quicksearch=${encodeURIComponent(query)}&include_fields=${fields}&limit=50`, fetchFn);
-  const bugs: PriorArtBug[] = [];
-  for (const b of found.bugs) {
-    const att = await getJson(`bug/${b.id}/attachment?include_fields=file_name,content_type,is_obsolete`, fetchFn);
-    bugs.push({
-      id: b.id,
-      summary: b.summary,
-      status: b.status,
-      product: b.product,
-      component: b.component,
-      keywords: b.keywords,
-      assignee: b.assigned_to === "nobody@mozilla.org" ? null : b.assigned_to,
-      lastChangeTime: b.last_change_time,
-      revisions: revisionsFromAttachments(att.bugs[String(b.id)] ?? []),
-    });
-  }
+  const bugs: PriorArtBug[] = await Promise.all(
+    found.bugs.map(async (b: any) => {
+      const att = await getJson(`bug/${b.id}/attachment?include_fields=file_name,content_type,is_obsolete`, fetchFn);
+      return {
+        id: b.id,
+        summary: b.summary,
+        status: b.status,
+        product: b.product,
+        component: b.component,
+        keywords: b.keywords,
+        assignee: b.assigned_to === "nobody@mozilla.org" ? null : b.assigned_to,
+        lastChangeTime: b.last_change_time,
+        revisions: revisionsFromAttachments(att.bugs[String(b.id)] ?? []),
+      };
+    }),
+  );
   const ids = [...new Set(bugs.flatMap((b) => b.revisions.map((r) => r.revision)))].sort((a, b) => a - b);
   if (ids.length) {
     const revs = await conduit("differential.revision.search", { constraints: { ids }, limit: 100 });
@@ -129,17 +130,19 @@ export function enterBugUrl(draft: BugDraft): string {
     ["comment", draft.description],
     ...(draft.blocks ?? []).map((b): [string, string] => ["blocked", String(b)]),
   ];
+  if (draft.bugType) fields.push(["bug_type", draft.bugType]);
+  if (draft.keywords?.length) fields.push(["keywords", draft.keywords.join(", ")]);
   return BUGZILLA + "enter_bug.cgi?" + fields.map(([k, v]) => `${k}=${quote(v)}`).join("&");
 }
 
 async function main() {
   await runCli({
     "prior-art": async (args) => {
-      if (args.length !== 1) throw new Error("usage: prior-art <test>");
+      if (args.length !== 1) throw new UsageError("usage: prior-art <test>");
       return priorArt(args[0]);
     },
     "enter-url": async (args) => {
-      if (args.length !== 1) throw new Error("usage: enter-url <draft.json>");
+      if (args.length !== 1) throw new UsageError("usage: enter-url <draft.json>");
       return { url: enterBugUrl(JSON.parse(readFileSync(args[0], "utf8")) as BugDraft) };
     },
   });

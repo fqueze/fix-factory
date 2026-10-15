@@ -94,4 +94,6 @@ test("enterBugUrl matches file-bug.py's encoding", () => {
     url,
     "https://bugzilla.mozilla.org/enter_bug.cgi?product=Core&component=Disability%20Access%20APIs&short_desc=Intermittent%20a%2Fb%2Fbrowser_x.js%20%7C%20Timeout%20%28it%27s%20%2Abad%2A%29%21&comment=Line%201%0ALine%202%20%26%20100%25%20~ok&blocked=123&blocked=456",
   );
+  const meta = enterBugUrl({ product: "Testing", component: "General", summary: "m", description: "d", bugType: "task", keywords: ["meta", "leave-open"] });
+  assert.ok(meta.endsWith("&bug_type=task&keywords=meta%2C%20leave-open"), meta);
 });

@@ -1,8 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
-import { makeConduit, parseFileInfoReviewers, parseRevision, poll, reviewerStatus, reviewersCommand, stripBadge, type Conduit } from "./phab.ts";
+import { arcToken, makeConduit, parseFileInfoReviewers, parseRevision, poll, reviewerStatus, reviewersCommand, stripBadge, type Conduit } from "./phab.ts";
 
 const fixtures = new URL("../../test/fixtures/phab/", import.meta.url);
 
@@ -57,19 +59,36 @@ test("makeConduit: request shape and errors", async () => {
     seen = { url, body: init.body as URLSearchParams };
     return new Response(JSON.stringify({ result: null, error_code: "ERR-CONDUIT-CORE", error_info: "nope" }));
   }) as typeof fetch;
-  const conduit = makeConduit(fakeFetch, () => "api-secret");
+  let tokenReads = 0;
+  const conduit = makeConduit(fakeFetch, () => (tokenReads++, "api-secret"));
   await assert.rejects(conduit("user.whoami", { a: 1 }), /user\.whoami: ERR-CONDUIT-CORE: nope/);
+  await assert.rejects(conduit("user.whoami", { a: 1 }));
+  assert.equal(tokenReads, 1);
   assert.equal(seen?.url, "https://phabricator.services.mozilla.com/api/user.whoami");
   assert.deepEqual(JSON.parse(seen!.body.get("params")!), { a: 1, __conduit__: { token: "api-secret" } });
 });
 
+test("arcToken: clear error without a token for the host", () => {
+  const dir = mkdtempSync(join(tmpdir(), "arcrc-test-"));
+  try {
+    const arcrc = join(dir, ".arcrc");
+    writeFileSync(arcrc, JSON.stringify({ hosts: { "https://phabricator.services.mozilla.com/api/": { token: "api-x" } } }));
+    assert.equal(arcToken(arcrc), "api-x");
+    writeFileSync(arcrc, JSON.stringify({ hosts: {} }));
+    assert.throws(() => arcToken(arcrc), /no token for https:\/\/phabricator\.services\.mozilla\.com\/api\/ in .*\.arcrc/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("reviewerStatus", () => {
-  assert.equal(reviewerStatus("accepted"), "accepted");
-  assert.equal(reviewerStatus("accepted-older"), "accepted");
-  assert.equal(reviewerStatus("rejected"), "blocking");
-  assert.equal(reviewerStatus("blocking"), "pending");
-  assert.equal(reviewerStatus("added"), "pending");
-  assert.equal(reviewerStatus("resigned"), "resigned");
+  assert.equal(reviewerStatus("accepted", "accepted"), "accepted");
+  assert.equal(reviewerStatus("rejected", "needs-revision"), "blocking");
+  // Requested changes on an older diff: the author updated it, the revision is back in review.
+  assert.equal(reviewerStatus("rejected", "needs-review"), "pending");
+  assert.equal(reviewerStatus("blocking", "needs-review"), "pending");
+  assert.equal(reviewerStatus("added", "needs-review"), "pending");
+  assert.equal(reviewerStatus("resigned", "needs-review"), "resigned");
 });
 
 test("stripBadge", () => {

@@ -31,7 +31,14 @@ test("firstLineFormat", () => {
   assert.deepEqual(firstLineFormat(["Bug 123 - Do it, r=foo."]), []);
   assert.deepEqual(firstLineFormat(["Bug XXXXXXX - Do it, r=#foo-reviewers,bar."]), []);
   assert.deepEqual(firstLineFormat(["Bug 123 - Do it, r=foo!,bar."]), []);
-  for (const bad of ["Bug 123 - Do it r=foo.", "Bug 123 - Do it, r=foo", "Bug 123: Do it, r=foo.", "Do it, r=foo.", "Bug 123 - Do it, r=foo, bar."]) {
+  assert.deepEqual(firstLineFormat(["Bug 123 - Do it, r=foo, bar."]), []);
+  for (const bad of [
+    "Bug 123 - Do it r=foo.",
+    "Bug 123 - Do it, r=foo",
+    "Bug 123: Do it, r=foo.",
+    "Do it, r=foo.",
+    "Bug 123 - Do it, r=ai-frontend-reviewers, r=x.",
+  ]) {
     assert.equal(firstLineFormat([bad]).length, 1, bad);
   }
 });
@@ -43,7 +50,7 @@ test("reviewerNotRequest", () => {
 
 test("reviewerGroupHash", () => {
   assert.deepEqual(reviewerGroupHash(["Bug 1 - x, r=#dom-core-reviewers,smaug."]), []);
-  const v = reviewerGroupHash(["Bug 1 - x, r=sessionstore-reviewers,dao."]);
+  const v = reviewerGroupHash(["Bug 1 - x, r=dao, sessionstore-reviewers."]);
   assert.equal(v.length, 1);
   assert.match(v[0].text, /#sessionstore-reviewers/);
 });
@@ -68,7 +75,8 @@ test("noFileLineRefs", () => {
 test("noTryLinks", () => {
   assert.equal(noTryLinks(["https://treeherder.mozilla.org/jobs?repo=try&revision=abc"]).length, 1);
   assert.equal(noTryLinks(["https://hg.mozilla.org/try/rev/abc"]).length, 1);
-  assert.deepEqual(noTryLinks(["Try to wait for the load"]), []);
+  assert.equal(noTryLinks(["https://firefox-ci-tc.services.mozilla.com/tasks/abc"]).length, 1);
+  assert.deepEqual(noTryLinks(["Try to wait for the load", "Fix the treeherder log parser", "Use the taskcluster proxy"]), []);
 });
 
 test("noMeasurements", () => {
@@ -93,7 +101,7 @@ test("noCauseClaims", () => {
 test("noStackCrossRefs", () => {
   assert.equal(noStackCrossRefs(["the mac one goes in the last commit of this series"]).length, 1);
   assert.equal(noStackCrossRefs(["The previous patch handles it."]).length, 1);
-  assert.deepEqual(noStackCrossRefs(["Wait for the previous task's tabs."]), []);
+  assert.deepEqual(noStackCrossRefs(["Wait for the previous task's tabs.", "The last commit to touch this file", "Keep the first patch of the observer"]), []);
 });
 
 test("noAiAttribution", () => {
@@ -135,6 +143,7 @@ test("bug drafts", () => {
   assert.deepEqual(lintBug(ok), { ok: true, violations: [] });
   assert.deepEqual(requiredFields({ product: "Firefox", summary: "x", description: "y" }), [{ rule: "requiredFields", text: "missing component" }]);
   assert.equal(summaryLength("x".repeat(151)).length, 1);
+  assert.deepEqual(rules(lintBug({ ...ok, summary: "Fix it \u{1F916} Generated with Claude" })), ["noAiAttribution"]);
   assert.equal(descriptionLength(Array(9).fill("l").join("\n")).length, 1);
   assert.deepEqual(descriptionLength(Array(8).fill("l").join("\n\n")), []);
   assert.deepEqual(rules(lint("bug", JSON.stringify({ ...ok, component: "" }))), ["requiredFields"]);

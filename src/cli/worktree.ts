@@ -12,16 +12,17 @@
 //
 //   node src/cli/worktree.ts remove <name>
 //     → {name, path, killed: [{pid, cmdline}], removed: true}
-//     Kills the processes whose command line contains the worktree path (and only those), then
-//     `git worktree remove --force`, and deletes the objdir. The branch is kept.
+//     Kills the processes whose command line names the worktree or whose working directory is in it (and
+//     only those), then `git worktree remove --force`, which also deletes the in-tree objdir. The branch is
+//     kept. killed lists the processes actually signalled.
 //
 // Worktrees live outside the checkout: worktrees inside it break `mach try`.
 
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync, openSync, closeSync } from "node:fs";
-import { isAbsolute, join, resolve } from "node:path";
+import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, readlinkSync, realpathSync, writeFileSync } from "node:fs";
+import { basename, dirname, join, resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
-import { runCli, log } from "../lib/cli.ts";
+import { log, runCli, UsageError } from "../lib/cli.ts";
 import { exec, execOk } from "../lib/exec.ts";
 import { loadConfig } from "../config.ts";
 
@@ -38,22 +39,26 @@ export function mozconfig(build: BuildKind): string {
   return lines.join("\n") + "\n";
 }
 
-export function objdirOf(mozconfigText: string, topsrcdir: string): string | null {
-  const m = /^mk_add_options MOZ_OBJDIR=(.+)$/m.exec(mozconfigText);
-  if (!m) return null;
-  const dir = m[1].trim().replace("@TOPSRCDIR@", topsrcdir);
-  return isAbsolute(dir) ? dir : resolve(topsrcdir, dir);
-}
-
 export function validateName(name: string): void {
   if (!name || name.includes("/") || name.startsWith("-") || name === "." || name === "..") {
     throw new Error(`invalid worktree name: ${name}`);
   }
 }
 
-export function isInside(path: string, dir: string): boolean {
+// realpath of the longest existing prefix: worktreesDir may not exist yet.
+function realOrResolved(path: string): string {
   const p = resolve(path);
-  const d = resolve(dir);
+  try {
+    return realpathSync(p);
+  } catch {
+    const parent = dirname(p);
+    return parent === p ? p : join(realOrResolved(parent), basename(p));
+  }
+}
+
+export function isInside(path: string, dir: string): boolean {
+  const p = realOrResolved(path);
+  const d = realOrResolved(dir);
   return p === d || p.startsWith(d + "/");
 }
 
@@ -121,15 +126,15 @@ export async function create(name: string, opts: { base?: string; build: BuildKi
   }
   if (smokeStatus !== 0) throw new Error(`${dest} built but can't run a mochitest; log: ${smokeLog}`);
 
-  return { name, path: dest, branch: name, base, build: opts.build, mozconfig: mozconfigPath, objdir: objdirOf(mozconfig(opts.build), dest), smokeLog };
+  return { name, path: dest, branch: name, base, build: opts.build, mozconfig: mozconfigPath, objdir: join(dest, `obj-${flavor(opts.build)}`), smokeLog };
 }
 
 // True when the command line names the path itself or something under it, not a sibling such as
-// "<path>-2".
+// "<path>-2" or "<path>+x".
 export function mentionsPath(cmdline: string, path: string): boolean {
   for (let i = cmdline.indexOf(path); i !== -1; i = cmdline.indexOf(path, i + 1)) {
     const next = cmdline[i + path.length];
-    if (next === undefined || !/[\w.-]/.test(next)) return true;
+    if (next === undefined || next === "/" || /\s/.test(next)) return true;
   }
   return false;
 }
@@ -139,6 +144,7 @@ export interface Proc {
   cmdline: string;
 }
 
+// The working directory catches commands with relative paths, such as `python3 ./mach test`.
 export function processesUnder(path: string, procRoot = "/proc", self = process.pid): Proc[] {
   const out: Proc[] = [];
   for (const entry of readdirSync(procRoot)) {
@@ -150,7 +156,13 @@ export function processesUnder(path: string, procRoot = "/proc", self = process.
       continue; // exited since readdir, or not ours to read
     }
     const cmdline = raw.replace(/\0+$/, "").replaceAll("\0", " ");
-    if (cmdline && mentionsPath(cmdline, path)) out.push({ pid: Number(entry), cmdline });
+    let cwd: string | undefined;
+    try {
+      cwd = readlinkSync(join(procRoot, entry, "cwd"));
+    } catch {
+      // kernel threads, other users' processes
+    }
+    if (mentionsPath(cmdline, path) || (cwd !== undefined && isInside(cwd, path))) out.push({ pid: Number(entry), cmdline });
   }
   return out;
 }
@@ -164,30 +176,30 @@ function alive(pid: number): boolean {
   }
 }
 
-async function killAll(procs: Proc[]): Promise<void> {
-  const signal = (pid: number, sig: NodeJS.Signals) => {
-    try {
-      process.kill(pid, sig);
-    } catch {
-      // already gone
-    }
-  };
-  for (const p of procs) signal(p.pid, "SIGTERM");
-  for (let i = 0; i < 50 && procs.some((p) => alive(p.pid)); i++) await sleep(100);
-  for (const p of procs) if (alive(p.pid)) signal(p.pid, "SIGKILL");
+function signal(pid: number, sig: NodeJS.Signals): boolean {
+  try {
+    process.kill(pid, sig);
+    return true;
+  } catch {
+    return false; // gone, or not ours (EPERM)
+  }
+}
+
+async function killAll(procs: Proc[]): Promise<Proc[]> {
+  const signalled = procs.filter((p) => signal(p.pid, "SIGTERM"));
+  for (let i = 0; i < 50 && signalled.some((p) => alive(p.pid)); i++) await sleep(100);
+  for (const p of signalled) if (alive(p.pid)) signal(p.pid, "SIGKILL");
+  return signalled;
 }
 
 export async function remove(name: string, opts: { repo: string; worktreesDir: string }) {
   validateName(name);
   const dest = join(opts.worktreesDir, name);
   if (!existsSync(dest)) throw new Error(`${dest} does not exist`);
-  const killed = processesUnder(dest);
-  await killAll(killed);
-  const mozconfigPath = join(dest, "mozconfig");
-  const objdir = existsSync(mozconfigPath) ? objdirOf(readFileSync(mozconfigPath, "utf8"), dest) : null;
-  // --force: the objdir and mozconfig are untracked, git refuses without it.
+  const killed = await killAll(processesUnder(realpathSync(dest)));
+  // --force: the objdir and mozconfig are untracked, git refuses without it. An objdir outside the tree
+  // may be shared, so only the in-tree one goes, with the tree.
   await execOk(["git", "worktree", "remove", "--force", dest], { cwd: opts.repo });
-  if (objdir && existsSync(objdir)) rmSync(objdir, { recursive: true, force: true });
   return { name, path: dest, killed, removed: true };
 }
 
@@ -197,13 +209,13 @@ async function main() {
       create: async (args, values) => {
         const build = values.build as BuildKind;
         if (args.length !== 1 || !["artifact", "debug", "full"].includes(build)) {
-          throw new Error("usage: create <name> [--base <ref>] --build artifact|debug|full");
+          throw new UsageError("usage: create <name> [--base <ref>] --build artifact|debug|full");
         }
         const config = loadConfig();
         return create(args[0], { base: values.base as string | undefined, build, repo: config.firefoxRepo, worktreesDir: config.worktreesDir });
       },
       remove: async (args) => {
-        if (args.length !== 1) throw new Error("usage: remove <name>");
+        if (args.length !== 1) throw new UsageError("usage: remove <name>");
         const config = loadConfig();
         return remove(args[0], { repo: config.firefoxRepo, worktreesDir: config.worktreesDir });
       },
