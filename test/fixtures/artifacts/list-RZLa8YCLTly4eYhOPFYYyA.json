@@ -1,0 +1,129 @@
+{
+ "artifacts": [
+  {
+   "storageType": "s3",
+   "name": "public/build/perfherder-data-mozharness-actions.json",
+   "expires": "2026-11-10T12:37:20.365Z",
+   "contentType": "application/json",
+   "contentLength": 1491
+  },
+  {
+   "storageType": "s3",
+   "name": "public/build/xvfb/xvfb.log",
+   "expires": "2026-11-10T12:37:20.365Z",
+   "contentType": "text/plain",
+   "contentLength": 2429
+  },
+  {
+   "storageType": "s3",
+   "name": "public/fetch/perfherder-data-fetch-content.json",
+   "expires": "2026-11-10T12:37:20.365Z",
+   "contentType": "application/json",
+   "contentLength": 168
+  },
+  {
+   "storageType": "s3",
+   "name": "public/logs/live_backing.log",
+   "expires": "2026-11-10T12:37:20.365Z",
+   "contentType": "text/plain; charset=utf-8",
+   "contentLength": 3080140
+  },
+  {
+   "storageType": "link",
+   "name": "public/logs/live.log",
+   "expires": "2026-11-10T12:37:20.365Z",
+   "contentType": "text/plain; charset=utf-8"
+  },
+  {
+   "storageType": "s3",
+   "name": "public/logs/localconfig.json",
+   "expires": "2026-11-10T12:37:20.365Z",
+   "contentType": "application/json",
+   "contentLength": 11974
+  },
+  {
+   "storageType": "s3",
+   "name": "public/test_info/perfherder-data-resource-usage.json",
+   "expires": "2026-11-10T12:37:20.365Z",
+   "contentType": "application/json",
+   "contentLength": 1317
+  },
+  {
+   "storageType": "s3",
+   "name": "public/test_info/profile_resource-usage.json",
+   "expires": "2026-11-10T12:37:20.365Z",
+   "contentType": "application/json",
+   "contentLength": 7513405
+  },
+  {
+   "storageType": "s3",
+   "name": "public/test_info/profile_test_async_transactions.js.json.gz",
+   "expires": "2026-11-10T12:37:20.365Z",
+   "contentType": "application/gzip",
+   "contentLength": 214487
+  },
+  {
+   "storageType": "s3",
+   "name": "public/test_info/profile_test_command_line_handler.js.json.gz",
+   "expires": "2026-11-10T12:37:20.365Z",
+   "contentType": "application/gzip",
+   "contentLength": 598240
+  },
+  {
+   "storageType": "s3",
+   "name": "public/test_info/profile_test_permmanager_migrate_7-8.js.json.gz",
+   "expires": "2026-11-10T12:37:20.365Z",
+   "contentType": "application/gzip",
+   "contentLength": 91785
+  },
+  {
+   "storageType": "s3",
+   "name": "public/test_info/profile_test_quicksuggest_yelp.js.json.gz",
+   "expires": "2026-11-10T12:37:20.365Z",
+   "contentType": "application/gzip",
+   "contentLength": 1614232
+  },
+  {
+   "storageType": "s3",
+   "name": "public/test_info/summary.jsonl",
+   "expires": "2026-11-10T12:37:20.365Z",
+   "contentType": "application/jsonl",
+   "contentLength": 2444864
+  },
+  {
+   "storageType": "s3",
+   "name": "public/test_info/system-info.log",
+   "expires": "2026-11-10T12:37:20.365Z",
+   "contentType": "text/plain",
+   "contentLength": 13332
+  },
+  {
+   "storageType": "s3",
+   "name": "public/test_info/xpcshell_errorsummary.log",
+   "expires": "2026-11-10T12:37:20.365Z",
+   "contentType": "text/plain",
+   "contentLength": 53747
+  },
+  {
+   "storageType": "s3",
+   "name": "public/test/perfherder-data-mozharness-actions.json",
+   "expires": "2026-11-10T12:37:20.365Z",
+   "contentType": "application/json",
+   "contentLength": 1491
+  },
+  {
+   "storageType": "s3",
+   "name": "public/test/xvfb/xvfb.log",
+   "expires": "2026-11-10T12:37:20.365Z",
+   "contentType": "text/plain",
+   "contentLength": 2429
+  },
+  {
+   "storageType": "s3",
+   "name": "public/xsession-errors.log",
+   "expires": "2026-11-10T12:37:20.365Z",
+   "contentType": "application/octet-stream",
+   "contentLength": 20343
+  }
+ ]
+}

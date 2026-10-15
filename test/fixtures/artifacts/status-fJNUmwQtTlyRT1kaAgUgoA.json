@@ -1,0 +1,30 @@
+{
+ "status": {
+  "taskId": "fJNUmwQtTlyRT1kaAgUgoA",
+  "provisionerId": "releng-hardware",
+  "workerType": "gecko-t-osx-1500-m4",
+  "taskQueueId": "releng-hardware/gecko-t-osx-1500-m4",
+  "schedulerId": "gecko-level-1",
+  "projectId": "none",
+  "taskGroupId": "M_cvKUU-S5mvTnjzY_6HTw",
+  "priority": "very-low",
+  "deadline": "2026-10-14T20:31:00.138Z",
+  "expires": "2026-11-10T20:31:00.138Z",
+  "retriesLeft": 5,
+  "state": "completed",
+  "runs": [
+   {
+    "runId": 0,
+    "state": "completed",
+    "reasonCreated": "scheduled",
+    "reasonResolved": "completed",
+    "workerGroup": "mdc1",
+    "workerId": "macmini-m4-89",
+    "takenUntil": "2026-10-13T21:03:55.904Z",
+    "scheduled": "2026-10-13T20:43:55.797Z",
+    "started": "2026-10-13T20:43:55.906Z",
+    "resolved": "2026-10-13T20:57:43.292Z"
+   }
+  ]
+ }
+}

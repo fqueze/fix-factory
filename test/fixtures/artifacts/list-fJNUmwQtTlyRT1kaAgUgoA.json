@@ -1,0 +1,82 @@
+{
+ "artifacts": [
+  {
+   "storageType": "s3",
+   "name": "public/build/perfherder-data-mozharness-actions.json",
+   "expires": "2026-11-10T20:31:00.138Z",
+   "contentType": "application/json"
+  },
+  {
+   "storageType": "s3",
+   "name": "public/fetch/perfherder-data-fetch-content.json",
+   "expires": "2026-11-10T20:31:00.138Z",
+   "contentType": "application/json"
+  },
+  {
+   "storageType": "s3",
+   "name": "public/logs/live_backing.log",
+   "expires": "2026-11-10T20:31:00.138Z",
+   "contentType": "text/plain; charset=utf-8"
+  },
+  {
+   "storageType": "link",
+   "name": "public/logs/live.log",
+   "expires": "2026-11-10T20:31:00.138Z",
+   "contentType": "text/plain; charset=utf-8"
+  },
+  {
+   "storageType": "s3",
+   "name": "public/logs/localconfig.json",
+   "expires": "2026-11-10T20:31:00.138Z",
+   "contentType": "application/json"
+  },
+  {
+   "storageType": "s3",
+   "name": "public/test_info/manifests.list",
+   "expires": "2026-11-10T20:31:00.138Z",
+   "contentType": "text/plain; charset=utf-8"
+  },
+  {
+   "storageType": "s3",
+   "name": "public/test_info/mochitest-browser-a11y_errorsummary.log",
+   "expires": "2026-11-10T20:31:00.138Z",
+   "contentType": "text/plain"
+  },
+  {
+   "storageType": "s3",
+   "name": "public/test_info/modifiedPrefs.json",
+   "expires": "2026-11-10T20:31:00.138Z",
+   "contentType": "application/json"
+  },
+  {
+   "storageType": "s3",
+   "name": "public/test_info/perfherder-data-resource-usage.json",
+   "expires": "2026-11-10T20:31:00.138Z",
+   "contentType": "application/json"
+  },
+  {
+   "storageType": "s3",
+   "name": "public/test_info/profile_browser_test_simple_transform.js.json.gz",
+   "expires": "2026-11-10T20:31:00.138Z",
+   "contentType": "application/octet-stream"
+  },
+  {
+   "storageType": "s3",
+   "name": "public/test_info/profile_resource-usage.json",
+   "expires": "2026-11-10T20:31:00.138Z",
+   "contentType": "application/json"
+  },
+  {
+   "storageType": "s3",
+   "name": "public/test_info/summary.jsonl",
+   "expires": "2026-11-10T20:31:00.138Z",
+   "contentType": "application/octet-stream"
+  },
+  {
+   "storageType": "s3",
+   "name": "public/test_info/system-info.log",
+   "expires": "2026-11-10T20:31:00.138Z",
+   "contentType": "text/plain"
+  }
+ ]
+}
