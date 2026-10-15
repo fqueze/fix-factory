@@ -1,4 +1,4 @@
-import type { BugDraft, ItemState, ItemView, NeedsUser, PatchView, RequestState, StackView } from "../../types.ts";
+import type { BugDraft, ItemState, ItemView, NeedsUser, PatchView, PushView, RequestState, StackView } from "../../types.ts";
 import { REQUEST_STEPS } from "../commands.ts";
 import { html, type Html } from "../html.ts";
 
@@ -10,18 +10,9 @@ export interface RenderContext {
   maxAgents?: number;
   maxBuilds?: number;
   open?: string; // request id to show expanded
+  // The text of a patch's interdiffFile, read by the server inside stateDir.
+  interdiff?: (p: PatchView) => string | undefined;
 }
-
-// Fields the page can show but src/types.ts doesn't have yet (see the report):
-// the meta-bug draft (step 7) and each patch's interdiff (step 9).
-export interface RequestExtras {
-  metaBug?: { bug: number | null; draft?: BugDraft };
-}
-export interface PatchExtras {
-  interdiff?: string;
-}
-export type Request = RequestState & RequestExtras;
-export type Patch = PatchView & PatchExtras;
 
 export const PHABRICATOR = "https://phabricator.services.mozilla.com";
 export const BUGZILLA = "https://bugzilla.mozilla.org";
@@ -81,6 +72,12 @@ export function enterBugUrl(d: BugDraft): string {
   if (d.blocks?.length) {
     p.set("blocked", d.blocks.join(","));
   }
+  if (d.bugType) {
+    p.set("bug_type", d.bugType);
+  }
+  if (d.keywords?.length) {
+    p.set("keywords", d.keywords.join(","));
+  }
   return `${BUGZILLA}/enter_bug.cgi?${p}`;
 }
 
@@ -116,11 +113,11 @@ export function isLandable(r: RequestState, p: PatchView, seen = new Set<string>
     });
 }
 
-export function stackPatches(r: RequestState, s: StackView): Patch[] {
+export function stackPatches(r: RequestState, s: StackView): PatchView[] {
   return s.order.map((id) => r.patches[id]).filter((p) => p !== undefined);
 }
 
-export function patchesOutsideStacks(r: RequestState): Patch[] {
+export function patchesOutsideStacks(r: RequestState): PatchView[] {
   const stacked = new Set(Object.values(r.stacks).flatMap((s) => s.order));
   return Object.values(r.patches).filter((p) => !stacked.has(p.id));
 }
@@ -154,26 +151,51 @@ export function stackOfPatch(r: RequestState, patch: string | undefined): StackV
 export type ActionKind = "approve-push" | "take-it" | "file-bug" | "meta-bug" | "submit" | "resubmit" | "land" | "recovery" | "other";
 const ACTION_KINDS: ActionKind[] = ["approve-push", "take-it", "file-bug", "meta-bug", "submit", "resubmit", "land", "recovery"];
 
-// needs-user keys are "<kind>:<id>" (see the report). Entries with another key
-// get their buttons from the ids they carry.
-export function actionKind(n: NeedsUser, r: RequestState): { kind: ActionKind; rest: string } {
-  const i = n.key.indexOf(":");
-  const prefix = i < 0 ? n.key : n.key.slice(0, i);
-  const rest = i < 0 ? "" : n.key.slice(i + 1);
+// The key's "<kind>:" prefix names the buttons of a needs-user entry, and the ids
+// it carries (push, item, patch, stack, job) say what they act on. Entries with
+// another key get their buttons from those ids alone.
+export function actionKind(n: NeedsUser, r: RequestState): ActionKind {
+  const prefix = n.key.split(":")[0];
   if ((ACTION_KINDS as string[]).includes(prefix)) {
-    return { kind: prefix as ActionKind, rest };
+    return prefix as ActionKind;
   }
   if (n.push) {
-    return { kind: "approve-push", rest };
+    return "approve-push";
+  }
+  if (n.job) {
+    return "recovery";
   }
   const patch = n.patch ? r.patches[n.patch] : undefined;
   if (patch && patch.bug === null && patch.bugDraft) {
-    return { kind: "file-bug", rest };
+    return "file-bug";
   }
   if (n.item) {
-    return { kind: "take-it", rest };
+    return "take-it";
   }
-  return { kind: "other", rest };
+  return "other";
+}
+
+export function pushStatus(p: PushView): string {
+  if (p.result) {
+    return p.result === "green" ? "green" : p.summary || "failures";
+  }
+  if (p.progress) {
+    return `${p.progress.done}/${p.progress.total}, ${plural(p.progress.failures, "failure")}`;
+  }
+  return p.rev ? "pushed" : "planned";
+}
+
+export function pushResultClass(p: PushView): "ok" | "bad" | "run" {
+  return p.result ? (p.result === "green" ? "ok" : "bad") : "run";
+}
+
+// Only https links from the state: anything else (javascript:, data:) falls back
+// on Treeherder.
+export function pushUrl(p: PushView): string {
+  if (p.url && /^https:\/\//i.test(p.url) && URL.canParse(p.url)) {
+    return p.url;
+  }
+  return TREEHERDER + encodeURIComponent(p.rev ?? "");
 }
 
 export type StateClass = "run" | "wait" | "find" | "ok" | "closed";

@@ -186,7 +186,7 @@
           }
         ]
       },
-      "interdiff": "@@ browser_topsites_sponsored.js\n-  let tiles = row.querySelectorAll(\".top-site-outer\");\n-  is(tiles.length - 1, 2, \"two sponsored tiles\");\n+  let sponsored = row.querySelectorAll(\".top-site-outer.sponsored\");\n+  is(sponsored.length, 2, \"two sponsored tiles\");"
+      "interdiffFile": "interdiffs/p-sponsored.diff"
     },
     "p-glean": {
       "id": "p-glean",
@@ -335,6 +335,7 @@
       "action": "Post 1 reply, then resubmit D327101",
       "detail": "comments addressed and re-reviewed (Opus) · interdiff below",
       "since": "2026-10-15T07:30:00.000Z",
+      "stack": "newtab",
       "patch": "p-sponsored"
     }
   ],

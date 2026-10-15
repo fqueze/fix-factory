@@ -1,55 +1,48 @@
-import type { NeedsUser, PlannedCommand, PushView, StackView } from "../../types.ts";
+import type { NeedsUser, PlannedCommand, PushView, RequestState, StackView } from "../../types.ts";
 import { html, join, type Html } from "../html.ts";
-import {
-  actionKind,
-  commandFields,
-  enterBugUrl,
-  requestUrl,
-  stackOfPatch,
-  submitChecks,
-  type Request,
-} from "./common.ts";
+import { actionKind, commandFields, enterBugUrl, requestUrl, stackOfPatch, submitChecks } from "./common.ts";
 
 // The ⚑ area of one open needs-user entry: what you're asked, why, and the buttons.
-export function renderAction(r: Request, n: NeedsUser): Html {
-  const { kind, rest } = actionKind(n, r);
+export function renderAction(r: RequestState, n: NeedsUser): Html {
+  const kind = actionKind(n, r);
   const back = requestUrl(r.id);
-  let controls: Html;
+  let controls: Html | null = null;
   switch (kind) {
     case "approve-push": {
-      const push = r.pushes[n.push ?? rest];
-      controls = push ? approvePushControls(r, [push], back) : html``;
+      const push = n.push === undefined ? undefined : r.pushes[n.push];
+      controls = push ? approvePushControls(r, [push], back) : null;
       break;
     }
     case "take-it": {
-      const item = n.item ?? rest;
-      controls = html`<form class="inline cmd" method="post" action="/api/commands">${commandFields([{ cmd: "take-it", request: r.id, item }], back)}<button class="btn small primary">Take it</button></form><form class="inline cmd" method="post" action="/api/commands">${commandFields([{ cmd: "hand-back", request: r.id, item }], back)}<button class="btn small">Hand back</button></form>`;
+      const item = n.item;
+      controls =
+        item === undefined
+          ? null
+          : html`<form class="inline cmd" method="post" action="/api/commands">${commandFields([{ cmd: "take-it", request: r.id, item }], back)}<button class="btn small primary">Take it</button></form><form class="inline cmd" method="post" action="/api/commands">${commandFields([{ cmd: "hand-back", request: r.id, item }], back)}<button class="btn small">Hand back</button></form>`;
       break;
     }
     case "file-bug": {
-      const patch = r.patches[n.patch ?? rest];
+      const patch = n.patch === undefined ? undefined : r.patches[n.patch];
       controls = patch?.bugDraft
         ? html`<a class="btn small" href="${enterBugUrl(patch.bugDraft)}" target="_blank" rel="noopener">Bug to file ↗</a>${bugBox(r.id, patch.id, back)}`
-        : html``;
+        : null;
       break;
     }
     case "meta-bug": {
       const draft = r.metaBug?.draft;
-      const stack = findStack(r, n, rest);
+      const stack = findStack(r, n);
       controls = html`${draft ? html`<a class="btn small" href="${enterBugUrl(draft)}" target="_blank" rel="noopener">Meta: Bug to file ↗</a>` : null}${bugBox(r.id, "meta", back)}${stack ? submitControls(r, stack, back) : null}`;
       break;
     }
     case "submit": {
-      const stack = findStack(r, n, rest);
-      controls = stack ? submitControls(r, stack, back) : html``;
+      const stack = findStack(r, n);
+      controls = stack ? submitControls(r, stack, back) : null;
       break;
     }
     case "resubmit":
     case "land": {
-      const stack = findStack(r, n, rest);
-      controls = stack
-        ? html`${kind === "land" ? html`<a class="btn small" href="${back}">Interdiffs</a>` : null}${mozPhabButton(r.id, stack, back, false)}`
-        : html``;
+      const stack = findStack(r, n);
+      controls = stack ? mozPhabButton(r.id, stack, back, false) : null;
       break;
     }
     case "recovery": {
@@ -59,27 +52,26 @@ export function renderAction(r: Request, n: NeedsUser): Html {
         : html`<div class="action" data-key="${n.key}"><span class="flag">${n.action}</span><span class="why">${n.detail}</span></div>`;
     }
     case "other":
-      controls = html``;
       break;
   }
   return html`<div class="action" data-key="${n.key}"><span class="flag">${n.action}</span><span class="why">${n.detail}</span>${controls}</div>`;
 }
 
-// The plan a "recovery:<job>" entry asks about; the latest one when the key names no job.
-export function recoveryPlanFor(r: Request, n: NeedsUser): Request["recoveryPlans"][number] | undefined {
-  const { kind, rest } = actionKind(n, r);
-  if (kind !== "recovery") {
+// The plan a recovery entry asks about: its job's latest plan, or the latest plan
+// when it names no job.
+export function recoveryPlanFor(r: RequestState, n: NeedsUser): RequestState["recoveryPlans"][number] | undefined {
+  if (actionKind(n, r) !== "recovery") {
     return undefined;
   }
-  return r.recoveryPlans.findLast((p) => p.job === rest) ?? r.recoveryPlans.at(-1);
+  return n.job === undefined ? r.recoveryPlans.at(-1) : r.recoveryPlans.findLast((p) => p.job === n.job);
 }
 
-function findStack(r: Request, n: NeedsUser, rest: string): StackView | undefined {
+function findStack(r: RequestState, n: NeedsUser): StackView | undefined {
   const stacks = Object.values(r.stacks);
-  return r.stacks[rest] ?? stackOfPatch(r, n.patch) ?? (stacks.length === 1 ? stacks[0] : undefined);
+  return (n.stack === undefined ? undefined : r.stacks[n.stack]) ?? stackOfPatch(r, n.patch) ?? (stacks.length === 1 ? stacks[0] : undefined);
 }
 
-export function approvePushControls(r: Request, pushes: PushView[], back: string): Html {
+export function approvePushControls(r: RequestState, pushes: PushView[], back: string): Html {
   const label = pushes.length === 1 ? "Approve" : pushes.length === 2 ? "Approve both" : `Approve all ${pushes.length}`;
   return html`<form class="inline cmd" method="post" action="/api/commands">${commandFields(
     pushes.map((p) => ({ cmd: "approve-push", request: r.id, push: p.id })),
@@ -99,10 +91,23 @@ export function bugBox(request: string, patch: string, back: string, cls = "inli
   }"><button class="btn small">Send</button></form>`;
 }
 
-export function submitControls(r: Request, stack: StackView, back: string): Html {
+export function submitControls(r: RequestState, stack: StackView, back: string): Html {
   const checks = submitChecks(r, stack);
   const ready = checks.every((c) => c.ok);
-  return html`<div class="checks" style="flex-basis:100%">${checks.map((c) => html`<span class="${c.ok ? "ok" : "bad"}">${c.text}</span>`)}</div>${stackViewerLink(stack)}${mozPhabButton(r.id, stack, back, !ready)}`;
+  return html`<div class="checks" style="flex-basis:100%">${checks.map((c) => html`<span class="${c.ok ? "ok" : "bad"}">${c.text}</span>`)}</div>${stackViewerLink(stack)}${mozPhabButton(r.id, stack, back, !ready)}${
+    stack.summary
+      ? html`<textarea hidden id="${summaryId(r.id, stack.id)}">${stack.summary}</textarea>${copyButton(summaryId(r.id, stack.id), "Copy the meta-bug comment")}`
+      : null
+  }`;
+}
+
+export function summaryId(request: string, stack: string): string {
+  return `summary-${request}-${stack}`;
+}
+
+// Copies the value or text of the element with this id (see client.js).
+export function copyButton(id: string, label: string, primary = false): Html {
+  return html`<button type="button" class="btn small${primary ? " primary" : ""}" data-copy="${id}">${label}</button>`;
 }
 
 export function stackViewerLink(stack: StackView): Html {
@@ -115,7 +120,7 @@ function mozPhabButton(request: string, stack: StackView, back: string, disabled
   }>moz-phab submit</button></form>`;
 }
 
-function plannedTarget(c: PlannedCommand, r: Request): string {
+function plannedTarget(c: PlannedCommand, r: RequestState): string {
   switch (c.cmd) {
     case "retry-job":
     case "cancel-job":
@@ -135,12 +140,12 @@ function plannedTarget(c: PlannedCommand, r: Request): string {
   }
 }
 
-function itemLabel(r: Request, item: string): string {
+function itemLabel(r: RequestState, item: string): string {
   const v = r.items[item];
   return v ? (v.group.tests.length === 1 ? (v.group.tests[0].split("/").pop() ?? item) : v.folder) : item;
 }
 
-export function recoveryPlan(r: Request, plan: Request["recoveryPlans"][number], back: string): Html {
+export function recoveryPlan(r: RequestState, plan: RequestState["recoveryPlans"][number], back: string): Html {
   return html`<form class="inline cmd" method="post" action="/api/commands"><input type="hidden" name="back" value="${back}"><ul>${plan.plan.map(
     (c) =>
       // The shell escape hatch is opt-in; everything else is checked.
@@ -152,6 +157,6 @@ export function recoveryPlan(r: Request, plan: Request["recoveryPlans"][number],
   }</form><form class="inline cmd" method="post" action="/api/commands">${commandFields([{ cmd: "reply-recovery", request: r.id, job: plan.job }], back)}<input type="text" name="text" required placeholder="Reply…"><button class="btn small">Reply</button></form>`;
 }
 
-export function actionsSummary(r: Request): Html {
+export function actionsSummary(r: RequestState): Html {
   return join(r.needsUser.map((n) => renderAction(r, n)), "");
 }

@@ -1,0 +1,5 @@
+@@ browser_topsites_sponsored.js
+-  let tiles = row.querySelectorAll(".top-site-outer");
+-  is(tiles.length - 1, 2, "two sponsored tiles");
++  let sponsored = row.querySelectorAll(".top-site-outer.sponsored");
++  is(sponsored.length, 2, "two sponsored tiles");

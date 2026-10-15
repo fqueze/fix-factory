@@ -1,4 +1,5 @@
-import { mkdirSync, readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { exec } from "../lib/exec.ts";
 import type { RequestState, StackView } from "../types.ts";
@@ -13,31 +14,40 @@ export function findStack(requests: RequestState[], stackId: string): { request:
   return undefined;
 }
 
+// A git revision name that can't be taken for an option: a sha, a branch, HEAD~2, sha^.
+export function isRevName(rev: string): boolean {
+  return /^[A-Za-z0-9_][\w./^~@{}-]*$/.test(rev) && !rev.includes("..") && rev.length <= 200;
+}
+
 // stack-viewer's output for the stack, with the button that sends its comments to
-// the factory. `base` defaults to the parent of the stack's first patch.
-export async function buildStackReview(opts: {
-  command: string[];
-  outDir: string;
-  request: RequestState;
-  stack: StackView;
-  base?: string;
-}): Promise<string> {
+// the factory. The base is `base`, else the stack's, else the parent of its first patch.
+export async function buildStackReview(opts: { command: string[]; request: RequestState; stack: StackView; base?: string }): Promise<string> {
   const { request, stack } = opts;
   const first = request.patches[stack.order[0]];
-  const base = opts.base ?? (first ? `${first.sha}^` : undefined);
+  const base = opts.base ?? stack.base ?? (first ? `${first.sha}^` : undefined);
   if (!base) {
     throw new Error(`stack ${stack.id} has no patches`);
   }
-  mkdirSync(opts.outDir, { recursive: true });
-  const file = join(opts.outDir, `${stack.id.replace(/[^\w.-]/g, "_")}.html`);
-  // --no-open: with -o, stack-viewer would otherwise open a browser on the server.
-  const cmd = [...opts.command, "--no-open", "-R", stack.worktree, "-o", file, `${base}..${stack.branch}`];
-  const r = await exec(cmd);
-  if (r.code !== 0) {
-    throw new Error(`${cmd.join(" ")} exited with ${r.code}: ${r.stderr.trim().slice(-2000)}`);
+  for (const rev of [base, stack.branch]) {
+    if (!isRevName(rev)) {
+      throw new Error(`not a revision name: ${rev}`);
+    }
   }
-  const shas = Object.fromEntries(stack.order.map((id) => [request.patches[id]?.sha, id]).filter(([sha]) => sha));
-  return injectSendButton(readFileSync(file, "utf8"), { request: request.id, stack: stack.id, shas });
+  // A directory per request, so two reviews of the same stack don't share a file.
+  const dir = mkdtempSync(join(tmpdir(), "fix-factory-stack-viewer-"));
+  try {
+    const file = join(dir, "review.html");
+    // --no-open: with -o, stack-viewer would otherwise open a browser on the server.
+    const cmd = [...opts.command, "--no-open", "-R", stack.worktree, "-o", file, `${base}..${stack.branch}`];
+    const r = await exec(cmd);
+    if (r.code !== 0) {
+      throw new Error(`${cmd.join(" ")} exited with ${r.code}: ${r.stderr.trim().slice(-2000)}`);
+    }
+    const shas = Object.fromEntries(stack.order.map((id) => [request.patches[id]?.sha, id]).filter(([sha]) => sha));
+    return injectSendButton(readFileSync(file, "utf8"), { request: request.id, stack: stack.id, shas });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 }
 
 // JSON safe inside a <script> element.

@@ -45,9 +45,11 @@
       "folder": "browser/components/urlbar/tests/browser",
       "branch": "ff/focus",
       "worktree": "/build/worktrees/focus",
+      "base": "central",
       "order": [
         "p-focus"
-      ]
+      ],
+      "summary": "| Patch | Effort | Value |\n|---|---|---|\n| Blur the urlbar at the end of browser_focus.js | 1 | 9/wk |"
     }
   },
   "pushes": {
@@ -70,7 +72,8 @@
       "key": "submit:focus",
       "action": "Review in stack-viewer, then submit",
       "detail": "pre-submit checks pass · reviewers: mak",
-      "since": "2026-10-15T07:30:00.000Z"
+      "since": "2026-10-15T07:30:00.000Z",
+      "stack": "focus"
     }
   ],
   "recoveryPlans": [],

@@ -153,9 +153,11 @@
   }
 
   document.addEventListener("click", function (event) {
-    var button = event.target.closest && event.target.closest("[data-copy-reply]");
+    var button = event.target.closest && event.target.closest("[data-copy]");
     if (!button) return;
-    var area = document.querySelector('textarea[data-reply="' + CSS.escape(button.dataset.copyReply) + '"]');
+    // Copy buttons inside a request's summary line mustn't fold it.
+    event.preventDefault();
+    var area = document.getElementById(button.dataset.copy);
     if (!area) return;
     var done = function () {
       var label = button.textContent;
@@ -169,8 +171,12 @@
     } else {
       // The page is often opened over plain http from another machine, where the
       // clipboard API isn't available.
+      // A hidden textarea can't be selected.
+      var hidden = area.hidden;
+      area.hidden = false;
       area.select();
       document.execCommand("copy");
+      area.hidden = hidden;
       done();
     }
   });

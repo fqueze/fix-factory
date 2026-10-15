@@ -1,6 +1,7 @@
 import { existsSync, readdirSync, readFileSync, watch } from "node:fs";
 import { join } from "node:path";
-import type { Command, Event, RequestId, RequestState } from "../types.ts";
+import type { CommandInput } from "../state/commands.ts";
+import type { Event, RequestId, RequestState } from "../types.ts";
 
 // What the web server reads. The integrator wires this to src/state/.
 export interface StateSource {
@@ -13,13 +14,10 @@ export interface StateSource {
   subscribe(onChange: (id: RequestId) => void): () => void;
 }
 
-// Omit applied to each member of the Command union, so each keeps its own fields.
-export type NewCommand = Command extends infer C ? (C extends Command ? Omit<C, "id" | "v" | "t"> : never) : never;
-
 // Where the web server writes. The integrator wires this to commands.jsonl,
-// adding id, v and t.
+// which adds id, v and t.
 export interface CommandSink {
-  append(command: NewCommand): void;
+  append(command: CommandInput): void;
 }
 
 export class MemoryStateSource implements StateSource {
@@ -67,8 +65,8 @@ export class MemoryStateSource implements StateSource {
 }
 
 export class MemoryCommandSink implements CommandSink {
-  readonly commands: NewCommand[] = [];
-  append(command: NewCommand): void {
+  readonly commands: CommandInput[] = [];
+  append(command: CommandInput): void {
     this.commands.push(command);
   }
 }

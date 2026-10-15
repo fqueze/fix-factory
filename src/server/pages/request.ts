@@ -1,9 +1,8 @@
-import type { ItemView, PushView, StackView } from "../../types.ts";
+import type { ItemView, PatchView, PushView, RequestState, StackView } from "../../types.ts";
 import { ITEM_STATES } from "../commands.ts";
 import { html, join, type Html } from "../html.ts";
-import { actionsSummary, approvePushControls, bugBox, commandDetails, recoveryPlan, recoveryPlanFor, stackViewerLink } from "./actions.ts";
+import { actionsSummary, approvePushControls, bugBox, commandDetails, copyButton, recoveryPlan, recoveryPlanFor, stackViewerLink, summaryId } from "./actions.ts";
 import {
-  TREEHERDER,
   bugUrl,
   commandFields,
   enterBugUrl,
@@ -26,13 +25,15 @@ import {
   stackPatches,
   stateClass,
   stepLabel,
-  type Patch,
+  pushResultClass,
+  pushStatus,
+  pushUrl,
   type RenderContext,
-  type Request,
+
 } from "./common.ts";
 
 // One line per request; the body only when expanded, so the overview stays small.
-export function renderRequest(r: Request, ctx: RenderContext, open = ctx.open === r.id): Html {
+export function renderRequest(r: RequestState, ctx: RenderContext, open = ctx.open === r.id): Html {
   const needs = r.needsUser.length > 0;
   const cost = requestCost(r);
   return html`<details class="req${needs ? " needs" : ""}" id="req-${r.id}" data-request="${r.id}" data-section="${sectionOf(r)}"${open ? html` open` : null}>
@@ -46,7 +47,7 @@ export function renderRequest(r: Request, ctx: RenderContext, open = ctx.open ==
   </details>`;
 }
 
-export function requestSummary(r: Request): string {
+export function requestSummary(r: RequestState): string {
   const parts: string[] = [];
   if (r.step === "request") {
     const keys = Object.keys(r.config);
@@ -73,17 +74,7 @@ export function requestSummary(r: Request): string {
   return parts.join(" · ");
 }
 
-function pushStatus(p: PushView): string {
-  if (p.result) {
-    return p.result === "green" ? "green" : p.summary || "failures";
-  }
-  if (p.progress) {
-    return `${p.progress.done}/${p.progress.total}, ${plural(p.progress.failures, "failure")}`;
-  }
-  return p.rev ? "pushed" : "planned";
-}
-
-export function renderRequestBody(r: Request, ctx: RenderContext): Html {
+export function renderRequestBody(r: RequestState, ctx: RenderContext): Html {
   const back = requestUrl(r.id);
   const stacks = Object.values(r.stacks);
   const loose = patchesOutsideStacks(r);
@@ -110,7 +101,7 @@ export function renderRequestBody(r: Request, ctx: RenderContext): Html {
   </div>`;
 }
 
-function configLine(r: Request): Html | null {
+function configLine(r: RequestState): Html | null {
   const entries = Object.entries(r.config);
   if (!entries.length) {
     return null;
@@ -121,7 +112,7 @@ function configLine(r: Request): Html | null {
   )}</div>`;
 }
 
-function metaBugLine(r: Request, back: string): Html {
+function metaBugLine(r: RequestState, back: string): Html {
   const m = r.metaBug!;
   if (m.bug !== null) {
     return html`<div class="sub" style="margin-top:8px">Meta bug: <a class="bug" href="${bugUrl(m.bug)}">Bug ${m.bug}</a></div>`;
@@ -131,15 +122,19 @@ function metaBugLine(r: Request, back: string): Html {
   }${bugBox(r.id, "meta", back, "row")}</div>`;
 }
 
-function stackSection(r: Request, s: StackView, ctx: RenderContext): Html {
+function stackSection(r: RequestState, s: StackView, ctx: RenderContext): Html {
   const patches = stackPatches(r, s);
   return html`<h3>${s.folder} <span class="sub">· stack order: easy and valuable first, each patch after its hard deps · <span class="mono">${s.branch}</span></span></h3>
     ${patchTable(r, patches, ctx)}
-    ${s.summary ? html`<div class="sub" style="margin-top:4px">${s.summary}</div>` : null}
-    <div style="margin-top:8px">${stackViewerLink(s)}</div>`;
+    ${
+      s.summary
+        ? html`<details style="margin-top:6px"><summary class="sub">Meta-bug comment</summary><textarea readonly rows="6" id="${summaryId(r.id, s.id)}-body">${s.summary}</textarea></details>`
+        : null
+    }
+    <div style="margin-top:8px">${stackViewerLink(s)}${s.summary ? html` ${copyButton(`${summaryId(r.id, s.id)}-body`, "Copy the meta-bug comment")}` : null}</div>`;
 }
 
-function patchTable(r: Request, patches: Patch[], ctx: RenderContext): Html {
+function patchTable(r: RequestState, patches: PatchView[], ctx: RenderContext): Html {
   const reviewed = patches.some((p) => p.review);
   // Landed patches only matter as history once the rest is in review.
   const landed = patches.filter((p) => isLanded(r, p));
@@ -157,7 +152,7 @@ function patchTable(r: Request, patches: Patch[], ctx: RenderContext): Html {
   </table></div>`;
 }
 
-function patchRow(r: Request, p: Patch, reviewedColumn: boolean, _ctx: RenderContext): Html {
+function patchRow(r: RequestState, p: PatchView, reviewedColumn: boolean, ctx: RenderContext): Html {
   const back = requestUrl(r.id);
   const item = itemOf(r, p);
   const rate = item?.group.ratePerWeek;
@@ -167,7 +162,7 @@ function patchRow(r: Request, p: Patch, reviewedColumn: boolean, _ctx: RenderCon
     }
       ${p.bug === null && p.bugDraft ? bugDraftBox(r.id, p, back) : null}
       ${p.deps.map((d) => depLine(r, d))}
-      ${reviewBox(r, p, back)}
+      ${reviewBox(r, p, back, p.interdiffFile === undefined ? undefined : ctx.interdiff?.(p))}
     </td>
     <td>${item ? html`<span class="st ${stateClass(item.state)}">${item.state}</span>` : null}</td>
     <td class="hide-sm">${p.effort ?? ""}</td>
@@ -176,7 +171,7 @@ function patchRow(r: Request, p: Patch, reviewedColumn: boolean, _ctx: RenderCon
   </tr>`;
 }
 
-function bugLabel(p: Patch): Html {
+function bugLabel(p: PatchView): Html {
   if (p.bug !== null) {
     return html`<a class="bug" href="${bugUrl(p.bug)}" target="_blank" rel="noopener">Bug ${p.bug}</a>`;
   }
@@ -186,7 +181,7 @@ function bugLabel(p: Patch): Html {
   return html`<span class="bug none">Bug XXXXXXX</span>`;
 }
 
-function bugDraftBox(request: string, p: Patch, back: string): Html {
+function bugDraftBox(request: string, p: PatchView, back: string): Html {
   const d = p.bugDraft!;
   return html`<div class="box">
     <h4>Bug draft · ${d.product}::${d.component} · “${d.summary}”</h4>
@@ -195,14 +190,14 @@ function bugDraftBox(request: string, p: Patch, back: string): Html {
   </div>`;
 }
 
-function depLine(r: Request, d: Patch["deps"][number]): Html {
+function depLine(r: RequestState, d: PatchView["deps"][number]): Html {
   const needed = r.patches[d.needs];
   const label = needed ? `“${patchTitle(needed)}”${needed.revision ? ` (D${needed.revision})` : ""}` : d.needs;
   const met = needed !== undefined && itemOf(r, needed)?.state === "landed";
   return html`<div class="dep${met ? " met" : ""}">${d.kind === "hard" ? "⛔ hard" : "🔗 soft"}: needs ${label} (${d.reason})</div>`;
 }
 
-function reviewers(r: Request, p: Patch): Html | null {
+function reviewers(r: RequestState, p: PatchView): Html | null {
   if (!p.review) {
     return null;
   }
@@ -213,24 +208,24 @@ function reviewers(r: Request, p: Patch): Html | null {
 }
 
 // Interdiff, the comments still to answer, and the drafted replies to post.
-function reviewBox(r: Request, p: Patch, back: string): Html | null {
+function reviewBox(r: RequestState, p: PatchView, back: string, interdiff: string | undefined): Html | null {
   const comments = p.review?.comments ?? [];
   const drafts = new Map(p.replyDrafts.map((d) => [d.commentId, d.text]));
   const shown = comments.filter((c) => !c.done || drafts.has(c.id));
-  if (!p.interdiff && !shown.length) {
+  if (p.interdiffFile === undefined && !shown.length) {
     return null;
   }
   const revision = p.review?.revision ?? p.revision;
   return html`<div class="box">
-    ${p.interdiff ? html`<h4>Interdiff</h4>${diff(p.interdiff)}` : null}
+    ${p.interdiffFile === undefined ? null : html`<h4>Interdiff</h4>${interdiff === undefined ? html`<div class="sub">${p.interdiffFile} can't be read</div>` : diff(interdiff)}`}
     ${shown.map((c) => {
       const draft = drafts.get(c.id);
       return html`<div class="comment" data-comment="${c.id}"><b>${c.author}</b>${c.file ? html` <span class="sub mono">${c.file}${c.line ? `:${c.line}` : ""}</span>` : null}${c.kind ? html` <span class="sub">(${c.kind})</span>` : null}: ${c.text}${
         c.suggestion ? html`<pre class="diff">${c.suggestion}</pre>` : null
       }</div>${
         draft !== undefined
-          ? html`<h4>Draft reply</h4><textarea rows="${Math.min(6, draft.split("\n").length)}" data-reply="${c.id}">${draft}</textarea>
-            <div class="row"><button type="button" class="btn small primary" data-copy-reply="${c.id}">Copy reply</button>${
+          ? html`<h4>Draft reply</h4><textarea rows="${Math.min(6, draft.split("\n").length)}" id="reply-${p.id}-${c.id}">${draft}</textarea>
+            <div class="row">${copyButton(`reply-${p.id}-${c.id}`, "Copy reply", true)}${
               revision ? html`<a class="btn small" href="${phabUrl(revision, c.id)}" target="_blank" rel="noopener" title="D${revision}#inline-${c.id}">Open comment ↗</a>` : null
             }</div>`
           : null
@@ -256,7 +251,7 @@ export function diff(text: string): Html {
   })}</pre>`;
 }
 
-function itemRow(r: Request, i: ItemView, ctx: RenderContext): Html {
+function itemRow(r: RequestState, i: ItemView, ctx: RenderContext): Html {
   const running = [...i.jobs].reverse().map((j) => r.jobs[j]).find((j) => j && j.endedAt === undefined);
   const tests = i.group.tests;
   const name = tests.length === 1 ? tests[0] : i.folder;
@@ -275,11 +270,10 @@ function itemRow(r: Request, i: ItemView, ctx: RenderContext): Html {
 }
 
 function pushRow(p: PushView): Html {
-  const res = p.result ? (p.result === "green" ? "ok" : "bad") : "run";
-  return html`<tr><td class="mono"><a href="${p.url ?? TREEHERDER + p.rev}" target="_blank" rel="noopener">${p.rev!.slice(0, 12)}</a></td><td>${p.purpose}</td><td class="res ${res}">${pushStatus(p)}</td></tr>`;
+  return html`<tr><td class="mono"><a href="${pushUrl(p)}" target="_blank" rel="noopener">${p.rev!.slice(0, 12)}</a></td><td>${p.purpose}</td><td class="res ${pushResultClass(p)}">${pushStatus(p)}</td></tr>`;
 }
 
-function recentJobs(r: Request, ctx: RenderContext): Html | null {
+function recentJobs(r: RequestState, ctx: RenderContext): Html | null {
   const jobs = Object.values(r.jobs)
     .sort((a, b) => b.startedAt.localeCompare(a.startedAt))
     .slice(0, 8);

@@ -108,7 +108,7 @@
         "p-captive",
         "p-perm"
       ],
-      "summary": "Stack review (Opus): no findings."
+      "summary": "Patches in review order:\n| Patch | Effort | Value |\n|---|---|---|\n| Reset the camera permission | 1 | 8/wk |\n| Clear the captive portal permission | 1 | 5/wk |\n| Remove the delegated permission | 2 | 2/wk |"
     }
   },
   "pushes": {
@@ -131,7 +131,8 @@
       "key": "meta-bug:permissions",
       "action": "File the meta bug, then review and submit",
       "detail": "the meta-bug comment lists the stack in review order, with effort, value and repro",
-      "since": "2026-10-15T07:30:00.000Z"
+      "since": "2026-10-15T07:30:00.000Z",
+      "stack": "permissions"
     }
   ],
   "recoveryPlans": [],
@@ -143,6 +144,10 @@
       "product": "Testing",
       "component": "General",
       "summary": "[meta] Permissions left changed by browser-chrome tests",
+      "bugType": "task",
+      "keywords": [
+        "meta"
+      ],
       "description": "Tests that leave permissions changed make later tests fail.\n\n| patch | effort | value |\n|---|---|---|\n| webrtc | 1 | 8/wk |"
     }
   }

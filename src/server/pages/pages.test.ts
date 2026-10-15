@@ -1,16 +1,25 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, it } from "node:test";
 import { FixtureStateSource } from "../state-source.ts";
-import type { RenderContext, Request } from "./common.ts";
+import type { RequestState } from "../../types.ts";
+import type { RenderContext } from "./common.ts";
 import { renderOverview } from "./overview.ts";
 import { renderRequest } from "./request.ts";
 
 const FIXTURES = resolve(import.meta.dirname, "../../../test/fixtures/server");
 const source = new FixtureStateSource(FIXTURES);
-const ctx: RenderContext = { profilerOrigin: "http://localhost:4242", baseUrl: "http://factory:4300", now: Date.parse("2026-10-15T09:00:00Z"), maxAgents: 10, maxBuilds: 3 };
+const ctx: RenderContext = {
+  profilerOrigin: "http://localhost:4242",
+  baseUrl: "http://factory:4300",
+  now: Date.parse("2026-10-15T09:00:00Z"),
+  maxAgents: 10,
+  maxBuilds: 3,
+  interdiff: (p) => readFileSync(resolve(FIXTURES, p.interdiffFile!), "utf8"),
+};
 
-function get(id: string): Request {
+function get(id: string): RequestState {
   const r = source.getRequest(id);
   assert.ok(r, id);
   return r;
@@ -154,6 +163,38 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.match(h, /<button class="btn small primary">moz-phab submit<\/button>/);
   });
 
+  it("8. submit: the meta-bug comment can be copied, from the ⚑ area and from the stack", () => {
+    const h = expanded("r-20261007-focus");
+    assert.match(h, /<textarea hidden id="summary-r-20261007-focus-focus">\| Patch \| Effort \| Value \|/);
+    assert.match(h, /data-copy="summary-r-20261007-focus-focus">Copy the meta-bug comment</);
+    assert.match(h, /<textarea readonly rows="6" id="summary-r-20261007-focus-focus-body">/);
+    assert.match(h, /data-copy="summary-r-20261007-focus-focus-body">Copy the meta-bug comment</);
+    // Collapsed, the ⚑ area still has what it copies.
+    const closed = renderRequest(get("r-20261007-focus"), ctx, false).value;
+    assert.match(closed, /id="summary-r-20261007-focus-focus"/);
+  });
+
+  it("7. meta bug: the draft's bug type and keywords go into enter_bug.cgi", () => {
+    const h = expanded("r-20261008-permissions");
+    assert.match(h, /bug_type=task&amp;keywords=meta/);
+  });
+
+  it("buttons act on the stack and job the needs-user entry names", () => {
+    const r = structuredClone(get("r-20261005-newtab"));
+    r.stacks.other = { ...r.stacks.newtab, id: "other" };
+    r.needsUser = [{ key: "resubmit:x", action: "Resubmit", detail: "", stack: "other", since: r.createdAt }];
+    assert.ok(renderRequest(r, ctx).value.includes(cmd({ cmd: "run-moz-phab", request: r.id, stack: "other", args: ["submit"] })));
+
+    const t = structuredClone(get("r-20261013-tab-failures"));
+    t.recoveryPlans.push({ ...t.recoveryPlans[0], job: "j-later", text: "a later plan", plan: [] });
+    assert.match(renderRequest(t, ctx).value, /the browser_tabSpinner agent/, "the plan of the entry's job, not the latest");
+  });
+
+  it("reports an interdiff that can't be read", () => {
+    const h = renderRequest(get("r-20261005-newtab"), { ...ctx, interdiff: () => undefined }, true).value;
+    assert.match(h, /interdiffs\/p-sponsored\.diff can't be read/);
+  });
+
   it("9. review comments: reviewers, interdiff, draft reply with Copy reply and Open comment", () => {
     const h = expanded("r-20261005-newtab");
     assert.match(h, /<a class="phab" href="https:\/\/phabricator\.services\.mozilla\.com\/D327101" title="D327101"/);
@@ -161,8 +202,8 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.match(h, /<span class="rv block">mconley<\/span>/);
     assert.match(h, /<span class="rv pend">beth<\/span>/);
     assert.match(h, /<span class="r">-  let tiles = row\.querySelectorAll\(&quot;\.top-site-outer&quot;\);<\/span>/);
-    assert.match(h, /<textarea rows="1" data-reply="1873402">Done\.<\/textarea>/);
-    assert.match(h, /data-copy-reply="1873402">Copy reply</);
+    assert.match(h, /<textarea rows="1" id="reply-p-sponsored-1873402">Done\.<\/textarea>/);
+    assert.match(h, /data-copy="reply-p-sponsored-1873402">Copy reply</);
     assert.match(h, /href="https:\/\/phabricator\.services\.mozilla\.com\/D327101#inline-1873402"/);
     assert.ok(h.includes(cmd({ cmd: "comment-fix", request: "r-20261005-newtab", patch: "p-sponsored" })));
     assert.match(h, /1 landed ▸/);
@@ -200,5 +241,16 @@ describe("escaping", () => {
     assert.doesNotMatch(h, /<script>|<img/);
     assert.match(h, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
     assert.match(h, /&lt;img src=x onerror=&quot;alert\(1\)&quot;&gt;/);
+  });
+
+  it("only links to https try push URLs", () => {
+    const r = structuredClone(get("r-20261005-newtab"));
+    r.pushes.v2.url = "javascript:alert(1)";
+    r.pushes.v2.rev = "abc&x=<y>";
+    const pages = [renderRequest(r, ctx, true).value, renderOverview([r], ctx)];
+    for (const h of pages) {
+      assert.doesNotMatch(h, /javascript:/);
+      assert.ok(h.includes('href="https://treeherder.mozilla.org/jobs?repo=try&amp;revision=abc%26x%3D%3Cy%3E"'));
+    }
   });
 });

@@ -1,10 +1,11 @@
+import type { RequestState } from "../../types.ts";
 import { html, type Html } from "../html.ts";
-import { commandFields, formatDate, plural, profileUrl, requestName, sectionOf, shortName, TREEHERDER, type RenderContext, type Request } from "./common.ts";
+import { commandFields, formatDate, plural, profileUrl, pushResultClass, pushStatus, pushUrl, requestName, requestUrl, sectionOf, shortName, type RenderContext } from "./common.ts";
 import { renderRequest } from "./request.ts";
 
 const PHAB_SYMBOL = html`<svg style="display:none"><symbol id="phab" viewBox="0 0 16 16"><path d="M1 8s2.6-5 7-5 7 5 7 5-2.6 5-7 5-7-5-7-5z" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="8" cy="8" r="2.3" fill="currentColor"/></symbol></svg>`;
 
-export function renderOverview(requests: Request[], ctx: RenderContext): string {
+export function renderOverview(requests: RequestState[], ctx: RenderContext): string {
   return html`<!doctype html>
 <html lang="en">
 <head>
@@ -30,7 +31,7 @@ ${renderMain(requests, ctx)}
 `.value;
 }
 
-export function renderStrip(requests: Request[], ctx: RenderContext): Html {
+export function renderStrip(requests: RequestState[], ctx: RenderContext): Html {
   const jobs = requests.flatMap((r) => Object.values(r.jobs)).filter((j) => j.endedAt === undefined);
   const agents = jobs.filter((j) => j.kind === "agent").length;
   const builds = jobs.filter((j) => j.kind === "build").length;
@@ -57,7 +58,7 @@ function newRequestForm(): Html {
 
 // Everything under the header, also served alone so the client can refresh it
 // when a request appears or moves between sections.
-export function renderMain(requests: Request[], ctx: RenderContext): Html {
+export function renderMain(requests: RequestState[], ctx: RenderContext): Html {
   const byUpdate = [...requests].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   // Requests that need you first, the rest by latest activity.
   const active = byUpdate.filter((r) => sectionOf(r) === "active").sort((a, b) => Number(b.needsUser.length > 0) - Number(a.needsUser.length > 0));
@@ -89,7 +90,7 @@ export function renderMain(requests: Request[], ctx: RenderContext): Html {
   </details>` : null}`;
 }
 
-export function renderRecentPushes(requests: Request[]): Html | null {
+export function renderRecentPushes(requests: RequestState[]): Html | null {
   const pushes = [...requests]
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
     .flatMap((r) =>
@@ -103,9 +104,8 @@ export function renderRecentPushes(requests: Request[]): Html | null {
     return null;
   }
   return html`<h2>Recent try pushes</h2>
-  <div class="simple scroll" id="recent-pushes"><table><tbody>${pushes.map(({ r, p }) => {
-    const res = p.result ? (p.result === "green" ? "ok" : "bad") : "run";
-    const text = p.result ? (p.result === "green" ? "green" : p.summary || "failures") : p.progress ? `${p.progress.done}/${p.progress.total}, ${plural(p.progress.failures, "failure")}` : "pushed";
-    return html`<tr><td class="mono"><a href="${p.url ?? TREEHERDER + p.rev}" target="_blank" rel="noopener">${p.rev!.slice(0, 12)}</a></td><td class="hide-sm"><a href="/requests/${encodeURIComponent(r.id)}">${shortName(r)}</a></td><td>${p.purpose}</td><td class="res ${res}">${text}</td></tr>`;
-  })}</tbody></table></div>`;
+  <div class="simple scroll" id="recent-pushes"><table><tbody>${pushes.map(
+    ({ r, p }) =>
+      html`<tr><td class="mono"><a href="${pushUrl(p)}" target="_blank" rel="noopener">${p.rev!.slice(0, 12)}</a></td><td class="hide-sm"><a href="${requestUrl(r.id)}">${shortName(r)}</a></td><td>${p.purpose}</td><td class="res ${pushResultClass(p)}">${pushStatus(p)}</td></tr>`,
+  )}</tbody></table></div>`;
 }

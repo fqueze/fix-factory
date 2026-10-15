@@ -1,5 +1,6 @@
-import type { Command, ItemState, RequestKind, RequestState, RequestStep } from "../types.ts";
-import type { NewCommand } from "./state-source.ts";
+import { isDeepStrictEqual } from "node:util";
+import type { Command, ItemState, PlannedCommand, RequestKind, RequestState, RequestStep } from "../types.ts";
+import type { CommandInput } from "../state/commands.ts";
 
 export const ITEM_STATES = [
   "not started",
@@ -112,7 +113,7 @@ function checkField(name: string, spec: Field, value: unknown): string | null {
   }
 }
 
-export type Validation = { ok: true; command: NewCommand } | { ok: false; error: string };
+export type Validation = { ok: true; command: CommandInput } | { ok: false; error: string };
 
 // Checks one command against the Command union, and the ids it names against the
 // request's state when it's about a request. Unknown fields are dropped.
@@ -146,8 +147,11 @@ export function validateCommand(input: unknown, getRequest: (id: string) => Requ
     }
     out.request = input.request;
   }
-  if (NEEDS_REQUEST.has(cmd) && out.request === undefined) {
+  if ((NEEDS_REQUEST.has(cmd) || PLANNED.has(cmd)) && out.request === undefined) {
     return { ok: false, error: `${cmd} needs a request` };
+  }
+  if (cmd === "run-moz-phab" && !mozPhabArgsOk(out.args as string[])) {
+    return { ok: false, error: `run-moz-phab: args must be ["submit", ...revisions or commits]` };
   }
   if (typeof out.request === "string") {
     const state = getRequest(out.request);
@@ -158,8 +162,27 @@ export function validateCommand(input: unknown, getRequest: (id: string) => Requ
     if (error) {
       return { ok: false, error: `${cmd}: ${error}` };
     }
+    // Recovery commands (shell among them) only run as approved from a plan the
+    // request already has: the checkboxes send its entries unchanged.
+    if (PLANNED.has(cmd) && !state.recoveryPlans.some((p) => p.plan.some((entry) => isDeepStrictEqual(project(entry, spec), project(out, spec))))) {
+      return { ok: false, error: `${cmd}: not in a recovery plan of ${out.request}` };
+    }
   }
-  return { ok: true, command: out as unknown as NewCommand };
+  return { ok: true, command: out as unknown as CommandInput };
+}
+
+const PLANNED = new Set<string>(["retry-job", "cancel-job", "resume-agent", "start-agent", "set-state", "redo-step", "edit-config", "shell"] satisfies PlannedCommand["cmd"][]);
+
+function project(c: object, spec: Record<string, Field>): Record<string, unknown> {
+  const o = c as Record<string, unknown>;
+  return Object.fromEntries(["cmd", ...Object.keys(spec)].filter((k) => o[k] !== undefined).map((k) => [k, o[k]]));
+}
+
+// What the page sends: submit, optionally restricted to some revisions or commits.
+const MOZ_PHAB_FLAGS = new Set(["--yes", "--no-wip"]);
+function mozPhabArgsOk(args: string[]): boolean {
+  const [sub, ...rest] = args;
+  return sub === "submit" && rest.every((a) => MOZ_PHAB_FLAGS.has(a) || /^(D\d{1,9}|[0-9a-f]{7,40})$/.test(a));
 }
 
 function checkIds(c: Record<string, unknown>, state: RequestState): string | null {

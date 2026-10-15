@@ -1,24 +1,31 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { isAbsolute, join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { loadConfig } from "../config.ts";
-import type { FactoryConfig } from "../types.ts";
+import type { FactoryConfig, PatchView } from "../types.ts";
+import { HostCheck } from "./host-check.ts";
 import { commandsFromForm, validateCommand } from "./commands.ts";
 import type { RenderContext } from "./pages/common.ts";
 import { renderMain, renderOverview, renderStrip } from "./pages/overview.ts";
 import { renderRequest } from "./pages/request.ts";
 import { buildRequestProfile } from "./request-profile.ts";
-import { buildStackReview, findStack } from "./stack-review.ts";
-import { FixtureStateSource, type CommandSink, type NewCommand, type StateSource } from "./state-source.ts";
+import { buildStackReview, findStack, isRevName } from "./stack-review.ts";
+import type { CommandInput } from "../state/commands.ts";
+import { FixtureStateSource, type CommandSink, type StateSource } from "./state-source.ts";
 
 export interface ServerOptions {
-  config: Pick<FactoryConfig, "port" | "profilerOrigin" | "stackViewerCommand" | "stateDir" | "maxAgents" | "maxBuilds">;
+  // allowedHosts: extra Host names to answer to (proposed FactoryConfig field).
+  config: Pick<FactoryConfig, "port" | "profilerOrigin" | "stackViewerCommand" | "stateDir" | "maxAgents" | "maxBuilds"> & { allowedHosts?: unknown };
   state: StateSource;
   sink: CommandSink;
   now?: () => number;
+  machineName?: string; // os.hostname() by default
 }
+
+export type FactoryServer = Server & { sseClientCount(): number };
+
+const HEARTBEAT_MS = 30_000;
 
 const STATIC: Record<string, { file: string; type: string }> = {
   "/client.js": { file: "client.js", type: "text/javascript; charset=utf-8" },
@@ -35,15 +42,21 @@ class HttpError extends Error {
   }
 }
 
-export function createFactoryServer(opts: ServerOptions): Server {
+export function createFactoryServer(opts: ServerOptions): FactoryServer {
   const now = opts.now ?? Date.now;
+  const allowedHosts = Array.isArray(opts.config.allowedHosts) ? opts.config.allowedHosts.filter((h): h is string => typeof h === "string") : [];
+  const hosts = new HostCheck(allowedHosts, opts.machineName);
+  void hosts.addFqdn(opts.machineName);
   const sseClients = new Set<ServerResponse>();
-  const unsubscribe = opts.state.subscribe((id) => {
-    const data = `event: changed\ndata: ${JSON.stringify(id)}\n\n`;
+  const broadcast = (data: string) => {
     for (const res of sseClients) {
       res.write(data);
     }
-  });
+  };
+  const unsubscribe = opts.state.subscribe((id) => broadcast(`event: changed\ndata: ${JSON.stringify(id)}\n\n`));
+  // Keeps idle connections from being dropped by proxies, and finds dead clients.
+  const heartbeat = setInterval(() => broadcast(": heartbeat\n\n"), HEARTBEAT_MS);
+  heartbeat.unref();
 
   const server = createServer((req, res) => {
     handle(req, res).catch((e: unknown) => {
@@ -58,7 +71,38 @@ export function createFactoryServer(opts: ServerOptions): Server {
       }
     });
   });
-  server.on("close", unsubscribe);
+  // An open event stream would keep close() waiting forever.
+  const close = server.close.bind(server);
+  const factoryServer = Object.assign(server, {
+    sseClientCount: () => sseClients.size,
+    close(callback?: (err?: Error) => void) {
+      unsubscribe();
+      clearInterval(heartbeat);
+      for (const res of sseClients) {
+        res.end();
+      }
+      sseClients.clear();
+      return close(callback);
+    },
+  });
+
+  function readInterdiff(p: PatchView): string | undefined {
+    if (p.interdiffFile === undefined) {
+      return undefined;
+    }
+    try {
+      const root = realpathSync(opts.config.stateDir);
+      const file = realpathSync(resolve(root, p.interdiffFile));
+      const rel = relative(root, file);
+      // Inside stateDir only, symlinks included.
+      if (rel.startsWith("..") || isAbsolute(rel)) {
+        return undefined;
+      }
+      return readFileSync(file, "utf8");
+    } catch {
+      return undefined;
+    }
+  }
 
   function ctx(req: IncomingMessage, open?: string): RenderContext {
     return {
@@ -70,6 +114,7 @@ export function createFactoryServer(opts: ServerOptions): Server {
       maxAgents: opts.config.maxAgents,
       maxBuilds: opts.config.maxBuilds,
       open,
+      interdiff: readInterdiff,
     };
   }
 
@@ -86,6 +131,10 @@ export function createFactoryServer(opts: ServerOptions): Server {
     const path = url.pathname;
     const method = req.method ?? "GET";
     let m: RegExpMatchArray | null;
+
+    if (!hosts.allows(req.headers.host)) {
+      throw new HttpError(421, `unknown host ${req.headers.host ?? ""}: add it to allowedHosts in factory.config.json`);
+    }
 
     if (method === "OPTIONS" && path.startsWith("/api/requests/")) {
       res.writeHead(204, { "Access-Control-Allow-Origin": opts.config.profilerOrigin, "Access-Control-Allow-Headers": "*", "Access-Control-Max-Age": "86400" });
@@ -148,14 +197,17 @@ export function createFactoryServer(opts: ServerOptions): Server {
       if (!found) {
         throw new HttpError(404, `unknown stack: ${id}`);
       }
+      const base = url.searchParams.get("base") ?? undefined;
+      if (base !== undefined && !isRevName(base)) {
+        throw new HttpError(400, `not a revision name: ${base}`);
+      }
       let page: string;
       try {
         page = await buildStackReview({
           command: opts.config.stackViewerCommand,
-          outDir: join(opts.config.stateDir, "cache", "stack-viewer"),
           request: found.request,
           stack: found.stack,
-          base: url.searchParams.get("base") ?? undefined,
+          base,
         });
       } catch (e) {
         throw new HttpError(502, errorMessage(e));
@@ -173,7 +225,7 @@ export function createFactoryServer(opts: ServerOptions): Server {
     // Commands include shell commands, so another site's page must not be able to
     // post a form here.
     const origin = req.headers.origin;
-    if (req.headers["sec-fetch-site"] === "cross-site" || (origin !== undefined && hostOf(origin) !== req.headers.host)) {
+    if (req.headers["sec-fetch-site"] === "cross-site" || (origin !== undefined && hostOf(origin) !== req.headers.host?.toLowerCase())) {
       throw new HttpError(403, "cross-origin command refused");
     }
     const body = await readBody(req);
@@ -203,7 +255,7 @@ export function createFactoryServer(opts: ServerOptions): Server {
       throw new HttpError(400, "no command");
     }
     // All or nothing: a recovery plan's checked commands go in together.
-    const commands: NewCommand[] = [];
+    const commands: CommandInput[] = [];
     for (const input of inputs) {
       const v = validateCommand(input, (id) => opts.state.getRequest(id));
       if (!v.ok) {
@@ -222,7 +274,7 @@ export function createFactoryServer(opts: ServerOptions): Server {
     }
   }
 
-  return server;
+  return factoryServer;
 }
 
 function wantsJson(req: IncomingMessage): boolean {
@@ -286,7 +338,8 @@ if (import.meta.main) {
   const state = new FixtureStateSource(resolve(values.fixtures));
   state.watch();
   const sink: CommandSink = { append: (c) => process.stdout.write(JSON.stringify(c) + "\n") };
-  config.stateDir = join(tmpdir(), "fix-factory-fixtures");
+  // interdiffFile paths in the fixtures are relative to the fixture directory.
+  config.stateDir = resolve(values.fixtures);
   createFactoryServer({ config, state, sink }).listen(config.port, () => {
     process.stderr.write(`fix-factory page on http://localhost:${config.port}/ (fixtures from ${values.fixtures})\n`);
   });

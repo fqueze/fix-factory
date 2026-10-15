@@ -148,7 +148,8 @@
       "key": "recovery:j-recover",
       "action": "Recovery plan",
       "detail": "You said: “the browser_tabSpinner agent has been at it for 6 hours”",
-      "since": "2026-10-15T07:30:00.000Z"
+      "since": "2026-10-15T07:30:00.000Z",
+      "job": "j-recover"
     }
   ],
   "recoveryPlans": [
