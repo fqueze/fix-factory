@@ -62,9 +62,11 @@ describe("overview", () => {
     assert.doesNotMatch(page, /New request|new-request/);
   });
 
-  it("archives text forwarded to an existing request, with where it went", () => {
+  it("archives text from the main box that was forwarded, or that it couldn't route, with what became of it", () => {
     assert.ok(page.indexOf("r-20261015-lando-was-down-re-push") > page.indexOf("<h2>Finished"));
-    assert.match(page, /<b>Lando was down this morning, re-push what failed<\/b> <span class="sub">· Forwarded to r-20261013-tab-failures.<\/span>/);
+    assert.match(page, /<b>Lando was down this morning, re-push what failed<\/b> <span class="sub">· Forwarded to r-20261013-tab-failures<\/span>/);
+    assert.ok(page.indexOf("r-20261015-hmm") > page.indexOf("<h2>Finished"));
+    assert.match(page, /<b>hmm<\/b> <span class="sub">· The factory couldn&#39;t tell what this is: rephrase it in the main box<\/span>/);
   });
 
   it("lists recent try pushes across requests", () => {

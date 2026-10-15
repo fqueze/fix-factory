@@ -313,6 +313,12 @@ class Planner {
       this.raise(`failed:${last.job}`, { action: `Push ${last.purpose.push} not made: the stack changed since its dry run. Ask the factory to plan it again (redo-step)`, detail, job: last.job });
       return;
     }
+    if (last.purpose.what === "route") {
+      // Nothing to retry by hand: the text is all there is.
+      this.raise(`failed:${last.job}`, { action: "The factory couldn't tell what this is: rephrase it in the main box", detail, job: last.job });
+      this.setStep("done");
+      return;
+    }
     const action = NO_RETRY.has(last.purpose.what) ? `${last.name} failed (not retried: it may have happened)` : `${last.name} failed twice`;
     this.raise(`failed:${last.job}`, { action, detail, job: last.job, ...(last.item ? { item: last.item } : {}) });
     if (last.item && this.s.items[last.item]) this.setItem(last.item, "blocked", `${last.name} failed`);

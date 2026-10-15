@@ -29,13 +29,11 @@ function withPatch(): Scenario {
 const executed = (sc: Scenario) => sc.of("command-executed").map((e) => ({ ok: e.ok, detail: e.detail }));
 
 describe("commands", () => {
-  it("new-request names the request from its folder, text or revision", () => {
-    const c = (f: Record<string, string>) => cmd({ cmd: "new-request", kind: "burndown", text: "", ...f }) as Extract<Command, { cmd: "new-request" }>;
-    assert.equal(newRequestId(c({ folder: "browser/components/sessionstore/test" }), () => false), "r-20261015-sessionstore-test");
-    assert.equal(newRequestId(c({ text: "Fix the xpcshell cwd failures", kind: "try-push", rev: "abc" }), () => false), "r-20261015-fix-the-xpcshell-cwd");
-    assert.equal(newRequestId(c({ folder: "a/b" }), (id) => id === "r-20261015-a-b"), "r-20261015-a-b-2");
-    const [e] = commandEffects(c({ folder: "a/b" }), { config, exists: () => false, plan: () => undefined });
-    assert.deepEqual(e, { type: "event", event: { type: "request-created", request: "r-20261015-a-b", kind: "burndown", text: "", folder: "a/b" } });
+  it("names a new request from the first words of its text", () => {
+    const t = "2026-10-15T09:00:00.000Z";
+    assert.equal(newRequestId({ t, text: "Fix the xpcshell cwd failures" }, () => false), "r-20261015-fix-the-xpcshell-cwd");
+    assert.equal(newRequestId({ t, text: "a b" }, (id) => id === "r-20261015-a-b"), "r-20261015-a-b-2");
+    assert.equal(newRequestId({ t, text: "!!!" }, () => false), "r-20261015-request");
   });
 
   it("approve-push, take-it and hand-back answer their needs-user", () => {
@@ -90,7 +88,7 @@ describe("commands", () => {
   it("a global tell-factory creates a request to route, named from its text; one for an unknown request does nothing", () => {
     const { request: _r, ...global } = cmd({ cmd: "tell-factory", text: "Burn down dom/base/test, skip Android" });
     const effects = commandEffects(global as Command, { config, exists: () => false, plan: () => undefined });
-    assert.deepEqual(effects, [{ type: "event", event: { type: "request-created", request: "r-20261015-burn-down-dom-base-test-skip", kind: "unrouted", text: "Burn down dom/base/test, skip Android" } }]);
+    assert.deepEqual(effects, [{ type: "event", event: { type: "request-created", request: "r-20261015-burn-down-dom-base-test-skip", kind: "unrouted", text: "Burn down dom/base/test, skip Android", command: global.id } }]);
     assert.deepEqual(commandEffects(cmd({ cmd: "tell-factory", request: "r-nope", text: "x" }), { config, exists: () => false, plan: () => undefined }), []);
   });
 

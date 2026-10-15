@@ -176,9 +176,7 @@ export class Orchestrator {
       return;
     }
     const request = c.request;
-    const creates = c.cmd === "new-request" || (c.cmd === "tell-factory" && request === undefined);
-    // Already executed: its request exists. The text too, since two commands can share a millisecond.
-    if (creates && this.requests().map((id) => this.load(id).s).some((s) => s.createdAt === c.t && s.text === c.text)) return;
+    if (c.cmd === "tell-factory" && request === undefined && this.requests().some((id) => this.load(id).s.fromCommand === c.id)) return; // already executed
     const loaded = request !== undefined && this.requests().includes(request) ? this.load(request) : undefined;
     if (loaded?.view.executed.has(c.id)) return;
     const effects = commandEffects(c, {

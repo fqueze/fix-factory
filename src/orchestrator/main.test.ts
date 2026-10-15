@@ -5,7 +5,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { appendCommand } from "../state/commands.ts";
-import { appendEvent, readEvents, type EventInput } from "../state/events.ts";
+import { appendEvent, listRequests, readEvents, type EventInput } from "../state/events.ts";
+import { foldEvents } from "../state/fold.ts";
 import { groupMembers, readPidFile, startJob } from "../state/jobs.ts";
 import type { Event, FactoryConfig } from "../types.ts";
 import { Orchestrator, withDryRun } from "./main.ts";
@@ -84,27 +85,66 @@ describe("Orchestrator", () => {
     }
   });
 
+  // Text from the global box that route-request forwards to r-a, until recover starts on r-a.
+  async function forwarded(o: Orchestrator, root: string, config: FactoryConfig) {
+    writeFileSync(join(root, "claude.json"), JSON.stringify([{ match: "^You wrote this", report: { existing: "r-a", feedback: [] } }]));
+    add(config.stateDir, { type: "request-created", request: "r-a", kind: "try-push", text: "Fix the xpcshell failures", rev: "abcdef123456" });
+    await o.startup();
+    const told = appendCommand(config.stateDir, { cmd: "tell-factory", text: "Lando was down, re-push" });
+    await o.tick();
+    const id = `r-${told.t.slice(0, 10).replace(/-/g, "")}-lando-was-down-re-push`;
+    const recover = () => readEvents(config.stateDir, "r-a").filter((e): e is Extract<Event, { type: "job-started" }> => e.type === "job-started" && e.name === "recover");
+    for (let i = 0; i < 200 && recover().length === 0; i++) {
+      await new Promise((r) => setTimeout(r, 20));
+      await o.tick();
+    }
+    const unrouted = () => listRequests(config.stateDir).filter((r) => r !== "r-a");
+    return { told, id, recover, unrouted };
+  }
+
   it("makes a request of the global box's text, and forwards it to recover on the request route-request names", async () => {
     const { root, config, o } = setup({ maxAgents: 2 });
     try {
-      writeFileSync(join(root, "claude.json"), JSON.stringify([{ match: "^You wrote this", report: { existing: "r-a", feedback: [] } }]));
-      add(config.stateDir, { type: "request-created", request: "r-a", kind: "try-push", text: "Fix the xpcshell failures", rev: "abc" });
-      await o.startup();
-      const told = appendCommand(config.stateDir, { cmd: "tell-factory", text: "Lando was down, re-push" });
-      await o.tick();
-      const id = `r-${told.t.slice(0, 10).replace(/-/g, "")}-lando-was-down-re-push`;
-      const created = readEvents(config.stateDir, id);
-      assert.deepEqual(created[0], { v: 1, t: told.t, type: "request-created", request: id, kind: "unrouted", text: "Lando was down, re-push" });
-      assert.equal(readFileSync(join(config.stateDir, "requests", id, "data", "requests.txt"), "utf8"), "r-a  Fix the failures of try push abc (step: work list): Fix the xpcshell failures\n");
-      const recover = () => readEvents(config.stateDir, "r-a").filter((e): e is Extract<Event, { type: "job-started" }> => e.type === "job-started" && e.name === "recover");
-      for (let i = 0; i < 200 && recover().length === 0; i++) {
-        await new Promise((r) => setTimeout(r, 20));
-        await o.tick();
-      }
+      const { told, id, recover } = await forwarded(o, root, config);
+      const events = readEvents(config.stateDir, id);
+      assert.deepEqual(events[0], { v: 1, t: told.t, type: "request-created", request: id, kind: "unrouted", text: "Lando was down, re-push", command: told.id });
+      assert.equal(readFileSync(join(config.stateDir, "requests", id, "data", "requests.txt"), "utf8"), "r-a  Fix the failures of try push abcdef123456 (step: work list): Fix the xpcshell failures\n");
       assert.equal(recover()[0].purpose?.reason, "Lando was down, re-push");
-      const routed = readEvents(config.stateDir, id);
-      assert.ok(routed.some((e) => e.type === "note" && e.text === "Forwarded to r-a."));
-      assert.equal(routed.filter((e) => e.type === "step").at(-1)?.step, "done");
+      const s = foldEvents(events);
+      assert.deepEqual([s.forwardedTo, s.step], ["r-a", "done"]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("executes the global box's text once when its commands are read again", async () => {
+    const { root, config, o } = setup({ maxAgents: 2 });
+    try {
+      const { recover, unrouted } = await forwarded(o, root, config);
+      rmSync(join(config.stateDir, "commands.cursor.json"));
+      await o.tick();
+      await o.tick();
+      assert.equal(unrouted().length, 1);
+      assert.equal(recover().length, 1);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("forwards once when route-request's job-finished was lost and the job is recorded again", async () => {
+    const { root, config, o } = setup({ maxAgents: 2 });
+    try {
+      const { id, recover, unrouted } = await forwarded(o, root, config);
+      // As if the orchestrator died after the forward, before job-finished.
+      const path = join(config.stateDir, "requests", id, "events.jsonl");
+      const lines = readFileSync(path, "utf8").trimEnd().split("\n");
+      writeFileSync(path, lines.filter((l) => JSON.parse(l).type !== "job-finished").join("\n") + "\n");
+      await o.tick();
+      await o.tick();
+      assert.ok(readEvents(config.stateDir, id).some((e) => e.type === "job-finished"));
+      assert.equal(readFileSync(join(config.stateDir, "commands.jsonl"), "utf8").match(/"forward-/g)?.length, 2);
+      assert.equal(unrouted().length, 1);
+      assert.equal(recover().length, 1);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

@@ -75,12 +75,14 @@ export function handleFinished(input: HandlerInput): HandlerResult {
       if (r.existing !== undefined) {
         if (!purpose.requests?.includes(r.existing)) throw new Error(`${r.existing} is not one of the active requests`);
         commands.push({ id: `forward-${job.job}`, cmd: "tell-factory", request: r.existing, text: s.text });
-        ev("note", { text: `Forwarded to ${r.existing}.` });
+        ev("request-forwarded", { to: r.existing });
         ev("step", { step: "done" });
         break;
       }
       if (r.kind === undefined) throw new Error("the report has neither existing nor kind");
-      if (r.kind === "burndown" ? !r.folder : !r.rev) throw new Error(r.kind === "burndown" ? "a burndown needs a folder" : "a try-push request needs a revision");
+      // The folder ends up in CLI arguments and worktree paths, the revision in a Treeherder URL.
+      if (r.kind === "burndown" && !(r.folder && !r.folder.startsWith("/") && !r.folder.split("/").includes(".."))) throw new Error(`a burndown needs a folder relative to the repository, not ${JSON.stringify(r.folder)}`);
+      if (r.kind === "try-push" && !/^[0-9a-f]{12,40}$/i.test(r.rev ?? "")) throw new Error(`a try-push request needs a revision of 12 to 40 hex digits, not ${JSON.stringify(r.rev)}`);
       ev("request-routed", { kind: r.kind, ...(r.kind === "burndown" ? { folder: r.folder } : { rev: r.rev }) });
       const questions = r.questions ?? [];
       ev("config-set", { config: { ...r.config, ...(questions.length ? { questions } : {}) } });

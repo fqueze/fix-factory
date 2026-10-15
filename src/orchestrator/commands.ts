@@ -24,10 +24,10 @@ export interface CommandContext {
   plan: (job: JobId) => JobPlan | undefined; // jobs/<job>/plan.json, what the runner started
 }
 
-// r-20261015-<slug>, from the folder, the text or the revision.
-export function newRequestId(c: { t: string; text: string; folder?: string; rev?: string }, exists: (id: RequestId) => boolean): RequestId {
+// r-20261015-<slug>, from the first words of the text.
+export function newRequestId(c: { t: string; text: string }, exists: (id: RequestId) => boolean): RequestId {
   const day = c.t.slice(0, 10).replace(/-/g, "");
-  const name = slug(c.folder?.split("/").slice(-2).join("-") || c.text.split("\n")[0].split(/\s+/).slice(0, 4).join("-") || c.rev || "request").toLowerCase() || "request";
+  const name = slug(c.text.split("\n")[0].split(/\s+/).slice(0, 4).join("-")).toLowerCase() || "request";
   const base = `r-${day}-${name}`;
   let id = base;
   for (let n = 2; exists(id); n++) id = `${base}-${n}`;
@@ -50,17 +50,12 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
   };
 
   switch (c.cmd) {
-    case "new-request": {
-      const request = newRequestId(c, ctx.exists);
-      effects.push({ type: "event", event: { type: "request-created", request, kind: c.kind, text: c.text, ...(c.folder ? { folder: c.folder } : {}), ...(c.rev ? { rev: c.rev } : {}) } });
-      return effects;
-    }
     case "presence":
       return effects; // the loop tracks presence from the commands themselves
     case "tell-factory":
       if (c.request === undefined) {
         // The global box: a request of its own, which route-request makes a new one or forwards.
-        effects.push({ type: "event", event: { type: "request-created", request: newRequestId(c, ctx.exists), kind: "unrouted", text: c.text } });
+        effects.push({ type: "event", event: { type: "request-created", request: newRequestId(c, ctx.exists), kind: "unrouted", text: c.text, command: c.id } });
         return effects;
       }
       if (!s) return effects;

@@ -11,7 +11,6 @@ const R = "r-20261010-xpcshell-cwd";
 describe("validateCommand", () => {
   it("accepts each kind of command the page sends", () => {
     const ok = [
-      { cmd: "new-request", kind: "burndown", text: "", folder: "dom/base/test" }, // no longer sent, still accepted
       { cmd: "approve-push", request: R, push: "A" },
       { cmd: "set-bug", request: R, patch: "p-copydir", bug: 2081216 },
       { cmd: "set-bug", request: R, patch: "meta", bug: 2081217 },
@@ -82,7 +81,7 @@ describe("validateCommand", () => {
       [{ cmd: "take-it", request: R, item: "i-nope" }, /unknown item/],
       [{ cmd: "stack-comments", request: R, stack: "storage-unit", comments: [] }, /non-empty list/],
       [{ cmd: "stack-comments", request: R, stack: "storage-unit", comments: [{ patch: "p-nope", text: "x" }] }, /unknown patch p-nope/],
-      [{ cmd: "new-request", kind: "burndown", text: "x" }, /needs a folder/],
+      [{ cmd: "new-request", kind: "burndown", text: "x", folder: "a" }, /unknown command/],
       [{ cmd: "run-moz-phab", request: R, stack: "storage-unit", args: ["submit"] }, /./],
     ];
     for (const [c, re] of bad) {

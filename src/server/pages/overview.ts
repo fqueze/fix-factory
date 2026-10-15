@@ -1,6 +1,6 @@
 import type { RequestState } from "../../types.ts";
 import { html, type Html } from "../html.ts";
-import { commandFields, formatDate, plural, profileUrl, pushResultClass, pushStatus, pushUrl, requestName, requestUrl, sectionOf, shortName, type RenderContext } from "./common.ts";
+import { commandFields, formatDate, plural, profileUrl, pushResultClass, pushStatus, pushUrl, requestName, requestUrl, routeOutcome, sectionOf, shortName, type RenderContext } from "./common.ts";
 import { renderRequest } from "./request.ts";
 
 const PHAB_SYMBOL = html`<svg style="display:none"><symbol id="phab" viewBox="0 0 16 16"><path d="M1 8s2.6-5 7-5 7 5 7 5-2.6 5-7 5-7-5-7-5z" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="8" cy="8" r="2.3" fill="currentColor"/></symbol></svg>`;
@@ -33,7 +33,7 @@ export function renderStrip(requests: RequestState[], ctx: RenderContext): Html 
   const jobs = requests.flatMap((r) => Object.values(r.jobs)).filter((j) => j.endedAt === undefined);
   const agents = jobs.filter((j) => j.kind === "agent").length;
   const builds = jobs.filter((j) => j.kind === "build").length;
-  const needs = requests.filter((r) => r.needsUser.length > 0).length;
+  const needs = requests.filter((r) => r.step !== "done" && r.needsUser.length > 0).length;
   return html`<div class="strip" id="strip">
     <span>agents <b>${agents}${ctx.maxAgents ? `/${ctx.maxAgents}` : ""}</b></span>
     <span>builds <b>${builds}${ctx.maxBuilds ? `/${ctx.maxBuilds}` : ""}</b></span>
@@ -70,7 +70,7 @@ export function renderMain(requests: RequestState[], ctx: RenderContext): Html {
     <summary>▸ ${plural(finished.length, "request")}</summary>
     <div class="simple" id="section-finished">${finished.map(
       (r) =>
-        html`<div class="row" data-request="${r.id}" data-section="finished"><span class="grow"><b>${requestName(r)}</b> <span class="sub">· ${r.kind === "unrouted" ? r.notes.at(-1)?.text : `${plural(Object.keys(r.patches).length, "patch", "patches")}, done ${formatDate(r.updatedAt)}`}</span></span><a class="btn small" href="${profileUrl(ctx, r.id)}" target="_blank" rel="noopener">Profile</a></div>`,
+        html`<div class="row" data-request="${r.id}" data-section="finished"><span class="grow"><b>${requestName(r)}</b> <span class="sub">· ${r.kind === "unrouted" ? routeOutcome(r) : `${plural(Object.keys(r.patches).length, "patch", "patches")}, done ${formatDate(r.updatedAt)}`}</span></span><a class="btn small" href="${profileUrl(ctx, r.id)}" target="_blank" rel="noopener">Profile</a></div>`,
     )}</div>
   </details>` : null}`;
 }

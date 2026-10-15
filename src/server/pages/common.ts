@@ -41,6 +41,12 @@ export function requestName(r: RequestState): string {
   return r.rev ? `Fix the failures of try push ${r.rev}` : r.id;
 }
 
+// What became of text from the main box that didn't become a request of its own: forwarded, or
+// route-request failed and its ⚑ asks you to rephrase it.
+export function routeOutcome(r: RequestState): string {
+  return r.forwardedTo ? `Forwarded to ${r.forwardedTo}` : (r.needsUser.at(-1)?.action ?? "");
+}
+
 // "r-20261015-xpcshell-cwd" → "xpcshell-cwd", for tight columns.
 export function shortName(r: RequestState): string {
   return r.id.replace(/^r-\d{8}-/, "");

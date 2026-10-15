@@ -70,25 +70,25 @@ describe("1. request", () => {
   const routed = (fields: object) => ({ config: { folders: [], tests: [], platforms: [], constraints: [] }, questions: [], feedback: [], ...fields });
 
   it("routes text from the main box: a try push gets its kind and revision, then goes to the work list with its push", () => {
-    const sc = new Scenario("unrouted", { text: "fix the failures of try push abc" });
+    const sc = new Scenario("unrouted", { text: "fix the failures of try push abcdef123456" });
     sc.activeRequests = [{ id: "r-20261014-other", summary: "Flakiness burndown of dom/base/test (step: work list)" }];
     assert.deepEqual(sc.step(), ["route"]);
     const plan = sc.plan("route");
     assert.equal(plan.name, "route-request");
     const requestsFile = `/state/requests/${ID}/data/requests.txt`;
-    assert.deepEqual(plan.agent?.vars, { text: "fix the failures of try push abc", requestsFile });
+    assert.deepEqual(plan.agent?.vars, { text: "fix the failures of try push abcdef123456", requestsFile });
     assert.deepEqual(plan.files, [{ path: requestsFile, content: "r-20261014-other  Flakiness burndown of dom/base/test (step: work list)\n" }]);
     assert.deepEqual(plan.purpose.requests, ["r-20261014-other"]);
     assert.deepEqual(sc.step(), []);
-    sc.complete("route", { report: routed({ kind: "try-push", rev: "abc", questions: ["which platforms?"] }) });
+    sc.complete("route", { report: routed({ kind: "try-push", rev: "abcdef123456", questions: ["which platforms?"] }) });
     assert.equal(sc.state().kind, "try-push");
     assert.deepEqual(sc.state().config.questions, ["which platforms?"]);
     assert.deepEqual(sc.settle(), ["watch:initial"]);
     const s = sc.state();
     assert.equal(s.step, "work list");
-    assert.equal(s.pushes.initial.rev, "abc");
+    assert.equal(s.pushes.initial.rev, "abcdef123456");
     assert.equal(sc.plan("watch:initial").kind, "try-watch");
-    assert.deepEqual(sc.plan("watch:initial").cli, { tool: "try.ts", args: ["watch", "abc"] });
+    assert.deepEqual(sc.plan("watch:initial").cli, { tool: "try.ts", args: ["watch", "abcdef123456"] });
   });
 
   it("routes a burndown to the first signal", () => {
@@ -109,7 +109,7 @@ describe("1. request", () => {
     assert.deepEqual(sc.commands, [{ id: `forward-${job}`, cmd: "tell-factory", request: "r-20261014-other", text: "Lando was down, re-push" }]);
     const s = sc.state();
     assert.equal(s.step, "done");
-    assert.deepEqual(s.notes.map((n) => n.text), ["Forwarded to r-20261014-other."]);
+    assert.equal(s.forwardedTo, "r-20261014-other");
     assert.deepEqual(sc.step(), []);
   });
 
@@ -119,13 +119,20 @@ describe("1. request", () => {
     assert.throws(() => sc.complete("route", { report: { existing: "r-nope", feedback: [] } }), /not one of the active requests/);
     assert.throws(() => sc.complete("route", { report: routed({ kind: "burndown" }) }), /needs a folder/);
     assert.throws(() => sc.complete("route", { report: { feedback: [] } }), /neither existing nor kind/);
+    for (const folder of ["/etc", "dom/../../x", ".."]) assert.throws(() => sc.complete("route", { report: routed({ kind: "burndown", folder }) }), /folder/, folder);
+    for (const rev of ["abc", "main", "g".repeat(12), "a".repeat(41)]) assert.throws(() => sc.complete("route", { report: routed({ kind: "try-push", rev }) }), /revision/, rev);
   });
 
-  it("a request with its kind already (the new-request command) goes on without routing", () => {
-    const sc = new Scenario("burndown", { folder: "dom/base/test" });
+  it("when route-request fails twice, asks you to rephrase it in the main box and closes the request", () => {
+    const sc = new Scenario("unrouted", { text: "hmm" });
     sc.step();
-    assert.equal(sc.state().step, "first signal");
-    assert.equal(sc.view().byKey.has("route"), false);
+    sc.complete("route", { error: "no result line" });
+    sc.step();
+    const job = sc.complete("route", { error: "no result line" });
+    sc.step();
+    const s = sc.state();
+    assert.equal(s.step, "done");
+    assert.deepEqual(s.needsUser.map((n) => [n.key, n.action]), [[`failed:${job}`, "The factory couldn't tell what this is: rephrase it in the main box"]]);
   });
 });
 

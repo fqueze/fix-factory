@@ -119,8 +119,9 @@ export interface InlineComment {
 export type JobKind = "script" | "agent" | "build" | "try-watch";
 
 export type Event =
-  | (EventBase & { type: "request-created"; kind: RequestKind; text: string; folder?: string; rev?: string })
+  | (EventBase & { type: "request-created"; kind: RequestKind; text: string; folder?: string; rev?: string; command?: string })
   | (EventBase & { type: "request-routed"; kind: Exclude<RequestKind, "unrouted">; folder?: string; rev?: string })
+  | (EventBase & { type: "request-forwarded"; to: RequestId })
   | (EventBase & { type: "config-set"; config: Record<string, unknown> })
   | (EventBase & { type: "step"; step: RequestStep })
   | (EventBase & { type: "item-created"; item: ItemId; folder: string; group: FailureGroup })
@@ -188,7 +189,6 @@ interface CommandBase {
 }
 
 export type Command =
-  | (CommandBase & { cmd: "new-request"; kind: RequestKind; text: string; folder?: string; rev?: string })
   | (CommandBase & { cmd: "approve-push"; push: PushId })
   | (CommandBase & { cmd: "set-bug"; patch: PatchId; bug: number })
   | (CommandBase & { cmd: "comment-bug-draft"; patch: PatchId | "meta"; text: string })
@@ -335,6 +335,8 @@ export interface RequestState {
   text: string;
   folder?: string;
   rev?: string;
+  fromCommand?: string; // the tell-factory command that created it
+  forwardedTo?: RequestId; // route-request said its text is about that request
   createdAt: Iso;
   updatedAt: Iso;
   step: RequestStep;
@@ -393,15 +395,8 @@ export interface RouteRequestReport {
   kind?: Exclude<RequestKind, "unrouted">;
   folder?: string;
   rev?: string;
-  config?: ParseRequestReport["config"];
+  config?: { folders: string[]; tests: string[]; platforms: string[]; constraints: string[] };
   questions?: string[];
-  feedback: Feedback[];
-}
-
-// The report of parse-request, which route-request replaced.
-export interface ParseRequestReport {
-  config: { folders: string[]; tests: string[]; platforms: string[]; constraints: string[] };
-  questions: string[];
   feedback: Feedback[];
 }
 

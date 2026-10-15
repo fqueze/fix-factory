@@ -1,5 +1,5 @@
 import { isDeepStrictEqual } from "node:util";
-import type { Command, ItemState, PlannedCommand, RequestKind, RequestState, RequestStep } from "../types.ts";
+import type { Command, ItemState, PlannedCommand, RequestState, RequestStep } from "../types.ts";
 import type { CommandInput } from "../state/commands.ts";
 
 export const ITEM_STATES = [
@@ -35,8 +35,6 @@ export const REQUEST_STEPS = [
   "done",
 ] as const satisfies readonly RequestStep[];
 
-const REQUEST_KINDS = ["burndown", "try-push"] as const satisfies readonly RequestKind[];
-
 // Compile-time checks that the lists above cover their unions.
 type Missing<U, L extends readonly unknown[]> = Exclude<U, L[number]>;
 const allItemStates: Missing<ItemState, typeof ITEM_STATES> extends never ? true : false = true;
@@ -47,7 +45,6 @@ void allSteps;
 type Field =
   | "string"
   | "string?"
-  | "any-string"
   | "int"
   | "boolean"
   | "string[]"
@@ -58,7 +55,6 @@ type Field =
 // One entry per Command["cmd"]: the type checker fails here when a command is added
 // to src/types.ts without being added to the page's validation.
 const SPECS: Record<Command["cmd"], Record<string, Field>> = {
-  "new-request": { kind: { oneOf: REQUEST_KINDS }, text: "any-string", folder: "string?", rev: "string?" },
   "approve-push": { push: "string" },
   presence: { visible: "boolean" },
   "set-bug": { patch: "string", bug: "int" },
@@ -97,8 +93,6 @@ function checkField(name: string, spec: Field, value: unknown): string | null {
   switch (spec) {
     case "string?":
       return value === undefined || typeof value === "string" ? null : `${name} must be a string`;
-    case "any-string":
-      return typeof value === "string" ? null : `${name} must be a string`;
     case "string":
       return typeof value === "string" && value.trim() !== "" ? null : `${name} must be a non-empty string`;
     case "int":
@@ -138,10 +132,6 @@ export function validateCommand(input: unknown, getRequest: (id: string) => Requ
     if (input[name] !== undefined) {
       out[name] = input[name];
     }
-  }
-
-  if (cmd === "new-request" && !(out.kind === "burndown" ? out.folder : out.rev)) {
-    return { ok: false, error: out.kind === "burndown" ? "a burndown needs a folder" : "a try-push request needs a revision" };
   }
 
   if (input.request !== undefined) {

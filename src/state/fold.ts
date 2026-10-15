@@ -50,7 +50,11 @@ export function foldEvents(events: readonly Event[]): RequestState {
         s.text = e.text;
         s.folder = e.folder;
         s.rev = e.rev;
+        s.fromCommand = e.command;
         s.createdAt = e.t;
+        break;
+      case "request-forwarded":
+        s.forwardedTo = e.to;
         break;
       case "request-routed":
         s.kind = e.kind;

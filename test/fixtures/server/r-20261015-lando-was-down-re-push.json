@@ -5,6 +5,7 @@
   "createdAt": "2026-10-15T08:30:00.000Z",
   "updatedAt": "2026-10-15T08:30:40.000Z",
   "step": "done",
+  "forwardedTo": "r-20261013-tab-failures",
   "config": {},
   "items": {},
   "patches": {},
@@ -31,10 +32,5 @@
   },
   "needsUser": [],
   "recoveryPlans": [],
-  "notes": [
-    {
-      "t": "2026-10-15T08:30:40.000Z",
-      "text": "Forwarded to r-20261013-tab-failures."
-    }
-  ]
+  "notes": []
 }

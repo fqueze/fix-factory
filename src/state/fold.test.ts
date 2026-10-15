@@ -49,6 +49,8 @@ test("request-routed gives a request typed in the main box its kind, folder and 
   assert.equal(s.folder, "dom/base/test");
   assert.equal(s.text, "burn down dom/base/test");
   assert.equal("rev" in s, false);
+  const forwarded = foldEvents([ev({ type: "request-created", kind: "unrouted", text: "re-push", command: "c-1" }), ev({ type: "request-forwarded", to: "r-other" })]);
+  assert.deepEqual([forwarded.fromCommand, forwarded.forwardedTo, forwarded.kind], ["c-1", "r-other", "unrouted"]);
 });
 
 test("unknown event types are ignored, and don't move updatedAt", () => {

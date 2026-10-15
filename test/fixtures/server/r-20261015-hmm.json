@@ -1,0 +1,25 @@
+{
+  "id": "r-20261015-hmm",
+  "kind": "unrouted",
+  "text": "hmm",
+  "createdAt": "2026-10-15T08:20:00.000Z",
+  "updatedAt": "2026-10-15T08:21:00.000Z",
+  "step": "done",
+  "config": {},
+  "items": {},
+  "patches": {},
+  "stacks": {},
+  "pushes": {},
+  "jobs": {},
+  "needsUser": [
+    {
+      "key": "failed:j-route-hmm",
+      "action": "The factory couldn't tell what this is: rephrase it in the main box",
+      "detail": "invalid report: $: no structured_output",
+      "job": "j-route-hmm",
+      "since": "2026-10-15T08:21:00.000Z"
+    }
+  ],
+  "recoveryPlans": [],
+  "notes": []
+}
