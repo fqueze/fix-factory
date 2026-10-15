@@ -108,6 +108,7 @@ export async function applyDiffToTree(cwd: string, tree: string, diff: string): 
   }
 }
 
+// `empty`: the change was already in `onto`; `sha` is then `onto` itself.
 export type PickResult = { ok: true; sha: string; empty: boolean } | { ok: false; files: string[] };
 
 // Cherry-picks `commit` onto `onto` in memory. When nothing changes (same parent, same message, no
@@ -131,9 +132,12 @@ export async function pick(cwd: string, onto: string, commit: CommitObject, opts
   if (opts.diff) {
     tree = await applyDiffToTree(cwd, tree, opts.diff);
   }
-  const ontoTree = (await git(cwd, ["rev-parse", `${onto}^{tree}`])).trim();
-  const sha = await commitTree(cwd, tree, onto, message, commit.author);
-  return { ok: true, sha, empty: tree === ontoTree };
+  // A change that is already there (the patch landed, or is in the stack under another sha) makes no
+  // commit: an empty one would still carry the Differential Revision trailer and confuse moz-phab.
+  if (tree === (await git(cwd, ["rev-parse", `${onto}^{tree}`])).trim()) {
+    return { ok: true, sha: onto, empty: true };
+  }
+  return { ok: true, sha: await commitTree(cwd, tree, onto, message, commit.author), empty: false };
 }
 
 export async function currentBranch(cwd: string): Promise<string | null> {
@@ -181,7 +185,7 @@ export async function leaveCherryPickInProgress(cwd: string, sha: string, messag
 // Context lines are kept: Lando applies the diff stored on Phabricator, so a patch whose context
 // changed has to be resubmitted even if its +/- lines are the same.
 export async function normalizedDiff(cwd: string, sha: string): Promise<string> {
-  const out = await git(cwd, ["diff", "--no-color", "--no-ext-diff", "--no-renames", `${sha}^`, sha]);
+  const out = await git(cwd, ["diff", "--binary", "--no-color", "--no-ext-diff", "--no-renames", `${sha}^`, sha]);
   return out
     .split("\n")
     .filter((l) => !l.startsWith("index "))

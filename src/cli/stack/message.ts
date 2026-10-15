@@ -1,6 +1,6 @@
 // Commit message parsing and editing.
 
-export const PLACEHOLDER_RE = /\bBug X{3,}\b/gi;
+export const PLACEHOLDER_RE = /\bBug X{3,}\b/i;
 const REVISION_RE = /^Differential Revision: (https?:\/\/\S+\/D(\d+))\s*$/m;
 export const TITLE_FORMAT_RE = /^Bug \d+ - \S.*, r=[^\s,]+(,[^\s,]+)*\.$/;
 
@@ -62,7 +62,7 @@ export function editMessage(message: string, edit: MessageEdit): string {
   if (edit.bug !== undefined) {
     const lines = out.split("\n");
     lines[0] = lines[0].replace(/^Bug (\d+|X+)\b/i, `Bug ${edit.bug}`);
-    out = lines.join("\n").replace(PLACEHOLDER_RE, `Bug ${edit.bug}`);
+    out = lines.join("\n").replace(new RegExp(PLACEHOLDER_RE.source, "gi"), `Bug ${edit.bug}`);
   }
   const trailer = revisionTrailer(message);
   if (trailer && !revisionTrailer(out)) {

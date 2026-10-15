@@ -141,10 +141,13 @@ test("rewrite reuses unchanged commits and reports context changes as diff chang
   const Y = await repo.commit({ "a.txt": lines(20, { 5: "X", 8: "Y" }) }, `Bug 2 - Y, r=a.\n\n${D}2`);
   const same = await rewrite(repo.dir, { base: "main", order: [X, Y] });
   assert.deepEqual(same.shas, [X, Y]);
+  assert.equal(same.backup, undefined);
+  assert.deepEqual(same.parentChangedRevisions, []);
   const r = await rewrite(repo.dir, { base: "main", order: [Y, X] });
   // Y's context had X's line; X's context now has Y's.
   assert.deepEqual(r.diffChanged, [Y, X]);
   assert.deepEqual(r.changedRevisions, [2, 1]);
+  assert.deepEqual(r.parentChangedRevisions, [2, 1]);
   assert.equal(await repo.git(["show", "work:a.txt"]), lines(20, { 5: "X", 8: "Y" }));
 });
 
@@ -179,6 +182,71 @@ test("rewrite applies a suggested-edit diff and refuses a dirty worktree", async
   await assert.rejects(rewrite(repo.dir, { base: "main", order: [A] }), /uncommitted changes/);
 });
 
+test("rewrite refuses duplicate shas, and leaving a conflict whose commit has a diff edit", async (t) => {
+  const { repo, A, B } = await fixture();
+  t.after(() => repo.cleanup());
+  await assert.rejects(rewrite(repo.dir, { base: "main", order: [A, A.slice(0, 10)] }), /listed twice/);
+  const head = (await repo.git(["rev-parse", "work"])).trim();
+  const diff = "--- a/a.txt\n+++ b/a.txt\n@@ -1,2 +1,2 @@\n 1\n-B\n+B2\n";
+  await assert.rejects(rewrite(repo.dir, { base: "main", order: [B, A], edits: { [B]: { diff } }, leaveConflict: true }), /diff edit/);
+  assert.equal((await repo.git(["rev-parse", "work"])).trim(), head);
+  assert.equal((await gitTry(repo.dir, ["rev-parse", "--verify", "--quiet", "CHERRY_PICK_HEAD"])).code, 1);
+});
+
+test("rewrite keeps the author when it differs from the committer", async (t) => {
+  const repo = await makeRepo();
+  t.after(() => repo.cleanup());
+  await repo.commit({ "a.txt": "a\n", "b.txt": "b\n" }, "base");
+  await repo.git(["checkout", "-q", "-b", "work"]);
+  const X = await repo.commit({ "a.txt": "x\n" }, "Bug 1 - X, r=a.", "Alice <alice@example.com>");
+  const Y = await repo.commit({ "b.txt": "y\n" }, "Bug 2 - Y, r=a.");
+  const before = (await repo.git(["log", "-1", "--format=%an|%ae|%ad", X])).trim();
+  const r = await rewrite(repo.dir, { base: "main", order: [Y, X] });
+  assert.equal((await repo.git(["log", "-1", "--format=%an|%ae|%ad", r.mapping[X]])).trim(), before);
+  assert.equal((await repo.git(["log", "-1", "--format=%cn", r.mapping[X]])).trim(), "Test");
+});
+
+test("empty picks make no commit: already in the branch under another sha, or landed", async (t) => {
+  const { repo, A, C } = await fixture();
+  t.after(() => repo.cleanup());
+  // A copy of C on another branch: assembling it onto work changes nothing.
+  await repo.git(["checkout", "-q", "-b", "copy", "main"]);
+  const C2 = await repo.commit({ "b.txt": lines(5, { 1: "C" }), "dir/test/test_c.js": "x\n" }, `Bug 7 - Copy of C, r=carol.\n\n${D}7`);
+  await repo.git(["checkout", "-q", "work"]);
+  const head = (await repo.git(["rev-parse", "work"])).trim();
+  const r1 = await assemble(repo.dir, { branch: "work", shas: [C2] });
+  assert.deepEqual(r1.empty, [C2]);
+  assert.deepEqual(r1.commits, []);
+  assert.equal((await repo.git(["rev-parse", "work"])).trim(), head);
+  // C landed on main: rebuilding on main leaves it out.
+  await repo.git(["checkout", "-q", "main"]);
+  await repo.git(["merge", "-q", "--ff-only", C2]);
+  await repo.git(["checkout", "-q", "work"]);
+  const r2 = await rewrite(repo.dir, { base: "main", order: [A, C] });
+  assert.deepEqual(r2.empty, [C]);
+  assert.deepEqual(Object.keys(r2.mapping), [A]);
+  assert.equal((await repo.git(["rev-list", "--count", "main..work"])).trim(), "1");
+});
+
+test("rename and binary conflicts are reported with their files", async (t) => {
+  const repo = await makeRepo();
+  t.after(() => repo.cleanup());
+  const bin = (n: number) => Buffer.from([0, 1, 2, n, 0, 255]);
+  await repo.commit({ "f.txt": lines(10), "img.bin": bin(1) }, "base");
+  await repo.git(["checkout", "-q", "-b", "work"]);
+  await repo.commit({ "img.bin": bin(2) }, "B1");
+  const B2 = await repo.commit({ "img.bin": bin(3) }, "B2");
+  const R = await repo.commit({ "f.txt": null, "g.txt": lines(10, { 1: "R" }) }, "R");
+  const r1 = await rewrite(repo.dir, { base: "main", order: [B2] });
+  assert.deepEqual(r1.conflict, { sha: B2, files: ["img.bin"] });
+  // f.txt deleted on the target branch: R's rename conflicts.
+  await repo.git(["checkout", "-q", "-b", "other", "main"]);
+  await repo.commit({ "f.txt": null }, "delete f");
+  const r2 = await assemble(repo.dir, { branch: "other", shas: [R] });
+  assert.equal(r2.conflict?.sha, R);
+  assert.ok(r2.conflict!.files.length > 0 && r2.conflict!.files.every((f) => f === "f.txt" || f === "g.txt"), JSON.stringify(r2.conflict));
+});
+
 test("interdiff ignores what the base contributed", async (t) => {
   const repo = await makeRepo();
   t.after(() => repo.cleanup());
@@ -202,6 +270,7 @@ test("check reports every pre-submit problem", async (t) => {
   const good = await repo.commit({ "a.txt": "1\n" }, `Bug 123 - Good, r=a.\n\n${D}9`);
   const noTrailer = await repo.commit({ "a.txt": "2\n" }, "Bug 999 - Private bug, r=a,#b.");
   const wip = await repo.commit({ "a.txt": "3\n" }, "WIP - not done");
+  const debug = await repo.commit({ "a.txt": "3b\n" }, "Bug 123 - DEBUG - log more, r=a.");
   const placeholder = await repo.commit({ "a.txt": "4\n" }, "Bug XXXXXXX - Placeholder, r=a.");
   const badFormat = await repo.commit({ "a.txt": "5\n" }, "Bug 123 - No reviewer");
   const urls: string[] = [];
@@ -209,13 +278,15 @@ test("check reports every pre-submit problem", async (t) => {
     urls.push(url);
     return new Response(JSON.stringify({ bugs: [{ id: 123 }] }), { status: 200 });
   }) as unknown as typeof fetch;
-  const r = await check(repo.dir, "main", { fetch: fakeFetch, revisions: { [good]: 9, [noTrailer]: 10 } });
+  const green = [{ push: "p1", complete: true, result: "green" }];
+  const r = await check(repo.dir, "main", { fetch: fakeFetch, revisions: { [good]: 9, [noTrailer]: 10 }, tryPushes: green });
   assert.equal(r.ok, false);
   const got = r.failures.map((f) => [f.rule, f.sha]);
   assert.deepEqual(got, [
     ["missing-trailer", noTrailer],
     ["wip", wip],
     ["title-format", wip],
+    ["wip", debug],
     ["placeholder", placeholder],
     ["title-format", placeholder],
     ["title-format", badFormat],
@@ -224,14 +295,21 @@ test("check reports every pre-submit problem", async (t) => {
   assert.deepEqual(urls, ["https://bugzilla.mozilla.org/rest/bug?id=123,999&include_fields=id"]);
 
   await repo.git(["reset", "-q", "--hard", good]);
-  const ok = await check(repo.dir, "main", { fetch: fakeFetch, revisions: { [good]: 9 } });
+  const ok = await check(repo.dir, "main", { fetch: fakeFetch, revisions: { [good]: 9 }, tryPushes: green });
   assert.deepEqual(ok, { ok: true, failures: [] });
+  const tryFailures = async (tryPushes?: { push: string; complete: boolean; result?: string }[]) =>
+    (await check(repo.dir, "main", { fetch: fakeFetch, tryPushes })).failures.map((f) => [f.rule, f.message]);
+  assert.deepEqual(await tryFailures(undefined), [["try", "no try push for this stack"]]);
+  assert.deepEqual(await tryFailures([...green, { push: "p2", complete: false }, { push: "p3", complete: true, result: "failures" }]), [
+    ["try", "try push p2 isn't complete"],
+    ["try", "try push p3 isn't green (failures)"],
+  ]);
   await repo.git(["checkout", "-q", "--detach"]);
-  const detached = await check(repo.dir, "main", { fetch: fakeFetch });
+  const detached = await check(repo.dir, "main", { fetch: fakeFetch, tryPushes: green });
   assert.deepEqual(detached.failures.map((f) => f.rule), ["detached-head"]);
 });
 
-test("CLI: one JSON document on stdout, error JSON with exit 1", async (t) => {
+test("CLI: one JSON document on stdout, error JSON with exit 2 on usage errors", async (t) => {
   const repo = await makeRepo();
   t.after(() => repo.cleanup());
   const input = join(repo.dir, "order.json");
@@ -245,6 +323,6 @@ test("CLI: one JSON document on stdout, error JSON with exit 1", async (t) => {
   } catch (e) {
     failed = e as { status: number; stdout: string };
   }
-  assert.equal(failed?.status, 1);
+  assert.equal(failed?.status, 2);
   assert.deepEqual(JSON.parse(failed!.stdout), { error: "--cwd is required" });
 });

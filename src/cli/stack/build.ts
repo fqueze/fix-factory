@@ -28,7 +28,7 @@ interface ChainItem {
 interface ChainResult {
   head: string;
   mapping: { sha: string; newSha: string }[];
-  empty: string[]; // original shas whose change was already in the tree they were applied to
+  empty: string[]; // original shas whose change was already there; left out of the chain
   conflict?: { index: number; files: string[] };
 }
 
@@ -41,7 +41,10 @@ async function buildChain(cwd: string, start: string, items: ChainItem[]): Promi
     if (!r.ok) {
       return { head, mapping, empty, conflict: { index, files: r.files } };
     }
-    if (r.empty) empty.push(item.commit.sha);
+    if (r.empty) {
+      empty.push(item.commit.sha);
+      continue;
+    }
     mapping.push({ sha: item.commit.sha, newSha: r.sha });
     head = r.sha;
   }
@@ -54,10 +57,10 @@ async function branchExists(cwd: string, branch: string): Promise<boolean> {
 
 export interface AssembleResult {
   branch: string;
-  head: string; // the branch tip after the operation
+  head?: string; // the branch tip after the operation; absent when the branch doesn't exist
   commits: { sha: string; newSha: string }[]; // picked commits, in order
-  skipped: string[]; // already in the branch
-  empty: string[];
+  skipped: string[]; // already in the branch (same sha)
+  empty: string[]; // already in the branch under another sha, or landed: not picked
   conflict?: Conflict;
   conflictLeft?: boolean; // true: the cherry-pick is in progress in the worktree, HEAD on the branch
   remaining?: string[]; // commits after the conflicting one, not applied
@@ -93,8 +96,10 @@ export async function assemble(cwd: string, opts: { branch: string; base?: strin
       result.conflict = { sha, files: await leaveCherryPickInProgress(cwd, sha) };
       result.conflictLeft = true;
     } else {
-      result.head = exists ? start : "";
+      if (exists) result.head = start;
+      else delete result.head;
       result.commits = [];
+      result.empty = [];
       result.conflict = { sha, files: chain.conflict.files };
       result.conflictLeft = false;
     }
@@ -115,6 +120,7 @@ export interface RewriteResult {
   diffChanged: string[]; // old shas whose diff (context included) changed
   changedRevisions: number[]; // D-numbers of those
   messageChangedRevisions: number[]; // D-numbers whose commit message changed
+  parentChangedRevisions: number[]; // D-numbers whose parent revision changed (stale on Phabricator)
   conflict?: Conflict;
   conflictLeft?: boolean;
   remaining?: string[];
@@ -143,6 +149,7 @@ export async function rewrite(
   const items: ChainItem[] = [];
   for (const ref of opts.order) {
     const commit = await readCommit(cwd, ref);
+    if (items.some((i) => i.commit.sha === commit.sha)) throw new Error(`${commit.sha} is listed twice in the order`);
     const edit = edits.get(commit.sha);
     items.push({ commit, message: edit ? editMessage(commit.message, edit) : undefined, diff: edit?.diff });
   }
@@ -151,6 +158,11 @@ export async function rewrite(
   }
   const chain = await buildChain(cwd, base, items);
   const dropped = before.filter((sha) => !items.some((i) => i.commit.sha === sha));
+  if (chain.conflict && opts.leaveConflict && items[chain.conflict.index].diff) {
+    throw new Error(
+      `${items[chain.conflict.index].commit.sha} conflicts and has a diff edit, which a cherry-pick left in progress can't carry; rewrite without --leave-conflict or without that edit`,
+    );
+  }
   if (chain.conflict && !opts.leaveConflict) {
     return {
       branch,
@@ -162,18 +174,22 @@ export async function rewrite(
       diffChanged: [],
       changedRevisions: [],
       messageChangedRevisions: [],
+      parentChangedRevisions: [],
       conflict: { sha: items[chain.conflict.index].commit.sha, files: chain.conflict.files },
       conflictLeft: false,
       remaining: items.slice(chain.conflict.index + 1).map((i) => i.commit.sha),
     };
   }
 
-  const backup = `refs/fix-factory/backup/${branch}/${Date.now()}`;
-  await git(cwd, ["update-ref", backup, oldHead]);
+  let backup: string | undefined;
+  if (chain.head !== oldHead) {
+    backup = `refs/fix-factory/backup/${branch}/${Date.now()}`;
+    await git(cwd, ["update-ref", backup, oldHead]);
+  }
   const result: RewriteResult = {
     branch,
     head: chain.head,
-    backup,
+    ...(backup ? { backup } : {}),
     shas: chain.mapping.map((m) => m.newSha),
     mapping: Object.fromEntries(chain.mapping.map((m) => [m.sha, m.newSha])),
     dropped,
@@ -181,15 +197,23 @@ export async function rewrite(
     diffChanged: [],
     changedRevisions: [],
     messageChangedRevisions: [],
+    parentChangedRevisions: [],
   };
-  for (const [i, m] of chain.mapping.entries()) {
+  const revisionOf = async (sha: string) => (before.includes(sha) ? parseRevision((await readCommit(cwd, sha)).message) : undefined);
+  let previousRevision: number | undefined;
+  for (const m of chain.mapping) {
+    const item = items.find((i) => i.commit.sha === m.sha)!;
+    const revision = parseRevision(item.commit.message);
+    if (revision !== undefined && (await revisionOf(item.commit.parents[0])) !== previousRevision) {
+      result.parentChangedRevisions.push(revision);
+    }
+    previousRevision = revision;
     if (m.sha === m.newSha) continue;
-    const revision = parseRevision(items[i].commit.message);
     if ((await normalizedDiff(cwd, m.sha)) !== (await normalizedDiff(cwd, m.newSha))) {
       result.diffChanged.push(m.sha);
       if (revision !== undefined) result.changedRevisions.push(revision);
     }
-    if (items[i].message !== undefined && items[i].message !== items[i].commit.message && revision !== undefined) {
+    if (item.message !== undefined && item.message !== item.commit.message && revision !== undefined) {
       result.messageChangedRevisions.push(revision);
     }
   }

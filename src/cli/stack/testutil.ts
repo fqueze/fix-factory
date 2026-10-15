@@ -9,7 +9,7 @@ export interface TestRepo {
   dir: string;
   git(args: string[]): Promise<string>;
   // Writes the files (null deletes) and commits them on the current HEAD; returns the new sha.
-  commit(files: Record<string, string | null>, message: string): Promise<string>;
+  commit(files: Record<string, string | Buffer | null>, message: string, author?: string): Promise<string>;
   cleanup(): void;
 }
 
@@ -23,7 +23,7 @@ export async function makeRepo(): Promise<TestRepo> {
   return {
     dir,
     git: g,
-    async commit(files, message) {
+    async commit(files, message, author) {
       for (const [path, content] of Object.entries(files)) {
         const full = join(dir, path);
         if (content === null) {
@@ -34,7 +34,7 @@ export async function makeRepo(): Promise<TestRepo> {
         }
       }
       await g(["add", "-A"]);
-      await git(dir, ["commit", "-q", "--no-verify", "--allow-empty", "-F", "-"], { input: message });
+      await git(dir, ["commit", "-q", "--no-verify", "--allow-empty", ...(author ? [`--author=${author}`] : []), "-F", "-"], { input: message });
       return (await g(["rev-parse", "HEAD"])).trim();
     },
     cleanup() {

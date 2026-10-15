@@ -2,14 +2,21 @@ import { currentBranch, gitTry, readCommit, revList, revParse, title } from "./g
 import { PLACEHOLDER_RE, TITLE_FORMAT_RE, parseBug, parseRevision } from "./message.ts";
 
 export interface CheckFailure {
-  rule: "detached-head" | "cherry-pick-in-progress" | "empty-stack" | "wip" | "placeholder" | "title-format" | "bug-not-public" | "bugzilla" | "missing-trailer" | "wrong-trailer";
+  rule: "detached-head" | "cherry-pick-in-progress" | "empty-stack" | "wip" | "placeholder" | "title-format" | "bug-not-public" | "bugzilla" | "missing-trailer" | "wrong-trailer" | "try";
   message: string;
   sha?: string;
   title?: string;
 }
 
+export interface TryPush {
+  push: string;
+  complete: boolean;
+  result?: string; // "green" when every job passed
+}
+
 export interface CheckOptions {
   revisions?: Record<string, number>; // sha → D-number, for patches already submitted
+  tryPushes?: TryPush[]; // the stack's try pushes: at least one is needed, all complete and green
   fetch?: typeof fetch; // injectable for tests
   bugzillaUrl?: string;
 }
@@ -34,13 +41,21 @@ export async function check(cwd: string, base: string, opts: CheckOptions = {}):
   if (shas.length === 0) {
     failures.push({ rule: "empty-stack", message: `no commits between ${base} and HEAD` });
   }
+  const pushes = opts.tryPushes ?? [];
+  if (pushes.length === 0) {
+    failures.push({ rule: "try", message: "no try push for this stack" });
+  }
+  for (const p of pushes) {
+    if (!p.complete) failures.push({ rule: "try", message: `try push ${p.push} isn't complete` });
+    else if (p.result !== "green") failures.push({ rule: "try", message: `try push ${p.push} isn't green (${p.result ?? "no result"})` });
+  }
   const bugs = new Map<number, { sha: string; title: string }[]>();
   for (const sha of shas) {
     const message = (await readCommit(cwd, sha)).message;
     const t = title(message);
     const fail = (rule: CheckFailure["rule"], msg: string) => failures.push({ rule, message: msg, sha, title: t });
-    if (/^(WIP|DEBUG)\b/i.test(t)) fail("wip", "WIP or DEBUG commit");
-    if (message.match(PLACEHOLDER_RE)) fail("placeholder", "the message still says Bug XXXXXXX");
+    if (/^(Bug (\d+|X+)\s*-\s*)?(WIP|DEBUG)\b/i.test(t)) fail("wip", "WIP or DEBUG commit");
+    if (PLACEHOLDER_RE.test(message)) fail("placeholder", "the message still says Bug XXXXXXX");
     if (!TITLE_FORMAT_RE.test(t)) fail("title-format", 'the title must look like "Bug N - Description, r=reviewer."');
     const bug = parseBug(t);
     if (bug !== null) bugs.set(bug, [...(bugs.get(bug) ?? []), { sha, title: t }]);

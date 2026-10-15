@@ -21,17 +21,20 @@
 // rewrite --base <ref> --order <sha>[,<sha>...] [<sha>...] [--edits <edits.json>] [--branch <name>] [--leave-conflict]
 //   edits: {"<sha>": {bug?: number, message?: string, diff?: string}}
 //   → {branch, head, backup?, shas, mapping: {old: new}, dropped, empty, diffChanged: [old sha],
-//      changedRevisions: number[], messageChangedRevisions: number[], conflict?, conflictLeft?, remaining?}
+//      changedRevisions, messageChangedRevisions, parentChangedRevisions: number[], conflict?,
+//      conflictLeft?, remaining?}. Changes already there (landed, or in the stack under another sha)
+//      make no commit and are listed in `empty`.
 // interdiff <old-sha> <new-sha>
 //   → {diff, method: "same-parent" | "old-rebased" | "new-rebased" | "diff-of-diffs"}
-// check --base <ref> [--revisions <sha-to-D-number.json>] [--bugzilla-url <url>]
+// check --base <ref> --try <pushes.json> [--revisions <sha-to-D-number.json>] [--bugzilla-url <url>]
+//   pushes: [{push, complete, result}] for the stack; fails unless non-empty, all complete and "green".
 //   → {ok, failures: [{rule, message, sha?, title?}]}. Reads Bugzilla anonymously, never writes.
 // summary <input.json | ->
 //   input: {folder?, patches: [{id, title, bug, revision?, effort?, value?, repro?}], order?}
 //   → {markdown, metaComment}
 
 import { readFileSync } from "node:fs";
-import { runCli, type Subcommand } from "../lib/cli.ts";
+import { UsageError, runCli, type Subcommand } from "../lib/cli.ts";
 import { assemble, rewrite } from "./stack/build.ts";
 import { check } from "./stack/check.ts";
 import { detectDeps } from "./stack/deps.ts";
@@ -54,21 +57,21 @@ function readJson<T>(path: string): T {
 
 function str(values: Record<string, unknown>, name: string): string {
   const v = values[name];
-  if (typeof v !== "string" || !v) throw new Error(`--${name} is required`);
+  if (typeof v !== "string" || !v) throw new UsageError(`--${name} is required`);
   return v;
 }
 
 const cwdOf = (values: Record<string, unknown>) => str(values, "cwd");
 
 function onePositional(positionals: string[], what: string): string {
-  if (positionals.length !== 1) throw new Error(`expected ${what}`);
+  if (positionals.length !== 1) throw new UsageError(`expected ${what}`);
   return positionals[0];
 }
 
 const subcommands: Record<string, Subcommand> = {
   import: async (pos, values) => importStack(cwdOf(values), onePositional(pos, "a revset")),
   assemble: async (pos, values) => {
-    if (pos.length === 0) throw new Error("expected commits to cherry-pick");
+    if (pos.length === 0) throw new UsageError("expected commits to cherry-pick");
     return assemble(cwdOf(values), {
       branch: str(values, "branch"),
       base: typeof values.base === "string" ? values.base : undefined,
@@ -92,12 +95,13 @@ const subcommands: Record<string, Subcommand> = {
     });
   },
   interdiff: async (pos, values) => {
-    if (pos.length !== 2) throw new Error("expected <old-sha> <new-sha>");
+    if (pos.length !== 2) throw new UsageError("expected <old-sha> <new-sha>");
     return interdiff(cwdOf(values), pos[0], pos[1]);
   },
   check: async (_pos, values) =>
     check(cwdOf(values), str(values, "base"), {
       revisions: typeof values.revisions === "string" ? readJson(values.revisions) : undefined,
+      tryPushes: typeof values.try === "string" ? readJson(values.try) : undefined,
       bugzillaUrl: typeof values["bugzilla-url"] === "string" ? values["bugzilla-url"] : undefined,
     }),
   summary: async (pos) => summary(readJson<SummaryInput>(onePositional(pos, "an input file"))),
@@ -111,6 +115,7 @@ if (import.meta.main) {
     order: { type: "string" },
     edits: { type: "string" },
     revisions: { type: "string" },
+    try: { type: "string" },
     "bugzilla-url": { type: "string" },
     "leave-conflict": { type: "boolean" },
     landable: { type: "boolean" },
