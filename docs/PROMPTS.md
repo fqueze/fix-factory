@@ -111,7 +111,7 @@ Look for:
 - a fix not verified by the checks it claims;
 - several citations for one claim that all trace back to the same source.
 
-Report each finding as must-fix or nit, with file and line, or return `ok`.
+Report each finding as must-fix or nit, with file and line, or return `ok`. Must-fix means the patch can't land as it is; everything else is a nit, and nits don't send the patch back. `Bug XXXXXXX` is expected at this stage (bugs are filed later): never report it.
 ```
 
 ## revise-bug-draft

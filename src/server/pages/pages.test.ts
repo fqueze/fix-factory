@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import { describe, it } from "node:test";
 import { FixtureStateSource } from "../state-source.ts";
 import type { RequestState } from "../../types.ts";
-import type { RenderContext } from "./common.ts";
+import { jobLabel, type RenderContext } from "./common.ts";
 import { renderOverview } from "./overview.ts";
 import { renderRequest } from "./request.ts";
 
@@ -49,14 +49,14 @@ describe("overview", () => {
   });
 
   it("shows one line per active request with its step and Profile button", () => {
-    assert.equal((page.match(/<details class="req/g) ?? []).length, 9);
+    assert.equal((page.match(/<details class="req/g) ?? []).length, 10);
     assert.match(page, /<span class="step">6 · verify on try<\/span>/);
     const url = encodeURIComponent("http://factory:4300/api/requests/r-20261005-newtab/profile");
     assert.ok(page.includes(`href="http://localhost:4242/from-url/${url}?thread=0"`));
   });
 
   it("has the header strip and the global Tell the factory box", () => {
-    assert.match(page, /agents <b>5\/10<\/b>/);
+    assert.match(page, /agents <b>7\/10<\/b>/);
     assert.match(page, /<b>8<\/b> requests need you/);
     assert.ok(page.includes(cmd({ cmd: "tell-factory" })));
     assert.doesNotMatch(page, /New request|new-request/);
@@ -91,7 +91,7 @@ describe("one fixture per step of docs/MVP.md", () => {
 
   it("2. first signal: approve the un-skip push, with its command and tasks", () => {
     const h = expanded("r-20261014-extensions-xpcshell");
-    assert.match(h, /<b>platforms<\/b>: \[&quot;linux&quot;,&quot;windows&quot;\]/);
+    assert.match(h, /<b>platforms<\/b>: linux, windows/);
     assert.match(h, /<span class="flag">Approve the un-skip push<\/span>/);
     assert.ok(h.includes(cmd({ cmd: "approve-push", request: "r-20261014-extensions-xpcshell", push: "unskip" })));
     assert.match(h, /Command \+ tasks/);
@@ -110,9 +110,9 @@ describe("one fixture per step of docs/MVP.md", () => {
   it("4. investigate and fix: item states, running agent, recovery plan with a checkbox per command", () => {
     const h = expanded("r-20261013-tab-failures");
     assert.match(h, /<span class="st run">investigating<\/span>/);
-    assert.match(h, /opus · <span data-since="[^"]+">6 h<\/span>/);
+    assert.match(h, /investigating<\/span><span class="sub"> · Opus · <span data-since="[^"]+">6 h<\/span><\/span>/);
     assert.match(h, /<span class="st find">review findings<\/span>/);
-    assert.match(h, /<span class="st closed">handed back: bug 2081413, dao active<\/span>/);
+    assert.match(h, /<span class="st closed">handed back<\/span><span class="detail">: bug 2081413, dao active<\/span>/);
     assert.match(h, /<span class="st wait">waiting for a build slot<\/span>/);
     const boxes = h.match(/<input type="checkbox" name="command"[^>]*>/g) ?? [];
     assert.equal(boxes.length, 2);
@@ -138,7 +138,7 @@ describe("one fixture per step of docs/MVP.md", () => {
     const order = ["p-prefs", "p-storage", "p-copydir", "p-fixture"].map((p) => h.indexOf(`data-patch="${p}"`));
     assert.deepEqual([...order].sort((a, b) => a - b), order);
     assert.ok(order[0] > 0);
-    assert.match(h, /<span class="bug none">Bug XXXXXXX<\/span> Save the prefs file of test_libPrefs\.js in the temp dir, r=gstoll\. <span class="sub">\(meta bug\)<\/span>/);
+    assert.match(h, /<span class="bug none">no bug yet<\/span> Save the prefs file of test_libPrefs\.js in the temp dir, r=gstoll\. <span class="sub">\(meta bug\)<\/span>/);
     assert.match(h, /⛔ hard: needs “Make nsLocalFile::CopyDirectoryTo/);
     assert.match(h, /🔗 soft: needs a newer sqlite on the try builders \(the vacuum test is slow without it\)/);
     assert.match(h, /<td class="num hide-sm">40\/wk<\/td>/);
@@ -237,6 +237,106 @@ describe("one fixture per step of docs/MVP.md", () => {
     for (const r of source.listRequests()) {
       assert.ok(renderRequest(r, ctx, true).value.includes(cmd({ cmd: "tell-factory", request: r.id })), r.id);
     }
+  });
+});
+
+describe("a burndown with closed groups, running agents and a dropped patch", () => {
+  const ID = "r-20261015-enterprisepolicies";
+  const h = expanded(ID);
+  const section = (from: string, to: string) => h.slice(h.indexOf(from), h.indexOf(to, h.indexOf(from)));
+
+  it("shows only the config fields that have a value, in words, and no config block when none has", () => {
+    assert.match(h, /<b>folders<\/b>: browser\/components\/enterprisepolicies\/tests\/browser<\/div>/);
+    assert.doesNotMatch(h, /<b>tests<\/b>|\[\]/);
+    const r = structuredClone(get(ID));
+    r.config = { folders: [], tests: [], platforms: [], constraints: [] };
+    assert.doesNotMatch(renderRequest(r, ctx, true).value, /Config/);
+  });
+
+  it("lists the patch of a left-as-is group as dropped, without a bug number, and doesn't count it", () => {
+    assert.doesNotMatch(h, /Bug 0/);
+    assert.doesNotMatch(h, /data-patch=/);
+    assert.match(h, /<details class="fold" data-fold="dropped-loose"><summary>Dropped \(1\)<\/summary><div class="sub"><span class="bug none">no bug yet<\/span> Convert scoping skip-if/);
+    assert.match(h, /<span class="rsum">7 failure groups: 1 not started, 2 investigating, 4 left as-is<\/span>/);
+    assert.doesNotMatch(h, /<h3>Patches<\/h3>/, "no heading over dropped patches alone");
+  });
+
+  it("names tests relative to the request's folder, with the full path and message in tooltips", () => {
+    assert.match(h, /<span title="browser\/components\/enterprisepolicies\/tests\/browser\/trackingprotection\/browser_policy_trackingprotection\.js\n[^"]*">trackingprotection\/browser_policy_trackingprotection\.js<\/span>/);
+    assert.match(h, />browser_policy_sitepolicies_jit\.js<\/span>/);
+    assert.match(h, /<div class="sub clamp2" title="leaked 1 window\(s\) until shutdown \[url = about:preferences#etp\]">/);
+  });
+
+  it("shows running work in the group rows, with the group's cost so far", () => {
+    assert.match(h, /investigating<\/span><span class="sub"> · Opus · <span data-since="2026-10-15T08:53:00.000Z">7 min<\/span> · <span title="Agent cost of this group so far">\$0\.40<\/span><\/span>/);
+    assert.match(h, /investigating<\/span><span class="sub"> · Opus · <span data-since="2026-10-15T08:54:00.000Z">6 min<\/span><\/span>/);
+    assert.match(h, /<span class="st run">preparing<\/span><span class="sub"> · build worktree · <span data-since/);
+  });
+
+  it("puts the running groups first, then the others, and folds the closed ones with their full reasons", () => {
+    const at = (item: string) => h.indexOf(`data-item="${item}"`);
+    const fold = h.indexOf('<details class="fold" data-fold="closed-groups"><summary>3 left as-is</summary>');
+    assert.ok(fold > 0);
+    assert.ok(at("i-browser-policy-trackingprotection") < fold);
+    for (const closed of ["i-annotations", "i-browser-policy-firefoxhome", "i-browser-policy-firefoxhome-2"]) {
+      assert.ok(at(closed) > fold, closed);
+    }
+    assert.match(h, /<details class="clamp3" data-fold="detail-i-annotations" title="left as-is: Dropped the run-if commit per review;[^"]*nothing left to convert and the DEBUG un-skip push showed no failures to fix\."><summary><span class="st closed">left as-is<\/span><span class="detail">: Dropped/);
+
+    const r = structuredClone(get(ID));
+    r.jobs["j-wt-sw2"].endedAt = "2026-10-15T09:00:00.000Z";
+    r.items["i-browser-policy-firefoxhome"].state = "handed back";
+    const h2 = renderRequest(r, ctx, true).value;
+    assert.ok(h2.indexOf('data-item="i-browser-policy-trackingprotection"') < h2.indexOf('data-item="i-browser-policy-sitepolicies-serviceworke-2"'), "not started after running");
+    assert.match(h2, /<summary>3 closed<\/summary>/);
+  });
+
+  it("shows the Bug to file link of a group whose report drafted a bug without a patch", () => {
+    const row = section('data-item="i-browser-policy-sitepolicies-jit"', "</tr>");
+    assert.match(row, /<a class="bug tofile" href="https:\/\/bugzilla\.mozilla\.org\/enter_bug\.cgi\?product=Firefox&amp;component=Enterprise\+Policies&amp;short_desc=Workers\+start\+slowly/);
+    assert.match(row, /<span class="sub">“Workers start slowly when a site policy disables the JIT”<\/span>/);
+    const r = structuredClone(get(ID));
+    r.patches["p-runif"].item = "i-browser-policy-sitepolicies-jit";
+    assert.doesNotMatch(renderRequest(r, ctx, true).value, /Workers start slowly/, "a patch's draft shows on the patch row");
+  });
+
+  it("keeps a closed group with a bug to file out of the fold, without asking you for it", () => {
+    assert.ok(h.indexOf('data-item="i-browser-policy-sitepolicies-jit"') < h.indexOf('data-fold="closed-groups"'));
+    assert.doesNotMatch(h, /to file<\/span>|bug to file/);
+    assert.doesNotMatch(h, /class="action"/);
+  });
+
+  it("lists the file names of a small group, and the item id of a job whose item is unknown", () => {
+    assert.match(h, /">browser_policy_managedbookmarks\.js, browser_policy_search_engine\.js<\/span>/);
+    const r = structuredClone(get(ID));
+    r.jobs["j-inv-tp"].item = "i-gone";
+    assert.match(renderRequest(r, ctx, true).value, /<span class="sub" title="i-gone">i-gone<\/span>/);
+  });
+
+  it("folds recent jobs, with job labels and test names", () => {
+    const jobs = section('<details class="fold section" data-fold="jobs">', "</details>");
+    assert.ok(jobs.length > 0);
+    assert.match(jobs, /<span title="worktree\.ts create">build worktree<\/span> <span class="sub" title="i-browser-policy-sitepolicies-serviceworke-2">browser_policy_sitepolicies_serviceworkers\.js<\/span>/);
+    assert.match(jobs, /<span title="investigate-and-fix">investigate<\/span> <span class="sub" title="i-browser-policy-trackingprotection">trackingprotection\/browser_policy_trackingprotection\.js/);
+    assert.doesNotMatch(jobs, />i-browser/);
+  });
+
+  it("hides the Effort and Value columns while no patch has one", () => {
+    assert.match(expanded("r-20261013-tab-failures"), /<th class="hide-sm"[^>]*>Effort<\/th><th class="num hide-sm"[^>]*>Value<\/th>/);
+    const r = structuredClone(get("r-20261013-tab-failures"));
+    delete r.patches["p-close"].effort;
+    delete r.items["i-close"].group.ratePerWeek;
+    const t = renderRequest(r, ctx, true).value;
+    assert.doesNotMatch(t, /Effort|Value/);
+    assert.match(t, /<th>Patch<\/th><th>State<\/th><\/tr>/);
+  });
+
+  it("labels jobs by what they do", () => {
+    assert.equal(jobLabel("worktree.ts create --build artifact"), "build worktree");
+    assert.equal(jobLabel("lint-text.ts commit"), "lint message");
+    assert.equal(jobLabel("failures.ts collect"), "collect failures");
+    assert.equal(jobLabel("review-patch"), "critical review");
+    assert.equal(jobLabel("draft-reply"), "draft-reply");
   });
 });
 

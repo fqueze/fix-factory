@@ -48,13 +48,13 @@ export function renderAction(r: RequestState, n: NeedsUser): Html {
     case "recovery": {
       const plan = recoveryPlanFor(r, n);
       return plan
-        ? html`<div class="action" data-key="${n.key}"><span class="flag">${n.action}</span><span class="why">${n.detail || html`You said: “${plan.text}”`}</span>${recoveryPlan(r, plan, back)}</div>`
-        : html`<div class="action" data-key="${n.key}"><span class="flag">${n.action}</span><span class="why">${n.detail}</span></div>`;
+        ? html`<div class="action" data-key="${n.key}"><span class="flag">${n.action}</span> <span class="why">${n.detail || html`You said: “${plan.text}”`}</span>${recoveryPlan(r, plan, back)}</div>`
+        : html`<div class="action" data-key="${n.key}"><span class="flag">${n.action}</span> <span class="why">${n.detail}</span></div>`;
     }
     case "other":
       break;
   }
-  return html`<div class="action" data-key="${n.key}"><span class="flag">${n.action}</span><span class="why">${n.detail}</span>${controls}</div>`;
+  return html`<div class="action" data-key="${n.key}"><span class="flag">${n.action}</span> <span class="why">${n.detail}</span>${controls}</div>`;
 }
 
 // The plan a recovery entry asks about: its job's latest plan, or the latest plan
