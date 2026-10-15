@@ -149,18 +149,20 @@ export type Event =
       revision?: number; // D-number once submitted
       effort?: number; // 1-5
       testOnly?: boolean;
+      interdiffFile?: string; // diff against the previously submitted version, relative to stateDir
     })
   | (EventBase & { type: "dep"; dep: Dep })
   | (EventBase & { type: "dep-removed"; patch: PatchId; needs: PatchId | string })
-  | (EventBase & { type: "stack"; stack: string; folder: string; branch: string; worktree: string; order: PatchId[]; summary?: string })
+  | (EventBase & { type: "stack"; stack: string; folder: string; branch: string; worktree: string; base?: string; order: PatchId[]; summary?: string })
+  | (EventBase & { type: "meta-bug"; bug: number | null; draft?: BugDraft })
   | (EventBase & { type: "try-planned"; push: PushId; purpose: string; command: string[]; taskCount?: number })
   | (EventBase & { type: "try-pushed"; push: PushId; rev: string; url: string })
   | (EventBase & { type: "try-progress"; push: PushId; done: number; total: number; failures: number })
-  | (EventBase & { type: "try-job-failed"; push: PushId; taskId: string; jobName: string; platform: string; result: string })
+  | (EventBase & { type: "try-job-failed"; push: PushId; taskId: string; retryId?: number; jobName: string; platform: string; tier?: number; result: string })
   | (EventBase & { type: "try-finished"; push: PushId; result: "green" | "failures"; summary: string })
   | (EventBase & { type: "review-status"; patch: PatchId; revision: number; status: string; reviewers: ReviewerStatus[]; comments: InlineComment[] })
   | (EventBase & { type: "reply-draft"; patch: PatchId; commentId: number; text: string })
-  | (EventBase & { type: "needs-user"; key: string; action: string; detail: string; item?: ItemId; patch?: PatchId; push?: PushId })
+  | (EventBase & { type: "needs-user"; key: string; action: string; detail: string; item?: ItemId; patch?: PatchId; push?: PushId; stack?: string; job?: JobId })
   | (EventBase & { type: "user-done"; key: string }) // clears a needs-user with the same key
   | (EventBase & { type: "command-executed"; command: string; ok: boolean; detail?: string })
   | (EventBase & { type: "recovery-plan"; job: JobId; text: string; plan: PlannedCommand[]; cannotDo: string[]; questions: string[] })
@@ -281,6 +283,7 @@ export interface PatchView {
   revision?: number;
   effort?: number;
   testOnly?: boolean;
+  interdiffFile?: string;
   deps: Dep[]; // deps where this patch is the dependent one
   review?: { revision: number; status: string; reviewers: ReviewerStatus[]; comments: InlineComment[] };
   replyDrafts: { commentId: number; text: string }[];
@@ -291,6 +294,7 @@ export interface StackView {
   folder: string;
   branch: string;
   worktree: string;
+  base?: string;
   order: PatchId[];
   summary?: string;
 }
@@ -314,6 +318,8 @@ export interface NeedsUser {
   item?: ItemId;
   patch?: PatchId;
   push?: PushId;
+  stack?: string;
+  job?: JobId;
   since: Iso;
 }
 
@@ -333,6 +339,7 @@ export interface RequestState {
   pushes: Record<PushId, PushView>; // in creation order
   jobs: Record<JobId, JobView>;
   needsUser: NeedsUser[]; // open ones only
+  metaBug?: { bug: number | null; draft?: BugDraft };
   recoveryPlans: { job: JobId; text: string; plan: PlannedCommand[]; cannotDo: string[]; questions: string[]; t: Iso }[];
   notes: { t: Iso; text: string }[];
 }

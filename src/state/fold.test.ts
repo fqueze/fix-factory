@@ -257,3 +257,18 @@ test("folds the fixture request (truncated last line excluded)", () => {
   assert.equal(s.updatedAt, "2026-10-15T11:01:00.000Z");
   assert.equal(JSON.stringify(JSON.parse(JSON.stringify(s))), JSON.stringify(s));
 });
+
+test("meta bug, stack base, interdiff and needs-user stack/job fields", () => {
+  const s = fold(
+    ev({ type: "meta-bug", bug: null, draft: { product: "Testing", component: "General", summary: "[meta] x", description: "d" } }),
+    ev({ type: "meta-bug", bug: 2081216 }),
+    ev({ type: "stack", stack: "st", folder: "f", branch: "b", worktree: "/w", base: "abc", order: [] }),
+    ev({ type: "patch", patch: "p", sha: "1", worktree: "/w", title: "t", bug: null, interdiffFile: "cache/interdiff/p.diff" }),
+    ev({ type: "needs-user", key: "submit:st", action: "Submit", detail: "", stack: "st", job: "j1" }),
+  );
+  assert.deepEqual(s.metaBug, { bug: 2081216 });
+  assert.equal(s.stacks.st.base, "abc");
+  assert.equal(s.patches.p.interdiffFile, "cache/interdiff/p.diff");
+  assert.equal(s.needsUser[0].stack, "st");
+  assert.equal(s.needsUser[0].job, "j1");
+});

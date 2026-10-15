@@ -128,6 +128,7 @@ export function foldEvents(events: readonly Event[]): RequestState {
           revision: e.revision,
           effort: e.effort,
           testOnly: e.testOnly,
+          interdiffFile: e.interdiffFile,
           deps: [],
           replyDrafts: [],
         };
@@ -153,6 +154,7 @@ export function foldEvents(events: readonly Event[]): RequestState {
           folder: e.folder,
           branch: e.branch,
           worktree: e.worktree,
+          base: e.base,
           order: e.order,
           summary: e.summary,
         };
@@ -190,7 +192,7 @@ export function foldEvents(events: readonly Event[]): RequestState {
       }
       case "needs-user": {
         const open = s.needsUser.find((n) => n.key === e.key);
-        const n = { key: e.key, action: e.action, detail: e.detail, item: e.item, patch: e.patch, push: e.push };
+        const n = { key: e.key, action: e.action, detail: e.detail, item: e.item, patch: e.patch, push: e.push, stack: e.stack, job: e.job };
         if (open) {
           // Re-raising keeps the original since: it measures how long you've been needed.
           Object.assign(open, n);
@@ -199,6 +201,9 @@ export function foldEvents(events: readonly Event[]): RequestState {
         }
         break;
       }
+      case "meta-bug":
+        s.metaBug = { bug: e.bug, draft: e.draft };
+        break;
       case "user-done":
         s.needsUser = s.needsUser.filter((n) => n.key !== e.key);
         break;
