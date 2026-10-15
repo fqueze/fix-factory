@@ -211,7 +211,7 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
     case "start-agent": {
       const item = s.items[c.item];
       const session = authorJobsOf(view, c.item).find((j) => j.purpose.reason === "initial");
-      if (!item || !session || c.prompt !== session.name || c.item === ANNOTATIONS_ITEM) {
+      if (!item || !session || c.item === ANNOTATIONS_ITEM) {
         done(false, `start-agent only starts a new ${session?.name ?? "investigate-and-fix"} on an item that already had one`);
         break;
       }
@@ -222,10 +222,10 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
         plan: {
           purpose: { key, what: "author", item: c.item, reason: "start" },
           kind: "agent",
-          name: c.prompt,
+          name: session.name,
           item: c.item,
           cwd: session.cwd,
-          agent: { sessionId: sessionIdFor(s.id, key), resume: false, vars: { ...startVars(item.group.tests, session.cwd), failureSummary: `"${item.group.message}" on ${item.group.configs.length} configs. Note from the factory: ${c.reason}` } },
+          agent: { sessionId: sessionIdFor(s.id, key), resume: false, vars: { ...startVars(item.group.tests, session.cwd), failureSummary: `"${item.group.message}" on ${item.group.configs.length} configs.\n\nInstructions for this run: ${c.prompt}` } },
           startEvents: [{ type: "item-state", request: s.id, item: c.item, state: "investigating", detail: "started again" }],
         },
       });

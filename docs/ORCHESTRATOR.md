@@ -18,8 +18,9 @@ A tick runs on any change to `commands.jsonl` or a job file, and at least every 
 - **Failures:**
   - A script is retried once. If it fails again, it's blocked and shows the error to you.
   - An agent report that doesn't match its schema gets one retry with the errors, then fails the same way.
-- **Round limits:** lint violations go back to the author at most twice. A critical review gets at most 3 rounds with
-  the author. After that, it comes to you.
+- **Round limits:** lint violations go back to the author at most twice. A critical review with must-fix findings sends all
+  its findings back, for at most 3 rounds; one with only nits gets a single author pass, then only the lint again,
+  and isn't a round. After that, it comes to you.
 - **Authors** are resumed in their own session.
 - **When step 3 runs:** at whichever comes first, the push finishing or 2 h after it started, so slow pools don't
   hold everything up. It runs again when the push finishes, adding new groups.

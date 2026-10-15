@@ -524,23 +524,69 @@ describe("4. investigate and fix", () => {
     }
   });
 
-  it("a review with only nits doesn't send the patch back: the item is reviewed, the nits noted", () => {
+  // The author's commit through import and a clean lint; returns the author job.
+  function linted(sc: Scenario, author: string, commit: string): string {
+    sc.complete(author, { report: fixed([commit]) });
+    sc.settle();
+    const job = sc.view().byKey.get(author)!.at(-1)!.job;
+    sc.complete(`import:${job}`, { output: imported(commit, "Bug 1 - Fix", ["a/test_a.js"], 1) });
+    sc.settle();
+    sc.complete(`msg:p-test-a:${commit}`, { output: "m" });
+    sc.settle();
+    sc.complete(`lint:p-test-a:${commit}`, { output: lintOk });
+    return job;
+  }
+  const nit = { severity: "nit", file: "a.js", line: 2, text: "wordy comment" } as const;
+
+  it("a review with must-fix findings sends the nits back with them", () => {
     const sc = workList([group("ka", "a/test_a.js", "boom")]);
     investigating(sc, "i-test-a");
-    sc.complete("author:i-test-a:initial", { report: fixed([sha("1")]) });
+    const job = linted(sc, "author:i-test-a:initial", sha("1"));
     sc.settle();
-    const job = sc.view().byKey.get("author:i-test-a:initial")![0].job;
-    sc.complete(`import:${job}`, { output: imported(sha("1"), "Bug 1 - Fix", ["a/test_a.js"], 1) });
+    sc.complete(`review:p-test-a:${job}`, { report: { verdict: "findings", findings: [{ severity: "must-fix", file: "a.js", line: 5, text: "dead code" }, nit], feedback: [] } });
+    assert.deepEqual(sc.settle(), [`author:i-test-a:review:${job}`]);
+    const message = sc.plan(`author:i-test-a:review:${job}`).agent?.message ?? "";
+    assert.match(message, /\[must-fix\] a.js:5 dead code/);
+    assert.match(message, /\[nit\] a.js:2 wordy comment/);
+  });
+
+  it("a review with only nits gets one author pass, then only the lint, and the item is reviewed", () => {
+    const sc = workList([group("ka", "a/test_a.js", "boom")]);
+    investigating(sc, "i-test-a");
+    const job = linted(sc, "author:i-test-a:initial", sha("1"));
     sc.settle();
-    sc.complete(`msg:p-test-a:${sha("1")}`, { output: "m" });
-    sc.settle();
-    sc.complete(`lint:p-test-a:${sha("1")}`, { output: lintOk });
-    sc.settle();
-    sc.complete(`review:p-test-a:${job}`, { report: { verdict: "findings", findings: [{ severity: "nit", file: "a.js", line: 2, text: "wordy comment" }], feedback: [] } });
-    assert.ok(!sc.settle().some((k) => k.startsWith("author:")));
+    sc.complete(`review:p-test-a:${job}`, { report: { verdict: "findings", findings: [nit], feedback: [] } });
+    assert.equal(sc.of("note").at(-1)?.text, "Review nits for p-test-a: a.js:2: wordy comment");
+    const nits = `author:i-test-a:nits:${job}`;
+    assert.deepEqual(sc.settle(), [nits]);
+    assert.match(sc.plan(nits).agent?.message ?? "", /\[nit\] a.js:2 wordy comment[\s\S]*say in one line/);
+    assert.equal(sc.state().items["i-test-a"].state, "review findings");
+    const second = linted(sc, nits, sha("2"));
+    assert.ok(!sc.settle().some((k) => k.startsWith("review:") || k.startsWith("author:")), "no second review");
+    assert.ok(!sc.view().byKey.has(`review:p-test-a:${second}`));
     assert.equal(sc.state().items["i-test-a"].state, "reviewed");
     assert.deepEqual(sc.open(), []);
-    assert.equal(sc.of("note").at(-1)?.text, "Review nits for p-test-a (not sent back): a.js:2: wordy comment");
+  });
+
+  it("a nits pass that is blocked or fails comes to you", () => {
+    for (const blocked of [true, false]) {
+      const sc = workList([group("ka", "a/test_a.js", "boom")]);
+      investigating(sc, "i-test-a");
+      const job = linted(sc, "author:i-test-a:initial", sha("1"));
+      sc.settle();
+      sc.complete(`review:p-test-a:${job}`, { report: { verdict: "findings", findings: [nit], feedback: [] } });
+      const nits = `author:i-test-a:nits:${job}`;
+      assert.deepEqual(sc.settle(), [nits]);
+      if (blocked) sc.complete(nits, { report: { ...fixed([]), state: "blocked", summary: "can't reword it" } });
+      else {
+        sc.complete(nits, { error: "invalid report: $.commits: required" });
+        sc.settle();
+        sc.complete(nits, { error: "invalid report: $.commits: required" });
+      }
+      assert.deepEqual(sc.settle(), []);
+      assert.equal(sc.state().items["i-test-a"].state, "blocked");
+      assert.ok(sc.open()[0].startsWith("failed:"));
+    }
   });
 
   it("an author that leaves it as is ends the item; a blocked one comes to you", () => {
@@ -1001,6 +1047,34 @@ describe("9. review comments", () => {
     assert.equal(n.action, "Post 1 reply, then resubmit D101");
     assert.equal(n.stack, "a");
     assert.equal(sc.state().items["i-test-a"].state, "waiting for review");
+  });
+
+  it("a nits pass after the answer still leads to the resubmit, with the answer's replies", () => {
+    const sc = inReview();
+    sc.complete("poll:0", { output: polled("needs-revision", [{ id: 7, author: "smaug", text: "Use waitForCondition", done: false, length: 1 }], "blocking") });
+    const [classify] = sc.settle();
+    sc.complete(classify, { report: { comments: [{ id: 7, kind: "change request", impliesChange: true }], feedback: [] } });
+    const [address] = sc.settle();
+    const job = sc.complete(address, { report: { state: "addressed", summary: "s", commits: [sha("7")], replies: [{ commentId: 7, text: "Done." }], feedback: [] } });
+    sc.settle();
+    sc.complete(`import:${job}`, { output: imported(sha("7"), "Bug 999 - Fix a, r=smaug.", ["a/test_a.js"], 999).map((c) => ({ ...c, revision: 101 })) });
+    sc.settle();
+    sc.complete(`msg:p-test-a:${sha("7")}`, { output: "m" });
+    sc.complete(`lint-reply:${job}:7`, { output: lintOk });
+    sc.settle();
+    sc.complete(`lint:p-test-a:${sha("7")}`, { output: lintOk });
+    sc.settle();
+    sc.complete(`review:p-test-a:${job}`, { report: { verdict: "findings", findings: [{ severity: "nit", text: "wordy" }], feedback: [] } });
+    const nits = `author:i-test-a:nits:${job}`;
+    assert.deepEqual(sc.settle(), [nits]);
+    const pass = sc.complete(nits, { report: fixed([sha("9")]) });
+    sc.settle();
+    sc.complete(`import:${pass}`, { output: imported(sha("9"), "Bug 999 - Fix a, r=smaug.", ["a/test_a.js"], 999).map((c) => ({ ...c, revision: 101 })) });
+    sc.settle();
+    sc.complete(`msg:p-test-a:${sha("9")}`, { output: "m" });
+    sc.settle();
+    sc.complete(`lint:p-test-a:${sha("9")}`, { output: lintOk });
+    assert.deepEqual(sc.settle(), [`rewrite-review:a:${pass}`]);
   });
 });
 
