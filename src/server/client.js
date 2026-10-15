@@ -1,4 +1,4 @@
-// Live updates, command forms without page reloads, and copy-to-clipboard.
+// Live updates, command forms without page reloads, copy-to-clipboard, and presence.
 // Served as is; the page works without it (forms post and come back).
 (function () {
   "use strict";
@@ -180,6 +180,34 @@
       done();
     }
   });
+
+  // Tells the orchestrator you're here: it polls Phabricator only while you are
+  // (docs/ORCHESTRATOR.md). Not a user action, so no feedback, and failures are
+  // ignored: the next one comes at the next visibility change or tick.
+  var PRESENCE_MS = 15 * 60 * 1000;
+  var presenceTimer = null;
+  var lastVisibleSent = -Infinity;
+  function sendPresence() {
+    var visible = document.visibilityState === "visible";
+    // Flipping between tabs shouldn't append a command each time.
+    if (visible && Date.now() - lastVisibleSent < 60 * 1000) return;
+    if (visible) lastVisibleSent = Date.now();
+    fetch("/api/commands", {
+      method: "POST",
+      // Lets the "hidden" one go out when the tab is closing.
+      keepalive: true,
+      headers: { Accept: "application/json", "Content-Type": "application/json" },
+      body: JSON.stringify({ cmd: "presence", visible: visible }),
+    }).catch(function () {});
+  }
+  function onVisibilityChange() {
+    clearInterval(presenceTimer);
+    presenceTimer = null;
+    sendPresence();
+    if (document.visibilityState === "visible") presenceTimer = setInterval(sendPresence, PRESENCE_MS);
+  }
+  document.addEventListener("visibilitychange", onVisibilityChange);
+  if (document.visibilityState === "visible") onVisibilityChange();
 
   var connectedOnce = false;
   function connect() {
