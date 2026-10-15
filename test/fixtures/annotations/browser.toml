@@ -1,0 +1,53 @@
+[DEFAULT]
+skip-if = [
+  "os == 'android'", # Bug 1500000
+]
+
+["browser_1953801_tab_groups_history_close_other.js"]
+
+["browser_aboutPrivateBrowsing.js"]
+
+["browser_aboutRestartrequired_noRestore.js"]
+
+["browser_aboutSessionRestore.js"]
+
+["browser_async_duplicate_tab.js"]
+support-files = ["file_async_duplicate_tab.html"]
+
+["browser_async_flushes.js"]
+support-files = ["file_async_flushes.html"]
+run-if = [
+  "crashreporter",
+]
+
+["browser_async_remove_tab.js"]
+skip-if = [
+  "os == 'linux' && os_version == '24.04' && arch == 'x86_64' && display == 'x11' && opt", # Bug 1787024
+  "os == 'win' && os_version == '11.26100' && arch == 'x86_64' && asan", # Bug 1787024
+  "os == 'win' && os_version == '11.26200' && arch == 'x86_64' && asan", # Bug 1787024
+]
+
+["browser_async_window_flushing.js"]
+https_first_disabled = true
+skip-if = [
+  "os == 'mac' && os_version == '10.15' && arch == 'x86_64' && opt", # Bug 1775616
+  "os == 'win' && os_version == '11.26100' && arch == 'x86_64' && asan", # Bug 1775616
+  "os == 'win' && os_version == '11.26200' && arch == 'x86_64' && asan", # Bug 1775616
+  "os == 'win' && os_version == '11.26100' && arch == 'x86_64' && opt", # Bug 1775616
+  "os == 'win' && os_version == '11.26200' && arch == 'x86_64' && opt", # Bug 1775616
+]
+
+["browser_attributes.js"]
+
+["browser_single_line.js"]
+skip-if = ["os == 'android'", "tsan"] # Bug 1780219
+
+["browser_fail.js"]
+fail-if = [
+  'os == "win"', # bug 123456 and Bug 234567
+  "a11y_checks && \"quoted\"", # Bug 1858041
+]
+run-if = ["crashreporter"]
+
+["test_query.html?a=b"]
+skip-if = "debug"
