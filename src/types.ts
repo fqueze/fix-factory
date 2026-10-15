@@ -1,0 +1,335 @@
+// Shared contract between the orchestrator, the web server, the CLIs and the agent runner.
+// Only add fields or union members; never rename or remove (see docs/CONTRACTS.md).
+
+export type Iso = string; // ISO 8601 timestamp
+export type RequestId = string; // e.g. "r-20261015-xpcshell-cwd"
+export type ItemId = string; // work item, unique within a request
+export type JobId = string; // unique across the factory
+export type PatchId = string; // stable across rewrites; the sha changes, the id doesn't
+export type PushId = string;
+
+// ---------------------------------------------------------------------------
+// Configuration: factory.config.json
+
+export interface FactoryConfig {
+  port: number; // web server, listens on all interfaces
+  stateDir: string; // commands.jsonl, requests/, jobs/, feedback/, cache/
+  firefoxRepo: string; // main checkout; worktrees are created next to it, never inside
+  worktreesDir: string;
+  claudeCommand: string[]; // e.g. ["mozsb", "claude"]; the runner appends -p and its flags
+  stackViewerCommand: string[]; // e.g. ["stack-viewer"]
+  profilerOrigin: string; // e.g. "http://localhost:4242" (a local profiler front end), for request profiles
+  maxAgents: number;
+  maxBuilds: number;
+  dryRun: boolean; // refuse every external side effect (try, Phabricator, Bugzilla, agents)
+}
+
+// ---------------------------------------------------------------------------
+// Work item states (from orchestrate-parallel-fixes, plus factory steps).
+
+export type ItemState =
+  | "not started"
+  | "waiting for a build slot"
+  | "investigating"
+  | "fix verified locally"
+  | "in critical review"
+  | "review findings"
+  | "reviewed"
+  | "in stack"
+  | "in try"
+  | "waiting for review"
+  | "addressing review comments"
+  | "blocked"
+  // terminal
+  | "fixed"
+  | "left as-is"
+  | "handed back"
+  | "landed";
+
+export type RequestStep =
+  | "request"
+  | "first signal"
+  | "work list"
+  | "investigate and fix"
+  | "stack"
+  | "verify on try"
+  | "meta bug"
+  | "submit"
+  | "review comments"
+  | "landing"
+  | "done";
+
+// ---------------------------------------------------------------------------
+// events.jsonl: one file per request, append-only, written by the orchestrator only.
+
+interface EventBase {
+  v: 1;
+  t: Iso;
+  request: RequestId;
+}
+
+export type RequestKind = "burndown" | "try-push";
+
+export interface FailureGroup {
+  message: string; // the shared specific failure message, or the generic one for a single test
+  tests: string[];
+  configs: string[];
+  ratePerWeek?: number; // value, for stack ordering
+  taskIds?: string[];
+}
+
+export interface BugDraft {
+  product: string;
+  component: string;
+  summary: string;
+  description: string;
+  blocks?: number[];
+}
+
+export interface Dep {
+  patch: PatchId; // the dependent patch
+  needs: PatchId | string; // a patch id, or free text for something outside the stack
+  kind: "hard" | "soft";
+  reason: string;
+  source: "agent" | "textual" | "reviewer" | "user";
+}
+
+export interface ReviewerStatus {
+  name: string; // "mconley", "#home-newtab-reviewers"
+  status: "accepted" | "blocking" | "pending" | "resigned";
+}
+
+export interface InlineComment {
+  id: number; // Phabricator inline id, for D…#inline-N links
+  author: string;
+  file?: string;
+  line?: number;
+  text: string;
+  suggestion?: string; // "suggest edit" replacement text
+  done: boolean;
+  kind?: "suggested edit" | "nit" | "question" | "change request";
+}
+
+export type JobKind = "script" | "agent" | "build" | "try-watch";
+
+export type Event =
+  | (EventBase & { type: "request-created"; kind: RequestKind; text: string; folder?: string; rev?: string })
+  | (EventBase & { type: "config-set"; config: Record<string, unknown> })
+  | (EventBase & { type: "step"; step: RequestStep })
+  | (EventBase & { type: "item-created"; item: ItemId; folder: string; group: FailureGroup })
+  | (EventBase & { type: "item-state"; item: ItemId; state: ItemState; detail?: string })
+  | (EventBase & {
+      type: "job-started";
+      job: JobId;
+      item?: ItemId;
+      kind: JobKind;
+      name: string; // "failures.ts try-table", or a prompt name such as "investigate-and-fix"
+      pid: number;
+      pidStartTime: number; // from /proc/<pid>/stat, to detect pid reuse
+      cmd: string[];
+      cwd: string;
+      codeVersion: string; // git sha of the factory release
+      model?: string;
+      sessionId?: string;
+      promptVersion?: string; // git blob sha of the prompt file
+    })
+  | (EventBase & { type: "job-finished"; job: JobId; exitCode: number; durationMs: number; output?: unknown; costUsd?: number; error?: string })
+  | (EventBase & { type: "agent-report"; job: JobId; item?: ItemId; prompt: string; report: unknown })
+  | (EventBase & {
+      type: "patch";
+      patch: PatchId;
+      item?: ItemId;
+      sha: string;
+      worktree: string;
+      title: string; // first line of the commit message
+      bug: number | null; // null while the message says Bug XXXXXXX
+      bugDraft?: BugDraft;
+      revision?: number; // D-number once submitted
+      effort?: number; // 1-5
+      testOnly?: boolean;
+    })
+  | (EventBase & { type: "dep"; dep: Dep })
+  | (EventBase & { type: "dep-removed"; patch: PatchId; needs: PatchId | string })
+  | (EventBase & { type: "stack"; stack: string; folder: string; branch: string; worktree: string; order: PatchId[]; summary?: string })
+  | (EventBase & { type: "try-planned"; push: PushId; purpose: string; command: string[]; taskCount?: number })
+  | (EventBase & { type: "try-pushed"; push: PushId; rev: string; url: string })
+  | (EventBase & { type: "try-progress"; push: PushId; done: number; total: number; failures: number })
+  | (EventBase & { type: "try-finished"; push: PushId; result: "green" | "failures"; summary: string })
+  | (EventBase & { type: "review-status"; patch: PatchId; revision: number; status: string; reviewers: ReviewerStatus[]; comments: InlineComment[] })
+  | (EventBase & { type: "reply-draft"; patch: PatchId; commentId: number; text: string })
+  | (EventBase & { type: "needs-user"; key: string; action: string; detail: string; item?: ItemId; patch?: PatchId; push?: PushId })
+  | (EventBase & { type: "user-done"; key: string }) // clears a needs-user with the same key
+  | (EventBase & { type: "command-executed"; command: string; ok: boolean; detail?: string })
+  | (EventBase & { type: "recovery-plan"; job: JobId; text: string; plan: PlannedCommand[]; cannotDo: string[]; questions: string[] })
+  | (EventBase & { type: "note"; text: string });
+
+export type EventType = Event["type"];
+
+// ---------------------------------------------------------------------------
+// commands.jsonl: one file for the factory, append-only, written by the web server
+// (your clicks) and by the orchestrator when you approve a recovery plan.
+
+interface CommandBase {
+  v: 1;
+  id: string;
+  t: Iso;
+  request?: RequestId;
+}
+
+export type Command =
+  | (CommandBase & { cmd: "new-request"; kind: RequestKind; text: string; folder?: string; rev?: string })
+  | (CommandBase & { cmd: "approve-push"; push: PushId })
+  | (CommandBase & { cmd: "set-bug"; patch: PatchId; bug: number })
+  | (CommandBase & { cmd: "comment-bug-draft"; patch: PatchId | "meta"; text: string })
+  | (CommandBase & { cmd: "stack-comments"; stack: string; comments: { patch: PatchId; text: string }[] })
+  | (CommandBase & { cmd: "run-moz-phab"; stack: string; args: string[] })
+  | (CommandBase & { cmd: "take-it" | "hand-back"; item: ItemId })
+  | (CommandBase & { cmd: "comment-fix"; patch: PatchId; text: string })
+  | (CommandBase & { cmd: "tell-factory"; text: string })
+  | (CommandBase & { cmd: "reply-recovery"; job: JobId; text: string })
+  | (CommandBase & { cmd: "start-now" })
+  // Recovery commands: proposed by recover.md, executed after your approval.
+  | (CommandBase & PlannedCommand);
+
+export type PlannedCommand =
+  | { cmd: "retry-job"; job: JobId; reason: string }
+  | { cmd: "cancel-job"; job: JobId; reason: string }
+  | { cmd: "resume-agent"; item: ItemId; message: string; reason: string }
+  | { cmd: "start-agent"; item: ItemId; prompt: string; reason: string }
+  | { cmd: "set-state"; item: ItemId; state: ItemState; reason: string }
+  | { cmd: "redo-step"; item?: ItemId; step: RequestStep; reason: string }
+  | { cmd: "edit-config"; config: Record<string, unknown>; reason: string }
+  | { cmd: "shell"; cwd: string; command: string; reason: string };
+
+// ---------------------------------------------------------------------------
+// Agent reports: the structured_output of each prompt. The JSON schemas in
+// schemas/<prompt>.json must match these.
+
+export interface Feedback {
+  target: "fx-tests" | "profiler-cli" | "searchfox-cli" | "factory" | "inputs";
+  text: string;
+}
+
+export interface InvestigateReport {
+  state: "fix verified locally" | "left as-is" | "handed back" | "blocked";
+  summary: string; // one line, shown on the status page
+  cause: string;
+  verification: string;
+  commits: string[]; // shas in the agent's worktree, oldest first
+  bugDraft?: BugDraft; // when the fix needs its own bug
+  landsAfter: { what: string; reason: string }[];
+  feedback: Feedback[];
+}
+
+export interface ReviewPatchReport {
+  verdict: "ok" | "findings";
+  findings: { severity: "must-fix" | "nit"; file?: string; line?: number; text: string }[];
+  feedback: Feedback[];
+}
+
+export interface RecoverReport {
+  plan: PlannedCommand[];
+  cannotDo: string[];
+  questions: string[];
+  feedback: Feedback[];
+}
+
+// ---------------------------------------------------------------------------
+// Folded state: what src/state/fold.ts computes from a request's events.jsonl.
+// The web server renders from this; the orchestrator decides from it.
+
+export interface JobView {
+  job: JobId;
+  item?: ItemId;
+  kind: JobKind;
+  name: string;
+  cmd: string[];
+  cwd: string;
+  pid: number;
+  pidStartTime: number;
+  startedAt: Iso;
+  endedAt?: Iso;
+  exitCode?: number;
+  durationMs?: number;
+  costUsd?: number;
+  model?: string;
+  sessionId?: string;
+  error?: string;
+}
+
+export interface ItemView {
+  id: ItemId;
+  folder: string;
+  group: FailureGroup;
+  state: ItemState;
+  detail?: string;
+  jobs: JobId[]; // oldest first
+  lastReport?: { prompt: string; report: unknown; job: JobId };
+}
+
+export interface PatchView {
+  id: PatchId;
+  item?: ItemId;
+  sha: string;
+  worktree: string;
+  title: string;
+  bug: number | null;
+  bugDraft?: BugDraft;
+  revision?: number;
+  effort?: number;
+  testOnly?: boolean;
+  deps: Dep[]; // deps where this patch is the dependent one
+  review?: { revision: number; status: string; reviewers: ReviewerStatus[]; comments: InlineComment[] };
+  replyDrafts: { commentId: number; text: string }[];
+}
+
+export interface StackView {
+  id: string;
+  folder: string;
+  branch: string;
+  worktree: string;
+  order: PatchId[];
+  summary?: string;
+}
+
+export interface PushView {
+  id: PushId;
+  purpose: string;
+  command: string[];
+  taskCount?: number;
+  rev?: string;
+  url?: string;
+  progress?: { done: number; total: number; failures: number };
+  result?: "green" | "failures";
+  summary?: string;
+}
+
+export interface NeedsUser {
+  key: string;
+  action: string;
+  detail: string;
+  item?: ItemId;
+  patch?: PatchId;
+  push?: PushId;
+  since: Iso;
+}
+
+export interface RequestState {
+  id: RequestId;
+  kind: RequestKind;
+  text: string;
+  folder?: string;
+  rev?: string;
+  createdAt: Iso;
+  updatedAt: Iso;
+  step: RequestStep;
+  config: Record<string, unknown>;
+  items: Record<ItemId, ItemView>;
+  patches: Record<PatchId, PatchView>;
+  stacks: Record<string, StackView>;
+  pushes: Record<PushId, PushView>; // in creation order
+  jobs: Record<JobId, JobView>;
+  needsUser: NeedsUser[]; // open ones only
+  recoveryPlans: { job: JobId; text: string; plan: PlannedCommand[]; cannotDo: string[]; questions: string[]; t: Iso }[];
+  notes: { t: Iso; text: string }[];
+}

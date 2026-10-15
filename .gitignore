@@ -1,3 +1,5 @@
 /artifacts/
 /research/
 /.claude/
+node_modules/
+factory.config.json

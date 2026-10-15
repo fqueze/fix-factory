@@ -1,0 +1,12 @@
+{
+  "port": 4300,
+  "stateDir": "/build/fix-factory-state",
+  "firefoxRepo": "/build/firefox",
+  "worktreesDir": "/build/worktrees",
+  "claudeCommand": ["mozsb", "claude"],
+  "stackViewerCommand": ["stack-viewer"],
+  "profilerOrigin": "http://localhost:4242",
+  "maxAgents": 10,
+  "maxBuilds": 3,
+  "dryRun": true
+}
