@@ -839,15 +839,17 @@ class Planner {
       const rep = this.rep<ReviewPatchReport>(r!);
       return rep.verdict === "findings" ? rep.findings.map((f) => ({ ...f, job: r! })) : [];
     });
-    if (findings.length === 0) {
+    // Nits don't send the patch back (the review handler notes them); must-fix findings do.
+    const mustFix = findings.filter((f) => f.severity === "must-fix");
+    if (mustFix.length === 0) {
       if (!WITH_PATCHES.includes(item.state) || item.state === "addressing review comments") this.setItem(item.id, "reviewed");
       return;
     }
     const key = `author:${item.id}${e}:review:${author.job}`;
     const rounds = this.roundsSinceStart(item.id, "review");
     if (rounds >= REVIEW_ROUNDS && !this.view.byKey.has(key)) {
-      const last = findings[0].job.job;
-      this.raise(`failed:${last}`, { action: `No ok after ${REVIEW_ROUNDS} critical review rounds`, detail: findings.map((f) => f.text).join("; ").slice(0, 500), job: last, item: item.id });
+      const last = mustFix[0].job.job;
+      this.raise(`failed:${last}`, { action: `No ok after ${REVIEW_ROUNDS} critical review rounds`, detail: mustFix.map((f) => f.text).join("; ").slice(0, 500), job: last, item: item.id });
       this.setItem(item.id, "blocked", "critical review");
       return;
     }

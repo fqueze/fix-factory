@@ -498,6 +498,25 @@ describe("4. investigate and fix", () => {
     }
   });
 
+  it("a review with only nits doesn't send the patch back: the item is reviewed, the nits noted", () => {
+    const sc = workList([group("ka", "a/test_a.js", "boom")]);
+    investigating(sc, "i-test-a");
+    sc.complete("author:i-test-a:initial", { report: fixed([sha("1")]) });
+    sc.settle();
+    const job = sc.view().byKey.get("author:i-test-a:initial")![0].job;
+    sc.complete(`import:${job}`, { output: imported(sha("1"), "Bug 1 - Fix", ["a/test_a.js"], 1) });
+    sc.settle();
+    sc.complete(`msg:p-test-a:${sha("1")}`, { output: "m" });
+    sc.settle();
+    sc.complete(`lint:p-test-a:${sha("1")}`, { output: lintOk });
+    sc.settle();
+    sc.complete(`review:p-test-a:${job}`, { report: { verdict: "findings", findings: [{ severity: "nit", file: "a.js", line: 2, text: "wordy comment" }], feedback: [] } });
+    assert.ok(!sc.settle().some((k) => k.startsWith("author:")));
+    assert.equal(sc.state().items["i-test-a"].state, "reviewed");
+    assert.deepEqual(sc.open(), []);
+    assert.equal(sc.of("note").at(-1)?.text, "Review nits for p-test-a (not sent back): a.js:2: wordy comment");
+  });
+
   it("an author that leaves it as is ends the item; a blocked one comes to you", () => {
     const sc = workList([group("ka", "a/test_a.js", "boom"), group("kb", "b/test_b.js", "bang")]);
     investigating(sc, "i-test-a");

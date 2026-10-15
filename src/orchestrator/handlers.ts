@@ -19,6 +19,7 @@ import type {
   PushId,
   RecoverReport,
   RequestState,
+  ReviewPatchReport,
 } from "../types.ts";
 import { patchId } from "./next.ts";
 import { dataPath } from "./plan.ts";
@@ -205,6 +206,11 @@ export function handleFinished(input: HandlerInput): HandlerResult {
     case "effort": {
       const p = s.patches[purpose.patch!];
       if (p) patchEvent(p, { effort: (input.report as EstimateReviewEffortReport).effort });
+      break;
+    }
+    case "review": {
+      const nits = (input.report as ReviewPatchReport).findings.filter((f) => f.severity === "nit");
+      if (nits.length) ev("note", { text: `Review nits for ${purpose.patch} (not sent back): ${nits.map((f) => `${f.file ? `${f.file}${f.line ? `:${f.line}` : ""}: ` : ""}${f.text}`).join("; ")}`.slice(0, 2000) });
       break;
     }
     case "review-stack": {
