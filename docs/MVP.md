@@ -97,7 +97,7 @@ can read them.
 | Reviewers | S | `phab.ts reviewers` |
 | Pre-submit checks: no WIP/DEBUG, real public bugs, `r=`, try complete and green | S | `stack.ts check` |
 | Review in stack-viewer. Comments go to each patch's author | 👤 → O | |
-| Click `moz-phab submit`, then copy the meta-bug comment | 👤 | `phab.ts run-moz-phab` |
+| Copy the `moz-phab submit` command (with the `cd` to the stack's worktree), run it yourself, then copy the meta-bug comment. The next poll reads the new `Differential Revision:` trailers | 👤 | `stack.ts import`, `phab.ts poll` |
 
 ### 9. Review comments (highest priority)
 | Step | Who | How |
@@ -106,13 +106,13 @@ can read them.
 | Classify each comment | H | `classify-review-comments.md` |
 | Address the comments, suggested edits included (author resumed). The author also returns replies, only where the code doesn't speak for itself (answers, disagreements, a different approach), never "Done.". Then lint (replies included) + critical review again | O | `address-review.md`, `lint-text.ts`, `review-patch.md` |
 | Interdiff | S | `stack.ts interdiff` |
-| Copy reply, open the inline comment, click resubmit (changed revisions only) | 👤 | |
+| Copy reply, open the inline comment, copy the resubmit command (changed revisions only) and run it | 👤 | |
 
 ### 10. Landing
 | Step | Who | How |
 |---|---|---|
 | Move accepted patches whose hard deps are met to the bottom, keeping trailers. Text conflicts → So, flipped soft deps → H/So, approach conflicts → author | S | `stack.ts order --landable`, `stack.ts rewrite`, `adapt-soft-dep.md` |
-| Click `moz-phab submit` for the changed revisions, then land | 👤 | |
+| Copy and run the `moz-phab submit` command for the changed revisions, then land | 👤 | |
 
 ### Throughout
 - **Status page:** requests (one line each, ⚑ when you're needed), stacks, try pushes with purpose and result.

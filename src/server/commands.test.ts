@@ -17,14 +17,12 @@ describe("validateCommand", () => {
       { cmd: "set-bug", request: R, patch: "meta", bug: 2081217 },
       { cmd: "comment-bug-draft", request: R, patch: "p-copydir", text: "Use Core::Networking" },
       { cmd: "stack-comments", request: R, stack: "storage-unit", comments: [{ patch: "p-prefs", text: "why?" }] },
-      { cmd: "run-moz-phab", request: R, stack: "storage-unit", args: ["submit"] },
       { cmd: "take-it", request: R, item: "i-update" },
       { cmd: "hand-back", request: R, item: "i-update" },
       { cmd: "comment-fix", request: R, patch: "p-prefs", text: "rename it" },
       { cmd: "tell-factory", text: "Lando was down" },
       { cmd: "reply-recovery", request: "r-20261013-tab-failures", job: "j-recover", text: "no" },
       { cmd: "start-now", request: "r-20261016-popups" },
-      { cmd: "run-moz-phab", request: R, stack: "storage-unit", args: ["submit", "--yes", "D327101", "0123abcd"] },
     ];
     for (const c of ok) {
       const v = validateCommand(c, get);
@@ -85,9 +83,7 @@ describe("validateCommand", () => {
       [{ cmd: "stack-comments", request: R, stack: "storage-unit", comments: [] }, /non-empty list/],
       [{ cmd: "stack-comments", request: R, stack: "storage-unit", comments: [{ patch: "p-nope", text: "x" }] }, /unknown patch p-nope/],
       [{ cmd: "new-request", kind: "burndown", text: "x" }, /needs a folder/],
-      [{ cmd: "run-moz-phab", request: R, stack: "storage-unit", args: ["install-certificate"] }, /args must be/],
-      [{ cmd: "run-moz-phab", request: R, stack: "storage-unit", args: ["submit", "--upstream=evil"] }, /args must be/],
-      [{ cmd: "run-moz-phab", request: R, stack: "storage-unit", args: ["submit", "-y; rm"] }, /args must be/],
+      [{ cmd: "run-moz-phab", request: R, stack: "storage-unit", args: ["submit"] }, /./],
     ];
     for (const [c, re] of bad) {
       const v = validateCommand(c, get);

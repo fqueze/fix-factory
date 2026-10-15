@@ -42,7 +42,7 @@ export function renderAction(r: RequestState, n: NeedsUser): Html {
     case "resubmit":
     case "land": {
       const stack = findStack(r, n);
-      controls = stack ? mozPhabButton(r.id, stack, back, false) : null;
+      controls = stack ? mozPhabButton(r.id, stack, false) : null;
       break;
     }
     case "recovery": {
@@ -94,7 +94,7 @@ export function bugBox(request: string, patch: string, back: string, cls = "inli
 export function submitControls(r: RequestState, stack: StackView, back: string): Html {
   const checks = submitChecks(r, stack);
   const ready = checks.every((c) => c.ok);
-  return html`<div class="checks" style="flex-basis:100%">${checks.map((c) => html`<span class="${c.ok ? "ok" : "bad"}">${c.text}</span>`)}</div>${stackViewerLink(stack)}${mozPhabButton(r.id, stack, back, !ready)}${
+  return html`<div class="checks" style="flex-basis:100%">${checks.map((c) => html`<span class="${c.ok ? "ok" : "bad"}">${c.text}</span>`)}</div>${stackViewerLink(stack)}${mozPhabButton(r.id, stack, !ready)}${
     stack.summary
       ? html`<textarea hidden id="${summaryId(r.id, stack.id)}">${stack.summary}</textarea>${copyButton(summaryId(r.id, stack.id), "Copy the meta-bug comment")}`
       : null
@@ -114,10 +114,16 @@ export function stackViewerLink(stack: StackView): Html {
   return html`<a class="btn small" href="/stacks/${encodeURIComponent(stack.id)}/review" target="_blank">Open in stack-viewer ↗</a>`;
 }
 
-function mozPhabButton(request: string, stack: StackView, back: string, disabled: boolean): Html {
-  return html`<form class="inline cmd" method="post" action="/api/commands">${commandFields([{ cmd: "run-moz-phab", request, stack: stack.id, args: ["submit"] }], back)}<button class="btn small primary"${
+// The factory never runs moz-phab: you copy the command and run it yourself.
+export function mozPhabCommand(stack: StackView): string {
+  return `cd ${stack.worktree} && moz-phab submit`;
+}
+
+function mozPhabButton(request: string, stack: StackView, disabled: boolean): Html {
+  const id = `mozphab-${request}-${stack.id}`;
+  return html`<textarea hidden id="${id}">${mozPhabCommand(stack)}</textarea><button type="button" class="btn small primary" data-copy="${id}"${
     disabled ? html` disabled` : null
-  }>moz-phab submit</button></form>`;
+  }>Copy the moz-phab command</button>`;
 }
 
 function plannedTarget(c: PlannedCommand, r: RequestState): string {

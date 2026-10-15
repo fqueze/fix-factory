@@ -21,7 +21,7 @@ Ten CLIs, each with subcommands. One file per tool, with modules inside it as ne
 | `lint-text.ts` | `--kind commit\|bug\|reply` [D5, G2, I5] | Format, length, banned patterns (`file:line`, try links, hedging) |
 | `stack.ts` | `import` (MVP) · `assemble` [E1] · `deps` [E1b] · `order [--landable]` [E3, J1, J2] · `rewrite` [E3, G5, I3, J2] · `interdiff` [I6] · `check` [H2] · `summary` [E5] | Every git stack operation. `rewrite` takes an order plus edits (message edits such as bug numbers, suggested edits from reviewers), keeps trailers, and reports which revisions changed |
 | `try.ts` | `dry-run` · `push` [B4, F3] · `watch` [B4, F3] · `select` [B2, F1] (later) | `dry-run` gives the task list of a planned push and refuses a duplicate of a pending one. `watch` emits an event per finished job, so work starts on the first failures. `select` (later) computes the selection without an agent |
-| `phab.ts` | `poll` [I1] · `reviewers` [H1] · `run-moz-phab` [H4, I7, J3] | `poll` gets per-reviewer status, inline comment ids and suggested-edit text (from `phab-suggestions.py`). `run-moz-phab` runs only on your click, in a PTY streamed to the page |
+| `phab.ts` | `poll` [I1] · `reviewers` [H1] | `poll` gets per-reviewer status, inline comment ids and suggested-edit text. The factory never runs `moz-phab`: the page gives you the command to copy |
 
 Factory runtime (long-running, not CLIs):
 

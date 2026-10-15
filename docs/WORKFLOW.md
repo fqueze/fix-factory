@@ -99,7 +99,7 @@ For try-push requests, B4 starts directly on the existing push.
 | H1 | Reviewers (`mach file-info reviewers`, validated groups) | S (+H tie-break) | |
 | H2 | Pre-submit checks: no `WIP`/`DEBUG`, bugs exist and are public, `r=`, try complete and green | S | the button stays disabled until they pass |
 | H3 | Review the stack in stack-viewer in a new tab. Comments go to each patch's author session | 👤 → S | `stack-viewer -o`, served same-origin, `mdvReviewComments()` |
-| H4 | `moz-phab submit` (one click, server PTY, streamed output) | 👤 | never automatic |
+| H4 | Copy the `moz-phab submit` command and run it yourself | 👤 | the factory never runs moz-phab |
 | H5 | Record the D-numbers and post the meta comment | S | |
 
 ## I. Review round-trip (top priority: the reviewer still remembers the patch)
@@ -118,7 +118,7 @@ For try-push requests, B4 starts directly on the existing push.
 |---|---|---|---|
 | J1 | Landable set: accepted, comments addressed, every hard dep landed or in the set | S | |
 | J2 | Reorder the landable set to the bottom, keeping trailers. Flipped soft deps → E3b. Conflicts → So, or O if semantic | S | lists the revisions whose diff changed → resubmit |
-| J3 | `moz-phab reorg`/submit, then Lando | 👤 | one click / link |
+| J3 | Copy and run the `moz-phab` command, then land in Lando | 👤 | |
 | J4 | Detect the landing, close items, clean up worktrees and processes | S | |
 
 ## Dependencies

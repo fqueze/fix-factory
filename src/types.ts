@@ -188,7 +188,6 @@ export type Command =
   | (CommandBase & { cmd: "set-bug"; patch: PatchId; bug: number })
   | (CommandBase & { cmd: "comment-bug-draft"; patch: PatchId | "meta"; text: string })
   | (CommandBase & { cmd: "stack-comments"; stack: string; comments: { patch: PatchId; text: string }[] })
-  | (CommandBase & { cmd: "run-moz-phab"; stack: string; args: string[] })
   | (CommandBase & { cmd: "take-it" | "hand-back"; item: ItemId })
   | (CommandBase & { cmd: "comment-fix"; patch: PatchId; text: string })
   | (CommandBase & { cmd: "tell-factory"; text: string })

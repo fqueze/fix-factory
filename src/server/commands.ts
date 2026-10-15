@@ -62,7 +62,6 @@ const SPECS: Record<Command["cmd"], Record<string, Field>> = {
   "set-bug": { patch: "string", bug: "int" },
   "comment-bug-draft": { patch: "string", text: "string" },
   "stack-comments": { stack: "string", comments: "comments" },
-  "run-moz-phab": { stack: "string", args: "string[]" },
   "take-it": { item: "string" },
   "hand-back": { item: "string" },
   "comment-fix": { patch: "string", text: "string" },
@@ -80,7 +79,7 @@ const SPECS: Record<Command["cmd"], Record<string, Field>> = {
 };
 
 // Commands that only make sense about a request.
-const NEEDS_REQUEST = new Set<string>(["approve-push", "set-bug", "comment-bug-draft", "stack-comments", "run-moz-phab", "take-it", "hand-back", "comment-fix", "reply-recovery", "start-now"]);
+const NEEDS_REQUEST = new Set<string>(["approve-push", "set-bug", "comment-bug-draft", "stack-comments", "take-it", "hand-back", "comment-fix", "reply-recovery", "start-now"]);
 
 function isObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
@@ -150,9 +149,6 @@ export function validateCommand(input: unknown, getRequest: (id: string) => Requ
   if ((NEEDS_REQUEST.has(cmd) || PLANNED.has(cmd)) && out.request === undefined) {
     return { ok: false, error: `${cmd} needs a request` };
   }
-  if (cmd === "run-moz-phab" && !mozPhabArgsOk(out.args as string[])) {
-    return { ok: false, error: `run-moz-phab: args must be ["submit", ...revisions or commits]` };
-  }
   if (typeof out.request === "string") {
     const state = getRequest(out.request);
     if (!state) {
@@ -176,13 +172,6 @@ const PLANNED = new Set<string>(["retry-job", "cancel-job", "resume-agent", "sta
 function project(c: object, spec: Record<string, Field>): Record<string, unknown> {
   const o = c as Record<string, unknown>;
   return Object.fromEntries(["cmd", ...Object.keys(spec)].filter((k) => o[k] !== undefined).map((k) => [k, o[k]]));
-}
-
-// What the page sends: submit, optionally restricted to some revisions or commits.
-const MOZ_PHAB_FLAGS = new Set(["--yes", "--no-wip"]);
-function mozPhabArgsOk(args: string[]): boolean {
-  const [sub, ...rest] = args;
-  return sub === "submit" && rest.every((a) => MOZ_PHAB_FLAGS.has(a) || /^(D\d{1,9}|[0-9a-f]{7,40})$/.test(a));
 }
 
 function checkIds(c: Record<string, unknown>, state: RequestState): string | null {

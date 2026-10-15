@@ -152,15 +152,16 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.match(h, /Meta: Bug to file ↗/);
     assert.ok(h.includes(cmd({ cmd: "set-bug", request: "r-20261008-permissions", patch: "meta" })));
     assert.match(h, /<span class="bad">2 patches still say Bug XXXXXXX<\/span>/);
-    assert.match(h, /<button class="btn small primary" disabled>moz-phab submit<\/button>/);
+    assert.match(h, /data-copy="mozphab-r-20261008-permissions-[^"]*" disabled>Copy the moz-phab command<\/button>/);
   });
 
-  it("8. submit: checks pass, stack-viewer link, moz-phab submit enabled", () => {
+  it("8. submit: checks pass, stack-viewer link, moz-phab command to copy", () => {
     const h = expanded("r-20261007-focus");
     assert.doesNotMatch(h, /class="bad"/);
     assert.match(h, /Open in stack-viewer ↗/);
-    assert.ok(h.includes(cmd({ cmd: "run-moz-phab", request: "r-20261007-focus", stack: "focus", args: ["submit"] })));
-    assert.match(h, /<button class="btn small primary">moz-phab submit<\/button>/);
+    assert.match(h, /<textarea hidden id="mozphab-r-20261007-focus-focus">cd [^<]+ &amp;&amp; moz-phab submit<\/textarea>/);
+    assert.match(h, /data-copy="mozphab-r-20261007-focus-focus">Copy the moz-phab command<\/button>/);
+    assert.doesNotMatch(h, /run-moz-phab/);
   });
 
   it("8. submit: the meta-bug comment can be copied, from the ⚑ area and from the stack", () => {
@@ -183,7 +184,7 @@ describe("one fixture per step of docs/MVP.md", () => {
     const r = structuredClone(get("r-20261005-newtab"));
     r.stacks.other = { ...r.stacks.newtab, id: "other" };
     r.needsUser = [{ key: "resubmit:x", action: "Resubmit", detail: "", stack: "other", since: r.createdAt }];
-    assert.ok(renderRequest(r, ctx).value.includes(cmd({ cmd: "run-moz-phab", request: r.id, stack: "other", args: ["submit"] })));
+    assert.match(renderRequest(r, ctx).value, /data-copy="mozphab-r-20261005-newtab-other"/);
 
     const t = structuredClone(get("r-20261013-tab-failures"));
     t.recoveryPlans.push({ ...t.recoveryPlans[0], job: "j-later", text: "a later plan", plan: [] });
@@ -209,11 +210,11 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.match(h, /1 landed ▸/);
   });
 
-  it("10. landing: landable patches and moz-phab submit", () => {
+  it("10. landing: landable patches and the moz-phab command", () => {
     const h = expanded("r-20261001-mouse-button");
     assert.match(h, /<span class="landable">landable<\/span>/);
     assert.match(h, /Reorg ready/);
-    assert.match(h, />moz-phab submit</);
+    assert.match(h, />Copy the moz-phab command</);
   });
 
   it("landable needs every hard dep landed or landable", () => {
