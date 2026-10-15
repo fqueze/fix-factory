@@ -58,7 +58,7 @@ test("a try-push request goes from the request to a planned verification push", 
   const { root, config, orchestrator } = setup();
   try {
     await orchestrator.startup();
-    appendCommand(config.stateDir, { cmd: "new-request", kind: "try-push", text: "Fix the dom/base failures", rev: "abcdef123456" });
+    appendCommand(config.stateDir, { cmd: "tell-factory", text: "Fix the dom/base failures of try push abcdef123456" });
     let events: Event[] = [];
     await tickUntil(orchestrator, () => {
       const [id] = listRequests(config.stateDir);
@@ -68,7 +68,9 @@ test("a try-push request goes from the request to a planned verification push", 
     const s = foldEvents(events);
     const of = <T extends Event["type"]>(type: T) => events.filter((e): e is Extract<Event, { type: T }> => e.type === type);
 
-    // 1 → 3: the config, then the initial push watched and the work list built from it.
+    // 1 → 3: routed as a try push with its config, then the initial push watched and the work list built from it.
+    assert.match(s.id, /^r-\d{8}-fix-the-dom-base-failures$/);
+    assert.deepEqual(of("request-routed").map((e) => [e.kind, e.rev]), [["try-push", "abcdef123456"]]);
     assert.deepEqual(of("config-set")[0].config, { folders: ["dom/base/test"], tests: [], platforms: [], constraints: [] });
     assert.deepEqual(
       of("step").map((e) => e.step),

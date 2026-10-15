@@ -5,6 +5,7 @@ import { relative } from "node:path";
 import type { PollResult } from "../cli/phab.ts";
 import type { ImportedCommit } from "../cli/stack/import.ts";
 import type { DryRunResult, WatchLine } from "../cli/try.ts";
+import type { CommandInput } from "../state/commands.ts";
 import type { EventInput } from "../state/events.ts";
 import type {
   AddressReviewReport,
@@ -23,7 +24,7 @@ import { dataPath } from "./plan.ts";
 import type {
   ClassifyReviewCommentsReport,
   EstimateReviewEffortReport,
-  ParseRequestReport,
+  RouteRequestReport,
   ResolveConflictReport,
   ReviewStackReport,
   ReviseBugDraftReport,
@@ -45,6 +46,7 @@ export interface HandlerInput {
 export interface HandlerResult {
   events: EventInput[];
   files?: { path: string; content: string }[];
+  commands?: CommandInput[]; // appended to commands.jsonl, after the events
 }
 
 type Fields<T extends EventInput["type"]> = Omit<Extract<EventInput, { type: T }>, "type" | "request" | "v" | "t">;
@@ -54,6 +56,7 @@ export function handleFinished(input: HandlerInput): HandlerResult {
   const purpose = job.purpose;
   const events: EventInput[] = [];
   const files: { path: string; content: string }[] = [];
+  const commands: CommandInput[] = [];
   const ev = <T extends EventInput["type"]>(type: T, fields: Fields<T>) => events.push({ type, request: s.id, ...fields } as unknown as EventInput);
   const json = <T>() => JSON.parse(input.output) as T;
   const patchEvent = (p: PatchView, changes: Partial<PatchView>) => {
@@ -66,9 +69,21 @@ export function handleFinished(input: HandlerInput): HandlerResult {
   };
 
   switch (purpose.what) {
-    case "parse": {
-      const r = input.report as ParseRequestReport;
-      ev("config-set", { config: { ...r.config, ...(r.questions.length ? { questions: r.questions } : {}) } });
+    case "route": {
+      // A wrong answer throws: the agent is resumed with the error once, then it comes to you.
+      const r = input.report as RouteRequestReport;
+      if (r.existing !== undefined) {
+        if (!purpose.requests?.includes(r.existing)) throw new Error(`${r.existing} is not one of the active requests`);
+        commands.push({ id: `forward-${job.job}`, cmd: "tell-factory", request: r.existing, text: s.text });
+        ev("note", { text: `Forwarded to ${r.existing}.` });
+        ev("step", { step: "done" });
+        break;
+      }
+      if (r.kind === undefined) throw new Error("the report has neither existing nor kind");
+      if (r.kind === "burndown" ? !r.folder : !r.rev) throw new Error(r.kind === "burndown" ? "a burndown needs a folder" : "a try-push request needs a revision");
+      ev("request-routed", { kind: r.kind, ...(r.kind === "burndown" ? { folder: r.folder } : { rev: r.rev }) });
+      const questions = r.questions ?? [];
+      ev("config-set", { config: { ...r.config, ...(questions.length ? { questions } : {}) } });
       break;
     }
     case "author":
@@ -257,7 +272,7 @@ export function handleFinished(input: HandlerInput): HandlerResult {
       ev("note", { text: `Shell in ${job.cwd} done: ${input.output.trim().split("\n").slice(-3).join(" / ").slice(0, 500)}` });
       break;
   }
-  return { events, files };
+  return { events, files, commands };
 }
 
 function authorReport(input: HandlerInput, ev: <T extends EventInput["type"]>(type: T, fields: Fields<T>) => void): void {

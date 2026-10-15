@@ -3,7 +3,6 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { config, HOUR, ID, Scenario, sha } from "./testkit.ts";
 
-const parse = { config: { folders: [], tests: [], platforms: [], constraints: [] }, questions: [], feedback: [] };
 const none = { verdict: "none", quote: "no bug", feedback: [] };
 const ok = { verdict: "ok", findings: [], feedback: [] };
 const lintOk = { ok: true, violations: [] };
@@ -17,7 +16,6 @@ const group = (key: string, test: string, message: string, rate = 1) => ({ key, 
 function tryPushFinished(): Scenario {
   const sc = new Scenario("try-push", { rev: "abc" });
   sc.step();
-  sc.complete("parse", { report: parse });
   sc.settle();
   sc.complete("watch:initial", { output: "" });
   sc.add({ type: "try-finished", request: ID, push: "initial", result: "failures", summary: "2 failures" });
@@ -69,14 +67,21 @@ function reviewed(sc: Scenario, item: string, commit: string, test: string, opts
 }
 
 describe("1. request", () => {
-  it("parses the request, then a try-push request goes to the work list with its push", () => {
-    const sc = new Scenario("try-push", { rev: "abc", text: "fix these" });
-    assert.deepEqual(sc.step(), ["parse"]);
-    const plan = sc.plan("parse");
-    assert.equal(plan.name, "parse-request");
-    assert.deepEqual(plan.agent?.vars, { kind: "try-push", text: "fix these" });
+  const routed = (fields: object) => ({ config: { folders: [], tests: [], platforms: [], constraints: [] }, questions: [], feedback: [], ...fields });
+
+  it("routes text from the main box: a try push gets its kind and revision, then goes to the work list with its push", () => {
+    const sc = new Scenario("unrouted", { text: "fix the failures of try push abc" });
+    sc.activeRequests = [{ id: "r-20261014-other", summary: "Flakiness burndown of dom/base/test (step: work list)" }];
+    assert.deepEqual(sc.step(), ["route"]);
+    const plan = sc.plan("route");
+    assert.equal(plan.name, "route-request");
+    const requestsFile = `/state/requests/${ID}/data/requests.txt`;
+    assert.deepEqual(plan.agent?.vars, { text: "fix the failures of try push abc", requestsFile });
+    assert.deepEqual(plan.files, [{ path: requestsFile, content: "r-20261014-other  Flakiness burndown of dom/base/test (step: work list)\n" }]);
+    assert.deepEqual(plan.purpose.requests, ["r-20261014-other"]);
     assert.deepEqual(sc.step(), []);
-    sc.complete("parse", { report: { ...parse, questions: ["which platforms?"] } });
+    sc.complete("route", { report: routed({ kind: "try-push", rev: "abc", questions: ["which platforms?"] }) });
+    assert.equal(sc.state().kind, "try-push");
     assert.deepEqual(sc.state().config.questions, ["which platforms?"]);
     assert.deepEqual(sc.settle(), ["watch:initial"]);
     const s = sc.state();
@@ -86,12 +91,41 @@ describe("1. request", () => {
     assert.deepEqual(sc.plan("watch:initial").cli, { tool: "try.ts", args: ["watch", "abc"] });
   });
 
-  it("a burndown goes to the first signal", () => {
+  it("routes a burndown to the first signal", () => {
+    const sc = new Scenario("unrouted", { text: "burn down dom/base/test" });
+    sc.step();
+    assert.equal(sc.plan("route").files![0].content, "(no active requests)\n");
+    sc.complete("route", { report: routed({ kind: "burndown", folder: "dom/base/test" }) });
+    sc.step();
+    const s = sc.state();
+    assert.deepEqual([s.kind, s.folder, s.step], ["burndown", "dom/base/test", "first signal"]);
+  });
+
+  it("forwards text about an existing request to recover on it, and closes the new one", () => {
+    const sc = new Scenario("unrouted", { text: "Lando was down, re-push" });
+    sc.activeRequests = [{ id: "r-20261014-other", summary: "s" }];
+    sc.step();
+    const job = sc.complete("route", { report: { existing: "r-20261014-other", feedback: [] } });
+    assert.deepEqual(sc.commands, [{ id: `forward-${job}`, cmd: "tell-factory", request: "r-20261014-other", text: "Lando was down, re-push" }]);
+    const s = sc.state();
+    assert.equal(s.step, "done");
+    assert.deepEqual(s.notes.map((n) => n.text), ["Forwarded to r-20261014-other."]);
+    assert.deepEqual(sc.step(), []);
+  });
+
+  it("refuses a route to a request it wasn't given, or without a folder or revision", () => {
+    const sc = new Scenario("unrouted", { text: "x" });
+    sc.step();
+    assert.throws(() => sc.complete("route", { report: { existing: "r-nope", feedback: [] } }), /not one of the active requests/);
+    assert.throws(() => sc.complete("route", { report: routed({ kind: "burndown" }) }), /needs a folder/);
+    assert.throws(() => sc.complete("route", { report: { feedback: [] } }), /neither existing nor kind/);
+  });
+
+  it("a request with its kind already (the new-request command) goes on without routing", () => {
     const sc = new Scenario("burndown", { folder: "dom/base/test" });
     sc.step();
-    sc.complete("parse", { report: parse });
-    sc.step();
     assert.equal(sc.state().step, "first signal");
+    assert.equal(sc.view().byKey.has("route"), false);
   });
 });
 
@@ -101,7 +135,6 @@ describe("2. first signal", () => {
   function burndown(): Scenario {
     const sc = new Scenario("burndown", { folder: "dom/base/test" });
     sc.step();
-    sc.complete("parse", { report: parse });
     sc.settle();
     return sc;
   }
@@ -176,7 +209,6 @@ describe("try pushes", () => {
   it("fetches the artifacts of each failed job as it arrives, once", () => {
     const sc = new Scenario("try-push", { rev: "abc" });
     sc.step();
-    sc.complete("parse", { report: parse });
     sc.settle();
     sc.add({ type: "try-job-failed", request: ID, push: "initial", taskId: "T1", retryId: 0, jobName: "j", platform: "p", result: "testfailed" });
     assert.deepEqual(sc.step(), ["artifacts:T1:0"]);
@@ -189,7 +221,6 @@ describe("try pushes, failing", () => {
   it("never retries a failed push by itself: it may have pushed", () => {
     const sc = new Scenario("try-push", { rev: "abc" });
     sc.step();
-    sc.complete("parse", { report: parse });
     sc.settle();
     sc.add({ type: "try-planned", request: ID, push: "A", purpose: "p", command: ["./mach", "try", "fuzzy"] });
     sc.startJob({ purpose: { key: "dry-run:A", what: "dry-run", push: "A", args: ["fuzzy", "-q", "x"], cwd: "/wt/s" }, kind: "script", name: "try.ts dry-run", cwd: "/wt/s", cli: { tool: "try.ts", args: [] } });
@@ -205,7 +236,6 @@ describe("try pushes, failing", () => {
   it("asks for a new plan when the push was refused because the stack changed since its dry run", () => {
     const sc = new Scenario("try-push", { rev: "abc" });
     sc.step();
-    sc.complete("parse", { report: parse });
     sc.settle();
     sc.add({ type: "try-planned", request: ID, push: "A", purpose: "p", command: ["./mach", "try", "fuzzy"] });
     sc.startJob({ purpose: { key: "dry-run:A", what: "dry-run", push: "A", args: ["fuzzy", "-q", "x"], cwd: "/wt/s" }, kind: "script", name: "try.ts dry-run", cwd: "/wt/s", cli: { tool: "try.ts", args: [] } });
@@ -244,7 +274,6 @@ describe("3. work list", () => {
   it("runs at 2 h when the push hasn't finished, then again when it finishes, adding only new groups", () => {
     const sc = new Scenario("try-push", { rev: "abc" });
     sc.step();
-    sc.complete("parse", { report: parse });
     sc.settle();
     sc.now += HOUR;
     assert.deepEqual(sc.step(), []);
@@ -867,7 +896,6 @@ describe("burndown verification", () => {
   it("pushes the stack with the DEBUG commit on top, then checks the stack branch out again before submitting", () => {
     const sc = new Scenario("burndown", { folder: "a" });
     sc.step();
-    sc.complete("parse", { report: parse });
     sc.settle();
     sc.complete("annotations", { output: [{ manifest: "a/xpcshell.toml", test: "test_a.js", kind: "skip-if", condition: "os == 'win'", line: 2, commit: null, bug: null, commentBugs: [] }] });
     sc.settle();

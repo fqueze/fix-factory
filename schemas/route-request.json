@@ -1,6 +1,26 @@
 {
   "type": "object",
   "properties": {
+    "existing": {
+      "type": "string",
+      "description": "The id of the active request the text is about. Leave out the other fields except feedback."
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "burndown",
+        "try-push"
+      ],
+      "description": "For a new request: burning down a folder's flakiness, or fixing a try push's failures."
+    },
+    "folder": {
+      "type": "string",
+      "description": "The folder to burn down (burndown)."
+    },
+    "rev": {
+      "type": "string",
+      "description": "The try push revision whose failures to fix (try-push)."
+    },
     "config": {
       "type": "object",
       "properties": {
@@ -77,8 +97,6 @@
     }
   },
   "required": [
-    "config",
-    "questions",
     "feedback"
   ],
   "additionalProperties": false

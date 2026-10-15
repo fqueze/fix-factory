@@ -20,7 +20,7 @@ import type { Command, FactoryConfig, JobId, RequestId, RequestState } from "../
 import { commandEffects } from "./commands.ts";
 import { appendEventSafe } from "./event-data.ts";
 import { handleWatchLines } from "./handlers.ts";
-import { CANCELLED, next, type Action, type Ctx } from "./next.ts";
+import { CANCELLED, next, requestSummary, type Action, type Ctx } from "./next.ts";
 import { DEFAULT_PRIORITY, shortHash, type JobPlan } from "./plan.ts";
 import { defaultCliCommand, finishJob, jsonLines, readOut, readReport, startPlan, type RunnerDeps } from "./runner.ts";
 import { buildView, type JobRecord, type View } from "./view.ts";
@@ -103,6 +103,11 @@ export class Orchestrator {
       view,
       output: (job) => readOut(this.config, job),
       report: (job) => readReport(this.config, s.id, job),
+      activeRequests: () =>
+        this.requests()
+          .map((id) => this.load(id).s)
+          .filter((r) => r.step !== "done" && r.kind !== "unrouted")
+          .map((r) => ({ id: r.id, summary: requestSummary(r) })),
     };
   }
 
@@ -170,20 +175,13 @@ export class Orchestrator {
       this.notePresence(c);
       return;
     }
-    let request = c.request;
-    if (c.cmd === "tell-factory" && request === undefined) {
-      // The global box: the plan needs a request to live in, so it goes to the latest active one.
-      request = this.requests()
-        .map((id) => this.load(id).s)
-        .filter((s) => s.step !== "done")
-        .sort((a, b) => a.updatedAt.localeCompare(b.updatedAt))
-        .at(-1)?.id;
-      if (request === undefined) return;
-    }
-    if (c.cmd === "new-request" && this.requests().some((id) => this.load(id).s.createdAt === c.t)) return; // already executed
+    const request = c.request;
+    const creates = c.cmd === "new-request" || (c.cmd === "tell-factory" && request === undefined);
+    // Already executed: its request exists. The text too, since two commands can share a millisecond.
+    if (creates && this.requests().map((id) => this.load(id).s).some((s) => s.createdAt === c.t && s.text === c.text)) return;
     const loaded = request !== undefined && this.requests().includes(request) ? this.load(request) : undefined;
     if (loaded?.view.executed.has(c.id)) return;
-    const effects = commandEffects({ ...c, ...(request ? { request } : {}) } as Command, {
+    const effects = commandEffects(c, {
       config: this.config,
       state: loaded?.s,
       view: loaded?.view,

@@ -6,7 +6,8 @@ import { fileURLToPath } from "node:url";
 import { renderPrompt } from "../agents/run.ts";
 import type { EventInput } from "../state/events.ts";
 import { foldEvents } from "../state/fold.ts";
-import type { Event, FactoryConfig, JobId, RequestKind, RequestState } from "../types.ts";
+import type { CommandInput } from "../state/commands.ts";
+import type { Event, FactoryConfig, JobId, RequestId, RequestKind, RequestState } from "../types.ts";
 import { handleFinished } from "./handlers.ts";
 import { next, type Action } from "./next.ts";
 import type { JobPlan } from "./plan.ts";
@@ -40,6 +41,8 @@ export class Scenario {
   readonly reports = new Map<JobId, unknown>();
   private n = 0;
   lastActions: Action[] = [];
+  activeRequests: { id: RequestId; summary: string }[] = []; // the other requests, for route-request
+  readonly commands: CommandInput[] = []; // what the handlers appended to commands.jsonl
 
   constructor(kind: RequestKind, fields: { folder?: string; rev?: string; text?: string } = {}) {
     this.add({ type: "request-created", request: ID, kind, text: fields.text ?? "", ...fields });
@@ -67,6 +70,7 @@ export class Scenario {
       view,
       output: (job) => this.outputs.get(job) ?? "",
       report: (job) => this.reports.get(job),
+      activeRequests: () => this.activeRequests,
     });
   }
 
@@ -137,6 +141,7 @@ export class Scenario {
       if (result.report !== undefined) this.add({ type: "agent-report", request: ID, job, ...(rec.item ? { item: rec.item } : {}), prompt: rec.name, report: result.report });
       const h = handleFinished({ state: this.state(), view: this.view(), config, job: rec, output: this.outputs.get(job) ?? "", report: result.report, reportOf: (j) => this.reports.get(j) });
       for (const e of h.events) this.add(e);
+      this.commands.push(...(h.commands ?? []));
     }
     this.add({ type: "job-finished", request: ID, job, exitCode, durationMs: 1, ...(result.error ? { error: result.error } : {}) });
     return job;

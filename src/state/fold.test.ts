@@ -41,6 +41,16 @@ test("request-created, config, step, updatedAt", () => {
   assert.equal(s.step, "verify on try");
 });
 
+test("request-routed gives a request typed in the main box its kind, folder and revision", () => {
+  const created = ev({ type: "request-created", kind: "unrouted", text: "burn down dom/base/test" });
+  assert.equal(foldEvents([created]).kind, "unrouted");
+  const s = foldEvents([created, ev({ type: "request-routed", kind: "burndown", folder: "dom/base/test" })]);
+  assert.equal(s.kind, "burndown");
+  assert.equal(s.folder, "dom/base/test");
+  assert.equal(s.text, "burn down dom/base/test");
+  assert.equal("rev" in s, false);
+});
+
 test("unknown event types are ignored, and don't move updatedAt", () => {
   const note = ev({ type: "note", text: "n" });
   const unknown = { request: R, v: 1, t: "2030-01-01T00:00:00.000Z", type: "from-the-future", x: 1 } as unknown as Event;

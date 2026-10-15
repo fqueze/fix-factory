@@ -52,6 +52,11 @@ export function foldEvents(events: readonly Event[]): RequestState {
         s.rev = e.rev;
         s.createdAt = e.t;
         break;
+      case "request-routed":
+        s.kind = e.kind;
+        s.folder = e.folder;
+        s.rev = e.rev;
+        break;
       case "config-set":
         s.config = e.config;
         break;

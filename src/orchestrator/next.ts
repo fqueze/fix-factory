@@ -33,6 +33,7 @@ import type {
   PatchId,
   PatchView,
   PushId,
+  RequestId,
   RequestState,
   RequestStep,
   ReviewPatchReport,
@@ -70,6 +71,14 @@ export interface Ctx {
   view: View;
   output: (job: JobId) => string; // out.log of a finished job
   report: (job: JobId) => unknown; // the validated report of a finished agent job
+  activeRequests: () => { id: RequestId; summary: string }[]; // routed and not done, for route-request
+}
+
+// One line for route-request's list of active requests.
+export function requestSummary(s: RequestState): string {
+  const what = s.kind === "burndown" ? `Flakiness burndown of ${s.folder}` : `Fix the failures of try push ${s.rev}`;
+  const text = s.text.split("\n")[0].trim();
+  return `${what} (step: ${s.step})${text ? `: ${text.slice(0, 200)}` : ""}`;
 }
 
 export type Action = { type: "event"; event: EventInput } | { type: "start"; plan: JobPlan };
@@ -368,8 +377,18 @@ class Planner {
 
   private request(): void {
     if (this.s.step !== "request") return;
-    const parse = this.wantAgent(`parse${this.stepEpoch("request")}`, "parse", "parse-request", { kind: this.s.kind, text: this.s.text });
-    if (!parse) return;
+    if (this.s.kind === "unrouted") {
+      // Its handler routes the request: a kind (and the next pass goes on), or done, forwarded.
+      const key = `route${this.stepEpoch("request")}`;
+      this.want(key, () => {
+        const requests = this.ctx.activeRequests().filter((r) => r.id !== this.s.id);
+        const requestsFile = dataPath(this.config, this.s.id, "requests.txt");
+        const plan = this.agent("route", "route-request", { text: this.s.text, requestsFile }, { key, purpose: { requests: requests.map((r) => r.id) } });
+        plan.files = [{ path: requestsFile, content: requests.length ? requests.map((r) => `${r.id}  ${r.summary}\n`).join("") : "(no active requests)\n" }];
+        return plan;
+      });
+      return;
+    }
     if (this.s.kind === "burndown") {
       this.setStep("first signal");
       return;

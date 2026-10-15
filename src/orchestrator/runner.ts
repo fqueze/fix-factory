@@ -4,6 +4,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { appendFeedback, buildAgentCommand, parseStreamJson, promptVersion, renderPrompt, validateReport, type JsonSchema } from "../agents/run.ts";
+import { appendCommand } from "../state/commands.ts";
 import type { EventInput } from "../state/events.ts";
 import { appendEventSafe } from "./event-data.ts";
 import { jobDir, newJobId, startJob, type ExitInfo } from "../state/jobs.ts";
@@ -133,6 +134,8 @@ export function finishJob(deps: RunnerDeps, s: RequestState, view: View, rec: Jo
       const r = handleFinished({ state: s, view, config, job: rec, output: out, report, reportOf: (job) => readReport(config, s.id, job) });
       writeFiles(r.files ?? []);
       append(r.events);
+      // Their ids derive from the job, so a replay after a crash executes them once.
+      for (const c of r.commands ?? []) appendCommand(config.stateDir, c);
     } catch (e) {
       // An output we can't make sense of fails this job, not the loop.
       error = `recording the result failed: ${e instanceof Error ? e.message : String(e)}`.slice(0, 1500);

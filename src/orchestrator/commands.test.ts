@@ -87,6 +87,13 @@ describe("commands", () => {
     assert.deepEqual(executed(sc).at(-1), { ok: false, detail: "the author of i-a is running: send it again when it's done" });
   });
 
+  it("a global tell-factory creates a request to route, named from its text; one for an unknown request does nothing", () => {
+    const { request: _r, ...global } = cmd({ cmd: "tell-factory", text: "Burn down dom/base/test, skip Android" });
+    const effects = commandEffects(global as Command, { config, exists: () => false, plan: () => undefined });
+    assert.deepEqual(effects, [{ type: "event", event: { type: "request-created", request: "r-20261015-burn-down-dom-base-test-skip", kind: "unrouted", text: "Burn down dom/base/test, skip Android" } }]);
+    assert.deepEqual(commandEffects(cmd({ cmd: "tell-factory", request: "r-nope", text: "x" }), { config, exists: () => false, plan: () => undefined }), []);
+  });
+
   it("tell-factory starts the recover agent, whose plan comes to you; a reply resumes it", () => {
     const sc = withPatch();
     const c = cmd({ cmd: "tell-factory", text: "Lando was down, re-push" });

@@ -14,7 +14,10 @@ const prompts = (): string[] => Object.keys(JSON.parse(readFileSync(fileURLToPat
 const feedback = [{ target: "factory" as const, text: "the table file was empty" }];
 
 const samples: Record<string, unknown[]> = {
-  "parse-request": [{ config: { folders: ["dom/base/test"], tests: [], platforms: ["linux"], constraints: [] }, questions: [], feedback } satisfies R.ParseRequestReport],
+  "route-request": [
+    { kind: "burndown", folder: "dom/base/test", config: { folders: ["dom/base/test"], tests: [], platforms: ["linux"], constraints: [] }, questions: [], feedback } satisfies R.RouteRequestReport,
+    { existing: "r-20261015-xpcshell-cwd", feedback: [] } satisfies R.RouteRequestReport,
+  ],
   "classify-annotation": [{ kind: "scoping", reason: "no GPU on that config", feedback } satisfies R.ClassifyAnnotationReport],
   "write-annotation-patches": [{ runIf: "abc", debug: "def", summary: "two commits", feedback } satisfies R.WriteAnnotationPatchesReport, { summary: "nothing to change", feedback: [] } satisfies R.WriteAnnotationPatchesReport],
   "plan-try-pushes": [{ pushes: [{ purpose: "un-skip", tryArgs: ["fuzzy", "-q", "xpcshell"], rebuild: 10 }], feedback } satisfies R.PlanTryPushesReport],

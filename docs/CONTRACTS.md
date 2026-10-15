@@ -47,7 +47,8 @@ cache/artifacts/<taskId>/...      # downloaded try logs and profiles
 - `job-started` events of the orchestrator's jobs carry `purpose` (`JobPurpose`): what the job is for, so a
   restarted orchestrator knows.
 - `events.jsonl` is written only by the orchestrator. `commands.jsonl` is written by the web server and by the
-  orchestrator (when it executes an approved recovery plan, it appends that plan's commands). Readers must ignore
+  orchestrator (when it executes an approved recovery plan, it appends that plan's commands; when route-request says
+  text from the main box is about an existing request, it appends a `tell-factory` for that request). Readers must ignore
   event types and fields they don't know.
 
 ## Jobs

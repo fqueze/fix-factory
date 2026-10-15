@@ -71,7 +71,8 @@ interface EventBase {
   request: RequestId;
 }
 
-export type RequestKind = "burndown" | "try-push";
+// "unrouted": typed in the main box, and route-request hasn't said what it is yet.
+export type RequestKind = "burndown" | "try-push" | "unrouted";
 
 export interface FailureGroup {
   message: string; // the shared specific failure message, or the generic one for a single test
@@ -119,6 +120,7 @@ export type JobKind = "script" | "agent" | "build" | "try-watch";
 
 export type Event =
   | (EventBase & { type: "request-created"; kind: RequestKind; text: string; folder?: string; rev?: string })
+  | (EventBase & { type: "request-routed"; kind: Exclude<RequestKind, "unrouted">; folder?: string; rev?: string })
   | (EventBase & { type: "config-set"; config: Record<string, unknown> })
   | (EventBase & { type: "step"; step: RequestStep })
   | (EventBase & { type: "item-created"; item: ItemId; folder: string; group: FailureGroup })
@@ -378,11 +380,25 @@ export interface JobPurpose {
   comments?: number[]; // review comment ids an address-review run handles
   reason?: string; // why an author is resumed: "lint", "review", "try", "comment", ...; what you told recover
   replyTo?: JobId; // the recover run a reply-recovery answers
+  requests?: RequestId[]; // the active requests a route-request run was given: its answer must be one of them
 }
 
 // ---------------------------------------------------------------------------
 // Reports of the other prompts
 
+// Either existing (the text is about that request), or kind and the rest (a new request). The schema
+// can't say "either", so the handler checks it.
+export interface RouteRequestReport {
+  existing?: RequestId;
+  kind?: Exclude<RequestKind, "unrouted">;
+  folder?: string;
+  rev?: string;
+  config?: ParseRequestReport["config"];
+  questions?: string[];
+  feedback: Feedback[];
+}
+
+// The report of parse-request, which route-request replaced.
 export interface ParseRequestReport {
   config: { folders: string[]; tests: string[]; platforms: string[]; constraints: string[] };
   questions: string[];

@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -42,7 +42,7 @@ describe("Orchestrator", () => {
   it("starts agents within maxAgents, review comments first", async () => {
     const { root, config, o } = setup();
     try {
-      add(config.stateDir, { type: "request-created", request: "r-a", kind: "try-push", text: "", rev: "abc" });
+      add(config.stateDir, { type: "request-created", request: "r-a", kind: "unrouted", text: "fix try push abc" });
       // r-b is in review, with a new comment from its reviewer.
       const b = "r-b";
       add(config.stateDir, { type: "request-created", request: b, kind: "try-push", text: "", rev: "def" });
@@ -70,15 +70,41 @@ describe("Orchestrator", () => {
   it("start-now starts a queued request's jobs regardless of the caps", async () => {
     const { root, config, o } = setup({ maxAgents: 0 });
     try {
-      add(config.stateDir, { type: "request-created", request: "r-a", kind: "try-push", text: "", rev: "abc" });
+      add(config.stateDir, { type: "request-created", request: "r-a", kind: "unrouted", text: "fix try push abc" });
       await o.startup();
       await o.tick();
       assert.equal(readEvents(config.stateDir, "r-a").filter((e) => e.type === "job-started").length, 0);
       appendCommand(config.stateDir, { cmd: "start-now", request: "r-a" });
       await o.tick();
       const events = readEvents(config.stateDir, "r-a");
-      assert.deepEqual(events.filter((e) => e.type === "job-started").map((e) => (e as { name: string }).name), ["parse-request"]);
+      assert.deepEqual(events.filter((e) => e.type === "job-started").map((e) => (e as { name: string }).name), ["route-request"]);
       assert.ok(events.some((e) => e.type === "command-executed" && e.ok));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("makes a request of the global box's text, and forwards it to recover on the request route-request names", async () => {
+    const { root, config, o } = setup({ maxAgents: 2 });
+    try {
+      writeFileSync(join(root, "claude.json"), JSON.stringify([{ match: "^You wrote this", report: { existing: "r-a", feedback: [] } }]));
+      add(config.stateDir, { type: "request-created", request: "r-a", kind: "try-push", text: "Fix the xpcshell failures", rev: "abc" });
+      await o.startup();
+      const told = appendCommand(config.stateDir, { cmd: "tell-factory", text: "Lando was down, re-push" });
+      await o.tick();
+      const id = `r-${told.t.slice(0, 10).replace(/-/g, "")}-lando-was-down-re-push`;
+      const created = readEvents(config.stateDir, id);
+      assert.deepEqual(created[0], { v: 1, t: told.t, type: "request-created", request: id, kind: "unrouted", text: "Lando was down, re-push" });
+      assert.equal(readFileSync(join(config.stateDir, "requests", id, "data", "requests.txt"), "utf8"), "r-a  Fix the failures of try push abc (step: work list): Fix the xpcshell failures\n");
+      const recover = () => readEvents(config.stateDir, "r-a").filter((e): e is Extract<Event, { type: "job-started" }> => e.type === "job-started" && e.name === "recover");
+      for (let i = 0; i < 200 && recover().length === 0; i++) {
+        await new Promise((r) => setTimeout(r, 20));
+        await o.tick();
+      }
+      assert.equal(recover()[0].purpose?.reason, "Lando was down, re-push");
+      const routed = readEvents(config.stateDir, id);
+      assert.ok(routed.some((e) => e.type === "note" && e.text === "Forwarded to r-a."));
+      assert.equal(routed.filter((e) => e.type === "step").at(-1)?.step, "done");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

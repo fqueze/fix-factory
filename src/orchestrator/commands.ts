@@ -25,7 +25,7 @@ export interface CommandContext {
 }
 
 // r-20261015-<slug>, from the folder, the text or the revision.
-export function newRequestId(c: Extract<Command, { cmd: "new-request" }>, exists: (id: RequestId) => boolean): RequestId {
+export function newRequestId(c: { t: string; text: string; folder?: string; rev?: string }, exists: (id: RequestId) => boolean): RequestId {
   const day = c.t.slice(0, 10).replace(/-/g, "");
   const name = slug(c.folder?.split("/").slice(-2).join("-") || c.text.split("\n")[0].split(/\s+/).slice(0, 4).join("-") || c.rev || "request").toLowerCase() || "request";
   const base = `r-${day}-${name}`;
@@ -58,7 +58,12 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
     case "presence":
       return effects; // the loop tracks presence from the commands themselves
     case "tell-factory":
-      if (!s) return effects; // the loop attaches a global one to a request (see main.ts)
+      if (c.request === undefined) {
+        // The global box: a request of its own, which route-request makes a new one or forwards.
+        effects.push({ type: "event", event: { type: "request-created", request: newRequestId(c, ctx.exists), kind: "unrouted", text: c.text } });
+        return effects;
+      }
+      if (!s) return effects;
       effects.push({
         type: "start",
         plan: {

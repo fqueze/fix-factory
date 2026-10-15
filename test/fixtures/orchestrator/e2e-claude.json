@@ -1,7 +1,7 @@
 [
   {
-    "match": "^Turn this request into the JSON config",
-    "report": { "config": { "folders": ["dom/base/test"], "tests": [], "platforms": [], "constraints": [] }, "questions": [], "feedback": [] }
+    "match": "^You wrote this in the factory's main box",
+    "report": { "kind": "try-push", "rev": "abcdef123456", "config": { "folders": ["dom/base/test"], "tests": [], "platforms": [], "constraints": [] }, "questions": [], "feedback": [] }
   },
   {
     "match": "were grouped by exact message",
