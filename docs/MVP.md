@@ -153,7 +153,7 @@ state that looks wrong.
 4. The plan shows up on the request with a checkbox per command. You approve all or some of them, and they're
    appended to `commands.jsonl`. The orchestrator executes them exactly as if you had clicked, so there is only one
    execution path. Replying in the box instead resumes the same agent session, which returns a revised plan.
-5. What it can't express as a command goes in `cannot_do`. You handle it by hand, and if it comes up again it becomes
+5. What it can't express as a command goes in `cannotDo`. You handle it by hand, and if it comes up again it becomes
    a new command type.
 
 Examples:
