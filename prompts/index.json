@@ -1,0 +1,20 @@
+{
+  "parse-request": { "model": "sonnet", "step": "1. Request", "purpose": "Turn the request's free text into a config shown to you." },
+  "classify-annotation": { "model": "haiku", "step": "2. First signal", "purpose": "Classify a skip-if as scoping or flakiness." },
+  "write-annotation-patches": { "model": "sonnet", "step": "2. First signal", "purpose": "Write the run-if commit and the DEBUG un-skip commit." },
+  "plan-try-pushes": { "model": "sonnet", "step": "2. First signal, 6. Verify on try", "purpose": "Plan the try pushes, each with a command and a purpose." },
+  "triage-try": { "model": "haiku", "step": "3. Work list, 6. Verify on try", "purpose": "Classify failures fx-tests couldn't parse or that match no patch." },
+  "merge-clusters": { "model": "haiku", "step": "3. Work list", "purpose": "Merge or split failure clusters grouped by exact message." },
+  "prior-art-verdict": { "model": "haiku", "step": "3. Work list", "purpose": "Decide whether someone is already on a failure, or a bug can be reused." },
+  "investigate-and-fix": { "model": "opus", "step": "4. Investigate and fix", "purpose": "Investigate and fix one failure group, as today's subagents do." },
+  "review-patch": { "model": "opus", "step": "2. First signal, 4. Investigate and fix, 9. Review comments", "purpose": "Critical review of one commit, diff and message." },
+  "revise-bug-draft": { "model": "sonnet", "step": "4. Investigate and fix, 7. Meta bug", "purpose": "Revise a bug draft from your comments." },
+  "resolve-conflict": { "model": "sonnet", "step": "5. Stack, 10. Landing", "purpose": "Resolve a text conflict while assembling or rewriting the stack." },
+  "estimate-review-effort": { "model": "haiku", "step": "5. Stack", "purpose": "Rate a patch's review effort from 1 to 5." },
+  "review-stack": { "model": "opus", "step": "5. Stack", "purpose": "Review the assembled stack as a whole." },
+  "classify-review-comments": { "model": "haiku", "step": "9. Review comments", "purpose": "Classify each inline review comment." },
+  "address-review": { "model": "opus", "step": "9. Review comments", "purpose": "Resume the author to address review comments." },
+  "draft-reply": { "model": "sonnet", "step": "9. Review comments", "purpose": "Draft a reply to one review comment." },
+  "adapt-soft-dep": { "model": "haiku", "step": "10. Landing", "purpose": "Adjust two patches whose soft dependency was flipped by a reorder (Sonnet if not trivial)." },
+  "recover": { "model": "opus", "step": "Recovery", "purpose": "Turn your free text into a plan of factory commands." }
+}

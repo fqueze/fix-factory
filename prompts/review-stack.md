@@ -1,0 +1,1 @@
+Here is an assembled stack: commit messages, diffstats and dependencies, in order: {stack}. Look for two patches solving the same problem differently, a shared helper changed under another patch, a root cause deferred that another patch was in a position to fix, and missing or wrong dependencies. Return findings per patch, plus dependency additions and removals with a reason.

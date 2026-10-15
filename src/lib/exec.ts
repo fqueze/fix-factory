@@ -17,7 +17,13 @@ export function exec(cmd: string[], opts: { cwd?: string; env?: NodeJS.ProcessEn
     child.stderr.setEncoding("utf8").on("data", (d: string) => (stderr += d));
     child.on("error", reject);
     child.on("close", (code) => resolve({ code: code ?? 1, stdout, stderr }));
-    child.stdin.end(opts.input ?? "");
+    // The command may exit before reading its stdin; that EPIPE isn't an error for us.
+    child.stdin.on("error", () => {});
+    if (opts.input === undefined) {
+      child.stdin.end();
+    } else {
+      child.stdin.end(opts.input);
+    }
   });
 }
 

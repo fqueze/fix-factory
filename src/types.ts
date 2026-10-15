@@ -154,6 +154,7 @@ export type Event =
   | (EventBase & { type: "try-planned"; push: PushId; purpose: string; command: string[]; taskCount?: number })
   | (EventBase & { type: "try-pushed"; push: PushId; rev: string; url: string })
   | (EventBase & { type: "try-progress"; push: PushId; done: number; total: number; failures: number })
+  | (EventBase & { type: "try-job-failed"; push: PushId; taskId: string; jobName: string; platform: string; result: string })
   | (EventBase & { type: "try-finished"; push: PushId; result: "green" | "failures"; summary: string })
   | (EventBase & { type: "review-status"; patch: PatchId; revision: number; status: string; reviewers: ReviewerStatus[]; comments: InlineComment[] })
   | (EventBase & { type: "reply-draft"; patch: PatchId; commentId: number; text: string })
