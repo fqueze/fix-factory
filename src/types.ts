@@ -84,6 +84,8 @@ export interface BugDraft {
   summary: string;
   description: string;
   blocks?: number[];
+  bugType?: "defect" | "task" | "enhancement";
+  keywords?: string[]; // e.g. ["meta"]
 }
 
 export interface Dep {
