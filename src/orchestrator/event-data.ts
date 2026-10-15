@@ -2,8 +2,8 @@
 // requests/<id>/event-data/, and the line holds {"dataFile": "<path relative to stateDir>"} in their
 // place, largest first until it fits. internalizeEvent puts them back. Any event payload can grow
 // (review comments, a stack summary, a bug draft, a recovery plan), so every event the orchestrator
-// writes goes through here; readers of events.jsonl must internalize (see the proposal in the
-// orchestrator's report to move this into src/state/events.ts).
+// writes goes through here. Readers of events.jsonl must internalize: src/state/events.ts should do it in
+// readEventsFrom, for the server and anyone else.
 import { randomBytes } from "node:crypto";
 import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";

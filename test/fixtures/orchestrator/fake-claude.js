@@ -1,16 +1,21 @@
 // A stand-in for `claude -p --output-format stream-json`: config.claudeCommand is
 // ["node", "fake-claude.js", "<rules.json>"], and the runner appends its flags.
-// rules.json: [{"match": "<regex on the prompt>", "report": {...}, "cost": 0.01}], first match wins.
+// rules.json: [{"match": "<regex on the prompt>", "report": {...}, "cost": 0.01, "max": 1}], first match
+// wins; a rule with "max" answers that many times, then the next matching rule does. cost is the
+// session's total so far, as claude reports it.
 // Each call is appended to <rules.json>.calls.jsonl, so tests can check sessions and prompts.
-import { appendFileSync, readFileSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync } from "node:fs";
 
 const [rulesFile, ...args] = process.argv.slice(2);
 const flag = (name) => (args.includes(name) ? args[args.indexOf(name) + 1] : undefined);
 const session = flag("--session-id") ?? flag("--resume");
 const prompt = readFileSync(0, "utf8");
 const rules = JSON.parse(readFileSync(rulesFile, "utf8"));
-const rule = rules.find((r) => new RegExp(r.match).test(prompt));
-appendFileSync(`${rulesFile}.calls.jsonl`, JSON.stringify({ session, resume: args.includes("--resume"), model: flag("--model"), prompt, cwd: process.cwd() }) + "\n");
+const callsFile = `${rulesFile}.calls.jsonl`;
+const calls = existsSync(callsFile) ? readFileSync(callsFile, "utf8").trim().split("\n").map((l) => JSON.parse(l)) : [];
+const index = rules.findIndex((r, i) => new RegExp(r.match).test(prompt) && (r.max === undefined || calls.filter((c) => c.rule === i).length < r.max));
+const rule = rules[index];
+appendFileSync(callsFile, JSON.stringify({ rule: index, session, resume: args.includes("--resume"), model: flag("--model"), prompt, cwd: process.cwd() }) + "\n");
 const out = (o) => process.stdout.write(JSON.stringify(o) + "\n");
 out({ type: "system", subtype: "init", session_id: session, model: flag("--model") });
 if (!rule) {

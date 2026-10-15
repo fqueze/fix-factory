@@ -22,7 +22,12 @@ commands.jsonl                    # every command, append-only
 commands-data/<id>.<n>.txt        # long command strings; commands.jsonl holds {"textFile": ...} in their place
 commands.cursor.json              # last command executed by the orchestrator
 requests/<requestId>/events.jsonl # everything that happened to a request, append-only
+requests/<requestId>/event-data/  # big event values; events.jsonl holds {"dataFile": ...} in their place
+requests/<requestId>/data/        # inputs the orchestrator writes for agents and CLIs (groups, comments, edits)
+requests/<requestId>/reports/<jobId>.json # each agent's validated report
 jobs/<jobId>/spec.json            # {cmd, cwd, env, stdinFile?, kind, name, request, item}
+jobs/<jobId>/prompt.md            # an agent's rendered prompt, its stdin
+jobs/<jobId>/plan.json            # the orchestrator's plan for the job; retry-job runs it again
 jobs/<jobId>/out.log              # stdout (a CLI's JSON, or claude's stream-json)
 jobs/<jobId>/err.log
 jobs/<jobId>/pid.json             # {pid, pidStartTime}, written when the job starts
@@ -33,6 +38,14 @@ cache/artifacts/<taskId>/...      # downloaded try logs and profiles
 
 - One line per JSON object, written with a single `appendFileSync` call. Lines under 4 KB are atomic with
   `O_APPEND`. Big payloads go in a file, and the event only references that file.
+- An event that would be over 4 KB has its biggest values (any field but `v`, `t`, `request`, `type`) moved,
+  largest first until it fits, to `requests/<id>/event-data/<name>.json` (the value as JSON), replaced by
+  `{"dataFile": "requests/<id>/event-data/<name>.json"}`. Readers replace every object that is exactly
+  `{"dataFile": ...}` (with a path under that request's `event-data/`) by the file's content before folding:
+  `internalizeEvent` in `src/orchestrator/event-data.ts`.
+- Files a job needs before it starts (an agent's `prompt.md`) are written into its directory by `startJob`.
+- `job-started` events of the orchestrator's jobs carry `purpose` (`JobPurpose`): what the job is for, so a
+  restarted orchestrator knows.
 - `events.jsonl` is written only by the orchestrator. `commands.jsonl` is written by the web server and by the
   orchestrator (when it executes an approved recovery plan, it appends that plan's commands). Readers must ignore
   event types and fields they don't know.

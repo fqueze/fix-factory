@@ -83,7 +83,13 @@ test("a try-push request goes from the request to a planned verification push", 
     // maxBuilds is 1: the second worktree waited for the first.
     const states = (item: string) => of("item-state").filter((e) => e.item === item).map((e) => e.state);
     assert.deepEqual(states("i-test-a"), ["investigating", "fix verified locally", "in critical review", "reviewed", "in stack"]);
-    assert.deepEqual(states("i-test-b"), ["waiting for a build slot", "investigating", "fix verified locally", "in critical review", "reviewed", "in stack"]);
+    // test_b's first review had findings: its author was resumed in the same session.
+    assert.deepEqual(states("i-test-b"), ["waiting for a build slot", "investigating", "fix verified locally", "in critical review", "review findings", "fix verified locally", "in critical review", "reviewed", "in stack"]);
+    const authorB = Object.values(s.jobs).filter((j) => j.name === "investigate-and-fix" && j.item === "i-test-b");
+    assert.equal(authorB.length, 2);
+    assert.equal(authorB[1].sessionId, authorB[0].sessionId);
+    // Each run's cost: the session's total minus the earlier runs.
+    assert.deepEqual(authorB.map((j) => j.costUsd), [0.25, 0.5]);
     const builds = of("job-started").filter((e) => e.kind === "build");
     const ends = new Map(of("job-finished").map((e) => [e.job, e.t]));
     assert.equal(builds.length, 3);

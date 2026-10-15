@@ -1,4 +1,4 @@
-// The schemas of the prompts whose report types live in reports.ts (and AddressReviewReport):
+// The schemas of the prompts not covered by src/agents/schemas.test.ts, against their report types:
 // typed samples must validate, and every object forbids extra properties, as in
 // src/agents/schemas.test.ts.
 import { test } from "node:test";

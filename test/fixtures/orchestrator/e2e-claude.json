@@ -33,10 +33,29 @@
   },
   {
     "match": "^Fix dom/base/test/test_b.html in ",
+    "cost": 0.25,
     "report": {
       "state": "fix verified locally",
       "summary": "Null-check x after the reflow",
       "cause": "x is null after a reflow.",
+      "verification": "Passed 50 times with --verify.",
+      "commits": ["bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"],
+      "landsAfter": [],
+      "feedback": []
+    }
+  },
+  {
+    "match": "^Review commit b{40} ",
+    "max": 1,
+    "report": { "verdict": "findings", "findings": [{ "severity": "must-fix", "file": "dom/base/test/test_b.html", "line": 4, "text": "the null check hides the race" }], "feedback": [] }
+  },
+  {
+    "match": "^A critical reviewer found these problems",
+    "cost": 0.75,
+    "report": {
+      "state": "fix verified locally",
+      "summary": "Wait for the reflow instead of null-checking",
+      "cause": "x is null until the reflow.",
       "verification": "Passed 50 times with --verify.",
       "commits": ["bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"],
       "landsAfter": [],
