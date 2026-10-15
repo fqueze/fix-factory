@@ -13,6 +13,7 @@ function loadPage(visibilityState: "visible" | "hidden") {
   const sent: { url: string; body: unknown; keepalive: unknown }[] = [];
   const document = {
     visibilityState,
+    querySelectorAll: () => [],
     addEventListener(type: string, f: () => void) {
       listeners.set(type, [...(listeners.get(type) ?? []), f]);
     },

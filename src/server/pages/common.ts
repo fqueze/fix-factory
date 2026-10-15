@@ -245,6 +245,11 @@ export function formatDuration(ms: number): string {
   return h < 10 ? `${h.toFixed(1).replace(/\.0$/, "")} h` : `${Math.round(h)} h`;
 }
 
+// A running duration; client.js keeps it ticking between page updates.
+export function elapsed(startedAt: string, ctx: RenderContext): Html {
+  return html`<span data-since="${startedAt}">${formatDuration(ctx.now - Date.parse(startedAt))}</span>`;
+}
+
 export function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 }

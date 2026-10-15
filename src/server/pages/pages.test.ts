@@ -110,7 +110,7 @@ describe("one fixture per step of docs/MVP.md", () => {
   it("4. investigate and fix: item states, running agent, recovery plan with a checkbox per command", () => {
     const h = expanded("r-20261013-tab-failures");
     assert.match(h, /<span class="st run">investigating<\/span>/);
-    assert.match(h, /opus · 6 h/);
+    assert.match(h, /opus · <span data-since="[^"]+">6 h<\/span>/);
     assert.match(h, /<span class="st find">review findings<\/span>/);
     assert.match(h, /<span class="st closed">handed back: bug 2081413, dao active<\/span>/);
     assert.match(h, /<span class="st wait">waiting for a build slot<\/span>/);

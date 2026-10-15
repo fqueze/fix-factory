@@ -207,6 +207,21 @@
   document.addEventListener("visibilitychange", onVisibilityChange);
   if (document.visibilityState === "visible") onVisibilityChange();
 
+  // Same output as formatDuration in pages/common.ts.
+  function formatDuration(ms) {
+    var s = Math.round(ms / 1000);
+    if (s < 60) return s + " s";
+    var min = Math.round(s / 60);
+    if (min < 60) return min + " min";
+    var h = ms / 3600000;
+    return h < 10 ? h.toFixed(1).replace(/\.0$/, "") + " h" : Math.round(h) + " h";
+  }
+  setInterval(function () {
+    document.querySelectorAll("[data-since]").forEach(function (el) {
+      el.textContent = formatDuration(Date.now() - Date.parse(el.getAttribute("data-since")));
+    });
+  }, 5000);
+
   var connectedOnce = false;
   function connect() {
     var source = new EventSource("/events");

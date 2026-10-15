@@ -8,6 +8,7 @@ import {
   enterBugUrl,
   formatCost,
   formatDate,
+  elapsed,
   formatDuration,
   isLandable,
   isLanded,
@@ -264,7 +265,7 @@ function itemRow(r: RequestState, i: ItemView, ctx: RenderContext): Html {
     <td><span class="st ${stateClass(i.state)}">${i.state}${closed && i.detail ? `: ${i.detail}` : ""}</span></td>
     <td class="sub hide-sm">${
       running
-        ? `${running.model ?? running.kind} · ${formatDuration(ctx.now - Date.parse(running.startedAt))}`
+        ? html`${running.model ?? running.kind} · ${elapsed(running.startedAt, ctx)}`
         : !closed && i.detail
           ? `“${i.detail}”`
           : ""
@@ -287,7 +288,7 @@ function recentJobs(r: RequestState, ctx: RenderContext): Html | null {
     (j) =>
       html`<tr${j.error ? html` title="${j.error}"` : null}><td>${j.name} ${j.item ? html`<span class="sub">${j.item}</span>` : null}</td><td class="sub">${j.kind}${j.model ? ` · ${j.model}` : ""}</td><td class="res ${
         j.endedAt === undefined ? "run" : j.exitCode === 0 ? "ok" : "bad"
-      }">${j.endedAt === undefined ? `running ${formatDuration(ctx.now - Date.parse(j.startedAt))}` : `${formatDuration(j.durationMs ?? Date.parse(j.endedAt) - Date.parse(j.startedAt))}${j.exitCode ? `, exit ${j.exitCode}` : ""}`}</td><td class="num sub">${
+      }">${j.endedAt === undefined ? html`running ${elapsed(j.startedAt, ctx)}` : `${formatDuration(j.durationMs ?? Date.parse(j.endedAt) - Date.parse(j.startedAt))}${j.exitCode ? `, exit ${j.exitCode}` : ""}`}</td><td class="num sub">${
         j.costUsd === undefined ? "" : formatCost(j.costUsd)
       }</td></tr>`,
   )}</tbody></table></div>`;
