@@ -150,7 +150,10 @@ test("a job whose wrapper died without exit.json is lost; reconcile reports each
   const lost = startJob(dir, spec(["sleep", "5"]));
   await waitFor(done.job);
   process.kill(-lost.pid, "SIGKILL");
-  while (isAlive(lost.pid, lost.pidStartTime)) await new Promise((r) => setTimeout(r, 20));
+  // Members of a killed group can linger briefly after its leader; until then it's orphaned.
+  while (isAlive(lost.pid, lost.pidStartTime) || groupMembers(lost.pid, lost.pidStartTime).length > 0) {
+    await new Promise((r) => setTimeout(r, 20));
+  }
   try {
     const r = reconcile(dir, [running, done, lost]);
     assert.deepEqual(
