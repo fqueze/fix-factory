@@ -44,6 +44,16 @@ test("readEvents skips a truncated last line and returns [] for a missing reques
   assert.deepEqual(readEvents(dir, "nope"), []);
 });
 
+test("appendEvent after a crash-truncated line doesn't lose the new event", () => {
+  appendEvent(dir, { type: "note", request: "r1", text: "one" });
+  appendFileSync(eventsPath(dir, "r1"), '{"v":1,"type":"no');
+  appendEvent(dir, { type: "note", request: "r1", text: "two" });
+  assert.deepEqual(
+    readEvents(dir, "r1").map((e) => (e as Extract<Event, { type: "note" }>).text),
+    ["one", "two"],
+  );
+});
+
 test("readEventsFrom continues from an offset, including multi-byte text", () => {
   appendEvent(dir, { type: "note", request: "r1", text: "héllo ✓" });
   const a = readEventsFrom(dir, "r1", 0);

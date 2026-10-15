@@ -53,7 +53,7 @@ export function foldEvents(events: readonly Event[]): RequestState {
         s.createdAt = e.t;
         break;
       case "config-set":
-        s.config = { ...e.config };
+        s.config = e.config;
         break;
       case "step":
         s.step = e.step;
@@ -85,7 +85,7 @@ export function foldEvents(events: readonly Event[]): RequestState {
           item: e.item,
           kind: e.kind,
           name: e.name,
-          cmd: [...e.cmd],
+          cmd: e.cmd,
           cwd: e.cwd,
           pid: e.pid,
           pidStartTime: e.pidStartTime,
@@ -134,7 +134,7 @@ export function foldEvents(events: readonly Event[]): RequestState {
         break;
       case "dep": {
         const list = (deps.get(e.dep.patch) ?? []).filter((d) => d.needs !== e.dep.needs);
-        list.push({ ...e.dep });
+        list.push(e.dep);
         deps.set(e.dep.patch, list);
         break;
       }
@@ -153,14 +153,14 @@ export function foldEvents(events: readonly Event[]): RequestState {
           folder: e.folder,
           branch: e.branch,
           worktree: e.worktree,
-          order: [...e.order],
+          order: e.order,
           summary: e.summary,
         };
         break;
       case "try-planned": {
         const p = push(e.push);
         p.purpose = e.purpose;
-        p.command = [...e.command];
+        p.command = e.command;
         p.taskCount = e.taskCount;
         break;
       }
@@ -227,8 +227,9 @@ export function foldEvents(events: readonly Event[]): RequestState {
   return stripUndefined(s);
 }
 
-// Optional fields copied from events as undefined would otherwise show up as keys,
-// which makes deepEqual comparisons and JSON round trips disagree.
+// Deep-copies the state, so it shares no objects with the input events (the fold
+// above assigns event objects and arrays directly), and drops undefined optional
+// fields, which would otherwise make deepEqual comparisons and JSON round trips disagree.
 function stripUndefined<T>(value: T): T {
   if (Array.isArray(value)) {
     return value.map(stripUndefined) as T;

@@ -12,7 +12,28 @@ export function appendJsonLine(path: string, value: unknown, what: string): void
     throw new Error(`${what} is ${size} bytes, over the ${MAX_LINE_BYTES} byte line limit: put big payloads in a file and reference it`);
   }
   mkdirSync(dirname(path), { recursive: true });
-  appendFileSync(path, line);
+  // A crash mid-write leaves a line without its newline; without this, the next line
+  // would be glued to it and lost with it.
+  appendFileSync(path, endsWithNewline(path) ? line : "\n" + line);
+}
+
+function endsWithNewline(path: string): boolean {
+  let fd: number;
+  try {
+    fd = openSync(path, "r");
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === "ENOENT") return true;
+    throw e;
+  }
+  try {
+    const size = fstatSync(fd).size;
+    if (size === 0) return true;
+    const b = Buffer.alloc(1);
+    readSync(fd, b, 0, 1, size - 1);
+    return b[0] === 0x0a;
+  } finally {
+    closeSync(fd);
+  }
 }
 
 export interface JsonLine {
