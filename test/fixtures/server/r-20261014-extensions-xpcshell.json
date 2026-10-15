@@ -1,0 +1,165 @@
+{
+  "id": "r-20261014-extensions-xpcshell",
+  "kind": "burndown",
+  "text": "",
+  "createdAt": "2026-10-14T10:00:00.000Z",
+  "updatedAt": "2026-10-15T08:40:00.000Z",
+  "step": "first signal",
+  "config": {},
+  "items": {},
+  "patches": {
+    "p-runif": {
+      "id": "p-runif",
+      "sha": "p-runif000000000000000000000000000000000",
+      "worktree": "/build/worktrees/x",
+      "title": "Bug XXXXXXX - Turn the scoping skip-ifs of toolkit/components/extensions/test/xpcshell into run-if, r=robwu.",
+      "bug": null,
+      "deps": [],
+      "replyDrafts": [],
+      "testOnly": true
+    },
+    "p-debug": {
+      "id": "p-debug",
+      "sha": "p-debug000000000000000000000000000000000",
+      "worktree": "/build/worktrees/x",
+      "title": "DEBUG - Remove flakiness skip-if annotations in toolkit/components/extensions/test/xpcshell to reproduce on try. DO NOT LAND.",
+      "bug": null,
+      "deps": [],
+      "replyDrafts": []
+    }
+  },
+  "stacks": {},
+  "pushes": {
+    "unskip": {
+      "id": "unskip",
+      "purpose": "Un-skip: xpcshell on the 9 configs where the skips applied, --rebuild 10 (rates 2–15%)",
+      "command": [
+        "./mach",
+        "try",
+        "fuzzy",
+        "--rebuild",
+        "10",
+        "-q",
+        "'xpcshell"
+      ],
+      "taskCount": 186
+    }
+  },
+  "jobs": {
+    "j-ann": {
+      "job": "j-ann",
+      "kind": "script",
+      "name": "annotations.ts list",
+      "cmd": [
+        "node"
+      ],
+      "cwd": "/build/fix-factory-state",
+      "pid": 1000,
+      "pidStartTime": 1,
+      "startedAt": "2026-10-14T10:01:00.000Z",
+      "endedAt": "2026-10-14T10:02:00.000Z",
+      "exitCode": 0,
+      "durationMs": 60000
+    },
+    "j-cls": {
+      "job": "j-cls",
+      "kind": "agent",
+      "name": "classify-annotation",
+      "cmd": [
+        "node"
+      ],
+      "cwd": "/build/fix-factory-state",
+      "pid": 1000,
+      "pidStartTime": 1,
+      "startedAt": "2026-10-14T10:03:00.000Z",
+      "model": "haiku",
+      "endedAt": "2026-10-14T10:05:00.000Z",
+      "exitCode": 0,
+      "durationMs": 120000,
+      "costUsd": 0.04
+    },
+    "j-write": {
+      "job": "j-write",
+      "kind": "agent",
+      "name": "write-annotation-patches",
+      "cmd": [
+        "node"
+      ],
+      "cwd": "/build/fix-factory-state",
+      "pid": 1000,
+      "pidStartTime": 1,
+      "startedAt": "2026-10-14T10:06:00.000Z",
+      "model": "sonnet",
+      "endedAt": "2026-10-14T10:15:00.000Z",
+      "exitCode": 0,
+      "durationMs": 540000,
+      "costUsd": 0.61
+    },
+    "j-rev": {
+      "job": "j-rev",
+      "kind": "agent",
+      "name": "review-patch",
+      "cmd": [
+        "node"
+      ],
+      "cwd": "/build/fix-factory-state",
+      "pid": 1000,
+      "pidStartTime": 1,
+      "startedAt": "2026-10-14T10:16:00.000Z",
+      "model": "opus",
+      "endedAt": "2026-10-14T10:30:00.000Z",
+      "exitCode": 0,
+      "durationMs": 840000,
+      "costUsd": 1.92
+    },
+    "j-plan": {
+      "job": "j-plan",
+      "kind": "agent",
+      "name": "plan-try-pushes",
+      "cmd": [
+        "node"
+      ],
+      "cwd": "/build/fix-factory-state",
+      "pid": 1000,
+      "pidStartTime": 1,
+      "startedAt": "2026-10-14T10:31:00.000Z",
+      "model": "sonnet",
+      "endedAt": "2026-10-14T10:37:00.000Z",
+      "exitCode": 0,
+      "durationMs": 360000,
+      "costUsd": 0.35
+    },
+    "j-dry": {
+      "job": "j-dry",
+      "kind": "script",
+      "name": "try.ts dry-run",
+      "cmd": [
+        "node"
+      ],
+      "cwd": "/build/fix-factory-state",
+      "pid": 1000,
+      "pidStartTime": 1,
+      "startedAt": "2026-10-14T10:38:00.000Z",
+      "endedAt": "2026-10-14T10:40:00.000Z",
+      "exitCode": 0,
+      "durationMs": 120000
+    }
+  },
+  "needsUser": [
+    {
+      "key": "approve-push:unskip",
+      "action": "Approve the un-skip push",
+      "detail": "Sonnet's plan: xpcshell on the 9 configs where the skips applied, --rebuild 10 (rates 2–15%) · dry run: 186 tasks",
+      "since": "2026-10-14T10:40:00.000Z",
+      "push": "unskip"
+    }
+  ],
+  "recoveryPlans": [],
+  "notes": [
+    {
+      "t": "2026-10-14T10:05:00.000Z",
+      "text": "23 skip-ifs: 6 scoping → run-if, 17 flakiness → removed in the DEBUG commit"
+    }
+  ],
+  "folder": "toolkit/components/extensions/test/xpcshell"
+}

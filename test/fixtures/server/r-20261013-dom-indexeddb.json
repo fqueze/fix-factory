@@ -1,0 +1,104 @@
+{
+  "id": "r-20261013-dom-indexeddb",
+  "kind": "try-push",
+  "text": "Fix the failures of try push 8c1d0e5a3b77",
+  "createdAt": "2026-10-13T09:00:00.000Z",
+  "updatedAt": "2026-10-15T09:00:00.000Z",
+  "step": "work list",
+  "config": {},
+  "items": {
+    "i-idb-quota": {
+      "id": "i-idb-quota",
+      "folder": "dom/indexedDB/test/unit",
+      "group": {
+        "message": "Quota exceeded while opening the database",
+        "tests": [
+          "dom/indexedDB/test/unit/test_quota.js"
+        ],
+        "configs": [
+          "linux64/debug",
+          "windows11-64/opt"
+        ],
+        "ratePerWeek": 6
+      },
+      "state": "not started",
+      "jobs": []
+    },
+    "i-idb-upgrade": {
+      "id": "i-idb-upgrade",
+      "folder": "dom/indexedDB/test/unit",
+      "group": {
+        "message": "Version change transaction aborted",
+        "tests": [
+          "dom/indexedDB/test/unit/test_upgrade.js",
+          "dom/indexedDB/test/unit/test_upgrade_v2.js"
+        ],
+        "configs": [
+          "linux64/debug",
+          "windows11-64/opt"
+        ]
+      },
+      "state": "not started",
+      "jobs": []
+    }
+  },
+  "patches": {},
+  "stacks": {},
+  "pushes": {
+    "initial": {
+      "id": "initial",
+      "purpose": "The push to fix",
+      "command": [],
+      "rev": "8c1d0e5a3b77",
+      "url": "https://treeherder.mozilla.org/jobs?repo=try&revision=8c1d0e5a3b77",
+      "result": "failures",
+      "summary": "14 failures, 2 groups"
+    }
+  },
+  "jobs": {
+    "j-table": {
+      "job": "j-table",
+      "kind": "script",
+      "name": "failures.ts try-table",
+      "cmd": [
+        "node"
+      ],
+      "cwd": "/build/fix-factory-state",
+      "pid": 1000,
+      "pidStartTime": 1,
+      "startedAt": "2026-10-13T09:01:00.000Z",
+      "endedAt": "2026-10-13T09:03:00.000Z",
+      "exitCode": 0,
+      "durationMs": 120000
+    },
+    "j-prior": {
+      "job": "j-prior",
+      "kind": "agent",
+      "name": "prior-art-verdict",
+      "cmd": [
+        "node"
+      ],
+      "cwd": "/build/fix-factory-state",
+      "pid": 1000,
+      "pidStartTime": 1,
+      "startedAt": "2026-10-13T09:05:00.000Z",
+      "model": "haiku",
+      "endedAt": "2026-10-13T09:06:00.000Z",
+      "exitCode": 0,
+      "durationMs": 60000,
+      "costUsd": 0.02
+    }
+  },
+  "needsUser": [
+    {
+      "key": "take-it:i-idb-quota",
+      "action": "Someone is on test_quota.js",
+      "detail": "Bug 2079911 has a patch in review by janv, updated 3 days ago",
+      "since": "2026-10-15T07:30:00.000Z",
+      "item": "i-idb-quota"
+    }
+  ],
+  "recoveryPlans": [],
+  "notes": [],
+  "rev": "8c1d0e5a3b77"
+}

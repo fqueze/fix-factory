@@ -1,0 +1,183 @@
+{
+  "id": "r-20261013-tab-failures",
+  "kind": "try-push",
+  "text": "",
+  "createdAt": "2026-10-13T08:00:00.000Z",
+  "updatedAt": "2026-10-15T09:00:00.000Z",
+  "step": "investigate and fix",
+  "config": {},
+  "items": {
+    "i-spinner": {
+      "id": "i-spinner",
+      "folder": "browser/base/content/test/tabs",
+      "group": {
+        "message": "Tab spinner still visible after 5000ms",
+        "tests": [
+          "browser/base/content/test/tabs/browser_tabSpinner.js"
+        ],
+        "configs": [
+          "linux64/debug",
+          "windows11-64/opt"
+        ]
+      },
+      "state": "investigating",
+      "jobs": [
+        "j-inv-spinner"
+      ]
+    },
+    "i-close": {
+      "id": "i-close",
+      "folder": "browser/base/content/test/tabs",
+      "group": {
+        "message": "Test wrote into its own directory",
+        "tests": [
+          "browser/base/content/test/tabs/browser_tabCloseSpacer.js"
+        ],
+        "configs": [
+          "linux64/debug",
+          "windows11-64/opt"
+        ],
+        "ratePerWeek": 3
+      },
+      "state": "reviewed",
+      "jobs": []
+    },
+    "i-drag": {
+      "id": "i-drag",
+      "folder": "browser/base/content/test/tabs",
+      "group": {
+        "message": "Test wrote into its own directory",
+        "tests": [
+          "browser/base/content/test/tabs/browser_tab_drag_drop.js"
+        ],
+        "configs": [
+          "linux64/debug",
+          "windows11-64/opt"
+        ]
+      },
+      "state": "review findings",
+      "detail": "the drag session is still left open on failure",
+      "jobs": []
+    },
+    "i-mute": {
+      "id": "i-mute",
+      "folder": "browser/base/content/test/tabs",
+      "group": {
+        "message": "Test wrote into its own directory",
+        "tests": [
+          "browser/base/content/test/tabs/browser_mute.js"
+        ],
+        "configs": [
+          "linux64/debug",
+          "windows11-64/opt"
+        ]
+      },
+      "state": "handed back",
+      "detail": "bug 2081413, dao active",
+      "jobs": []
+    },
+    "i-pin": {
+      "id": "i-pin",
+      "folder": "browser/base/content/test/tabs",
+      "group": {
+        "message": "Test wrote into its own directory",
+        "tests": [
+          "browser/base/content/test/tabs/browser_pinnedTabs.js"
+        ],
+        "configs": [
+          "linux64/debug",
+          "windows11-64/opt"
+        ]
+      },
+      "state": "waiting for a build slot",
+      "jobs": []
+    }
+  },
+  "patches": {
+    "p-close": {
+      "id": "p-close",
+      "sha": "p-close000000000000000000000000000000000",
+      "worktree": "/build/worktrees/x",
+      "title": "Bug 2080011 - Wait for the tab close animation before measuring the spacer, r=dao.",
+      "bug": 2080011,
+      "deps": [],
+      "replyDrafts": [],
+      "item": "i-close",
+      "effort": 1,
+      "testOnly": true
+    }
+  },
+  "stacks": {},
+  "pushes": {},
+  "jobs": {
+    "j-inv-spinner": {
+      "job": "j-inv-spinner",
+      "kind": "agent",
+      "name": "investigate-and-fix",
+      "cmd": [
+        "node"
+      ],
+      "cwd": "/build/fix-factory-state",
+      "pid": 1000,
+      "pidStartTime": 1,
+      "startedAt": "2026-10-15T03:00:00.000Z",
+      "item": "i-spinner",
+      "model": "opus",
+      "sessionId": "3c1e"
+    },
+    "j-recover": {
+      "job": "j-recover",
+      "kind": "agent",
+      "name": "recover",
+      "cmd": [
+        "node"
+      ],
+      "cwd": "/build/fix-factory-state",
+      "pid": 1000,
+      "pidStartTime": 1,
+      "startedAt": "2026-10-15T08:50:00.000Z",
+      "model": "opus",
+      "endedAt": "2026-10-15T08:54:00.000Z",
+      "exitCode": 0,
+      "durationMs": 240000,
+      "costUsd": 0.88
+    }
+  },
+  "needsUser": [
+    {
+      "key": "recovery:j-recover",
+      "action": "Recovery plan",
+      "detail": "You said: “the browser_tabSpinner agent has been at it for 6 hours”",
+      "since": "2026-10-15T07:30:00.000Z"
+    }
+  ],
+  "recoveryPlans": [
+    {
+      "job": "j-recover",
+      "t": "2026-10-15T08:54:00.000Z",
+      "text": "the browser_tabSpinner agent has been at it for 6 hours",
+      "plan": [
+        {
+          "cmd": "resume-agent",
+          "item": "i-spinner",
+          "message": "Stop and report what you have.",
+          "reason": "Its last 40 min were repeated --repeat 50 runs with 0 failures."
+        },
+        {
+          "cmd": "shell",
+          "cwd": "/build/worktrees/spinner",
+          "command": "git stash list",
+          "reason": "Check whether it left uncommitted experiments."
+        }
+      ],
+      "cannotDo": [
+        "Read the profile of task Zx3 for it: the artifact expired."
+      ],
+      "questions": [
+        "Should the next attempt use a debug build?"
+      ]
+    }
+  ],
+  "notes": [],
+  "rev": "3f9a2c71e0d4"
+}

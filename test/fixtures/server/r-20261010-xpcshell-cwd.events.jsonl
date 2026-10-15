@@ -1,0 +1,6 @@
+{"v":1,"request":"r-20261010-xpcshell-cwd","t":"2026-10-10T08:00:00.000Z","type":"request-created","kind":"try-push","text":"xpcshell tests writing to the test directory","rev":"27999ea83b92"}
+{"v":1,"request":"r-20261010-xpcshell-cwd","t":"2026-10-10T08:04:00.000Z","type":"try-pushed","push":"initial","rev":"27999ea83b92","url":"https://treeherder.mozilla.org/jobs?repo=try&revision=27999ea83b92"}
+{"v":1,"request":"r-20261010-xpcshell-cwd","t":"2026-10-10T11:05:00.000Z","type":"try-finished","push":"initial","result":"failures","summary":"291 failures, 12 groups"}
+{"v":1,"request":"r-20261010-xpcshell-cwd","t":"2026-10-11T09:00:00.000Z","type":"needs-user","key":"take-it:i-update","action":"Someone is on the update tests","detail":"bug 2070001","item":"i-update"}
+{"v":1,"request":"r-20261010-xpcshell-cwd","t":"2026-10-11T12:00:00.000Z","type":"user-done","key":"take-it:i-update"}
+{"v":1,"request":"r-20261010-xpcshell-cwd","t":"2026-10-15T07:30:00.000Z","type":"needs-user","key":"approve-push:A","action":"Approve try push A for storage/test/unit","detail":"312 tasks","push":"A"}

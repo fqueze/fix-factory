@@ -1,0 +1,137 @@
+{
+  "id": "r-20261001-mouse-button",
+  "kind": "try-push",
+  "text": "Mouse button left pressed after synthetic clicks",
+  "createdAt": "2026-10-01T08:00:00.000Z",
+  "updatedAt": "2026-10-15T09:00:00.000Z",
+  "step": "landing",
+  "config": {},
+  "items": {
+    "i-m1": {
+      "id": "i-m1",
+      "folder": "dom/events/test",
+      "group": {
+        "message": "Test wrote into its own directory",
+        "tests": [
+          "dom/events/test/test_click.html"
+        ],
+        "configs": [
+          "linux64/debug",
+          "windows11-64/opt"
+        ],
+        "ratePerWeek": 11
+      },
+      "state": "waiting for review",
+      "jobs": []
+    },
+    "i-m2": {
+      "id": "i-m2",
+      "folder": "dom/events/test",
+      "group": {
+        "message": "Test wrote into its own directory",
+        "tests": [
+          "dom/events/test/test_drag.html"
+        ],
+        "configs": [
+          "linux64/debug",
+          "windows11-64/opt"
+        ],
+        "ratePerWeek": 3
+      },
+      "state": "landed",
+      "jobs": []
+    }
+  },
+  "patches": {
+    "p-m2": {
+      "id": "p-m2",
+      "sha": "p-m2000000000000000000000000000000000000",
+      "worktree": "/build/worktrees/x",
+      "title": "Bug 2060001 - Release the mouse in test_drag.html, r=smaug.",
+      "bug": 2060001,
+      "deps": [],
+      "replyDrafts": [],
+      "item": "i-m2",
+      "revision": 326000,
+      "review": {
+        "revision": 326000,
+        "status": "accepted",
+        "reviewers": [
+          {
+            "name": "smaug",
+            "status": "accepted"
+          }
+        ],
+        "comments": []
+      }
+    },
+    "p-m1": {
+      "id": "p-m1",
+      "sha": "p-m1000000000000000000000000000000000000",
+      "worktree": "/build/worktrees/x",
+      "title": "Bug 2060002 - Release the mouse in test_click.html, r=smaug.",
+      "bug": 2060002,
+      "deps": [
+        {
+          "patch": "p-m1",
+          "needs": "p-m2",
+          "kind": "hard",
+          "reason": "same helper",
+          "source": "agent"
+        }
+      ],
+      "replyDrafts": [],
+      "item": "i-m1",
+      "revision": 326001,
+      "review": {
+        "revision": 326001,
+        "status": "accepted",
+        "reviewers": [
+          {
+            "name": "smaug",
+            "status": "accepted"
+          }
+        ],
+        "comments": []
+      }
+    }
+  },
+  "stacks": {
+    "mouse-button": {
+      "id": "mouse-button",
+      "folder": "dom/events/test",
+      "branch": "ff/mouse-button",
+      "worktree": "/build/worktrees/mouse-button",
+      "order": [
+        "p-m2",
+        "p-m1"
+      ]
+    }
+  },
+  "pushes": {
+    "v1": {
+      "id": "v1",
+      "purpose": "Verify the harness check with all 7 fixes",
+      "command": [
+        "./mach",
+        "try",
+        "fuzzy"
+      ],
+      "rev": "5be03d71aa90",
+      "result": "green",
+      "summary": "green"
+    }
+  },
+  "jobs": {},
+  "needsUser": [
+    {
+      "key": "land:mouse-button",
+      "action": "Reorg ready: 1 landable patch moved to the bottom",
+      "detail": "1 text conflict resolved (Sonnet) · 1 revision changed",
+      "since": "2026-10-15T07:30:00.000Z"
+    }
+  ],
+  "recoveryPlans": [],
+  "notes": [],
+  "rev": "5be03d71aa90"
+}
