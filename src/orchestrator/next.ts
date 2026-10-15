@@ -42,6 +42,7 @@ import {
   outPath,
   reportPath,
   requestDir,
+  DEFAULT_PRIORITY,
   REVIEW_PRIORITY,
   sessionIdFor,
   shortHash,
@@ -81,6 +82,9 @@ export const LINT_ROUNDS = 2;
 export const REVIEW_ROUNDS = 3;
 export const STACK_REVIEW_ROUNDS = 3;
 export const CANCELLED = "cancelled by you";
+// Jobs with an external side effect that a failure doesn't undo: a try push can fail after mach try
+// pushed (a Lando timeout), and a retry would push again. They come to you instead.
+const NO_RETRY = new Set(["push"]);
 
 const SETTLED: ItemState[] = ["reviewed", "in stack", "in try", "waiting for review", "addressing review comments", "fixed", "landed", "left as-is", "handed back"];
 const WITH_PATCHES: ItemState[] = ["reviewed", "in stack", "in try", "waiting for review", "addressing review comments", "fixed", "landed"];
@@ -268,7 +272,7 @@ class Planner {
     if (succeeded(last)) return last;
     // You cancelled it: nothing happens until you say what to do instead.
     if (last.end.error?.startsWith(CANCELLED)) return undefined;
-    if (jobs.length < 2) {
+    if (jobs.length < 2 && !NO_RETRY.has(last.purpose.what)) {
       const retry = this.retryPlan(last, make);
       if (retry) this.start(key, retry);
     } else {
@@ -296,7 +300,8 @@ class Planner {
 
   private blocked(last: JobRecord): void {
     const detail = (last.end?.error ?? `exit code ${last.end?.exitCode}`).slice(0, 500);
-    this.raise(`failed:${last.job}`, { action: `${last.name} failed twice`, detail, job: last.job, ...(last.item ? { item: last.item } : {}) });
+    const action = NO_RETRY.has(last.purpose.what) ? `${last.name} failed (not retried: it may have happened)` : `${last.name} failed twice`;
+    this.raise(`failed:${last.job}`, { action, detail, job: last.job, ...(last.item ? { item: last.item } : {}) });
     if (last.item && this.s.items[last.item]) this.setItem(last.item, "blocked", `${last.name} failed`);
   }
 
@@ -308,8 +313,10 @@ class Planner {
     return this.ctx.report(r.job) as T;
   }
 
+  // redo-step appends a step event; the step's keys get its count, so its jobs run again. A request
+  // starts in "request" without a step event, the other steps with one.
   stepEpoch(step: RequestStep): string {
-    const n = (this.view.stepCount.get(step) ?? 0) - 1;
+    const n = (this.view.stepCount.get(step) ?? 0) - (step === "request" ? 0 : 1);
     return n > 0 ? `@${n}` : "";
   }
 
@@ -357,7 +364,7 @@ class Planner {
 
   private request(): void {
     if (this.s.step !== "request") return;
-    const parse = this.wantAgent("parse", "parse", "parse-request", { kind: this.s.kind, text: this.s.text });
+    const parse = this.wantAgent(`parse${this.stepEpoch("request")}`, "parse", "parse-request", { kind: this.s.kind, text: this.s.text });
     if (!parse) return;
     if (this.s.kind === "burndown") {
       this.setStep("first signal");
@@ -378,7 +385,7 @@ class Planner {
   }
 
   private skipIfs(): { a: Annotation; index: number }[] | undefined {
-    const ann = this.want("annotations", () => this.cli("annotations", "annotations.ts", ["list", this.s.folder ?? "", "--repo", this.config.firefoxRepo], { cwd: this.config.firefoxRepo }));
+    const ann = this.want(`annotations${this.stepEpoch("first signal")}`, () => this.cli("annotations", "annotations.ts", ["list", this.s.folder ?? "", "--repo", this.config.firefoxRepo], { cwd: this.config.firefoxRepo }));
     if (!ann) return undefined;
     return this.out<Annotation[]>(ann)
       .map((a, index) => ({ a, index }))
@@ -397,7 +404,7 @@ class Planner {
     const wt = this.signalWorktree();
     const classified = skips.map(({ a, index }) => {
       const bug = a.bug && "summary" in a.bug ? a.bug : undefined;
-      const r = this.wantAgent(`classify:${index}`, "classify", "classify-annotation", {
+      const r = this.wantAgent(`classify:${index}${this.stepEpoch("first signal")}`, "classify", "classify-annotation", {
         annotation: `${a.kind} = ${a.condition}`,
         manifest: `${a.manifest} [${a.test}]`,
         bug: a.bug?.id ?? "unknown",
@@ -425,8 +432,9 @@ class Planner {
       this.setStep("work list");
       return;
     }
+    const e = this.stepEpoch("first signal");
     const plan = this.wantAgent(
-      "plan:unskip",
+      `plan:unskip${e}`,
       "plan-pushes",
       "plan-try-pushes",
       {
@@ -441,16 +449,29 @@ class Planner {
     );
     if (!plan) return;
     const pushes = this.rep<PlanTryPushesReport>(plan).pushes;
-    const ids = pushes.map((_, i) => (pushes.length === 1 ? "unskip" : `unskip-${i + 1}`));
+    const ids = pushes.map((_, i) => `unskip${e.replace("@", "-")}${pushes.length === 1 ? "" : `-${i + 1}`}`);
     const dry = pushes.map((push, i) => this.dryRun(ids[i], push.tryArgs, push.purpose, wt.path));
     if (dry.some((d) => !d)) return;
     if (ids.every((id) => this.s.pushes[id]?.rev || dry[ids.indexOf(id)]!.duplicateOf !== undefined)) this.setStep("work list");
   }
 
   private dryRun(push: PushId, args: string[], purpose: string, cwd: string, stack?: string): DryRunResult | undefined {
-    const r = this.want(`dry-run:${push}`, () =>
-      this.cli("dry-run", "try.ts", ["dry-run", "--cwd", cwd, "--", ...args], { cwd, purpose: { push, args, cwd, purpose, ...(stack ? { stack } : {}) } }),
-    );
+    const r = this.want(`dry-run:${push}`, () => {
+      // try.ts refuses a duplicate of a push still pending.
+      const pending = Object.values(this.s.pushes)
+        .filter((p) => p.id !== push && p.result === undefined)
+        .flatMap((p) => {
+          const d = this.view.byKey.get(`dry-run:${p.id}`)?.find(succeeded);
+          return d ? [{ push: p.id, ...this.out<DryRunResult>(d) }] : [];
+        })
+        .map(({ push: id, tryTaskConfig, commits }) => ({ push: id, tryTaskConfig, commits }));
+      const file = dataPath(this.config, this.s.id, `pending-${push}.json`);
+      return this.cli("dry-run", "try.ts", ["dry-run", "--cwd", cwd, "--pending", file, "--", ...args], {
+        cwd,
+        files: [{ path: file, content: JSON.stringify(pending) + "\n" }],
+        purpose: { push, args, cwd, purpose, ...(stack ? { stack } : {}) },
+      });
+    });
     return r && this.out<DryRunResult>(r);
   }
 
@@ -462,9 +483,10 @@ class Planner {
       const dry = this.view.byKey.get(`dry-run:${push.id}`)?.find(succeeded);
       if (!push.rev && dry && this.view.done.has(`approve-push:${push.id}`)) {
         const { args = [], cwd = this.config.firefoxRepo, stack } = dry.purpose;
+        const commits = this.out<DryRunResult>(dry).commits;
         const items = stack ? (this.stackInfos.get(stack)?.patches.map((x) => x.item) ?? []) : [];
         const pushed = this.want(`push:${push.id}`, () =>
-          this.cli("push", "try.ts", ["push", "--cwd", cwd, "--", ...args], {
+          this.cli("push", "try.ts", ["push", "--cwd", cwd, "--expect-commits", commits.join(","), "--", ...args], {
             cwd,
             purpose: { push: push.id },
             startEvents: [...new Set(items)].map((item) => this.ev("item-state", { item, state: "in try" })),
@@ -491,14 +513,15 @@ class Planner {
 
   // Step 3 runs at whichever comes first, the push finishing or 2 h after it started, then again
   // when it finishes.
-  private pushRuns(push: PushId): ("early" | "final")[] {
+  // Run names carry the step's epoch e, so a redone step runs again.
+  private pushRuns(push: PushId, e: string): string[] {
     const p = this.s.pushes[push];
     if (!p?.rev) return [];
-    const runs: ("early" | "final")[] = [];
+    const runs: string[] = [];
     const pushedAt = this.view.pushedAt.get(push);
-    const earlyStarted = [...this.view.byKey.keys()].some((k) => k.endsWith(`:${push}:early`));
-    if (earlyStarted || (p.result === undefined && pushedAt !== undefined && this.ctx.now - pushedAt >= EARLY_WORK_LIST_MS)) runs.push("early");
-    if (p.result) runs.push("final");
+    const earlyStarted = [...this.view.byKey.keys()].some((k) => k.endsWith(`:${push}:early${e}`));
+    if (earlyStarted || (p.result === undefined && pushedAt !== undefined && this.ctx.now - pushedAt >= EARLY_WORK_LIST_MS)) runs.push(`early${e}`);
+    if (p.result) runs.push(`final${e}`);
     return runs;
   }
 
@@ -514,9 +537,10 @@ class Planner {
     if (at(this.s.step) < at("work list") || at(this.s.step) > at("verify on try")) return;
     const pushes = this.signalPushes();
     const goal = this.s.text.trim() || "find the failures to fix";
+    const e = this.stepEpoch("work list");
     let firstRunDone = false;
     if (pushes.length === 0 && this.s.kind === "burndown") {
-      const groups = this.groups("folder", "folder", this.s.folder ?? "");
+      const groups = this.groups("folder", `folder${e}`, this.s.folder ?? "");
       if (groups) {
         this.createItems(groups);
         firstRunDone = true;
@@ -524,7 +548,7 @@ class Planner {
     }
     for (const push of pushes) {
       const rev = this.s.pushes[push].rev!;
-      for (const run of this.pushRuns(push)) {
+      for (const run of this.pushRuns(push, e)) {
         const groups = this.groups(push, run, rev);
         const table = this.want(`try-table:${push}:${run}`, () => this.cli("try-table", "failures.ts", ["try-table", rev], { purpose: { push } }));
         if (!groups || !table) continue;
@@ -628,6 +652,14 @@ class Planner {
     return ok && { job: ok, commits: commitsOf(ok.name, this.rep(ok)) };
   }
 
+  // Round limits count from the author's latest fresh start or address-review run: review comments
+  // begin a new conversation with the critical reviewer.
+  private roundsSinceStart(item: ItemId, reason: string): number {
+    const jobs = this.authorJobs(item);
+    const start = jobs.findLastIndex((j) => j.purpose.reason === "initial" || j.purpose.reason === "start" || j.name === "address-review");
+    return jobs.slice(start + 1).filter((j) => j.purpose.reason === reason).length;
+  }
+
   resumeAuthor(item: ItemId, key: string, reason: string, message: string, state: ItemState = "investigating"): JobRecord | undefined {
     if (this.view.byKey.has(key)) return this.want(key);
     const plan = resumeAuthorPlan(this.s.id, this.view, item, reason, { message }, state);
@@ -698,7 +730,7 @@ class Planner {
   private annotationsInput(): unknown[] {
     const skips = this.skipIfs() ?? [];
     return skips.map(({ a, index }) => {
-      const r = this.view.byKey.get(`classify:${index}`)?.find(succeeded);
+      const r = this.view.byKey.get(`classify:${index}${this.stepEpoch("first signal")}`)?.find(succeeded);
       const c = r && this.rep<ClassifyAnnotationReport>(r);
       return { manifest: a.manifest, test: a.test, condition: a.condition, line: a.line, comment: a.comment, kind: c?.kind, reason: c?.reason };
     });
@@ -708,16 +740,18 @@ class Planner {
   private checkAndReview(item: ItemView, author: JobRecord, commits: string[]): void {
     const e = this.itemEpoch(item.id);
     const cwd = author.cwd;
+    // Answers to review comments are checked first, like the comments themselves.
+    const priority = author.name === "address-review" ? REVIEW_PRIORITY : DEFAULT_PRIORITY;
     const imp = this.want(`import:${author.job}`, () =>
-      this.cli("import", "stack.ts", ["import", "--cwd", cwd, `${commits[0]}^..${commits.at(-1)}`], { cwd, item: item.id, purpose: { item: item.id } }),
+      this.cli("import", "stack.ts", ["import", "--cwd", cwd, `${commits[0]}^..${commits.at(-1)}`], { cwd, item: item.id, priority, purpose: { item: item.id } }),
     );
     if (!imp) return;
     const patches = commits.map((sha, i) => ({ id: patchId(item.id, i), sha }));
     const lints: { job: JobRecord; what: string }[] = [];
     let pending = false;
     for (const p of patches) {
-      const msg = this.want(`msg:${p.id}:${p.sha}`, () => this.cli("msg", "git", ["log", "-1", "--format=%B", p.sha], { cwd, item: item.id, purpose: { item: item.id, patch: p.id } }));
-      const lint = msg && this.want(`lint:${p.id}:${p.sha}`, () => this.cli("lint", "lint-text.ts", ["--kind", "commit", outPath(this.config, msg.job)], { item: item.id, purpose: { item: item.id, patch: p.id } }));
+      const msg = this.want(`msg:${p.id}:${p.sha}`, () => this.cli("msg", "git", ["log", "-1", "--format=%B", p.sha], { cwd, item: item.id, priority, purpose: { item: item.id, patch: p.id } }));
+      const lint = msg && this.want(`lint:${p.id}:${p.sha}`, () => this.cli("lint", "lint-text.ts", ["--kind", "commit", outPath(this.config, msg.job)], { item: item.id, priority, purpose: { item: item.id, patch: p.id } }));
       if (lint) lints.push({ job: lint, what: `the commit message of ${p.sha.slice(0, 12)}` });
       else pending = true;
     }
@@ -735,7 +769,7 @@ class Planner {
       for (const reply of report.replies) {
         const file = dataPath(this.config, this.s.id, `replies/${author.job}-${reply.commentId}.txt`);
         const lint = this.want(`lint-reply:${author.job}:${reply.commentId}`, () =>
-          this.cli("lint", "lint-text.ts", ["--kind", "reply", file], { item: item.id, files: [{ path: file, content: reply.text }], purpose: { item: item.id } }),
+          this.cli("lint", "lint-text.ts", ["--kind", "reply", file], { item: item.id, priority, files: [{ path: file, content: reply.text }], purpose: { item: item.id } }),
         );
         if (lint) lints.push({ job: lint, what: `the reply to comment ${reply.commentId}` });
         else pending = true;
@@ -744,7 +778,7 @@ class Planner {
     if (pending) return;
     const violations = lints.flatMap(({ job, what }) => this.out<{ violations: { rule: string; line?: number; text: string }[] }>(job).violations.map((v) => ({ ...v, what, job })));
     if (violations.length > 0) {
-      const rounds = this.authorJobs(item.id).filter((j) => j.purpose.reason === "lint").length;
+      const rounds = this.roundsSinceStart(item.id, "lint");
       if (rounds >= LINT_ROUNDS && !this.view.byKey.has(`author:${item.id}${e}:lint:${author.job}`)) {
         this.raise(`failed:${violations[0].job.job}`, { action: `Lint violations after ${LINT_ROUNDS} rounds`, detail: violations.map((v) => `${v.rule}: ${v.text}`).join("; ").slice(0, 500), job: violations[0].job.job, item: item.id });
         this.setItem(item.id, "blocked", "lint violations");
@@ -760,6 +794,7 @@ class Planner {
     const reviews = patches.map((p) =>
       this.wantAgent(`review:${p.id}:${author.job}`, "review", "review-patch", { sha: p.sha, worktree: cwd, report: reportPath(this.config, this.s.id, author.job) }, {
         cwd,
+        priority,
         item: item.id,
         purpose: { item: item.id, patch: p.id, sha: p.sha },
         startEvents: [this.ev("item-state", { item: item.id, state: "in critical review" })],
@@ -775,7 +810,7 @@ class Planner {
       return;
     }
     const key = `author:${item.id}${e}:review:${author.job}`;
-    const rounds = this.authorJobs(item.id).filter((j) => j.purpose.reason === "review").length;
+    const rounds = this.roundsSinceStart(item.id, "review");
     if (rounds >= REVIEW_ROUNDS && !this.view.byKey.has(key)) {
       const last = findings[0].job.job;
       this.raise(`failed:${last}`, { action: `No ok after ${REVIEW_ROUNDS} critical review rounds`, detail: findings.map((f) => f.text).join("; ").slice(0, 500), job: last, item: item.id });
@@ -805,7 +840,7 @@ class Planner {
       if (patches.length === 0) continue;
       const id = stackId(folder);
       const wtJob = this.view.byKey.get(`wt:${id}`)?.find(succeeded);
-      const hash = shortHash(patches.map((p) => `${p.id}=${p.source}`));
+      const hash = shortHash(patches.map((p) => `${p.id}=${p.source}`)) + this.stepEpoch("stack");
       const info: StackInfo = { id, folder, hash, patches, branch: `${this.s.id}-${id}`, ready: false };
       if (wtJob) info.wt = this.out<{ path: string }>(wtJob).path;
       info.ready = this.view.byKey.get(`summary:${id}:${hash}`)?.some(succeeded) ?? false;
@@ -841,8 +876,9 @@ class Planner {
       ...info.patches.filter((p) => !prev?.order.includes(p.id)).map((p) => p.source),
     ];
     const patchesOf = (shas: string[]) => Object.fromEntries(shas.map((sha) => [sha.slice(0, 12), bySource.get(sha)!.id]));
-    const reassembly = this.view.jobs.some((j) => j.purpose.what === "assemble" && j.purpose.stack === id && !j.purpose.key.startsWith(`assemble:${id}:${hash}`));
-    const first = this.want(`assemble:${id}:${hash}`, () =>
+    const key = `assemble:${id}:${hash}`;
+    const reassembly = this.view.jobs.some((j) => j.purpose.what === "assemble" && j.purpose.stack === id && j.purpose.key !== key && !j.purpose.key.startsWith(`${key}:after:`));
+    const first = this.want(key, () =>
       reassembly
         ? this.cli("assemble", "stack.ts", ["rewrite", "--cwd", wt, "--base", this.config.baseRef, "--branch", info.branch, "--leave-conflict", "--order", sources.join(",")], { cwd: wt, purpose: { stack: id, patches: patchesOf(sources) } })
         : this.cli("assemble", "stack.ts", ["assemble", "--cwd", wt, "--branch", info.branch, "--base", this.config.baseRef, "--leave-conflict", ...sources], { cwd: wt, purpose: { stack: id, patches: patchesOf(sources) } }),
@@ -1049,7 +1085,7 @@ class Planner {
     const debug = this.s.kind === "burndown" ? this.debugCommit() : undefined;
     if (debug) {
       const tb = this.want(`try-branch:${info.id}:${info.hash}${e}`, () =>
-        this.cli("try-branch", "stack.ts", ["assemble", "--cwd", info.wt!, "--branch", `${stack.branch}-try-${info.hash.slice(0, 6)}${e.replace("@", "-")}`, "--base", stack.branch, debug], { cwd: info.wt, purpose: { stack: info.id } }),
+        this.cli("try-branch", "stack.ts", ["assemble", "--cwd", info.wt!, "--branch", `${stack.branch}-try-${shortHash([info.hash, e]).slice(0, 6)}`, "--base", stack.branch, debug], { cwd: info.wt, purpose: { stack: info.id } }),
       );
       if (!tb) return undefined;
       branch = this.out<{ branch: string }>(tb).branch;
@@ -1086,7 +1122,7 @@ class Planner {
     });
     if (!plan) return undefined;
     const planned = this.rep<PlanTryPushesReport>(plan).pushes;
-    const ids = planned.map((_, i) => `${info.id}-${info.hash.slice(0, 4)}${e.replace("@", "-")}-${i + 1}`);
+    const ids = planned.map((_, i) => `${info.id}-${shortHash([info.hash, e]).slice(0, 4)}-${i + 1}`);
     const dry = planned.map((push, i) => this.dryRun(ids[i], push.tryArgs, push.purpose, info.wt!, info.id));
     if (dry.some((d) => !d)) return undefined;
     return ids.filter((_, i) => dry[i]!.duplicateOf === undefined);
@@ -1115,7 +1151,7 @@ class Planner {
 
   private routeTryFailures(push: PushId, patches: PatchView[]): void {
     const p = this.s.pushes[push];
-    for (const run of this.pushRuns(push)) {
+    for (const run of this.pushRuns(push, this.stepEpoch("verify on try"))) {
       const table = this.want(`try-table:${push}:${run}`, () => this.cli("try-table", "failures.ts", ["try-table", p.rev!], { purpose: { push } }));
       if (!table) continue;
       const t = this.out<TryTable>(table);
@@ -1177,6 +1213,7 @@ class Planner {
 
   private submit(): void {
     if (this.s.step !== "submit") return;
+    const e = this.stepEpoch("submit");
     let submitted = true;
     for (const st of Object.values(this.s.stacks)) {
       const patches = st.order.map((pid) => this.s.patches[pid]);
@@ -1190,10 +1227,10 @@ class Planner {
       }
       submitted = false;
       if (this.s.kind === "burndown" && this.debugCommit()) {
-        if (!this.want(`checkout:${st.id}`, () => this.cli("checkout", "git", ["checkout", st.branch], { cwd: st.worktree, purpose: { stack: st.id } }))) continue;
+        if (!this.want(`checkout:${st.id}${e}`, () => this.cli("checkout", "git", ["checkout", st.branch], { cwd: st.worktree, purpose: { stack: st.id } }))) continue;
       }
       const files = [...new Set(patches.flatMap((p) => this.patchFiles(p)))];
-      const rv = this.want(`reviewers:${st.id}`, () => this.cli("reviewers", "phab.ts", ["reviewers", ...files, "--repo", st.worktree], { cwd: st.worktree, purpose: { stack: st.id } }));
+      const rv = this.want(`reviewers:${st.id}${e}`, () => this.cli("reviewers", "phab.ts", ["reviewers", ...files, "--repo", st.worktree], { cwd: st.worktree, purpose: { stack: st.id } }));
       if (!rv) continue;
       const reviewer = this.out<{ suggestions: ReviewerSuggestion[] }>(rv).suggestions[0]?.name;
       const missing = patches.filter((p) => !/\br=\S/.test(p.title));
@@ -1221,7 +1258,7 @@ class Planner {
       const latestPlan = this.view.jobs.filter((j) => j.purpose.what === "plan-pushes" && j.purpose.stack === st.id).at(-1);
       const current = pushes.filter((p) => latestPlan && (this.view.byKey.get(`dry-run:${p.id}`)?.[0].startedAt ?? 0) >= latestPlan.startedAt);
       const tryFile = dataPath(this.config, this.s.id, `try-${st.id}-${contentKey}.json`);
-      const check = this.want(`check:${st.id}:${contentKey}`, () =>
+      const check = this.want(`check:${st.id}:${contentKey}${e}`, () =>
         this.cli("check", "stack.ts", ["check", "--cwd", st.worktree, "--base", st.base ?? this.config.baseRef, "--try", tryFile], {
           cwd: st.worktree,
           purpose: { stack: st.id },
@@ -1289,7 +1326,7 @@ class Planner {
       const handled = new Set(this.view.jobs.filter((j) => j.purpose.patch === p.id && j.purpose.comments).flatMap((j) => j.purpose.comments!));
       const fresh = p.review.comments.filter((c) => !c.done && reviewers.has(c.author) && !handled.has(c.id));
       if (fresh.length > 0) {
-        const h = shortHash(fresh.map((c) => String(c.id)));
+        const h = shortHash(fresh.map((c) => String(c.id))) + this.stepEpoch("review comments");
         const cls = this.wantAgent(`classify-comments:${p.id}:${h}`, "classify-comments", "classify-review-comments", { revision: `D${p.revision}` }, { priority: REVIEW_PRIORITY, item, purpose: { patch: p.id } });
         if (!cls) continue;
         const kinds = new Map(this.rep<ClassifyReviewCommentsReport>(cls).comments.map((c) => [c.id, c]));
@@ -1371,7 +1408,7 @@ class Planner {
       const ps = st.order.map((pid) => this.s.patches[pid]);
       const fresh = (p: PatchView) => p.review?.comments.some((c) => !c.done) ?? false;
       // What makes patches landable, not their order or shas: the reorder below changes those.
-      const h = shortHash(ps.map((p) => `${p.id}:${accepted(p)}:${landed(p)}:${fresh(p)}`).sort());
+      const h = shortHash(ps.map((p) => `${p.id}:${accepted(p)}:${landed(p)}:${fresh(p)}`).sort()) + this.stepEpoch("landing");
       const file = dataPath(this.config, this.s.id, `landable-${st.id}-${h}.json`);
       const ord = this.want(`order-landable:${st.id}:${h}`, () =>
         this.cli("order", "stack.ts", ["order", file, "--landable"], {

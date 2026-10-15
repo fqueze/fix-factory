@@ -92,7 +92,7 @@
     }
   },
   {
-    "match": "^try\\.ts dry-run --cwd \\S+ -- fuzzy",
+    "match": "^try\\.ts dry-run --cwd \\S+ --pending \\S+ -- fuzzy",
     "out": { "command": ["./mach", "try", "fuzzy", "-q", "'mochitest-plain 'linux", "--rebuild", "5"], "taskCount": 12, "tasks": [], "tryTaskConfig": {}, "commits": [], "warnings": [] }
   }
 ]

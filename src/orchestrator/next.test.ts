@@ -144,8 +144,8 @@ describe("2. first signal", () => {
 
     sc.complete("plan:unskip", { report: { pushes: [{ purpose: "reproduce", tryArgs: ["fuzzy", "-q", "xpcshell"], rebuild: 10 }], feedback: [] } });
     assert.deepEqual(sc.settle(), ["dry-run:unskip"]);
-    assert.deepEqual(sc.plan("dry-run:unskip").cli?.args, ["dry-run", "--cwd", `/wt/${ID}-signal`, "--", "fuzzy", "-q", "xpcshell"]);
-    sc.complete("dry-run:unskip", { output: { command: ["./mach", "try", "fuzzy", "-q", "xpcshell"], taskCount: 40, tasks: [], tryTaskConfig: {}, commits: [], warnings: ["artifact push"] } });
+    assert.deepEqual(sc.plan("dry-run:unskip").cli?.args, ["dry-run", "--cwd", `/wt/${ID}-signal`, "--pending", `/state/requests/${ID}/data/pending-unskip.json`, "--", "fuzzy", "-q", "xpcshell"]);
+    sc.complete("dry-run:unskip", { output: { command: ["./mach", "try", "fuzzy", "-q", "xpcshell"], taskCount: 40, tasks: [], tryTaskConfig: {}, commits: ["c2", "c1"], warnings: ["artifact push"] } });
     sc.settle();
     assert.deepEqual(sc.open(), ["approve-push:unskip"]);
     assert.equal(sc.state().needsUser[0].detail, "40 tasks · reproduce · artifact push");
@@ -154,7 +154,7 @@ describe("2. first signal", () => {
     // Approved: pushed, watched, and the step moves on once the push exists.
     sc.add({ type: "user-done", request: ID, key: "approve-push:unskip" });
     assert.deepEqual(sc.settle(), ["push:unskip"]);
-    assert.deepEqual(sc.plan("push:unskip").cli?.args, ["push", "--cwd", `/wt/${ID}-signal`, "--", "fuzzy", "-q", "xpcshell"]);
+    assert.deepEqual(sc.plan("push:unskip").cli?.args, ["push", "--cwd", `/wt/${ID}-signal`, "--expect-commits", "c2,c1", "--", "fuzzy", "-q", "xpcshell"]);
     sc.complete("push:unskip", { output: { landoJobId: 7, landoUrl: "l", treeherderUrl: "t" } });
     assert.deepEqual(sc.settle(), ["watch:unskip"]);
     assert.deepEqual(sc.plan("watch:unskip").cli?.args, ["watch", "--lando", "7"]);
@@ -182,6 +182,24 @@ describe("try pushes", () => {
     assert.deepEqual(sc.step(), ["artifacts:T1:0"]);
     assert.deepEqual(sc.plan("artifacts:T1:0").cli?.args, ["fetch", "T1", "--run", "0", "--into", "/state/cache/artifacts/T1"]);
     assert.deepEqual(sc.step(), []);
+  });
+});
+
+describe("try pushes, failing", () => {
+  it("never retries a failed push by itself: it may have pushed", () => {
+    const sc = new Scenario("try-push", { rev: "abc" });
+    sc.step();
+    sc.complete("parse", { report: parse });
+    sc.settle();
+    sc.add({ type: "try-planned", request: ID, push: "A", purpose: "p", command: ["./mach", "try", "fuzzy"] });
+    sc.startJob({ purpose: { key: "dry-run:A", what: "dry-run", push: "A", args: ["fuzzy", "-q", "x"], cwd: "/wt/s" }, kind: "script", name: "try.ts dry-run", cwd: "/wt/s", cli: { tool: "try.ts", args: [] } });
+    sc.complete("dry-run:A", { output: { command: ["./mach", "try", "fuzzy"], taskCount: 1, tasks: [], tryTaskConfig: {}, commits: ["c1"], warnings: [] } });
+    sc.add({ type: "user-done", request: ID, key: "approve-push:A" });
+    assert.deepEqual(sc.settle(), ["push:A"]);
+    const job = sc.complete("push:A", { exitCode: 1, error: "Lando timed out" });
+    assert.deepEqual(sc.settle(), []);
+    assert.deepEqual(sc.open(), [`failed:${job}`]);
+    assert.match(sc.state().needsUser[0].action, /not retried/);
   });
 });
 
@@ -769,6 +787,7 @@ describe("9. review comments", () => {
     const job = sc.complete(address, { report: { state: "addressed", summary: "s", commits: [sha("7")], replies: [{ commentId: 7, text: "waitForCondition hides the race." }], feedback: [] } });
     assert.deepEqual(sc.state().patches["p-test-a"].replyDrafts, [{ commentId: 7, text: "waitForCondition hides the race." }]);
     sc.settle();
+    assert.equal(sc.plan(`import:${job}`).priority, 0);
     sc.complete(`import:${job}`, { output: imported(sha("7"), "Bug 999 - Fix a, r=smaug.", ["a/test_a.js"], 999).map((c) => ({ ...c, revision: 101 })) });
     sc.settle();
     sc.complete(`msg:p-test-a:${sha("7")}`, { output: "m" });
@@ -776,6 +795,7 @@ describe("9. review comments", () => {
     sc.settle();
     sc.complete(`lint:p-test-a:${sha("7")}`, { output: lintOk });
     sc.settle();
+    assert.equal(sc.plan(`review:p-test-a:${job}`).priority, 0);
     sc.complete(`review:p-test-a:${job}`, { report: ok });
     assert.deepEqual(sc.settle(), [`rewrite-review:a:${job}`]);
     assert.deepEqual(sc.plan(`rewrite-review:a:${job}`).cli?.args.slice(-2), ["--order", `${sha("e")},${sha("7")}`]);
@@ -827,6 +847,87 @@ describe("10. landing", () => {
   });
 });
 
+describe("burndown verification", () => {
+  it("pushes the stack with the DEBUG commit on top, then checks the stack branch out again before submitting", () => {
+    const sc = new Scenario("burndown", { folder: "a" });
+    sc.step();
+    sc.complete("parse", { report: parse });
+    sc.settle();
+    sc.complete("annotations", { output: [{ manifest: "a/xpcshell.toml", test: "test_a.js", kind: "skip-if", condition: "os == 'win'", line: 2, commit: null, bug: null, commentBugs: [] }] });
+    sc.settle();
+    sc.complete("classify:0", { report: { kind: "flakiness", reason: "intermittent", feedback: [] } });
+    sc.complete("wt:signal", { output: { name: `${ID}-signal`, path: `/wt/${ID}-signal`, branch: `${ID}-signal` } });
+    sc.settle();
+    // Only a DEBUG commit: nothing to review, the annotations item is done.
+    sc.complete("author:i-annotations:initial", { report: { debug: sha("9"), summary: "un-skip", feedback: [] } });
+    sc.settle();
+    sc.complete("plan:unskip", { report: { pushes: [{ purpose: "reproduce", tryArgs: ["fuzzy", "-q", "xpcshell"], rebuild: 10 }], feedback: [] } });
+    sc.settle();
+    sc.complete("dry-run:unskip", { output: { command: ["./mach", "try", "fuzzy"], taskCount: 4, tasks: [], tryTaskConfig: {}, commits: [sha("9")], warnings: [] } });
+    sc.add({ type: "user-done", request: ID, key: "approve-push:unskip" });
+    sc.settle();
+    sc.complete("push:unskip", { output: { rev: "def", landoJobId: 1, treeherderUrl: "t" } });
+    sc.settle();
+    assert.equal(sc.state().step, "work list");
+    sc.complete("watch:unskip", { output: "" });
+    sc.add({ type: "try-finished", request: ID, push: "unskip", result: "failures", summary: "s" });
+    sc.settle();
+    sc.complete("try-table:unskip:final", { output: table() });
+    sc.complete("collect:unskip:final", { output: [failure("a/test_a.js", "boom")] });
+    sc.settle();
+    sc.complete("cluster:unskip:final", { output: { groups: [group("ka", "a/test_a.js", "boom")], singles: [] } });
+    investigating(sc, "i-test-a");
+    reviewed(sc, "i-test-a", sha("1"), "a/test_a.js");
+    sc.complete("wt:a", { output: { name: `${ID}-a`, path: `/wt/${ID}-a`, branch: `${ID}-a` } });
+    sc.settle();
+    const hash = sc.view().jobs.find((j) => j.purpose.what === "assemble")!.purpose.key.split(":")[2];
+    sc.complete(`assemble:a:${hash}`, { output: { commits: [{ sha: sha("1"), newSha: sha("a") }] } });
+    sc.settle();
+    sc.complete(`deps:a:${hash}`, { output: [] });
+    sc.complete(`effort:p-test-a:${sha("1")}`, { report: { effort: 1, reason: "r", feedback: [] } });
+    sc.settle();
+    sc.complete(`order:a:${hash}`, { output: { order: ["p-test-a"], flippedSoftDeps: [] } });
+    sc.settle();
+    sc.complete(`review-stack:a:${hash}`, { report: { findings: [], addDeps: [], removeDeps: [], feedback: [] } });
+    sc.settle();
+    sc.complete(`summary:a:${hash}`, { output: { markdown: "t", metaComment: "m" } });
+    const [tryBranch] = sc.settle();
+    assert.equal(sc.state().step, "verify on try");
+
+    // The stack branch plus the DEBUG commit, on a branch of its own: that's what try gets.
+    assert.equal(tryBranch, `try-branch:a:${hash}`);
+    const args = sc.plan(tryBranch).cli!.args;
+    assert.deepEqual([args[0], args[4].startsWith(`${ID}-a-try-`), ...args.slice(5)], ["assemble", true, "--base", `${ID}-a`, sha("9")]);
+    sc.complete(tryBranch, { output: { branch: args[4], head: sha("b"), commits: [{ sha: sha("9"), newSha: sha("b") }] } });
+    const [planKey] = sc.settle();
+    assert.equal(sc.plan(planKey).agent?.vars?.branch, args[4]);
+    assert.equal(sc.state().patches["p-test-a"].sha, sha("a"));
+    sc.complete(planKey, { report: { pushes: [{ purpose: "verify", tryArgs: ["fuzzy", "-q", "x"], rebuild: 5 }], feedback: [] } });
+    const [dry] = sc.settle();
+    const push = sc.purpose(dry).push!;
+    sc.complete(dry, { output: { command: ["./mach", "try", "fuzzy"], taskCount: 5, tasks: [], tryTaskConfig: {}, commits: [sha("b"), sha("a")], warnings: [] } });
+    sc.add({ type: "user-done", request: ID, key: `approve-push:${push}` });
+    sc.add({ type: "try-pushed", request: ID, push, rev: "fed", url: "u" });
+    sc.add({ type: "try-finished", request: ID, push, result: "green", summary: "green" });
+    sc.settle();
+    sc.complete(`try-table:${push}:final`, { output: table() });
+    sc.settle();
+    assert.equal(sc.state().step, "meta bug");
+    sc.add({ type: "meta-bug", request: ID, bug: 999 });
+    const [rewrite] = sc.settle();
+    sc.complete(rewrite, { output: { mapping: { [sha("a")]: sha("c") } } });
+    sc.settle();
+
+    // Before submitting, the stack's own branch, without the DEBUG commit, is checked out again.
+    assert.equal(sc.state().step, "submit");
+    assert.deepEqual(sc.view().jobs.filter((j) => !j.end).map((j) => j.purpose.key), ["checkout:a"]);
+    const checkout = sc.plan("checkout:a");
+    assert.deepEqual([checkout.cli, checkout.cwd], [{ tool: "git", args: ["checkout", `${ID}-a`] }, `/wt/${ID}-a`]);
+    sc.complete("checkout:a", { output: "" });
+    assert.deepEqual(sc.settle(), ["reviewers:a"]);
+  });
+});
+
 describe("redo-step", () => {
   it("on an item, starts it over with new keys", () => {
     const sc = workList([group("ka", "a/test_a.js", "boom")]);
@@ -834,6 +935,12 @@ describe("redo-step", () => {
     sc.complete("author:i-test-a:initial", { report: { ...fixed([]), state: "left as-is" } });
     sc.add({ type: "item-state", request: ID, item: "i-test-a", state: "not started", detail: "try again" });
     assert.deepEqual(sc.settle(), ["prior-art:i-test-a@1"]);
+  });
+
+  it("on the work list, runs it again", () => {
+    const sc = workList([group("ka", "a/test_a.js", "boom")]);
+    sc.add({ type: "step", request: ID, step: "work list" });
+    assert.deepEqual(sc.step().sort(), ["collect:initial:final@1", "try-table:initial:final@1"]);
   });
 
   it("on the request, plans the step again", () => {
