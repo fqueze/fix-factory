@@ -19,10 +19,13 @@ conventions around it. For compatibility, **only add** fields, event types or co
 
 ```
 commands.jsonl                    # every command, append-only
+commands-data/<id>[.<path>].txt   # a command string over 2 KB, referenced as {"textFile": ...}
+commands.cursor.json              # last command executed by the orchestrator
 requests/<requestId>/events.jsonl # everything that happened to a request, append-only
 jobs/<jobId>/spec.json            # {cmd, cwd, env, stdinFile?, kind, name, request, item}
 jobs/<jobId>/out.log              # stdout (a CLI's JSON, or claude's stream-json)
 jobs/<jobId>/err.log
+jobs/<jobId>/pid.json             # {pid, pidStartTime}, written when the job starts
 jobs/<jobId>/exit.json            # {exitCode, endedAt}, written by the wrapper when the job ends
 feedback/<target>.md              # agent feedback, one file per Feedback.target
 cache/artifacts/<taskId>/...      # downloaded try logs and profiles
@@ -43,6 +46,8 @@ cache/artifacts/<taskId>/...      # downloaded try logs and profiles
 - The wrapper runs `cmd`, redirects stdout and stderr to the logs, and writes `exit.json` when the command ends.
 - Restarting the orchestrator doesn't touch running jobs. On startup it re-attaches to them: pid plus
   `pidStartTime` from `/proc/<pid>/stat` decide whether a job is still alive.
+- Job status is running, finished, lost (no process, no `exit.json`) or **orphaned** (the wrapper died but the command
+  is still running). An orphaned job is cancelled before any retry, so two agents never share a worktree.
 
 ## CLIs (`src/cli/<tool>.ts`)
 
