@@ -9,6 +9,21 @@ reorgs move to scripts and cheap agents, with a web page instead of the terminal
 
 Who: **S** = script · **H** = Haiku · **So** = Sonnet · **O** = Opus · **👤** = you, in the web page.
 
+## How the pieces talk
+
+Three kinds of processes: the **web server** (the page), the **orchestrator** (decides and starts the next job),
+and **jobs** (scripts, builds, agents, try watchers). They share no memory, only two kinds of append-only JSON lines
+files:
+- **`events.jsonl`, one per request:** everything that happened (state changes, job start/end, agent reports,
+  decisions). The orchestrator writes it, and folds it into the current state at startup. The web server reads it
+  and tails it for live updates. The request profile is built from it.
+- **`commands.jsonl`:** everything you asked for. Each button in the page appends a command, e.g.
+  `{"cmd": "approve-push", "push": …}` or `{"cmd": "set-bug", "patch": …, "bug": 2081216}`. The orchestrator executes
+  commands in order and records the outcome in `events.jsonl`.
+
+The volume is small (hundreds of patches, thousands of jobs), so no database. The files can be grepped, and agents
+can read them.
+
 ## Pipeline
 
 ### 1. Request
@@ -112,8 +127,8 @@ Who: **S** = script · **H** = Haiku · **So** = Sonnet · **O** = Opus · **�
 - **Caps:** N agents and M builds at once.
 - **Agent launch command** in `factory.config.json`, e.g. `"claudeCommand": ["mozsb", "claude"]` (sandbox,
   permission prompts disabled). The factory appends `-p --output-format stream-json --session-id … --model …`.
-  To check before building: `mozsb` passes those arguments through and lets us read stdout, and where the transcripts
-  end up when the sandbox sets its own `CLAUDE_CONFIG_DIR`.
+  Transcripts end up in `~/.claude`. To check before building: `mozsb` passes those arguments through and lets
+  us read stdout.
 
 ## Recovery ("Tell the factory…")
 
@@ -158,15 +173,13 @@ Examples:
 2. Investigation split from fixing: Opus writes a handoff, Sonnet implements (`implement-fix.md`).
 3. Agents stop running `mach`: the scripts run repro and verification (`run-tests.ts`, repro recipes, `--compare`).
 4. Scheduler with a cores/RAM model instead of fixed caps.
+5. A configurable Claude config directory (`CLAUDE_CONFIG_DIR`) for agents, with the factory finding transcripts there.
 
 ## Updating the factory without stopping it
 
 Every process can be restarted on its own without losing anything.
 
-**State is append-only JSON lines files, not a database.** The volume is small: hundreds of patches and
-thousands of jobs. A request's `events.jsonl` holds every state change, job start/end, agent report and decision. The
-orchestrator folds it into the current state at startup. The web server reads the same files and tails them for
-live updates. Your clicks go to `commands.jsonl`. The files can be grepped, and agents can read them.
+State lives in the two files described in "How the pieces talk" above.
 
 **Separate processes:**
 - The web server holds no state, so you can restart it whenever you like; the page reconnects on its own.
