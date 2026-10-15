@@ -1,0 +1,78 @@
+{
+  "type": "object",
+  "properties": {
+    "state": {
+      "type": "string",
+      "enum": [
+        "addressed",
+        "blocked"
+      ]
+    },
+    "summary": {
+      "type": "string",
+      "description": "One line."
+    },
+    "commits": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "The amended commit(s), oldest first."
+    },
+    "replies": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "commentId": {
+            "type": "integer"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "commentId",
+          "text"
+        ],
+        "additionalProperties": false
+      },
+      "description": "Only where the code doesn't speak for itself."
+    },
+    "feedback": {
+      "type": "array",
+      "description": "Problems with the tools or inputs you used, one entry per problem.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "target": {
+            "type": "string",
+            "enum": [
+              "fx-tests",
+              "profiler-cli",
+              "searchfox-cli",
+              "factory",
+              "inputs"
+            ]
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "target",
+          "text"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "state",
+    "summary",
+    "commits",
+    "replies",
+    "feedback"
+  ],
+  "additionalProperties": false
+}

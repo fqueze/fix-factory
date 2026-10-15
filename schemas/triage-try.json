@@ -1,0 +1,77 @@
+{
+  "type": "object",
+  "properties": {
+    "cells": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "test": {
+            "type": "string"
+          },
+          "config": {
+            "type": "string"
+          },
+          "taskId": {
+            "type": "string"
+          },
+          "verdict": {
+            "type": "string",
+            "enum": [
+              "fixed",
+              "still failing",
+              "broken by patch",
+              "pre-existing",
+              "infra"
+            ]
+          },
+          "patch": {
+            "type": "string",
+            "description": "For \"broken by patch\": the sha of the commit that broke it."
+          },
+          "evidence": {
+            "type": "string",
+            "description": "The log line the verdict rests on."
+          }
+        },
+        "required": [
+          "verdict",
+          "evidence"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "feedback": {
+      "type": "array",
+      "description": "Problems with the tools or inputs you used, one entry per problem.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "target": {
+            "type": "string",
+            "enum": [
+              "fx-tests",
+              "profiler-cli",
+              "searchfox-cli",
+              "factory",
+              "inputs"
+            ]
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "target",
+          "text"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "cells",
+    "feedback"
+  ],
+  "additionalProperties": false
+}

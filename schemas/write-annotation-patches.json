@@ -1,0 +1,49 @@
+{
+  "type": "object",
+  "properties": {
+    "runIf": {
+      "type": "string",
+      "description": "Sha of the run-if commit; omit when no skip was scoping."
+    },
+    "debug": {
+      "type": "string",
+      "description": "Sha of the DEBUG un-skip commit; omit when no skip was flakiness."
+    },
+    "summary": {
+      "type": "string",
+      "description": "One line."
+    },
+    "feedback": {
+      "type": "array",
+      "description": "Problems with the tools or inputs you used, one entry per problem.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "target": {
+            "type": "string",
+            "enum": [
+              "fx-tests",
+              "profiler-cli",
+              "searchfox-cli",
+              "factory",
+              "inputs"
+            ]
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "target",
+          "text"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "summary",
+    "feedback"
+  ],
+  "additionalProperties": false
+}

@@ -1,0 +1,62 @@
+[
+  {
+    "match": "^Turn this request into the JSON config",
+    "report": { "config": { "folders": ["dom/base/test"], "tests": [], "platforms": [], "constraints": [] }, "questions": [], "feedback": [] }
+  },
+  {
+    "match": "were grouped by exact message",
+    "report": {
+      "groups": [
+        { "message": "Test timed out waiting for load", "tests": ["dom/base/test/test_a.html"], "configs": ["test-linux2404-64/opt-mochitest-plain"], "from": ["ka"], "reason": "unchanged" },
+        { "message": "Uncaught TypeError: x is null", "tests": ["dom/base/test/test_b.html"], "configs": ["test-linux2404-64/debug-mochitest-plain"], "from": ["kb"], "reason": "unchanged" }
+      ],
+      "feedback": []
+    }
+  },
+  {
+    "match": "^Facts about existing bugs",
+    "report": { "verdict": "none", "quote": "no open bug mentions the test", "feedback": [] }
+  },
+  {
+    "match": "^Fix dom/base/test/test_a.html in ",
+    "cost": 1.5,
+    "report": {
+      "state": "fix verified locally",
+      "summary": "Wait for the load event before checking",
+      "cause": "The test checked before load.",
+      "verification": "Passed 50 times with --verify.",
+      "commits": ["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
+      "bugDraft": { "product": "Core", "component": "DOM: Core & HTML", "summary": "Intermittent test_a.html | Test timed out", "description": "It times out." },
+      "landsAfter": [],
+      "feedback": [{ "target": "fx-tests", "text": "the failure list missed a config" }]
+    }
+  },
+  {
+    "match": "^Fix dom/base/test/test_b.html in ",
+    "report": {
+      "state": "fix verified locally",
+      "summary": "Null-check x after the reflow",
+      "cause": "x is null after a reflow.",
+      "verification": "Passed 50 times with --verify.",
+      "commits": ["bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"],
+      "landsAfter": [],
+      "feedback": []
+    }
+  },
+  {
+    "match": "^Review commit ",
+    "report": { "verdict": "ok", "findings": [], "feedback": [] }
+  },
+  {
+    "match": "^Rate the effort of reviewing commit",
+    "report": { "effort": 2, "reason": "short test-only change", "feedback": [] }
+  },
+  {
+    "match": "^Review the assembled stack",
+    "report": { "findings": [], "addDeps": [], "removeDeps": [], "feedback": [] }
+  },
+  {
+    "match": "^Plan the try pushes for: verify",
+    "report": { "pushes": [{ "purpose": "the two fixed tests on linux, comparable with the initial push", "tryArgs": ["fuzzy", "-q", "'mochitest-plain 'linux", "--rebuild", "5"], "rebuild": 5 }], "feedback": [] }
+  }
+]

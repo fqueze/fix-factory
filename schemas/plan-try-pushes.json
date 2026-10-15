@@ -1,0 +1,65 @@
+{
+  "type": "object",
+  "properties": {
+    "pushes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "purpose": {
+            "type": "string",
+            "description": "One line: what this push answers."
+          },
+          "tryArgs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The arguments after `./mach try`, selector first, e.g. [\"fuzzy\", \"-q\", \"'xpcshell 'linux\", \"--rebuild\", \"10\"]."
+          },
+          "rebuild": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "purpose",
+          "tryArgs",
+          "rebuild"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "feedback": {
+      "type": "array",
+      "description": "Problems with the tools or inputs you used, one entry per problem.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "target": {
+            "type": "string",
+            "enum": [
+              "fx-tests",
+              "profiler-cli",
+              "searchfox-cli",
+              "factory",
+              "inputs"
+            ]
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "target",
+          "text"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "pushes",
+    "feedback"
+  ],
+  "additionalProperties": false
+}

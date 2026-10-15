@@ -1,0 +1,98 @@
+[
+  {
+    "match": "^try\\.ts watch abcdef123456",
+    "lines": [
+      { "type": "pushed", "rev": "abcdef123456", "pushId": 1, "url": "https://treeherder.mozilla.org/jobs?repo=try&revision=abcdef123456" },
+      { "type": "job-failed", "taskId": "TaskA", "retryId": 0, "jobId": 11, "jobName": "test-linux2404-64/opt-mochitest-plain-3", "platform": "linux2404-64", "result": "testfailed", "tier": 1 },
+      { "type": "progress", "done": 10, "total": 10, "failures": 2 },
+      { "type": "finished", "result": "failures", "summary": "2 failed jobs", "rev": "abcdef123456", "done": 10, "total": 10, "failures": 2, "notRun": [] }
+    ]
+  },
+  { "match": "^artifacts\\.ts fetch (\\S+)", "out": { "taskId": "$1", "run": 0, "state": "failed", "files": [], "missing": [] } },
+  {
+    "match": "^failures\\.ts try-table abcdef123456",
+    "out": {
+      "rev": "abcdef123456",
+      "pushId": 1,
+      "project": "try",
+      "complete": true,
+      "pending": 0,
+      "configs": ["test-linux2404-64/opt-mochitest-plain", "test-linux2404-64/debug-mochitest-plain"],
+      "rows": [
+        { "test": "dom/base/test/test_a.html", "config": "test-linux2404-64/opt-mochitest-plain", "result": "fail", "failures": ["Test timed out waiting for load"], "taskIds": ["TaskA"] },
+        { "test": "dom/base/test/test_b.html", "config": "test-linux2404-64/debug-mochitest-plain", "result": "fail", "failures": ["Uncaught TypeError: x is null"], "taskIds": ["TaskB"] }
+      ],
+      "unparsed": []
+    }
+  },
+  {
+    "match": "^failures\\.ts collect abcdef123456",
+    "out": [
+      { "test": "dom/base/test/test_a.html", "config": "test-linux2404-64/opt-mochitest-plain", "message": "Test timed out waiting for load", "taskIds": ["TaskA"], "count": 1, "rate": 3, "rateScope": "test" },
+      { "test": "dom/base/test/test_b.html", "config": "test-linux2404-64/debug-mochitest-plain", "message": "Uncaught TypeError: x is null", "taskIds": ["TaskB"], "count": 1, "rate": 1.5, "rateScope": "test" }
+    ]
+  },
+  {
+    "match": "^failures\\.ts cluster ",
+    "out": {
+      "groups": [
+        { "key": "ka", "message": "Test timed out waiting for load", "tests": ["dom/base/test/test_a.html"], "configs": ["test-linux2404-64/opt-mochitest-plain"], "ratePerWeek": 3, "taskIds": ["TaskA"] },
+        { "key": "kb", "message": "Uncaught TypeError: x is null", "tests": ["dom/base/test/test_b.html"], "configs": ["test-linux2404-64/debug-mochitest-plain"], "ratePerWeek": 1.5, "taskIds": ["TaskB"] }
+      ],
+      "singles": []
+    }
+  },
+  { "match": "^bugzilla\\.ts prior-art (\\S+)", "out": { "test": "$1", "query": "test", "bugs": [] } },
+  { "match": "^worktree\\.ts create (\\S+)", "mkdir": "$WORKTREES/$1", "out": { "name": "$1", "path": "$WORKTREES/$1", "branch": "$1", "base": "origin/main", "build": "artifact" } },
+  {
+    "match": "^stack\\.ts import --cwd \\S+ a{40}\\^\\.\\.a{40}",
+    "out": [{ "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "title": "Bug XXXXXXX - Wait for the load event in test_a.html, r=smaug.", "bug": null, "reviewers": ["smaug"], "files": ["dom/base/test/test_a.html"], "insertions": 3, "deletions": 1, "testOnly": true }]
+  },
+  {
+    "match": "^stack\\.ts import --cwd \\S+ b{40}\\^\\.\\.b{40}",
+    "out": [{ "sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "title": "Bug 1234567 - Null-check x after the reflow in test_b.html, r=smaug.", "bug": 1234567, "reviewers": ["smaug"], "files": ["dom/base/test/test_b.html"], "insertions": 2, "deletions": 0, "testOnly": true }]
+  },
+  { "match": "^git log -1 --format=%B (\\w+)", "out": "Bug XXXXXXX - Fix the test, r=smaug.\n\nThe test checked too early.\n" },
+  { "match": "^lint-text\\.ts --kind (commit|bug) ", "out": { "ok": true, "violations": [] } },
+  {
+    "match": "^stack\\.ts assemble --cwd \\S+ --branch (\\S+) --base origin/main --leave-conflict a{40} b{40}$",
+    "out": {
+      "branch": "$1",
+      "head": "dddddddddddddddddddddddddddddddddddddddd",
+      "commits": [
+        { "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "newSha": "cccccccccccccccccccccccccccccccccccccccc" },
+        { "sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "newSha": "dddddddddddddddddddddddddddddddddddddddd" }
+      ],
+      "skipped": [],
+      "empty": []
+    }
+  },
+  { "match": "^stack\\.ts deps ", "out": [] },
+  { "match": "^stack\\.ts order ", "out": { "order": ["p-test-b", "p-test-a"], "flippedSoftDeps": [] } },
+  {
+    "match": "^stack\\.ts rewrite --cwd \\S+ --base origin/main --branch (\\S+) --order d{40},c{40}$",
+    "out": {
+      "branch": "$1",
+      "head": "ffffffffffffffffffffffffffffffffffffffff",
+      "shas": ["eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "ffffffffffffffffffffffffffffffffffffffff"],
+      "mapping": { "dddddddddddddddddddddddddddddddddddddddd": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "cccccccccccccccccccccccccccccccccccccccc": "ffffffffffffffffffffffffffffffffffffffff" },
+      "dropped": [],
+      "empty": [],
+      "diffChanged": [],
+      "changedRevisions": [],
+      "messageChangedRevisions": [],
+      "parentChangedRevisions": []
+    }
+  },
+  {
+    "match": "^stack\\.ts summary ",
+    "out": {
+      "markdown": "| # | Patch | Effort | Failures/week | Repro |\n|---|---|---|---|---|\n| 1 | [Bug 1234567] - Null-check x | 2 | 1.5 | |\n| 2 | Bug to file - Wait for the load event | 2 | 3 | |\n",
+      "metaComment": "This stack fixes intermittent failures in dom/base/test: 2 patches, about 4.5 failures/week in total.\n"
+    }
+  },
+  {
+    "match": "^try\\.ts dry-run --cwd \\S+ -- fuzzy",
+    "out": { "command": ["./mach", "try", "fuzzy", "-q", "'mochitest-plain 'linux", "--rebuild", "5"], "taskCount": 12, "tasks": [], "tryTaskConfig": {}, "commits": [], "warnings": [] }
+  }
+]

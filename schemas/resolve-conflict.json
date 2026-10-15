@@ -1,0 +1,52 @@
+{
+  "type": "object",
+  "properties": {
+    "state": {
+      "type": "string",
+      "enum": [
+        "resolved",
+        "semantic"
+      ]
+    },
+    "commit": {
+      "type": "string",
+      "description": "Sha of the resolved commit, when resolved."
+    },
+    "explanation": {
+      "type": "string"
+    },
+    "feedback": {
+      "type": "array",
+      "description": "Problems with the tools or inputs you used, one entry per problem.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "target": {
+            "type": "string",
+            "enum": [
+              "fx-tests",
+              "profiler-cli",
+              "searchfox-cli",
+              "factory",
+              "inputs"
+            ]
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "target",
+          "text"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "state",
+    "explanation",
+    "feedback"
+  ],
+  "additionalProperties": false
+}

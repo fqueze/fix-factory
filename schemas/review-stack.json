@@ -1,0 +1,123 @@
+{
+  "type": "object",
+  "properties": {
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "patch": {
+            "type": "string",
+            "description": "Commit sha."
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "must-fix",
+              "nit"
+            ]
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "patch",
+          "severity",
+          "text"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "addDeps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "patch": {
+            "type": "string",
+            "description": "Sha of the dependent commit."
+          },
+          "needs": {
+            "type": "string",
+            "description": "Sha of the commit it needs."
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "hard",
+              "soft"
+            ]
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "patch",
+          "needs",
+          "kind",
+          "reason"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "removeDeps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "patch": {
+            "type": "string"
+          },
+          "needs": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "patch",
+          "needs",
+          "reason"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "feedback": {
+      "type": "array",
+      "description": "Problems with the tools or inputs you used, one entry per problem.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "target": {
+            "type": "string",
+            "enum": [
+              "fx-tests",
+              "profiler-cli",
+              "searchfox-cli",
+              "factory",
+              "inputs"
+            ]
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "target",
+          "text"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "findings",
+    "addDeps",
+    "removeDeps",
+    "feedback"
+  ],
+  "additionalProperties": false
+}

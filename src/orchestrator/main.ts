@@ -1,0 +1,326 @@
+// node src/orchestrator/main.ts [--dry-run]
+//
+// The loop of docs/ORCHESTRATOR.md. A tick runs on any change to commands.jsonl or the jobs
+// directory, and at least every 30 s: execute new commands, record finished jobs (try.ts watch
+// lines as they arrive), then start what next() asks for, within the caps, review comments first.
+// Everything it knows comes from the state files, so it can be restarted at any time.
+//
+// --dry-run (or "dryRun" in the config): starts no agents, and passes --dry-run to every CLI,
+// which then refuses try pushes and Phabricator or Bugzilla writes.
+import { existsSync, mkdirSync, readFileSync, watch, type FSWatcher } from "node:fs";
+import { join, resolve } from "node:path";
+import { parseArgs } from "node:util";
+import { loadConfig } from "../config.ts";
+import { execOk } from "../lib/exec.ts";
+import { processNewCommands, readCommands } from "../state/commands.ts";
+import { appendEvent, listRequests, readEvents } from "../state/events.ts";
+import { foldEvents } from "../state/fold.ts";
+import { cancelJob, jobDir, jobStatus, reconcile, type ExitInfo } from "../state/jobs.ts";
+import type { Command, FactoryConfig, JobId, RequestId, RequestState } from "../types.ts";
+import { commandEffects } from "./commands.ts";
+import { handleWatchLines } from "./handlers.ts";
+import { CANCELLED, next, type Action, type Ctx } from "./next.ts";
+import { DEFAULT_PRIORITY, type JobPlan } from "./plan.ts";
+import { defaultCliCommand, finishJob, jsonLines, readOut, readReport, startPlan, type RunnerDeps } from "./runner.ts";
+import { buildView, type JobRecord, type View } from "./view.ts";
+
+export const TICK_MS = 30_000;
+export const PRESENCE_MS = 30 * 60_000;
+const MAX_PLANNING_ROUNDS = 20;
+
+export interface OrchestratorOptions {
+  config: FactoryConfig;
+  configPath: string;
+  codeVersion: string;
+  factoryRoot?: string;
+  cliCommand?: (tool: string) => string[];
+  now?: () => number;
+  dryRun?: boolean;
+}
+
+interface Loaded {
+  s: RequestState;
+  view: View;
+}
+
+export class Orchestrator {
+  private readonly config: FactoryConfig;
+  private readonly deps: RunnerDeps;
+  private readonly now: () => number;
+  private readonly dryRun: boolean;
+  private readonly watchOffsets = new Map<JobId, number>();
+  private presenceTimes: number[] = []; // visible=true presence commands, in order
+  private ticking: Promise<void> | undefined;
+  private again = false;
+  private watchers: FSWatcher[] = [];
+  private timer: NodeJS.Timeout | undefined;
+
+  constructor(opts: OrchestratorOptions) {
+    this.config = opts.config;
+    this.now = opts.now ?? Date.now;
+    this.dryRun = opts.dryRun ?? opts.config.dryRun;
+    const factoryRoot = opts.factoryRoot ?? resolve(import.meta.dirname, "..", "..");
+    this.deps = {
+      config: opts.config,
+      configPath: opts.configPath,
+      factoryRoot,
+      codeVersion: opts.codeVersion,
+      cliCommand: opts.cliCommand ?? defaultCliCommand(factoryRoot),
+    };
+  }
+
+  private load(id: RequestId): Loaded {
+    const events = readEvents(this.config.stateDir, id);
+    return { s: foldEvents(events), view: buildView(events) };
+  }
+
+  private requests(): RequestId[] {
+    return listRequests(this.config.stateDir);
+  }
+
+  // Present: a visible page sent a presence command in the last 30 min. The streak starts at the
+  // first of a run of presence commands less than 30 min apart.
+  presence(): { present: boolean; since?: number } {
+    const times = this.presenceTimes;
+    const last = times.at(-1);
+    if (last === undefined || this.now() - last > PRESENCE_MS) return { present: false };
+    let i = times.length - 1;
+    while (i > 0 && times[i] - times[i - 1] <= PRESENCE_MS) i--;
+    return { present: true, since: times[i] };
+  }
+
+  private notePresence(c: Command): void {
+    if (c.cmd === "presence" && c.visible) this.presenceTimes.push(Date.parse(c.t));
+  }
+
+  private ctx(s: RequestState, view: View): Ctx {
+    return {
+      config: this.config,
+      now: this.now(),
+      presence: this.presence(),
+      view,
+      output: (job) => readOut(this.config, job),
+      report: (job) => readReport(this.config, s.id, job),
+    };
+  }
+
+  // Startup: re-attach to running jobs, cancel orphaned ones (their step restarts through next()'s
+  // retry), and count lost ones as failures.
+  async startup(): Promise<void> {
+    mkdirSync(join(this.config.stateDir, "jobs"), { recursive: true });
+    for (const c of readCommands(this.config.stateDir, 0).commands) this.notePresence(c);
+    for (const id of this.requests()) {
+      const { s } = this.load(id);
+      const running = Object.values(s.jobs).filter((j) => j.endedAt === undefined);
+      for (const { job, status } of reconcile(this.config.stateDir, running)) {
+        if (status.state === "orphaned") {
+          await cancelJob(this.config.stateDir, job);
+          this.fail(id, job, "orphaned at restart: cancelled, the step starts again");
+        } else if (status.state === "lost") {
+          this.fail(id, job, "lost: no process and no exit.json");
+        }
+      }
+    }
+  }
+
+  private fail(request: RequestId, job: JobId, error: string): void {
+    const { s, view } = this.load(request);
+    const rec = view.jobs.find((j) => j.job === job)!;
+    finishJob(this.deps, s, view, rec, { exitCode: -1, endedAt: new Date(this.now()).toISOString(), error });
+  }
+
+  tick(): Promise<void> {
+    if (this.ticking) {
+      this.again = true;
+      return this.ticking;
+    }
+    this.ticking = (async () => {
+      do {
+        this.again = false;
+        await processNewCommands(this.config.stateDir, (c) => this.execute(c));
+        await this.collect();
+        this.plan();
+      } while (this.again);
+    })().finally(() => {
+      this.ticking = undefined;
+    });
+    return this.ticking;
+  }
+
+  // -------------------------------------------------------------------------
+  // Commands
+
+  private async execute(c: Command): Promise<void> {
+    if (c.cmd === "presence") {
+      this.notePresence(c);
+      return;
+    }
+    let request = c.request;
+    if (c.cmd === "tell-factory" && request === undefined) {
+      // The global box: the plan needs a request to live in, so it goes to the latest active one.
+      request = this.requests()
+        .map((id) => this.load(id).s)
+        .filter((s) => s.step !== "done")
+        .sort((a, b) => a.updatedAt.localeCompare(b.updatedAt))
+        .at(-1)?.id;
+      if (request === undefined) return;
+    }
+    if (c.cmd === "new-request" && this.requests().some((id) => this.load(id).s.createdAt === c.t)) return; // already executed
+    const loaded = request !== undefined && this.requests().includes(request) ? this.load(request) : undefined;
+    if (loaded?.view.executed.has(c.id)) return;
+    const effects = commandEffects({ ...c, ...(request ? { request } : {}) } as Command, {
+      config: this.config,
+      state: loaded?.s,
+      view: loaded?.view,
+      exists: (id) => existsSync(join(this.config.stateDir, "requests", id)),
+      spec: (job) => {
+        try {
+          return JSON.parse(readFileSync(join(jobDir(this.config.stateDir, job), "spec.json"), "utf8"));
+        } catch {
+          return undefined;
+        }
+      },
+    });
+    for (const e of effects) {
+      switch (e.type) {
+        case "event":
+          appendEvent(this.config.stateDir, e.event.type === "request-created" ? { ...e.event, t: c.t } : e.event);
+          break;
+        case "start":
+          this.start(loaded!.s.id, e.plan);
+          break;
+        case "cancel": {
+          const exit = await cancelJob(this.config.stateDir, e.job);
+          const { s, view } = this.load(e.request);
+          const rec = view.jobs.find((j) => j.job === e.job);
+          if (rec && !rec.end) finishJob(this.deps, s, view, rec, { exitCode: exit.state === "finished" ? exit.exitCode : -1, endedAt: new Date(this.now()).toISOString(), error: CANCELLED });
+          break;
+        }
+        case "start-now":
+          this.plan(e.request);
+          break;
+      }
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Finished jobs
+
+  private async collect(): Promise<void> {
+    for (const id of this.requests()) {
+      const running = Object.values(this.load(id).s.jobs).filter((j) => j.endedAt === undefined);
+      for (const j of running) {
+        const status = jobStatus(this.config.stateDir, j.job, j);
+        const { s, view } = this.load(id);
+        const rec = view.jobs.find((r) => r.job === j.job)!;
+        if (rec.kind === "try-watch" && status.state !== "orphaned") this.readWatch(s, view, rec);
+        if (status.state === "finished") {
+          this.watchOffsets.delete(j.job);
+          const fresh = this.load(id);
+          finishJob(this.deps, fresh.s, fresh.view, rec, status satisfies ExitInfo);
+        } else if (status.state === "lost") {
+          this.fail(id, j.job, "lost: no process and no exit.json");
+        } else if (status.state === "orphaned") {
+          await cancelJob(this.config.stateDir, j.job);
+          this.fail(id, j.job, "orphaned: cancelled, the step starts again");
+        }
+      }
+    }
+  }
+
+  private readWatch(s: RequestState, view: View, rec: JobRecord): void {
+    const text = readOut(this.config, rec.job);
+    const { lines, next: offset } = jsonLines(text, this.watchOffsets.get(rec.job) ?? 0);
+    this.watchOffsets.set(rec.job, offset);
+    if (lines.length === 0) return;
+    for (const e of handleWatchLines(s, view, rec.purpose.push!, lines)) appendEvent(this.config.stateDir, e);
+  }
+
+  // -------------------------------------------------------------------------
+  // Planning
+
+  private start(request: RequestId, plan: JobPlan): void {
+    if (this.dryRun && plan.agent) {
+      appendEvent(this.config.stateDir, { type: "note", request, text: `Dry run: ${plan.name} not started (${plan.purpose.key}).` });
+      return;
+    }
+    const p = this.dryRun && plan.cli ? { ...plan, cli: { ...plan.cli, args: [...plan.cli.args, "--dry-run"] } } : plan;
+    startPlan(this.deps, request, p);
+  }
+
+  // Runs next() for every request (or one, for start-now, which also skips the caps) until it
+  // stops writing events, then starts its jobs within the caps.
+  plan(only?: RequestId): void {
+    let starts: { request: RequestId; plan: JobPlan }[] = [];
+    for (let round = 0; round < MAX_PLANNING_ROUNDS; round++) {
+      starts = [];
+      let wrote = false;
+      for (const id of only ? [only] : this.requests()) {
+        const { s, view } = this.load(id);
+        const actions: Action[] = next(s, this.ctx(s, view));
+        for (const a of actions) {
+          if (a.type === "event") {
+            appendEvent(this.config.stateDir, a.event);
+            wrote = true;
+          } else {
+            starts.push({ request: id, plan: a.plan });
+          }
+        }
+      }
+      if (!wrote) break;
+    }
+    const running = this.requests().flatMap((id) => Object.values(this.load(id).s.jobs).filter((j) => j.endedAt === undefined));
+    let agents = running.filter((j) => j.kind === "agent").length;
+    let builds = running.filter((j) => j.kind === "build").length;
+    starts.sort((a, b) => (a.plan.priority ?? DEFAULT_PRIORITY) - (b.plan.priority ?? DEFAULT_PRIORITY));
+    for (const { request, plan } of starts) {
+      if (!only && plan.kind === "agent" && agents >= this.config.maxAgents) continue;
+      if (!only && plan.kind === "build" && builds >= this.config.maxBuilds) {
+        if (plan.item) {
+          const item = this.load(request).s.items[plan.item];
+          if (item && item.state !== "waiting for a build slot") appendEvent(this.config.stateDir, { type: "item-state", request, item: plan.item, state: "waiting for a build slot" });
+        }
+        continue;
+      }
+      if (plan.kind === "agent") agents++;
+      if (plan.kind === "build") builds++;
+      this.start(request, plan);
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // The process
+
+  run(): void {
+    const kick = () => {
+      this.tick().catch((e: unknown) => process.stderr.write(`tick failed: ${e instanceof Error ? e.stack : String(e)}\n`));
+    };
+    this.watchers.push(watch(this.config.stateDir, (_t, name) => name === "commands.jsonl" && kick()));
+    this.watchers.push(watch(join(this.config.stateDir, "jobs"), { recursive: true }, (_t, name) => (name?.endsWith("exit.json") || name?.endsWith("out.log")) && kick()));
+    this.timer = setInterval(kick, TICK_MS);
+    kick();
+  }
+
+  stop(): void {
+    for (const w of this.watchers) w.close();
+    this.watchers = [];
+    clearInterval(this.timer);
+  }
+}
+
+if (import.meta.main) {
+  const { values } = parseArgs({ options: { "dry-run": { type: "boolean" } } });
+  const configPath = resolve(process.env.FACTORY_CONFIG ?? "factory.config.json");
+  const config = loadConfig(configPath);
+  const factoryRoot = resolve(import.meta.dirname, "..", "..");
+  const codeVersion = (await execOk(["git", "rev-parse", "HEAD"], { cwd: factoryRoot })).trim();
+  const o = new Orchestrator({ config, configPath, codeVersion, factoryRoot, dryRun: values["dry-run"] ?? config.dryRun });
+  await o.startup();
+  o.run();
+  for (const sig of ["SIGINT", "SIGTERM"] as const) {
+    process.on(sig, () => {
+      o.stop();
+      process.exit(0);
+    });
+  }
+}

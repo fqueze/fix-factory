@@ -1,0 +1,81 @@
+{
+  "type": "object",
+  "properties": {
+    "groups": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string",
+            "description": "The shared failure message."
+          },
+          "tests": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "configs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "from": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The `key` of every input cluster this group takes failures from."
+          },
+          "reason": {
+            "type": "string",
+            "description": "One line; \"unchanged\" when the cluster is kept as is."
+          }
+        },
+        "required": [
+          "message",
+          "tests",
+          "configs",
+          "from",
+          "reason"
+        ],
+        "additionalProperties": false
+      },
+      "description": "Every resulting group, unchanged ones included."
+    },
+    "feedback": {
+      "type": "array",
+      "description": "Problems with the tools or inputs you used, one entry per problem.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "target": {
+            "type": "string",
+            "enum": [
+              "fx-tests",
+              "profiler-cli",
+              "searchfox-cli",
+              "factory",
+              "inputs"
+            ]
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "target",
+          "text"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "groups",
+    "feedback"
+  ],
+  "additionalProperties": false
+}
