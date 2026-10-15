@@ -8,7 +8,8 @@
 //     mochitest. Long-running: meant to run as a job. Build output goes to stderr.
 //     artifact: opt artifact build. debug: debug artifact build (still about a minute). full: debug build
 //     compiled locally, for C++ changes.
-//     A failed build leaves the worktree in place (a bare ./mach build in it is the fix).
+//     A failed build leaves the worktree in place. Running create again with the same name reuses it (the
+//     worktree at that path on branch <name>) and runs the build again, so a failed create can be retried.
 //
 //   node src/cli/worktree.ts remove <name>
 //     → {name, path, killed: [{pid, cmdline}], removed: true}
@@ -66,6 +67,14 @@ export function worktreeAddArgs(dest: string, name: string, base: string, branch
   return branchExists ? ["worktree", "add", dest, name] : ["worktree", "add", "-b", name, dest, base];
 }
 
+// From `git worktree list --porcelain`: blocks of "worktree <path>", "HEAD <sha>", "branch refs/heads/<name>".
+export function isWorktreeOn(porcelain: string, path: string, branch: string): boolean {
+  return porcelain.split("\n\n").some((block) => {
+    const lines = block.split("\n");
+    return lines.includes(`worktree ${path}`) && lines.includes(`branch refs/heads/${branch}`);
+  });
+}
+
 export const BUILD_COMMAND = ["./mach", "build"];
 export const SMOKE_COMMAND = ["./mach", "mochitest", "--headless", "testing/mochitest/tests/Harness_sanity/test_sanity.html"];
 
@@ -84,15 +93,22 @@ export async function create(name: string, opts: { base?: string; build: BuildKi
   if (!existsSync(join(repo, "mach"))) throw new Error(`${repo} is not a Firefox checkout`);
   if (isInside(opts.worktreesDir, repo)) throw new Error(`worktreesDir ${opts.worktreesDir} is inside ${repo}`);
   const dest = join(opts.worktreesDir, name);
-  if (existsSync(dest)) throw new Error(`${dest} already exists`);
   const git = (args: string[]) => execOk(["git", ...args], { cwd: repo });
 
-  const branchExists = (await exec(["git", "show-ref", "--verify", "--quiet", `refs/heads/${name}`], { cwd: repo })).code === 0;
-  if (branchExists && opts.base) throw new Error(`branch ${name} already exists; --base would be ignored`);
-  const base = branchExists ? name : (opts.base ?? (await git(["rev-parse", "--abbrev-ref", "HEAD"])).trim());
-  mkdirSync(opts.worktreesDir, { recursive: true });
-  log(`creating worktree ${dest} off ${base}`);
-  await git(worktreeAddArgs(dest, name, base, branchExists));
+  let base: string;
+  if (existsSync(dest)) {
+    // A retry after a failed build: reuse the tree if it's ours, on our branch.
+    if (!isWorktreeOn(await git(["worktree", "list", "--porcelain"]), dest, name)) throw new Error(`${dest} already exists and isn't the worktree of branch ${name}`);
+    base = opts.base ?? name;
+    log(`reusing worktree ${dest}`);
+  } else {
+    const branchExists = (await exec(["git", "show-ref", "--verify", "--quiet", `refs/heads/${name}`], { cwd: repo })).code === 0;
+    if (branchExists && opts.base) throw new Error(`branch ${name} already exists; --base would be ignored`);
+    base = branchExists ? name : (opts.base ?? (await git(["rev-parse", "--abbrev-ref", "HEAD"])).trim());
+    mkdirSync(opts.worktreesDir, { recursive: true });
+    log(`creating worktree ${dest} off ${base}`);
+    await git(worktreeAddArgs(dest, name, base, branchExists));
+  }
 
   const mozconfigPath = join(dest, "mozconfig");
   try {
@@ -111,7 +127,7 @@ export async function create(name: string, opts: { base?: string; build: BuildKi
   log(`./mach build (${flavor(opts.build)})`);
   const buildStatus = await run(BUILD_COMMAND, dest, env, 2);
   if (buildStatus !== 0) {
-    throw new Error(`tree created at ${dest} but the build failed (exit ${buildStatus}); a bare ./mach build in it is the fix`);
+    throw new Error(`tree created at ${dest} but the build failed (exit ${buildStatus}); running create again reuses it and retries the build`);
   }
 
   // "Ready" means it can run a test, not that it compiled: a tree that builds and then can't run

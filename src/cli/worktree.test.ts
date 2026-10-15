@@ -1,11 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execOk } from "../lib/exec.ts";
-import { create, isInside, mentionsPath, mozconfig, processesUnder, remove, validateName, worktreeAddArgs } from "./worktree.ts";
+import { create, isInside, isWorktreeOn, mentionsPath, mozconfig, processesUnder, remove, validateName, worktreeAddArgs } from "./worktree.ts";
 
 test("mozconfig per build kind", () => {
   assert.equal(
@@ -92,6 +92,35 @@ test("create refuses a worktreesDir inside the checkout", async () => {
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test("create can be run again after a failed build: it reuses the worktree and builds again", async () => {
+  const { root, repo, git } = await tempRepo();
+  const worktreesDir = join(root, "wt");
+  // A mach that fails while FAKE_MACH_STATUS says so.
+  writeFileSync(join(repo, "mach"), "#!/bin/sh\nexit ${FAKE_MACH_STATUS:-0}\n");
+  chmodSync(join(repo, "mach"), 0o755);
+  await git("commit", "-qam", "mach");
+  try {
+    process.env.FAKE_MACH_STATUS = "1";
+    await assert.rejects(create("a", { build: "artifact", repo, worktreesDir, base: "main" }), /the build failed \(exit 1\); running create again/);
+    process.env.FAKE_MACH_STATUS = "0";
+    const out = await create("a", { build: "artifact", repo, worktreesDir, base: "main" });
+    assert.equal(out.path, join(worktreesDir, "a"));
+    assert.equal(out.branch, "a");
+    mkdirSync(join(worktreesDir, "b"));
+    await assert.rejects(create("b", { build: "artifact", repo, worktreesDir }), /isn't the worktree of branch b/);
+  } finally {
+    delete process.env.FAKE_MACH_STATUS;
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("isWorktreeOn reads git worktree list --porcelain", () => {
+  const out = "worktree /ff\nHEAD 1\nbranch refs/heads/main\n\nworktree /wt/a\nHEAD 2\nbranch refs/heads/a\n\nworktree /wt/c\nHEAD 3\ndetached\n";
+  assert.ok(isWorktreeOn(out, "/wt/a", "a"));
+  assert.ok(!isWorktreeOn(out, "/wt/a", "main"));
+  assert.ok(!isWorktreeOn(out, "/wt/c", "c"));
 });
 
 test("remove kills only the worktree's processes, removes the tree, keeps the branch and outside objdirs", async () => {

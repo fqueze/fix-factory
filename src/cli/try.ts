@@ -14,7 +14,8 @@
 //   the dry-run outputs of pending pushes with `push` added; duplicateOf is set (to
 //   `push`, or the list index) when one has the same try config and commits.
 //
-// node src/cli/try.ts push --cwd <worktree> [--lando-timeout <s>] -- <selector> <mach try args...>
+// node src/cli/try.ts push --cwd <worktree> [--lando-timeout <s>] [--expect-commits <sha,sha...>] -- <selector> <mach try args...>
+//   --expect-commits: the dry run's commits (newest first); refuses to push a stack that differs.
 //   Under --dry-run, or when the config has dryRun, refuses and prints
 //   {dryRun: true, command, cwd}. Otherwise runs `./mach try <args>` and prints
 //   {landoJobId, landoUrl, treeherderUrl, rev?}. rev is missing when Lando hasn't
@@ -311,12 +312,19 @@ function runStreaming(cmd: string[], cwd: string, input: string, onLine: (line: 
 export async function push(
   cwd: string,
   args: string[],
-  opts: { dryRun: boolean; landoTimeoutMs?: number; deps?: Partial<WatchDeps>; run?: typeof runStreaming },
+  opts: { dryRun: boolean; landoTimeoutMs?: number; deps?: Partial<WatchDeps>; run?: typeof runStreaming; expectCommits?: string[]; exec?: typeof exec },
 ): Promise<PushResult | { dryRun: true; command: string[]; cwd: string }> {
   checkTryArgs(args);
   const command = ["./mach", "try", ...args];
   if (opts.dryRun) {
     return { dryRun: true, command, cwd };
+  }
+  if (opts.expectCommits) {
+    // What was approved is the dry run: a stack rewritten since then is a different push.
+    const commits = await stackCommits(cwd, opts.exec ?? exec);
+    if (commits.join() !== opts.expectCommits.join()) {
+      throw new Error(`the stack changed since the approved dry run: expected ${opts.expectCommits.join(",") || "no commits"}, found ${commits.join(",") || "no commits"}`);
+    }
   }
   const run = opts.run ?? runStreaming;
   // "y" answers the large push prompt; the dry run already warned about it.
@@ -752,6 +760,7 @@ async function main(): Promise<void> {
         const isDryRun = values["dry-run"] === true || loadConfig().dryRun;
         return push(cwd, args, {
           dryRun: isDryRun,
+          expectCommits: typeof values["expect-commits"] === "string" ? values["expect-commits"].split(",").filter(Boolean) : undefined,
           landoTimeoutMs: positiveNumber(values["lando-timeout"], "--lando-timeout", 600) * 1000,
         });
       },
@@ -775,6 +784,7 @@ async function main(): Promise<void> {
       cwd: { type: "string" },
       pending: { type: "string" },
       "lando-timeout": { type: "string" },
+      "expect-commits": { type: "string" },
       lando: { type: "string" },
       interval: { type: "string" },
       timeout: { type: "string" },

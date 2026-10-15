@@ -514,3 +514,20 @@ test("push returns without a revision when Lando is slow", async () => {
   assert.ok(!("dryRun" in r) && !("rev" in r));
   assert.equal(r.treeherderUrl, "https://treeherder.mozilla.org/jobs?repo=try&landoInstance=lando-prod-2025&landoCommitID=103624");
 });
+
+test("push refuses a stack that differs from the approved dry run's commits", async () => {
+  let ran = false;
+  const opts = (stack: string) => ({
+    dryRun: false,
+    expectCommits: ["bbb", "aaa"],
+    exec: async () => ({ code: 0, stdout: stack, stderr: "" }),
+    run: async () => {
+      ran = true;
+      return { code: 1, stdout: "", stderr: "stop here" };
+    },
+  });
+  await assert.rejects(push("/wt", ["fuzzy", "-q", "x"], opts("ccc\naaa\n")), /the stack changed since the approved dry run: expected bbb,aaa, found ccc,aaa/);
+  assert.equal(ran, false);
+  await assert.rejects(push("/wt", ["fuzzy", "-q", "x"], opts("bbb\naaa\n")), /mach try exited with 1/);
+  assert.equal(ran, true);
+});
