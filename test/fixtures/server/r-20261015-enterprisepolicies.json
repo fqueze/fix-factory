@@ -1,0 +1,401 @@
+{
+  "id": "r-20261015-enterprisepolicies",
+  "kind": "burndown",
+  "text": "burn down browser/components/enterprisepolicies/tests/browser",
+  "folder": "browser/components/enterprisepolicies/tests/browser",
+  "createdAt": "2026-10-15T06:55:00.000Z",
+  "updatedAt": "2026-10-15T09:00:00.000Z",
+  "step": "investigate and fix",
+  "config": {
+    "folders": [
+      "browser/components/enterprisepolicies/tests/browser"
+    ],
+    "tests": [],
+    "platforms": [],
+    "constraints": []
+  },
+  "items": {
+    "i-annotations": {
+      "id": "i-annotations",
+      "folder": "browser/components/enterprisepolicies/tests/browser",
+      "group": {
+        "message": "skip-if annotations",
+        "tests": [
+          "browser/components/enterprisepolicies/tests/browser/browser_policy_managedbookmarks.js",
+          "browser/components/enterprisepolicies/tests/browser/browser_policy_search_engine.js"
+        ],
+        "configs": [
+          "linux2404-64/debug",
+          "windows11-64-24h2/opt"
+        ]
+      },
+      "state": "left as-is",
+      "jobs": [
+        "j-write"
+      ],
+      "detail": "Dropped the run-if commit per review; the only skip in annotations.json with a current skip-if (managedbookmarks/22.04-wayland) is a real intermittent on Wayland, not a scoping skip, so there is nothing left to convert and the DEBUG un-skip push showed no failures to fix."
+    },
+    "i-browser-policy-sitepolicies-serviceworke": {
+      "id": "i-browser-policy-sitepolicies-serviceworke",
+      "folder": "browser/components/enterprisepolicies/tests/browser",
+      "group": {
+        "message": "Uncaught exception in test - Waiting for * entry is in BFCache - timed out after 50 tries.",
+        "tests": [
+          "browser/components/enterprisepolicies/tests/browser/browser_policy_sitepolicies_serviceworkers.js"
+        ],
+        "configs": [
+          "linux2404-64/debug",
+          "windows11-64-24h2/opt"
+        ]
+      },
+      "state": "investigating",
+      "jobs": [
+        "j-inv-sw-0",
+        "j-wt-sw",
+        "j-inv-sw"
+      ]
+    },
+    "i-browser-policy-sitepolicies-serviceworke-2": {
+      "id": "i-browser-policy-sitepolicies-serviceworke-2",
+      "folder": "browser/components/enterprisepolicies/tests/browser",
+      "group": {
+        "message": "SW registered for example.org (intercept-status) - \"sw-error\" == \"sw-intercepted\"",
+        "tests": [
+          "browser/components/enterprisepolicies/tests/browser/browser_policy_sitepolicies_serviceworkers.js"
+        ],
+        "configs": [
+          "linux2404-64/debug",
+          "windows11-64-24h2/opt"
+        ]
+      },
+      "state": "not started",
+      "jobs": [
+        "j-wt-sw2"
+      ]
+    },
+    "i-browser-policy-sitepolicies-jit": {
+      "id": "i-browser-policy-sitepolicies-jit",
+      "folder": "browser/components/enterprisepolicies/tests/browser",
+      "group": {
+        "message": "Uncaught exception in test - Waiting for workers to respond - timed out after 50 tries.",
+        "tests": [
+          "browser/components/enterprisepolicies/tests/browser/browser_policy_sitepolicies_jit.js"
+        ],
+        "configs": [
+          "linux2404-64/debug",
+          "windows11-64-24h2/opt"
+        ]
+      },
+      "state": "left as-is",
+      "jobs": [
+        "j-wt-jit",
+        "j-inv-jit"
+      ],
+      "detail": "Already fixed by bug 2078564 (172a3c6bab04): the leaker browser_policy_pageinfo_permissions.js no longer leaves a cookie DENY; no failure since that landed on Oct 9 across 1400 runs.",
+      "lastReport": {
+        "prompt": "investigate-and-fix",
+        "job": "j-inv-jit",
+        "report": {
+          "state": "left as-is",
+          "summary": "Already fixed by bug 2078564; the worker timeout itself is a product bug.",
+          "cause": "Workers spawned under a JIT-disabling site policy start slowly.",
+          "verification": "No failure in 1400 runs since bug 2078564 landed.",
+          "commits": [],
+          "bugDraft": {
+            "product": "Firefox",
+            "component": "Enterprise Policies",
+            "summary": "Workers start slowly when a site policy disables the JIT",
+            "description": "With a JIT-disabling site policy, a new worker takes several seconds to respond."
+          },
+          "landsAfter": [],
+          "feedback": []
+        }
+      }
+    },
+    "i-browser-policy-firefoxhome": {
+      "id": "i-browser-policy-firefoxhome",
+      "folder": "browser/components/enterprisepolicies/tests/browser",
+      "group": {
+        "message": "Uncaught exception in test - undefined - timed out after 50 tries.",
+        "tests": [
+          "browser/components/enterprisepolicies/tests/browser/browser_policy_firefoxhome.js"
+        ],
+        "configs": [
+          "linux2404-64/debug",
+          "windows11-64-24h2/opt"
+        ]
+      },
+      "state": "left as-is",
+      "jobs": [
+        "j-inv-home"
+      ],
+      "detail": "Already fixed: the only failures came from Bug 2068721's first landing, which was backed out for them and relanded with an updated test on Oct 3; zero failures since."
+    },
+    "i-browser-policy-firefoxhome-2": {
+      "id": "i-browser-policy-firefoxhome-2",
+      "folder": "browser/components/enterprisepolicies/tests/browser",
+      "group": {
+        "message": "Attempting to connect to non-local address! opener is [unknown], uri is [https://prod-games-particle.merino.prod.webservices.mozgcp.net/index.html]",
+        "tests": [
+          "browser/components/enterprisepolicies/tests/browser/browser_policy_firefoxhome.js"
+        ],
+        "configs": [
+          "linux2404-64/debug",
+          "windows11-64-24h2/opt"
+        ]
+      },
+      "state": "left as-is",
+      "jobs": [
+        "j-inv-home2"
+      ],
+      "detail": "Already fixed by bug 2079939 (test profile disables the crossword widget); failures were confined to bug 2078974's 2026-10-07 landing window and none happened after the fix landed."
+    },
+    "i-browser-policy-trackingprotection": {
+      "id": "i-browser-policy-trackingprotection",
+      "folder": "browser/components/enterprisepolicies/tests/browser/trackingprotection",
+      "group": {
+        "message": "leaked 1 window(s) until shutdown [url = about:preferences#etp]",
+        "tests": [
+          "browser/components/enterprisepolicies/tests/browser/trackingprotection/browser_policy_trackingprotection.js"
+        ],
+        "configs": [
+          "linux2404-64/debug",
+          "windows11-64-24h2/opt"
+        ]
+      },
+      "state": "investigating",
+      "jobs": [
+        "j-wt-tp",
+        "j-inv-tp"
+      ]
+    }
+  },
+  "patches": {
+    "p-runif": {
+      "id": "p-runif",
+      "item": "i-annotations",
+      "sha": "0b5e7d1c9a3f0000000000000000000000000000",
+      "worktree": "/build/worktrees/enterprisepolicies-annotations",
+      "title": "Bug 0 - Convert scoping skip-if annotations to run-if in browser/components/enterprisepolicies/tests/browser, r=mkaply.",
+      "bug": 0,
+      "deps": [],
+      "replyDrafts": []
+    }
+  },
+  "stacks": {},
+  "pushes": {},
+  "jobs": {
+    "j-anno": {
+      "job": "j-anno",
+      "kind": "script",
+      "name": "annotations.ts list",
+      "cmd": [
+        "node"
+      ],
+      "cwd": "/build/fix-factory-state",
+      "pid": 1000,
+      "pidStartTime": 1,
+      "startedAt": "2026-10-15T07:00:00.000Z",
+      "endedAt": "2026-10-15T07:00:04.000Z",
+      "exitCode": 0,
+      "durationMs": 4000
+    },
+    "j-write": {
+      "job": "j-write",
+      "kind": "agent",
+      "name": "write-annotation-patches",
+      "cmd": [
+        "node"
+      ],
+      "cwd": "/build/fix-factory-state",
+      "pid": 1000,
+      "pidStartTime": 1,
+      "startedAt": "2026-10-15T07:01:00.000Z",
+      "item": "i-annotations",
+      "model": "opus",
+      "endedAt": "2026-10-15T07:09:00.000Z",
+      "exitCode": 0,
+      "durationMs": 480000,
+      "costUsd": 0.62
+    },
+    "j-try": {
+      "job": "j-try",
+      "kind": "script",
+      "name": "failures.ts try-table",
+      "cmd": [
+        "node"
+      ],
+      "cwd": "/build/fix-factory-state",
+      "pid": 1000,
+      "pidStartTime": 1,
+      "startedAt": "2026-10-15T07:40:00.000Z",
+      "endedAt": "2026-10-15T07:40:30.000Z",
+      "exitCode": 0,
+      "durationMs": 30000
+    },
+    "j-inv-home": {
+      "job": "j-inv-home",
+      "kind": "agent",
+      "name": "investigate-and-fix",
+      "cmd": [
+        "node"
+      ],
+      "cwd": "/build/fix-factory-state",
+      "pid": 1000,
+      "pidStartTime": 1,
+      "startedAt": "2026-10-15T08:00:00.000Z",
+      "item": "i-browser-policy-firefoxhome",
+      "model": "opus",
+      "endedAt": "2026-10-15T08:06:00.000Z",
+      "exitCode": 0,
+      "durationMs": 360000,
+      "costUsd": 0.76
+    },
+    "j-wt-jit": {
+      "job": "j-wt-jit",
+      "kind": "build",
+      "name": "worktree.ts create",
+      "cmd": [
+        "node"
+      ],
+      "cwd": "/build/fix-factory-state",
+      "pid": 1000,
+      "pidStartTime": 1,
+      "startedAt": "2026-10-15T08:01:00.000Z",
+      "item": "i-browser-policy-sitepolicies-jit",
+      "endedAt": "2026-10-15T08:02:00.000Z",
+      "exitCode": 0,
+      "durationMs": 60000
+    },
+    "j-inv-home2": {
+      "job": "j-inv-home2",
+      "kind": "agent",
+      "name": "investigate-and-fix",
+      "cmd": [
+        "node"
+      ],
+      "cwd": "/build/fix-factory-state",
+      "pid": 1000,
+      "pidStartTime": 1,
+      "startedAt": "2026-10-15T08:02:00.000Z",
+      "item": "i-browser-policy-firefoxhome-2",
+      "model": "opus",
+      "endedAt": "2026-10-15T08:09:00.000Z",
+      "exitCode": 0,
+      "durationMs": 420000,
+      "costUsd": 0.73
+    },
+    "j-inv-jit": {
+      "job": "j-inv-jit",
+      "kind": "agent",
+      "name": "investigate-and-fix",
+      "cmd": [
+        "node"
+      ],
+      "cwd": "/build/fix-factory-state",
+      "pid": 1000,
+      "pidStartTime": 1,
+      "startedAt": "2026-10-15T08:03:00.000Z",
+      "item": "i-browser-policy-sitepolicies-jit",
+      "model": "opus",
+      "endedAt": "2026-10-15T08:05:00.000Z",
+      "exitCode": 0,
+      "durationMs": 120000,
+      "costUsd": 0.58
+    },
+    "j-inv-sw-0": {
+      "job": "j-inv-sw-0",
+      "kind": "agent",
+      "name": "investigate-and-fix",
+      "cmd": [
+        "node"
+      ],
+      "cwd": "/build/fix-factory-state",
+      "pid": 1000,
+      "pidStartTime": 1,
+      "startedAt": "2026-10-15T08:40:00.000Z",
+      "item": "i-browser-policy-sitepolicies-serviceworke",
+      "model": "opus",
+      "endedAt": "2026-10-15T08:50:00.000Z",
+      "exitCode": 0,
+      "durationMs": 600000,
+      "costUsd": 0.4
+    },
+    "j-wt-sw": {
+      "job": "j-wt-sw",
+      "kind": "build",
+      "name": "worktree.ts create",
+      "cmd": [
+        "node"
+      ],
+      "cwd": "/build/fix-factory-state",
+      "pid": 1000,
+      "pidStartTime": 1,
+      "startedAt": "2026-10-15T08:51:00.000Z",
+      "item": "i-browser-policy-sitepolicies-serviceworke",
+      "endedAt": "2026-10-15T08:52:00.000Z",
+      "exitCode": 0,
+      "durationMs": 60000
+    },
+    "j-inv-sw": {
+      "job": "j-inv-sw",
+      "kind": "agent",
+      "name": "investigate-and-fix",
+      "cmd": [
+        "node"
+      ],
+      "cwd": "/build/fix-factory-state",
+      "pid": 1000,
+      "pidStartTime": 1,
+      "startedAt": "2026-10-15T08:53:00.000Z",
+      "item": "i-browser-policy-sitepolicies-serviceworke",
+      "model": "opus"
+    },
+    "j-wt-tp": {
+      "job": "j-wt-tp",
+      "kind": "build",
+      "name": "worktree.ts create",
+      "cmd": [
+        "node"
+      ],
+      "cwd": "/build/fix-factory-state",
+      "pid": 1000,
+      "pidStartTime": 1,
+      "startedAt": "2026-10-15T08:53:30.000Z",
+      "item": "i-browser-policy-trackingprotection",
+      "endedAt": "2026-10-15T08:53:38.000Z",
+      "exitCode": 0,
+      "durationMs": 8000
+    },
+    "j-inv-tp": {
+      "job": "j-inv-tp",
+      "kind": "agent",
+      "name": "investigate-and-fix",
+      "cmd": [
+        "node"
+      ],
+      "cwd": "/build/fix-factory-state",
+      "pid": 1000,
+      "pidStartTime": 1,
+      "startedAt": "2026-10-15T08:54:00.000Z",
+      "item": "i-browser-policy-trackingprotection",
+      "model": "opus"
+    },
+    "j-wt-sw2": {
+      "job": "j-wt-sw2",
+      "kind": "build",
+      "name": "worktree.ts create",
+      "cmd": [
+        "node"
+      ],
+      "cwd": "/build/fix-factory-state",
+      "pid": 1000,
+      "pidStartTime": 1,
+      "startedAt": "2026-10-15T08:59:40.000Z",
+      "item": "i-browser-policy-sitepolicies-serviceworke-2"
+    }
+  },
+  "needsUser": [],
+  "recoveryPlans": [],
+  "notes": []
+}

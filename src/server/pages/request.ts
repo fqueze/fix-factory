@@ -1,4 +1,4 @@
-import type { ItemView, PatchView, PushView, RequestState, StackView } from "../../types.ts";
+import type { BugDraft, InvestigateReport, ItemView, JobView, PatchView, PushView, RequestState, StackView } from "../../types.ts";
 import { ITEM_STATES } from "../commands.ts";
 import { html, join, type Html } from "../html.ts";
 import { actionsSummary, approvePushControls, bugBox, commandDetails, copyButton, recoveryPlan, recoveryPlanFor, stackViewerLink, summaryId } from "./actions.ts";
@@ -10,9 +10,14 @@ import {
   formatDate,
   elapsed,
   formatDuration,
+  groupLabel,
+  hasBug,
+  isDropped,
   isLandable,
   isLanded,
   itemOf,
+  jobLabel,
+  modelLabel,
   patchesOutsideStacks,
   patchTitle,
   phabUrl,
@@ -54,7 +59,7 @@ export function requestSummary(r: RequestState): string {
   if (r.kind === "unrouted") {
     parts.push(r.step === "done" ? routeOutcome(r) : "not routed yet: a new request, or about an existing one?");
   } else if (r.step === "request") {
-    const keys = Object.keys(r.config);
+    const keys = configEntries(r).map(([k]) => k);
     parts.push(keys.length ? `config: ${keys.join(", ")}` : "turning the request into a config");
   }
   const items = Object.values(r.items);
@@ -62,10 +67,10 @@ export function requestSummary(r: RequestState): string {
     const byState = ITEM_STATES.map((s) => [s, items.filter((i) => i.state === s).length] as const).filter(([, n]) => n > 0);
     parts.push(`${plural(items.length, "failure group")}: ${byState.map(([s, n]) => `${n} ${s}`).join(", ")}`);
   }
-  const patches = Object.values(r.patches);
+  const patches = Object.values(r.patches).filter((p) => !isDropped(r, p));
   if (patches.length) {
     const accepted = patches.filter((p) => p.review?.status === "accepted" || (p.review && p.review.reviewers.length > 0 && p.review.reviewers.every((x) => x.status === "accepted"))).length;
-    const toFile = patches.filter((p) => p.bug === null && p.bugDraft).length;
+    const toFile = patches.filter((p) => !hasBug(p) && p.bugDraft).length;
     parts.push(
       [plural(patches.length, "patch", "patches"), accepted ? `${accepted} accepted` : "", toFile ? `${plural(toFile, "bug")} to file` : ""].filter(Boolean).join(", "),
     );
@@ -94,8 +99,8 @@ export function renderRequestBody(r: RequestState, ctx: RenderContext): Html {
     ${configLine(r)}
     ${r.metaBug ? metaBugLine(r, back) : null}
     ${stacks.map((s) => stackSection(r, s, ctx))}
-    ${loose.length ? html`<h3>Patches</h3>${patchTable(r, loose, ctx)}` : null}
-    ${items.length ? html`<h3>${stacks.length ? "Other groups" : "Failure groups"}</h3><div class="scroll"><table><tbody>${items.map((i) => itemRow(r, i, ctx))}</tbody></table></div>` : null}
+    ${loose.length ? html`${loose.some((p) => !isDropped(r, p)) ? html`<h3>Patches</h3>` : null}${patchTable(r, loose, ctx, "loose")}` : null}
+    ${items.length ? html`<h3>${stacks.length ? "Other groups" : "Failure groups"}</h3>${groupTable(r, items, ctx)}` : null}
     ${planned.length ? html`<h3>Try plan <span class="sub">· waiting for your approval</span></h3><table><tbody>${planned.map((p) => html`<tr><td class="res plan">push ${p.id}</td><td>${p.purpose}${p.taskCount === undefined ? null : html` · ${p.taskCount} tasks`}</td><td>${commandDetails(p)}</td></tr>`)}</tbody></table><div style="margin-top:6px">${approvePushControls(r, planned, back)}</div>` : null}
     ${sent.length ? html`<h3>Try pushes</h3><table><tbody>${sent.map(pushRow)}</tbody></table>` : null}
     ${plans.length ? html`<details style="margin-top:10px"><summary class="sub">Earlier recovery plans (${plans.length})</summary>${plans.map((p) => html`<div class="action"><span class="flag">Recovery plan</span><span class="why">You said: “${p.text}”</span>${recoveryPlan(r, p, back)}</div>`)}</details>` : null}
@@ -105,20 +110,44 @@ export function renderRequestBody(r: RequestState, ctx: RenderContext): Html {
   </div>`;
 }
 
+// route-request fills every field, most of them often empty.
+function configEntries(r: RequestState): [string, string][] {
+  return Object.entries(r.config)
+    .map(([k, v]): [string, string] => [k, inWords(v)])
+    .filter(([, v]) => v !== "");
+}
+
+function inWords(v: unknown): string {
+  if (Array.isArray(v)) {
+    return v.map(inWords).filter(Boolean).join(", ");
+  }
+  if (v !== null && typeof v === "object") {
+    return Object.entries(v)
+      .map(([k, x]) => [k, inWords(x)])
+      .filter(([, w]) => w)
+      .map(([k, w]) => `${k} ${w}`)
+      .join(", ");
+  }
+  if (typeof v === "boolean") {
+    return v ? "yes" : "no";
+  }
+  return v === null || v === undefined ? "" : String(v);
+}
+
 function configLine(r: RequestState): Html | null {
-  const entries = Object.entries(r.config);
+  const entries = configEntries(r);
   if (!entries.length) {
     return null;
   }
   return html`<h3>Config <span class="sub">· from your request</span></h3><div class="sub">${join(
-    entries.map(([k, v]) => html`<b>${k}</b>: ${typeof v === "string" ? v : JSON.stringify(v)}`),
+    entries.map(([k, v]) => html`<b>${k}</b>: ${v}`),
     " · ",
   )}</div>`;
 }
 
 function metaBugLine(r: RequestState, back: string): Html {
   const m = r.metaBug!;
-  if (m.bug !== null) {
+  if (hasBug(m)) {
     return html`<div class="sub" style="margin-top:8px">Meta bug: <a class="bug" href="${bugUrl(m.bug)}">Bug ${m.bug}</a></div>`;
   }
   return html`<div class="box"><h4>Meta bug ${m.draft ? html`· <a class="bug tofile" href="${enterBugUrl(m.draft)}" target="_blank" rel="noopener">Bug to file</a> · “${m.draft.summary}”` : null}</h4>${
@@ -129,7 +158,7 @@ function metaBugLine(r: RequestState, back: string): Html {
 function stackSection(r: RequestState, s: StackView, ctx: RenderContext): Html {
   const patches = stackPatches(r, s);
   return html`<h3>${s.folder} <span class="sub">· stack order: easy and valuable first, each patch after its hard deps · <span class="mono">${s.branch}</span></span></h3>
-    ${patchTable(r, patches, ctx)}
+    ${patchTable(r, patches, ctx, `stack-${s.id}`)}
     ${
       s.summary
         ? html`<details style="margin-top:6px"><summary class="sub">Meta-bug comment</summary><textarea readonly rows="6" id="${summaryId(r.id, s.id)}-body">${s.summary}</textarea></details>`
@@ -138,51 +167,77 @@ function stackSection(r: RequestState, s: StackView, ctx: RenderContext): Html {
     <div style="margin-top:8px">${stackViewerLink(s)}${s.summary ? html` ${copyButton(`${summaryId(r.id, s.id)}-body`, "Copy the meta-bug comment")}` : null}</div>`;
 }
 
-function patchTable(r: RequestState, patches: PatchView[], ctx: RenderContext): Html {
-  const reviewed = patches.some((p) => p.review);
-  // Landed patches only matter as history once the rest is in review.
-  const landed = patches.filter((p) => isLanded(r, p));
-  const rest = landed.length < patches.length ? patches.filter((p) => !isLanded(r, p)) : patches;
-  const folded = rest === patches ? [] : landed;
-  return html`<div class="scroll"><table>
-    <thead><tr><th>Patch</th><th>State</th><th class="hide-sm" title="Expected review effort, 1 = trivial">Effort</th><th class="num hide-sm" title="Failures per week fixed">Value</th>${reviewed ? html`<th>Reviewers</th>` : null}</tr></thead>
-    <tbody>${rest.map((p) => patchRow(r, p, reviewed, ctx))}${
-      folded.length
-        ? html`<tr><td colspan="${reviewed ? 5 : 4}" class="sub"><details><summary>${folded.length} landed ▸</summary>${folded.map(
-            (p) => html`<div>${p.revision ? html`<a href="${phabUrl(p.revision)}" target="_blank" rel="noopener">D${p.revision}</a> ` : null}${bugLabel(p)} ${patchTitle(p)}</div>`,
-          )}</details></td></tr>`
-        : null
-    }</tbody>
-  </table></div>`;
+interface PatchColumns {
+  effort: boolean;
+  value: boolean;
+  reviewers: boolean;
 }
 
-function patchRow(r: RequestState, p: PatchView, reviewedColumn: boolean, ctx: RenderContext): Html {
+// fold: names the Dropped line, so that it stays open across updates.
+function patchTable(r: RequestState, patches: PatchView[], ctx: RenderContext, fold: string): Html {
+  const dropped = patches.filter((p) => isDropped(r, p));
+  const live = patches.filter((p) => !isDropped(r, p));
+  // Landed patches only matter as history once the rest is in review.
+  const landed = live.filter((p) => isLanded(r, p));
+  const rest = landed.length < live.length ? live.filter((p) => !isLanded(r, p)) : live;
+  const folded = rest === live ? [] : landed;
+  const columns: PatchColumns = {
+    effort: live.some((p) => p.effort !== undefined),
+    value: live.some((p) => itemOf(r, p)?.group.ratePerWeek !== undefined),
+    reviewers: live.some((p) => p.review),
+  };
+  const span = 2 + Object.values(columns).filter(Boolean).length;
+  return html`${
+    live.length
+      ? html`<div class="scroll"><table>
+    <thead><tr><th>Patch</th><th>State</th>${columns.effort ? html`<th class="hide-sm" title="Expected review effort, 1 = trivial">Effort</th>` : null}${
+      columns.value ? html`<th class="num hide-sm" title="Failures per week fixed">Value</th>` : null
+    }${columns.reviewers ? html`<th>Reviewers</th>` : null}</tr></thead>
+    <tbody>${rest.map((p) => patchRow(r, p, columns, ctx))}${
+      folded.length ? html`<tr><td colspan="${span}" class="sub"><details data-fold="landed-${fold}"><summary>${folded.length} landed ▸</summary>${folded.map((p) => patchLine(p))}</details></td></tr>` : null
+    }</tbody>
+  </table></div>`
+      : null
+  }${
+    dropped.length
+      ? html`<details class="fold" data-fold="dropped-${fold}"><summary>Dropped (${dropped.length})</summary>${dropped.map((p) => patchLine(p, itemOf(r, p)!.state))}</details>`
+      : null
+  }`;
+}
+
+function patchLine(p: PatchView, state?: string): Html {
+  return html`<div class="sub">${p.revision ? html`<a href="${phabUrl(p.revision)}" target="_blank" rel="noopener">D${p.revision}</a> ` : null}${bugLabel(p)} ${patchTitle(p)}${
+    state ? ` (${state})` : null
+  }</div>`;
+}
+
+function patchRow(r: RequestState, p: PatchView, columns: PatchColumns, ctx: RenderContext): Html {
   const back = requestUrl(r.id);
   const item = itemOf(r, p);
   const rate = item?.group.ratePerWeek;
   return html`<tr data-patch="${p.id}">
     <td>${p.revision ? html`<a class="phab" href="${phabUrl(p.revision)}" title="D${p.revision}" target="_blank" rel="noopener">${PHAB_ICON}</a>` : null}${bugLabel(p)} ${patchTitle(p)}${
-      p.bug === null && !p.bugDraft && p.testOnly ? html` <span class="sub">(meta bug)</span>` : null
+      !hasBug(p) && !p.bugDraft && p.testOnly ? html` <span class="sub">(meta bug)</span>` : null
     }
-      ${p.bug === null && p.bugDraft ? bugDraftBox(r.id, p, back) : null}
+      ${!hasBug(p) && p.bugDraft ? bugDraftBox(r.id, p, back) : null}
       ${p.deps.map((d) => depLine(r, d))}
       ${reviewBox(r, p, back, p.interdiffFile === undefined ? undefined : ctx.interdiff?.(p))}
     </td>
     <td>${item ? html`<span class="st ${stateClass(item.state)}">${item.state}</span>` : null}</td>
-    <td class="hide-sm">${p.effort ?? ""}</td>
-    <td class="num hide-sm">${rate === undefined ? "" : `${rate}/wk`}</td>
-    ${reviewedColumn ? html`<td>${reviewers(r, p)}</td>` : null}
+    ${columns.effort ? html`<td class="hide-sm">${p.effort ?? ""}</td>` : null}
+    ${columns.value ? html`<td class="num hide-sm">${rate === undefined ? "" : `${rate}/wk`}</td>` : null}
+    ${columns.reviewers ? html`<td>${reviewers(r, p)}</td>` : null}
   </tr>`;
 }
 
 function bugLabel(p: PatchView): Html {
-  if (p.bug !== null) {
+  if (hasBug(p)) {
     return html`<a class="bug" href="${bugUrl(p.bug)}" target="_blank" rel="noopener">Bug ${p.bug}</a>`;
   }
   if (p.bugDraft) {
     return html`<a class="bug tofile" href="${enterBugUrl(p.bugDraft)}" target="_blank" rel="noopener" title="Opens a prefilled enter_bug.cgi">Bug to file</a>`;
   }
-  return html`<span class="bug none">Bug XXXXXXX</span>`;
+  return html`<span class="bug none">no bug yet</span>`;
 }
 
 function bugDraftBox(request: string, p: PatchView, back: string): Html {
@@ -255,22 +310,61 @@ export function diff(text: string): Html {
   })}</pre>`;
 }
 
+function runningJob(r: RequestState, i: ItemView): JobView | undefined {
+  return i.jobs.map((j) => r.jobs[j]).findLast((j) => j.endedAt === undefined);
+}
+
+// What runs or waits for you first, then the rest; the closed ones folded under one line.
+function groupTable(r: RequestState, items: ItemView[], ctx: RenderContext): Html {
+  const closed = items.filter((i) => stateClass(i.state) === "closed");
+  const open = items.filter((i) => stateClass(i.state) !== "closed");
+  const busy = (i: ItemView) => runningJob(r, i) !== undefined || stateClass(i.state) === "run" || r.needsUser.some((n) => n.item === i.id);
+  const notStarted = (i: ItemView) => i.state === "not started";
+  const sorted = [...open.filter(busy), ...open.filter((i) => !busy(i) && !notStarted(i)), ...open.filter((i) => !busy(i) && notStarted(i))];
+  // A bug to file stays in sight, even for a closed group.
+  const withDraft = closed.filter((i) => itemBugDraft(r, i));
+  const folded = closed.filter((i) => !itemBugDraft(r, i));
+  const states = new Set(folded.map((i) => i.state));
+  const closedLabel = `${folded.length} ${states.size === 1 ? folded[0].state : "closed"}`;
+  return html`<table class="groups"><tbody>${[...sorted, ...withDraft].map((i) => itemRow(r, i, ctx))}${
+    folded.length
+      ? html`<tr><td colspan="2" class="foldrow"><details class="fold" data-fold="closed-groups"><summary>${closedLabel}</summary><table class="groups"><tbody>${folded.map((i) =>
+          itemRow(r, i, ctx),
+        )}</tbody></table></details></td></tr>`
+      : null
+  }</tbody></table>`;
+}
+
 function itemRow(r: RequestState, i: ItemView, ctx: RenderContext): Html {
-  const running = [...i.jobs].reverse().map((j) => r.jobs[j]).find((j) => j && j.endedAt === undefined);
+  const job = runningJob(r, i);
+  const draft = itemBugDraft(r, i);
   const tests = i.group.tests;
-  const name = tests.length === 1 ? tests[0] : i.folder;
-  const closed = stateClass(i.state) === "closed";
+  const cost = i.jobs.reduce((sum, j) => sum + (r.jobs[j].costUsd ?? 0), 0);
+  const work = job
+    ? html`<span class="sub"> · ${job.kind === "agent" && job.model ? modelLabel(job.model) : jobLabel(job.name)} · ${elapsed(job.startedAt, ctx)}${
+        cost > 0 ? html` · <span title="Agent cost of this group so far">${formatCost(cost)}</span>` : null
+      }</span>`
+    : null;
+  // A job running for a group not started yet (its worktree build) means it has started.
+  const preparing = job !== undefined && i.state === "not started";
+  const state = html`<span class="st ${preparing ? "run" : stateClass(i.state)}">${preparing ? "preparing" : i.state}</span>${work}${i.detail ? html`<span class="detail">: ${i.detail}</span>` : null}`;
   return html`<tr data-item="${i.id}">
-    <td>${name} ${tests.length > 1 ? html`<span class="sub">(${tests.length} tests)</span>` : null}<div class="sub" title="${i.group.configs.join(", ")}">${i.group.message}</div></td>
-    <td><span class="st ${stateClass(i.state)}">${i.state}${closed && i.detail ? `: ${i.detail}` : ""}</span></td>
-    <td class="sub hide-sm">${
-      running
-        ? html`${running.model ?? running.kind} · ${elapsed(running.startedAt, ctx)}`
-        : !closed && i.detail
-          ? `“${i.detail}”`
-          : ""
-    }</td>
+    <td class="gname"><span title="${[...tests, i.group.configs.join(", ")].join("\n")}">${groupLabel(r, i)}</span><div class="sub clamp2" title="${i.group.message}">${i.group.message}</div></td>
+    <td>${
+      i.detail
+        ? html`<details class="clamp3" data-fold="detail-${i.id}" title="${i.state}: ${i.detail}"><summary>${state}</summary></details>`
+        : state
+    }${draft ? html`<div><a class="bug tofile" href="${enterBugUrl(draft)}" target="_blank" rel="noopener" title="Opens a prefilled enter_bug.cgi">Bug to file</a> <span class="sub">“${draft.summary}”</span></div>` : null}</td>
   </tr>`;
+}
+
+// A bug the investigation asks to file without a patch to carry it (e.g. a product bug behind a
+// group left as-is); a patch's draft shows on its patch row instead.
+function itemBugDraft(r: RequestState, i: ItemView): BugDraft | undefined {
+  if (i.lastReport?.prompt !== "investigate-and-fix" || Object.values(r.patches).some((p) => p.item === i.id)) {
+    return undefined;
+  }
+  return (i.lastReport.report as InvestigateReport).bugDraft;
 }
 
 function pushRow(p: PushView): Html {
@@ -284,12 +378,16 @@ function recentJobs(r: RequestState, ctx: RenderContext): Html | null {
   if (!jobs.length) {
     return null;
   }
-  return html`<h3>Recent jobs</h3><div class="scroll"><table><tbody>${jobs.map(
+  // Collapsed: the group rows already show what runs.
+  return html`<details class="fold section" data-fold="jobs"><summary>Recent jobs</summary><div class="scroll"><table><tbody>${jobs.map(
     (j) =>
-      html`<tr${j.error ? html` title="${j.error}"` : null}><td>${j.name} ${j.item ? html`<span class="sub">${j.item}</span>` : null}</td><td class="sub">${j.kind}${j.model ? ` · ${j.model}` : ""}</td><td class="res ${
+      html`<tr${j.error ? html` title="${j.error}"` : null}><td><span title="${j.name}">${jobLabel(j.name)}</span> ${
+        // The folded state keeps jobs whose item it doesn't know.
+        j.item === undefined ? null : html`<span class="sub" title="${j.item}">${j.item in r.items ? groupLabel(r, r.items[j.item]) : j.item}</span>`
+      }</td><td class="sub">${j.kind}${j.model ? ` · ${modelLabel(j.model)}` : ""}</td><td class="res ${
         j.endedAt === undefined ? "run" : j.exitCode === 0 ? "ok" : "bad"
       }">${j.endedAt === undefined ? html`running ${elapsed(j.startedAt, ctx)}` : `${formatDuration(j.durationMs ?? Date.parse(j.endedAt) - Date.parse(j.startedAt))}${j.exitCode ? `, exit ${j.exitCode}` : ""}`}</td><td class="num sub">${
         j.costUsd === undefined ? "" : formatCost(j.costUsd)
       }</td></tr>`,
-  )}</tbody></table></div>`;
+  )}</tbody></table></div></details>`;
 }

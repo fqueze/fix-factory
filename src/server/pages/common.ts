@@ -96,6 +96,17 @@ export function itemOf(r: RequestState, p: PatchView): ItemView | undefined {
   return p.item ? r.items[p.item] : undefined;
 }
 
+// Bug 0 is what a commit message with a placeholder bug number parses to.
+export function hasBug(p: { bug: number | null }): p is { bug: number } {
+  return p.bug !== null && p.bug !== 0;
+}
+
+// The patch of a group that was left as-is or handed back: not part of the work anymore.
+export function isDropped(r: RequestState, p: PatchView): boolean {
+  const item = itemOf(r, p);
+  return item !== undefined && stateClass(item.state) === "closed";
+}
+
 export function isLanded(r: RequestState, p: PatchView): boolean {
   return itemOf(r, p)?.state === "landed";
 }
@@ -139,7 +150,7 @@ export function submitChecks(r: RequestState, s: StackView): Check[] {
   const patches = stackPatches(r, s).filter((p) => !isLanded(r, p));
   const wip = patches.filter((p) => /^(WIP|DEBUG)\b/i.test(p.title) || /DO NOT LAND/i.test(p.title)).length;
   const noReviewer = patches.filter((p) => !/\br=\S/.test(p.title)).length;
-  const noBug = patches.filter((p) => p.bug === null).length;
+  const noBug = patches.filter((p) => !hasBug(p)).length;
   const pushes = Object.values(r.pushes);
   const tryDone = pushes.length > 0 && pushes.every((p) => p.result === "green");
   return [
@@ -172,7 +183,7 @@ export function actionKind(n: NeedsUser, r: RequestState): ActionKind {
     return "recovery";
   }
   const patch = n.patch ? r.patches[n.patch] : undefined;
-  if (patch && patch.bug === null && patch.bugDraft) {
+  if (patch && !hasBug(patch) && patch.bugDraft) {
     return "file-bug";
   }
   if (n.item) {
@@ -260,6 +271,78 @@ export function formatCost(usd: number): string {
 
 export function requestCost(r: RequestState): number {
   return Object.values(r.jobs).reduce((sum, j) => sum + (j.costUsd ?? 0), 0);
+}
+
+// Test paths are long and share the request's folder: show what follows it.
+function relativePath(path: string, folder: string | undefined): string {
+  return folder && path.startsWith(`${folder}/`) ? path.slice(folder.length + 1) : path;
+}
+
+// "browser_foo.js", "sub/browser_foo.js, browser_bar.js", or the subfolder and test count of a larger group.
+export function groupLabel(r: RequestState, i: ItemView): string {
+  const tests = i.group.tests;
+  if (tests.length <= 3) {
+    return tests.map((t) => relativePath(t, r.folder)).join(", ");
+  }
+  const folder = i.folder === r.folder ? "" : relativePath(i.folder, r.folder);
+  return `${folder ? `${folder}, ` : ""}${tests.length} tests`;
+}
+
+// Job names are a tool and its first argument, or a prompt name.
+const JOB_LABELS: Record<string, string> = {
+  "annotations.ts list": "list skip annotations",
+  "artifacts.ts fetch": "fetch test artifacts",
+  "bugzilla.ts prior-art": "search prior art",
+  "failures.ts try-table": "read try results",
+  "failures.ts collect": "collect failures",
+  "failures.ts cluster": "cluster failures",
+  "git checkout": "check out the stack",
+  "git log": "read commit message",
+  "lint-text.ts commit": "lint message",
+  "lint-text.ts bug": "lint bug draft",
+  "lint-text.ts reply": "lint reply",
+  "phab.ts poll": "poll Phabricator",
+  "phab.ts reviewers": "pick reviewers",
+  "stack.ts assemble": "assemble stack",
+  "stack.ts check": "check stack",
+  "stack.ts deps": "find dependencies",
+  "stack.ts import": "import commits",
+  "stack.ts interdiff": "interdiff",
+  "stack.ts order": "order stack",
+  "stack.ts rewrite": "rewrite stack",
+  "stack.ts summary": "meta-bug comment",
+  "try.ts dry-run": "try dry run",
+  "try.ts push": "push to try",
+  "try.ts watch": "watch try push",
+  "worktree.ts create": "build worktree",
+  "worktree.ts remove": "remove worktree",
+  shell: "shell command",
+  "adapt-soft-dep": "adapt to a soft dep",
+  "address-review": "address review comments",
+  "classify-annotation": "classify annotation",
+  "classify-review-comments": "classify review comments",
+  "estimate-review-effort": "estimate review effort",
+  "investigate-and-fix": "investigate",
+  "merge-clusters": "merge clusters",
+  "plan-try-pushes": "plan try pushes",
+  "prior-art-verdict": "judge prior art",
+  recover: "recovery plan",
+  "resolve-conflict": "resolve conflict",
+  "review-patch": "critical review",
+  "review-stack": "review stack",
+  "revise-bug-draft": "revise bug draft",
+  "route-request": "route request",
+  "triage-try": "triage try results",
+  "write-annotation-patches": "write annotation patches",
+};
+
+export function jobLabel(name: string): string {
+  // Older jobs have the tool's flags in their names too.
+  return JOB_LABELS[name] ?? JOB_LABELS[name.split(" ").slice(0, 2).join(" ")] ?? name;
+}
+
+export function modelLabel(model: string): string {
+  return model.charAt(0).toUpperCase() + model.slice(1);
 }
 
 export function plural(n: number, one: string, many = `${one}s`): string {

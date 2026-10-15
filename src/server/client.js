@@ -32,6 +32,19 @@
     return a && el.contains(a) && (a.tagName === "INPUT" || a.tagName === "TEXTAREA" || a.tagName === "SELECT") && a.value !== "";
   }
 
+  // Folded parts of a request you opened (closed groups, recent jobs, a long reason) stay open
+  // when the request is re-rendered.
+  function openFolds(root) {
+    return Array.prototype.map.call(root.querySelectorAll("details[data-fold][open]"), function (d) {
+      return d.closest("[data-request]").dataset.request + " " + d.dataset.fold;
+    });
+  }
+  function reopenFolds(root, folds) {
+    root.querySelectorAll("details[data-fold]").forEach(function (d) {
+      if (folds.indexOf(d.closest("[data-request]").dataset.request + " " + d.dataset.fold) >= 0) d.open = true;
+    });
+  }
+
   function refreshMain() {
     var open = Array.prototype.map.call(document.querySelectorAll("details.req[open]"), function (d) {
       return d.dataset.request;
@@ -40,7 +53,9 @@
     return fetchText(url).then(function (text) {
       var main = document.getElementById("main");
       if (main.contains(document.activeElement) && document.activeElement.value) return;
+      var folds = openFolds(main);
       main.replaceChildren(parse(text));
+      reopenFolds(main, folds);
       open.forEach(function (id) {
         var el = requestElement(id);
         if (el && el.tagName === "DETAILS" && !el.open) {
@@ -64,7 +79,9 @@
         var fresh = parse(text).firstElementChild;
         // A request that moved between active, queued and finished needs the whole list.
         if (!fresh || fresh.dataset.section !== el.dataset.section) return refreshMain();
+        var folds = openFolds(el);
         el.replaceWith(fresh);
+        reopenFolds(fresh, folds);
       })
       .catch(function (e) {
         if (e.status === 404) el.remove();
