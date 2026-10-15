@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { appendCommand, type CommandInput } from "../state/commands.ts";
 import { listRequests, readEventsFrom, tailEvents } from "../state/events.ts";
 import { foldEvents } from "../state/fold.ts";
+import { checkId } from "../state/jsonl.ts";
 import type { Event, RequestId, RequestState } from "../types.ts";
 import type { CommandSink, StateSource } from "./state-source.ts";
 
@@ -79,7 +80,12 @@ export class StateDirSource implements StateSource {
   private ensureWatcher(): void {
     const dir = join(this.stateDir, "requests");
     if (this.watcher || !existsSync(dir)) return;
-    this.watcher = watch(dir, () => this.scan());
+    try {
+      this.watcher = watch(dir, () => this.scan());
+    } catch {
+      // Out of inotify watches, or requests/ just removed: the poll covers it.
+      return;
+    }
     this.watcher.on("error", () => {
       this.watcher?.close();
       this.watcher = undefined;
@@ -87,11 +93,20 @@ export class StateDirSource implements StateSource {
   }
 
   private scan(): void {
-    for (const id of listRequests(this.stateDir)) {
+    const present = new Set(listRequests(this.stateDir).filter(isValidId));
+    for (const id of present) {
       if (!this.requests.has(id)) this.track(id);
+    }
+    for (const [id, tracked] of this.requests) {
+      if (present.has(id)) continue;
+      tracked.stop();
+      this.requests.delete(id);
+      this.notify(id);
     }
   }
 
+  // Every request stays watched and in memory, finished ones included: deliberate at
+  // this scale (hundreds of requests, thousands of events each).
   private track(id: RequestId): void {
     const { events, offset } = readEventsFrom(this.stateDir, id, 0);
     const tracked: Tracked = { events, stop: () => {} };
@@ -112,9 +127,23 @@ export class StateDirSource implements StateSource {
   private refold(id: RequestId, tracked: Tracked): void {
     if (tracked.events.length === 0) return;
     tracked.state = foldEvents(tracked.events);
+    this.notify(id);
+  }
+
+  private notify(id: RequestId): void {
     for (const l of this.listeners) {
       l(id);
     }
+  }
+}
+
+// A directory made by hand under requests/ mustn't take the server down.
+function isValidId(id: string): boolean {
+  try {
+    checkId(id, "request id");
+    return true;
+  } catch {
+    return false;
   }
 }
 

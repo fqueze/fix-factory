@@ -312,9 +312,3 @@ function readBody(req: IncomingMessage): Promise<string> {
     req.on("error", reject);
   });
 }
-
-// Kept so `node src/server/server.ts --fixtures <dir>` still works.
-if (import.meta.main) {
-  // Not a top-level await: main.ts imports this module, which must finish evaluating first.
-  void import("./main.ts").then((m) => m.main(process.argv.slice(2)));
-}

@@ -29,6 +29,7 @@ function loadPage(visibilityState: "visible" | "hidden") {
     setInterval,
     clearInterval,
     setTimeout,
+    Date,
   };
   runInNewContext(CLIENT, page);
   return {
@@ -41,7 +42,7 @@ function loadPage(visibilityState: "visible" | "hidden") {
 }
 
 describe("presence", () => {
-  beforeEach(() => mock.timers.enable({ apis: ["setInterval", "setTimeout"] }));
+  beforeEach(() => mock.timers.enable({ apis: ["setInterval", "setTimeout", "Date"] }));
   afterEach(() => mock.timers.reset());
 
   it("sends presence when visible, on each visibility change, and every 15 min while visible", () => {
@@ -60,6 +61,23 @@ describe("presence", () => {
     assert.equal(page.sent.length, 4);
     mock.timers.tick(1 * MIN);
     assert.equal(page.sent.length, 5);
+  });
+
+  it("skips a visible send less than a minute after the last one", () => {
+    const page = loadPage("visible");
+    page.setVisibility("hidden");
+    page.setVisibility("visible");
+    assert.deepEqual(
+      page.sent.map((s) => (s.body as { visible: boolean }).visible),
+      [true, false],
+    );
+    page.setVisibility("hidden");
+    mock.timers.tick(1 * MIN);
+    page.setVisibility("visible");
+    assert.deepEqual(
+      page.sent.map((s) => (s.body as { visible: boolean }).visible),
+      [true, false, false, true],
+    );
   });
 
   it("sends nothing from a page opened in the background", () => {

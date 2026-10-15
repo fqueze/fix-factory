@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, it } from "node:test";
@@ -79,6 +79,28 @@ describe("StateDirSource", () => {
       s.listRequests().map((r) => r.id),
       ["r-new"],
     );
+  });
+
+  it("ignores request directories with invalid names", () => {
+    appendEvent(stateDir, created("r-a"));
+    mkdirSync(join(stateDir, "requests", ".hidden"));
+    writeFileSync(join(stateDir, "requests", ".hidden", "events.jsonl"), "");
+    assert.deepEqual(
+      start()
+        .listRequests()
+        .map((r) => r.id),
+      ["r-a"],
+    );
+  });
+
+  it("drops a request whose directory disappears", async () => {
+    appendEvent(stateDir, created("r-a"));
+    const s = start();
+    const changed = nextChange(s);
+    rmSync(join(stateDir, "requests", "r-a"), { recursive: true });
+    assert.equal(await changed, "r-a");
+    assert.equal(s.getRequest("r-a"), undefined);
+    assert.deepEqual(s.listRequests(), []);
   });
 
   it("waits for a truncated last line to be completed", async () => {

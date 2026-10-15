@@ -186,13 +186,18 @@
   // ignored: the next one comes at the next visibility change or tick.
   var PRESENCE_MS = 15 * 60 * 1000;
   var presenceTimer = null;
+  var lastVisibleSent = -Infinity;
   function sendPresence() {
+    var visible = document.visibilityState === "visible";
+    // Flipping between tabs shouldn't append a command each time.
+    if (visible && Date.now() - lastVisibleSent < 60 * 1000) return;
+    if (visible) lastVisibleSent = Date.now();
     fetch("/api/commands", {
       method: "POST",
       // Lets the "hidden" one go out when the tab is closing.
       keepalive: true,
       headers: { Accept: "application/json", "Content-Type": "application/json" },
-      body: JSON.stringify({ cmd: "presence", visible: document.visibilityState === "visible" }),
+      body: JSON.stringify({ cmd: "presence", visible: visible }),
     }).catch(function () {});
   }
   function onVisibilityChange() {

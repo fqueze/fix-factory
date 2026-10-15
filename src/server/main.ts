@@ -24,8 +24,13 @@ export function main(args: string[]): FactoryServer {
   } else {
     config = loadConfig();
   }
-  if (values.port) {
-    config.port = Number(values.port);
+  if (values.port !== undefined) {
+    const port = Number(values.port);
+    if (!/^\d+$/.test(values.port) || port > 65535) {
+      process.stderr.write(`--port must be an integer from 0 to 65535, not ${JSON.stringify(values.port)}\n`);
+      process.exit(2);
+    }
+    config.port = port;
   }
 
   let server: FactoryServer;
