@@ -8,7 +8,7 @@ import { appendCommand } from "../state/commands.ts";
 import { appendEvent, readEvents, type EventInput } from "../state/events.ts";
 import { groupMembers, readPidFile, startJob } from "../state/jobs.ts";
 import type { Event, FactoryConfig } from "../types.ts";
-import { Orchestrator } from "./main.ts";
+import { Orchestrator, withDryRun } from "./main.ts";
 
 const fixtures = fileURLToPath(new URL("../../test/fixtures/orchestrator/", import.meta.url));
 
@@ -137,6 +137,9 @@ describe("Orchestrator", () => {
       const started = events.filter((e): e is Extract<Event, { type: "job-started" }> => e.type === "job-started");
       assert.deepEqual(started.map((e) => e.name), ["annotations.ts list"]);
       assert.equal(started[0].cmd.at(-1), "--dry-run");
+      const plan = (tool: string, args: string[]) => ({ purpose: { key: "k", what: "w" }, kind: "script" as const, name: "n", cwd: "/", cli: { tool, args } });
+      assert.deepEqual(withDryRun(plan("try.ts", ["push", "--cwd", "/w", "--", "fuzzy", "-q", "x"])).cli?.args, ["push", "--cwd", "/w", "--dry-run", "--", "fuzzy", "-q", "x"]);
+      assert.deepEqual(withDryRun(plan("lint-text.ts", ["--kind", "commit", "f"])).cli?.args, ["--kind", "commit", "f"]);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

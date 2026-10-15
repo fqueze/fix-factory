@@ -11,7 +11,7 @@
 import { basename, dirname } from "node:path";
 import type { Annotation } from "../cli/annotations.ts";
 import type { ClusterGroup, CollectedFailure, TryRow, TryTable } from "../cli/failures.ts";
-import type { PollResult, ReviewerSuggestion } from "../cli/phab.ts";
+import type { ReviewerSuggestion } from "../cli/phab.ts";
 import type { ImportedCommit } from "../cli/stack/import.ts";
 import type { OrderOutput } from "../cli/stack/order.ts";
 import type { DryRunResult } from "../cli/try.ts";
@@ -51,7 +51,6 @@ import {
 import type {
   ClassifyAnnotationReport,
   ClassifyReviewCommentsReport,
-  EstimateReviewEffortReport,
   MergeClustersReport,
   PlanTryPushesReport,
   PriorArtVerdictReport,
@@ -248,10 +247,6 @@ class Planner {
 
   clear(key: string): void {
     if (this.s.needsUser.some((n) => n.key === key)) this.event(this.ev("user-done", { key }));
-  }
-
-  isOpen(key: string): boolean {
-    return this.s.needsUser.some((n) => n.key === key) || this.raisedKeys.has(key);
   }
 
   note(text: string): void {

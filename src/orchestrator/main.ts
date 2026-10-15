@@ -244,8 +244,7 @@ export class Orchestrator {
       appendEvent(this.config.stateDir, { type: "note", request, text: `Dry run: ${plan.name} not started (${plan.purpose.key}).` });
       return;
     }
-    const p = this.dryRun && plan.cli ? { ...plan, cli: { ...plan.cli, args: [...plan.cli.args, "--dry-run"] } } : plan;
-    startPlan(this.deps, request, p);
+    startPlan(this.deps, request, this.dryRun ? withDryRun(plan) : plan);
   }
 
   // Runs next() for every request (or one, for start-now, which also skips the caps) until it
@@ -306,6 +305,16 @@ export class Orchestrator {
     this.watchers = [];
     clearInterval(this.timer);
   }
+}
+
+// The CLIs that go through runCli take --dry-run, before any "--" (after it, try.ts passes
+// everything to mach try). lint-text.ts has no side effect and no such flag.
+export function withDryRun(plan: JobPlan): JobPlan {
+  if (!plan.cli || !plan.cli.tool.endsWith(".ts") || plan.cli.tool === "lint-text.ts") return plan;
+  const args = [...plan.cli.args];
+  const end = args.indexOf("--");
+  args.splice(end === -1 ? args.length : end, 0, "--dry-run");
+  return { ...plan, cli: { ...plan.cli, args } };
 }
 
 if (import.meta.main) {

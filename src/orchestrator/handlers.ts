@@ -19,7 +19,7 @@ import type {
   RequestState,
 } from "../types.ts";
 import { patchId } from "./next.ts";
-import { dataPath, type Purpose } from "./plan.ts";
+import { dataPath } from "./plan.ts";
 import type {
   ClassifyReviewCommentsReport,
   EstimateReviewEffortReport,
