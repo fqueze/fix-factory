@@ -172,7 +172,7 @@ export type Event =
   | (EventBase & { type: "reply-draft"; patch: PatchId; commentId: number; text: string })
   | (EventBase & { type: "needs-user"; key: string; action: string; detail: string; item?: ItemId; patch?: PatchId; push?: PushId; stack?: string; job?: JobId })
   | (EventBase & { type: "user-done"; key: string }) // clears a needs-user with the same key
-  | (EventBase & { type: "command-executed"; command: string; ok: boolean; detail?: string; cmd?: Command["cmd"] })
+  | (EventBase & { type: "command-executed"; command: string; ok: boolean; detail?: string; cmd?: Command["cmd"]; item?: ItemId; job?: JobId })
   | (EventBase & { type: "recovery-plan"; job: JobId; text: string; plan: PlannedCommand[]; cannotDo: string[]; questions: string[] })
   | (EventBase & { type: "note"; text: string });
 
@@ -341,6 +341,8 @@ export interface RefusedCommand {
   key: string; // "refused:<command id>", what dismiss names
   command: string; // its id
   cmd?: Command["cmd"]; // absent when the orchestrator failed before knowing it
+  item?: ItemId; // what it was about: a later success of the same cmd about the same item and job clears it
+  job?: JobId;
   detail?: string;
   t: Iso;
 }

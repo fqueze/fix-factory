@@ -191,12 +191,67 @@ describe("commands", () => {
     assert.deepEqual(sc.state().refused, []);
   });
 
-  it("accept-review makes the item reviewed and answers its ⚑", () => {
+  it("accept-review makes the item reviewed and answers its ⚑, only after the review rounds", () => {
     const sc = withPatch();
+    const review = (job: string, exitCode: number) => {
+      sc.add({ type: "job-started", request: ID, job, item: "i-a", kind: "agent", name: "review-patch", pid: 1, pidStartTime: 1, cmd: ["claude"], cwd: "/wt/a", codeVersion: "t" });
+      sc.add({ type: "job-finished", request: ID, job, exitCode, durationMs: 1 });
+    };
+    review("j-crash", 1);
+    sc.add({ type: "needs-user", request: ID, key: "failed:j-crash", action: "review-patch failed twice", detail: "d", job: "j-crash", item: "i-a" });
+    run(sc, cmd({ cmd: "accept-review", item: "i-a" }));
+    assert.match(executed(sc).at(-1)!.detail!, /isn't waiting for you/, "a crashed review is retried, not accepted");
+    sc.add({ type: "user-done", request: ID, key: "failed:j-crash" });
+    review("j-rev", 0);
     sc.add({ type: "item-state", request: ID, item: "i-a", state: "blocked", detail: "critical review" });
     sc.add({ type: "needs-user", request: ID, key: "failed:j-rev", action: "No ok after 3 critical review rounds", detail: "d", job: "j-rev", item: "i-a" });
     run(sc, cmd({ cmd: "accept-review", item: "i-a" }));
     assert.equal(sc.state().items["i-a"].state, "reviewed");
+    assert.deepEqual(sc.open(), []);
+  });
+
+  it("dismiss never answers a ⚑ whose user-done means something (an approval, a bug filed...)", () => {
+    const sc = withPatch();
+    sc.add({ type: "needs-user", request: ID, key: "approve-push:A", action: "Approve", detail: "", push: "A" });
+    run(sc, cmd({ cmd: "dismiss", key: "approve-push:A" }));
+    assert.deepEqual(sc.open(), ["approve-push:A"]);
+    assert.equal(executed(sc).at(-1)?.ok, false);
+  });
+
+  it("stop raises a ⚑ for a job without an item too, refuses try pushes; retry answers it", () => {
+    const sc = withPatch();
+    sc.startJob({ purpose: { key: "plan-pushes", what: "plan-pushes" }, kind: "agent", name: "plan-try-pushes", cwd: "/r", agent: { sessionId: "s-p", resume: false, message: "x" } });
+    const job = sc.running("plan-pushes");
+    run(sc, cmd({ cmd: "stop", job }));
+    assert.deepEqual(sc.open(), [`stopped:${job}`]);
+    sc.complete("plan-pushes", { exitCode: -1, error: "cancelled by you" });
+    run(sc, cmd({ cmd: "retry", job }));
+    assert.ok(sc.running("plan-pushes"));
+    assert.deepEqual(sc.open(), []);
+    sc.startJob({ purpose: { key: "push:A", what: "push", push: "A" }, kind: "script", name: "try.ts push", cwd: "/r", cli: { tool: "try.ts", args: ["push"] } });
+    const effects = run(sc, cmd({ cmd: "stop", job: sc.running("push:A") }));
+    assert.ok(!effects.some((e) => e.type === "cancel"));
+  });
+
+  it("continue reopens the keys of the item's stopped jobs", () => {
+    const sc = withPatch();
+    sc.startJob({ purpose: { key: "lint:p-a:x", what: "lint", item: "i-a" }, kind: "script", name: "lint-text.ts commit", item: "i-a", cwd: "/r", cli: { tool: "lint-text.ts", args: [] } });
+    const lint = sc.running("lint:p-a:x");
+    run(sc, cmd({ cmd: "stop", job: lint }));
+    sc.complete("lint:p-a:x", { exitCode: -1, error: "cancelled by you" });
+    run(sc, cmd({ cmd: "continue", item: "i-a", text: "same commit, check it again" }));
+    assert.ok(sc.view().done.has(`reopen:${lint}`));
+  });
+
+  it("retry after a stop takes the item out of the stopped state", () => {
+    const sc = withPatch();
+    const fix = cmd({ cmd: "comment-fix", patch: "p-a", text: "x" });
+    run(sc, fix);
+    const job = sc.running(`author:i-a:comment:${fix.id}`);
+    run(sc, cmd({ cmd: "stop", job }));
+    sc.complete(`author:i-a:comment:${fix.id}`, { exitCode: -1, error: "cancelled by you" });
+    run(sc, cmd({ cmd: "retry", job }));
+    assert.equal(sc.state().items["i-a"].state, "investigating");
     assert.deepEqual(sc.open(), []);
   });
 

@@ -226,9 +226,9 @@ export function foldEvents(events: readonly Event[]): RequestState {
         break;
       case "command-executed":
         if (e.ok) {
-          refused = refused.filter((x) => e.cmd === undefined || x.cmd !== e.cmd);
+          refused = refused.filter((x) => e.cmd === undefined || x.cmd !== e.cmd || x.item !== e.item || x.job !== e.job);
         } else {
-          refused = [...refused, { key: `refused:${e.command}`, command: e.command, cmd: e.cmd, detail: e.detail, t: e.t }].slice(-MAX_REFUSED);
+          refused = [...refused, { key: `refused:${e.command}`, command: e.command, cmd: e.cmd, item: e.item, job: e.job, detail: e.detail, t: e.t }].slice(-MAX_REFUSED);
         }
         break;
       case "recovery-plan":

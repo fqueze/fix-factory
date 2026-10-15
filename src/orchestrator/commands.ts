@@ -2,6 +2,7 @@
 // caps: you asked for them. Recovery commands come from an approved plan and run exactly as written.
 import { isDeepStrictEqual } from "node:util";
 import type { EventInput } from "../state/events.ts";
+import { canDismiss, isPushJob, reviewLimitFlag } from "../state/flags.ts";
 import type { Command, FactoryConfig, ItemId, JobId, PlannedCommand, RequestId, RequestState } from "../types.ts";
 import { ANNOTATIONS_ITEM, authorJobsOf, CANCELLED, itemEpochOf, resumeAuthorPlan } from "./next.ts";
 import { requestDir, sessionIdFor, slug, type JobPlan } from "./plan.ts";
@@ -40,7 +41,9 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
   const s = ctx.state;
   const view = ctx.view;
   const ev = (event: RequestEvent) => effects.push({ type: "event", event: { ...event, request: s!.id } as EventInput });
-  const done = (ok: boolean, detail?: string) => ev({ type: "command-executed", command: c.id, cmd: c.cmd, ok, ...(detail ? { detail: detail.slice(0, 500) } : {}) });
+  // With the item and job it was about: a refusal stays on the page until one like it succeeds.
+  const about = { ...("item" in c && c.item !== undefined ? { item: c.item } : {}), ...("job" in c ? { job: c.job } : {}) };
+  const done = (ok: boolean, detail?: string) => ev({ type: "command-executed", command: c.id, cmd: c.cmd, ...about, ok, ...(detail ? { detail: detail.slice(0, 500) } : {}) });
   const resume = (item: ItemId, reason: string, message: string): string | undefined => {
     const plan = resumeAuthorPlan(s!.id, view!, item, reason, { message }, "investigating");
     if (plan === undefined) return `${item} has no author session to resume`;
@@ -52,6 +55,11 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
   // The ⚑s that wait on an item's way forward.
   const clearItemFlags = (item: ItemId) => {
     for (const n of s!.needsUser.filter((x) => x.item === item && (x.key.startsWith("failed:") || x.key.startsWith("stopped:")))) ev({ type: "user-done", key: n.key });
+  };
+  // Keys of the item whose job you stopped: next() may start them again (a stopped lint would otherwise stay
+  // stopped when the author comes back with the same commit).
+  const reopen = (item: ItemId) => {
+    for (const j of view!.jobs.filter((x) => x.item === item && x.end?.error?.startsWith(CANCELLED) && !view!.done.has(`reopen:${x.job}`))) ev({ type: "user-done", key: `reopen:${j.job}` });
   };
 
   switch (c.cmd) {
@@ -204,8 +212,13 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
         job.kind === "agent" && job.sessionId
           ? { purpose: { ...job.purpose }, kind: "agent", name: job.name, item: job.item, cwd: job.cwd, agent: { sessionId: job.sessionId, resume: true, message: "Try again: continue where you stopped, then end with the JSON report." } }
           : { ...saved, purpose: { ...job.purpose } };
+      plan.startEvents = saved.startEvents;
       effects.push({ type: "start", plan });
-      ev({ type: "user-done", key: `failed:${c.job}` });
+      for (const key of [`failed:${c.job}`, `stopped:${c.job}`]) if (s.needsUser.some((n) => n.key === key)) ev({ type: "user-done", key });
+      // Out of the blocked state a stop or a failure left it in, unless the job's own start events set one.
+      const item = job.item === undefined ? undefined : s.items[job.item];
+      if (item?.state === "blocked" && !saved.startEvents?.some((e) => e.type === "item-state")) ev({ type: "item-state", item: item.id, state: "investigating", detail: "retried" });
+      if (job.item !== undefined) reopen(job.item);
       done(true, c.cmd === "retry-job" ? c.reason : undefined);
       break;
     }
@@ -215,27 +228,41 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
         done(false, `${c.job} isn't running`);
         break;
       }
-      effects.push({ type: "cancel", job: c.job, request: s.id, detail: CANCELLED });
-      // Cancelled jobs aren't retried: the item waits for your Continue.
-      if (job.item !== undefined && s.items[job.item]) {
-        ev({ type: "item-state", item: job.item, state: "blocked", detail: STOPPED });
-        ev({ type: "needs-user", key: `stopped:${c.job}`, action: `${job.name} ${STOPPED}`, detail: "Continue tells its author what to do instead.", job: c.job, item: job.item });
+      if (isPushJob(job)) {
+        done(false, "a try push isn't stopped (it may already have been made)");
+        break;
       }
+      effects.push({ type: "cancel", job: c.job, request: s.id, detail: CANCELLED });
+      // Cancelled jobs aren't retried: what needed this one waits for your Retry or Continue.
+      const item = job.item === undefined ? undefined : s.items[job.item];
+      if (item) ev({ type: "item-state", item: item.id, state: "blocked", detail: STOPPED });
+      ev({ type: "needs-user", key: `stopped:${c.job}`, action: `${job.name} ${STOPPED}`, detail: item ? "Retry it, or tell its author what to do instead." : "Retry it, or dismiss this.", job: c.job, ...(item ? { item: item.id } : {}) });
       done(true);
       break;
     }
     case "accept-review":
+      if (!reviewLimitFlag(s, c.item)) {
+        done(false, `${c.item} isn't waiting for you after its critical review rounds`);
+        break;
+      }
       ev({ type: "item-state", item: c.item, state: "reviewed", detail: "accepted by you" });
       clearItemFlags(c.item);
       done(true);
       break;
     case "continue": {
       const error = resume(c.item, "continue", `A message from the user:\n${c.text}\n\nDo what it says, amending your commit if your fix changes, then end with the JSON report again.`);
-      if (!error) clearItemFlags(c.item);
+      if (!error) {
+        clearItemFlags(c.item);
+        reopen(c.item);
+      }
       done(!error, error);
       break;
     }
     case "dismiss":
+      if (!canDismiss(c.key)) {
+        done(false, `${c.key} is answered by its own buttons`);
+        break;
+      }
       ev({ type: "user-done", key: c.key });
       done(true);
       break;

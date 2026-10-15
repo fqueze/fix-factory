@@ -286,8 +286,13 @@ class Planner {
     }
     if (!last.end) return undefined;
     if (succeeded(last)) return last;
-    // You cancelled it: nothing happens until you say what to do instead.
-    if (last.end.error?.startsWith(CANCELLED)) return undefined;
+    // You cancelled it: nothing happens until you say what to do instead (a continue or retry reopens it).
+    if (last.end.error?.startsWith(CANCELLED)) {
+      if (!this.view.done.has(`reopen:${last.job}`)) return undefined;
+      const again = make ? make() : this.retryPlan(last);
+      if (again) this.start(key, again);
+      return undefined;
+    }
     if (jobs.length < 2 && !NO_RETRY.has(last.purpose.what)) {
       const retry = this.retryPlan(last, make);
       if (retry) this.start(key, retry);

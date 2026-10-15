@@ -532,6 +532,23 @@ describe("4. investigate and fix", () => {
     assert.deepEqual(sc.open(), []);
   });
 
+  it("a job you stopped stays stopped until a continue or retry reopens its key", () => {
+    const sc = workList([group("ka", "a/test_a.js", "boom")]);
+    investigating(sc, "i-test-a");
+    const commit = sha("1");
+    sc.complete("author:i-test-a:initial", { report: fixed([commit]) });
+    sc.settle();
+    const author = sc.view().byKey.get("author:i-test-a:initial")!.at(-1)!.job;
+    sc.complete(`import:${author}`, { output: imported(commit, "Bug 1 - Fix", ["a/test_a.js"], 1) });
+    sc.settle();
+    sc.complete(`msg:p-test-a:${commit}`, { output: "m" });
+    sc.settle();
+    const lint = sc.complete(`lint:p-test-a:${commit}`, { exitCode: -1, error: "cancelled by you" });
+    assert.deepEqual(sc.settle(), []);
+    sc.add({ type: "user-done", request: ID, key: `reopen:${lint}` });
+    assert.deepEqual(sc.settle(), [`lint:p-test-a:${commit}`]);
+  });
+
   it("after the review limit, your continue starts a new count of review rounds", () => {
     const sc = workList([group("ka", "a/test_a.js", "boom")]);
     investigating(sc, "i-test-a");

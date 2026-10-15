@@ -1,6 +1,7 @@
 import { isDeepStrictEqual } from "node:util";
 import type { Command, ItemState, PlannedCommand, RequestState, RequestStep } from "../types.ts";
 import type { CommandInput } from "../state/commands.ts";
+import { canDismiss, isPushJob, reviewLimitFlag } from "../state/flags.ts";
 
 export const ITEM_STATES = [
   "not started",
@@ -205,14 +206,28 @@ function checkIds(c: Record<string, unknown>, state: RequestState): string | nul
   if (typeof c.stack === "string" && !Object.hasOwn(state.stacks, c.stack)) {
     return `unknown stack ${c.stack}`;
   }
-  if (c.cmd === "dismiss" && !state.needsUser.some((n) => n.key === c.key) && !(state.refused ?? []).some((x) => x.key === c.key)) {
-    return `nothing to dismiss for ${String(c.key)}`;
+  if (c.cmd === "dismiss") {
+    if (!canDismiss(c.key as string)) {
+      return `${String(c.key)} is answered by its own buttons`;
+    }
+    if (!state.needsUser.some((n) => n.key === c.key) && !(state.refused ?? []).some((x) => x.key === c.key)) {
+      return `nothing to dismiss for ${String(c.key)}`;
+    }
   }
-  if (c.cmd === "stop" && state.jobs[c.job as string].endedAt !== undefined) {
-    return `${String(c.job)} isn't running`;
+  if (c.cmd === "stop") {
+    const job = state.jobs[c.job as string];
+    if (job.endedAt !== undefined) {
+      return `${String(c.job)} isn't running`;
+    }
+    if (isPushJob(job)) {
+      return "a try push isn't stopped (it may already have been made)";
+    }
   }
-  if (c.cmd === "retry" && state.jobs[c.job as string].purpose?.what === "push") {
+  if (c.cmd === "retry" && isPushJob(state.jobs[c.job as string])) {
     return "a try push isn't retried (it may have been made): ask the factory to plan it again";
+  }
+  if (c.cmd === "accept-review" && !reviewLimitFlag(state, c.item as string)) {
+    return `${String(c.item)} isn't waiting for you after its critical review rounds`;
   }
   if (Array.isArray(c.comments)) {
     const bad = (c.comments as { patch: string }[]).find((x) => !patchOk(x.patch));
