@@ -108,12 +108,43 @@ Who: **S** = script · **H** = Haiku · **So** = Sonnet · **O** = Opus · **�
 - **Tool feedback, as in today's skills:** every agent's JSON output has a `feedback` list for problems with
   `fx-tests`, `profiler-cli` or a factory script, and for anything missing from what we gave it. A script appends
   each entry, with a link to the agent run, to one file per tool.
-- **"Tell the factory…"** free text → O `recover.md` proposes a plan, 👤 approves.
+- **"Tell the factory…"**: see Recovery below.
 - **Caps:** N agents and M builds at once.
 - **Agent launch command** in `factory.config.json`, e.g. `"claudeCommand": ["mozsb", "claude"]` (sandbox,
   permission prompts disabled). The factory appends `-p --output-format stream-json --session-id … --model …`.
   To check before building: `mozsb` passes those arguments through and lets us read stdout, and where the transcripts
   end up when the sandbox sets its own `CLAUDE_CONFIG_DIR`.
+
+## Recovery ("Tell the factory…")
+
+For anything the pipeline didn't anticipate: an unusual instruction, a service that was down, a stuck agent, or
+state that looks wrong.
+
+1. You type free text, either in the global box or on a request.
+2. The script starts an Opus agent (`recover.md`) in the factory's state directory. It can read everything: the
+   request's `events.jsonl`, job output files, agent transcripts, worktrees (`git log`/`diff`), and the read-only
+   subcommands of the factory CLIs. **It can't change anything.**
+3. It returns a plan: a list of **factory commands**, each with a one-sentence reason. These are the same commands your
+   buttons append to `commands.jsonl`:
+   - `retry-job`, `cancel-job`;
+   - `resume-agent` (item, message), `start-agent` (item, prompt);
+   - `set-state` (item, state);
+   - `set-bug` (patch, number);
+   - `redo-step` (item, step), for example re-plan the try pushes;
+   - `edit-config` (request);
+   - `shell` (worktree, command), the escape hatch, shown verbatim.
+4. The plan shows up on the request with a checkbox per command. You approve all or some of them, and they're
+   appended to `commands.jsonl`. The orchestrator executes them exactly as if you had clicked, so there is only one
+   execution path. Replying in the box instead resumes the same agent session, which returns a revised plan.
+5. What it can't express as a command goes in `cannot_do`. You handle it by hand, and if it comes up again it becomes
+   a new command type.
+
+Examples:
+- *"Lando was down this morning, re-push what failed"* → it finds the pushes whose job ended with a Lando error →
+  `retry-job` on each.
+- *"browser_foo's agent has been at it for 6 hours"* → it reads the transcript tail → `resume-agent` with "stop and
+  report what you have", or `cancel-job` + `start-agent` with a note on what to avoid.
+- *"Bug 2081300 is a duplicate, use 2081216"* → `set-bug` on the affected patches.
 
 ## Build order
 

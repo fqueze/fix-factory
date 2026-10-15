@@ -151,9 +151,10 @@ Factory runtime (long-running, not CLIs):
 > complete answer; "Done." is right when the change speaks for itself. Never claim anything that wasn't verified.
 
 ### `recover.md` (Opus) [Recovery]
-> The user says: {text}. State of request {id}: {state summary}. Recent failed jobs: {jobs}. Health checks:
-> {health}. Propose a plan using only the factory actions in the schema, with one sentence per action saying why,
-> and ask the user anything you can't determine.
+> The user says: {text}. The state of request {id} is in {state dir}: read `events.jsonl`, job outputs and
+> transcripts there before deciding anything. Return a plan made only of the factory commands in the schema, with
+> one sentence per command saying why. Put what can't be done with those commands in `cannot_do`, and ask
+> the user anything the files don't tell you.
 
 ## Skills these prompts depend on
 
