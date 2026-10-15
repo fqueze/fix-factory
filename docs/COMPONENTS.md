@@ -68,8 +68,10 @@ need that file.
 > Fix {test} in {worktree}, following debug-a-test-failure. The failure: {failureSummary}. Commit the fix with a
 > message following the commit-message skill, using `Bug XXXXXXX` if the fix needs a bug of its own. When the test
 > exposes a product bug (a leak, a race), fix the product: a test-side wait or guard that hides it is not a fix.
-> Use "handed back" only when someone else is actively working on it. End with the JSON report: state, cause, how
-> you verified it, a bug draft (bug-filing skill) if one is needed, and any patch yours must land after.
+> Use "handed back" only when someone else is actively working on it. Run builds and tests in the foreground and
+> wait for them: your session ends when you stop, and anything still running in the background is lost. End with
+> the JSON report: state, cause, how you verified it, a bug draft (bug-filing skill) if one is needed, and any
+> patch yours must land after.
 >
 > Other agents work in sibling worktrees of the same repository:
 > - Never run `git stash`: the stash is shared by every worktree. To test without your change, make a WIP commit,
@@ -180,10 +182,11 @@ review in `orchestrate-parallel-fixes`.
 
 ### `address-review.md` (resumes the author) [I4, I5]
 > The reviewer left comments on your patch {revision}; they are in {commentsFile}. Make the requested changes,
-> nits and suggested edits in code, keeping the `Differential Revision:` trailer. Reply only where the code
-> doesn't speak for itself: answer questions, and explain, with the reason, where you did something other than
-> what was asked or disagree. A comment fully handled in code gets no reply, never "Done.". Return the replies
-> with their comment ids.
+> nits and suggested edits in code, keeping the `Differential Revision:` trailer. Run builds and tests in the
+> foreground and wait for them: your session ends when you stop. Reply only where the code doesn't speak for
+> itself: answer questions, and explain, with the reason, where you did something other than what was asked or
+> disagree. A comment fully handled in code gets no reply, never "Done.". Return the replies with their comment
+> ids.
 
 ### `recover.md` (Opus) [Recovery]
 > The user says: {text}. The state of request {id} is in {stateDir}: read `events.jsonl`, job outputs and

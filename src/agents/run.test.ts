@@ -44,6 +44,7 @@ test("buildAgentCommand with a new session", () => {
   assert.deepEqual(buildAgentCommand({ claudeCommand: ["mozsb", "claude"] }, { model: "opus", schema, sessionId: "s1" }), [
     "mozsb", "claude", "-p", "--output-format", "stream-json", "--verbose",
     "--session-id", "s1", "--model", "opus", "--json-schema", '{"type":"object"}',
+    "--settings", '{"env":{"BASH_DEFAULT_TIMEOUT_MS":"7200000","BASH_MAX_TIMEOUT_MS":"7200000"}}',
   ]);
 });
 
@@ -51,7 +52,7 @@ test("buildAgentCommand resuming a session", () => {
   const cmd = buildAgentCommand({ claudeCommand: ["claude"] }, { model: "haiku", schema: '{"type":"object"}', resume: "s1" });
   assert.deepEqual(cmd.slice(4, 7), ["--verbose", "--resume", "s1"]);
   assert.ok(!cmd.includes("--session-id"));
-  assert.equal(cmd.at(-1), '{"type":"object"}');
+  assert.equal(cmd[cmd.indexOf("--json-schema") + 1], '{"type":"object"}');
 });
 
 test("parseStreamJson on a finished run", () => {
