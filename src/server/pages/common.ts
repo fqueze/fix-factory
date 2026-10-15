@@ -9,6 +9,7 @@ export interface RenderContext {
   now: number; // ms, for running durations
   maxAgents?: number;
   maxBuilds?: number;
+  runningBuilds?: number; // across requests, for "waiting for a build slot (N builds running)"
   open?: string; // request id to show expanded
   // The text of a patch's interdiffFile, read by the server inside stateDir.
   interdiff?: (p: PatchView) => string | undefined;
@@ -385,6 +386,11 @@ const JOB_LABELS: Record<string, string> = {
 export function jobLabel(name: string): string {
   // Older jobs have the tool's flags in their names too.
   return JOB_LABELS[name] ?? JOB_LABELS[name.split(" ").slice(0, 2).join(" ")] ?? name;
+}
+
+// A job as the subject of a sentence ("the investigation stopped by you").
+export function jobNoun(name: string): string {
+  return name === "investigate-and-fix" ? "the investigation" : jobLabel(name);
 }
 
 export function modelLabel(model: string): string {

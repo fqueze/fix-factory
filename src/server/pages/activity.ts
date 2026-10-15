@@ -32,7 +32,7 @@ export function renderActivity(request: RequestId, job: JobView, a: Activity | u
   if (!a) {
     return html`${head}<div class="sub">No output yet.</div>`;
   }
-  const steps = a.steps.filter((s) => s.kind === "tool").slice(-SHOWN_STEPS);
+  const steps = a.steps.slice(-SHOWN_STEPS);
   return html`${head}<ol class="steps">${steps.map(
     (s) => html`<li${s.subagent ? html` class="subagent" title="in a subagent"` : null}><b>${s.tool}</b>${s.text ? html` <span class="mono">${s.text}</span>` : null}</li>`,
   )}</ol>${a.summary.lastAssistantText ? html`<div class="said-last">${a.summary.lastAssistantText}</div>` : null}`;

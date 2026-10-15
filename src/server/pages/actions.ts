@@ -1,13 +1,32 @@
-import type { JobView, NeedsUser, PlannedCommand, PushView, RefusedCommand, RequestState, StackView } from "../../types.ts";
+import type { NeedsUser, PlannedCommand, PushView, RefusedCommand, RequestState, StackView } from "../../types.ts";
+import { canDismiss, isPushJob, reviewLimitFlag } from "../../state/flags.ts";
 import { html, join, type Html } from "../html.ts";
-import { actionKind, COMMAND_LABELS, commandFields, enterBugUrl, jobLabel, refusedOf, requestUrl, stackOfPatch, submitChecks } from "./common.ts";
+import { actionKind, COMMAND_LABELS, commandFields, enterBugUrl, jobLabel, jobNoun, refusedOf, requestUrl, stackOfPatch, submitChecks } from "./common.ts";
 
 // The ⚑ area of one open needs-user entry: what you're asked, why, and the buttons.
 export function renderAction(r: RequestState, n: NeedsUser): Html {
-  const kind = actionKind(n, r);
+  const plan = recoveryPlanFor(r, n);
+  if (plan) {
+    return html`<div class="action" data-key="${n.key}"><span class="flag">${n.action}</span> ${youSaid(n.detail || `You said: “${plan.text}”`)}${recoveryPlan(r, plan, requestUrl(r.id))}</div>`;
+  }
+  return html`<div class="action" data-key="${n.key}"><span class="flag">${flagTitle(r, n)}</span> <span class="why">${n.detail}</span>${flagControls(r, n)}</div>`;
+}
+
+// A stopped job by its label rather than its tool or prompt name.
+function flagTitle(r: RequestState, n: NeedsUser): string {
+  const job = n.job === undefined ? undefined : r.jobs[n.job];
+  return actionKind(n, r) === "stopped" && job ? `Stopped by you: ${jobNoun(job.name)}` : n.action;
+}
+
+// The buttons of a ⚑ (also on its group row): every ⚑ has a way out.
+export function flagControls(r: RequestState, n: NeedsUser): Html | null {
   const back = requestUrl(r.id);
+  const job = n.job === undefined ? undefined : r.jobs[n.job];
+  const item = n.item ?? job?.item;
+  const retry = job && !isPushJob(job) ? commandButton(r.id, { cmd: "retry", job: job.job }, "Retry", back, true) : null;
+  const talk = item !== undefined && hasAuthorSession(r, item) ? continueBox(r.id, item, back) : null;
   let controls: Html | null = null;
-  switch (kind) {
+  switch (actionKind(n, r)) {
     case "approve-push": {
       const push = n.push === undefined ? undefined : r.pushes[n.push];
       controls = push ? approvePushControls(r, [push], back) : null;
@@ -45,45 +64,40 @@ export function renderAction(r: RequestState, n: NeedsUser): Html {
       controls = stack ? mozPhabButton(r.id, stack, false) : null;
       break;
     }
-    case "recovery": {
-      const plan = recoveryPlanFor(r, n);
-      if (plan) {
-        return html`<div class="action" data-key="${n.key}"><span class="flag">${n.action}</span> ${youSaid(n.detail || `You said: “${plan.text}”`)}${recoveryPlan(r, plan, back)}</div>`;
-      }
-      break;
-    }
     case "failed": {
-      const job = n.job === undefined ? undefined : r.jobs[n.job];
-      const item = n.item ?? job?.item;
-      // A critical review that never said ok: the work is there, you judge it.
-      const accept = job?.name === "review-patch" && item !== undefined;
-      controls = join(
-        [
-          accept ? commandButton(r.id, { cmd: "accept-review", item }, "Accept as reviewed", back, true) : null,
-          job && !accept && !isPushJob(job) ? commandButton(r.id, { cmd: "retry", job: job.job }, "Retry", back, true) : null,
-          item === undefined ? null : continueBox(r.id, item, back),
-        ].filter((x) => x !== null),
-        "",
-      );
+      // A critical review that ran but never said ok: the work is there, you judge it. A crashed one is retried.
+      const accept = item !== undefined && reviewLimitFlag(r, item) === n;
+      controls = buttons(accept ? commandButton(r.id, { cmd: "accept-review", item }, "Accept as reviewed", back, true) : retry, talk);
       break;
     }
     case "stopped":
-      controls = n.item === undefined ? null : continueBox(r.id, n.item, back);
-      break;
+      return buttons(retry, talk, dismissButton(r.id, n.key, back));
+    case "recovery":
     case "other":
       break;
   }
-  return html`<div class="action" data-key="${n.key}"><span class="flag">${n.action}</span> <span class="why">${n.detail}</span>${controls?.value ? controls : dismissButton(r.id, n.key, back)}</div>`;
+  if (controls?.value) {
+    return controls;
+  }
+  return canDismiss(n.key) ? dismissButton(r.id, n.key, back) : null;
+}
+
+function buttons(...list: (Html | null)[]): Html {
+  return join(
+    list.filter((x) => x !== null),
+    "",
+  );
+}
+
+// Continue resumes the author's session: there has to be one.
+export function hasAuthorSession(r: RequestState, item: string): boolean {
+  // Jobs folded before JobView had a purpose: their name tells.
+  return r.items[item].jobs.some((j) => r.jobs[j].sessionId !== undefined && (r.jobs[j].purpose?.what === "author" || r.jobs[j].name === "investigate-and-fix"));
 }
 
 // A command the orchestrator refused, until you dismiss it or the same kind of command succeeds.
 export function renderRefused(r: RequestState, x: RefusedCommand): Html {
   return html`<div class="action" data-key="${x.key}"><span class="flag">Your ${x.cmd ? COMMAND_LABELS[x.cmd] : "command"} was refused</span> <span class="why">${x.detail ?? ""}</span>${dismissButton(r.id, x.key, requestUrl(r.id))}</div>`;
-}
-
-// Try pushes aren't retried: one may have been made.
-export function isPushJob(job: JobView): boolean {
-  return job.purpose?.what === "push" || job.name === "try.ts push";
 }
 
 function commandButton(request: string, c: object, label: string, back: string, primary = false): Html {

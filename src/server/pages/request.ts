@@ -1,8 +1,9 @@
 import type { BugDraft, InvestigateReport, ItemView, JobView, PatchView, PushView, RequestState, StackView } from "../../types.ts";
-import { ITEM_STATES } from "../commands.ts";
 import { html, join, type Html } from "../html.ts";
-import { actionsSummary, approvePushControls, bugBox, commandDetails, continueBox, copyButton, recoveryPlan, recoveryPlanFor, stackViewerLink, stopButton, summaryId, youSaid } from "./actions.ts";
+import { actionsSummary, approvePushControls, bugBox, commandDetails, continueBox, copyButton, recoveryPlan, recoveryPlanFor, hasAuthorSession, stackViewerLink, stopButton, summaryId, youSaid } from "./actions.ts";
 import { watchDetails } from "./activity.ts";
+import { IDLE, itemSentence, progressLine, requestProgress, runningJobOf, workLabel } from "./progress.ts";
+import { isPushJob } from "../../state/flags.ts";
 import {
   bugUrl,
   commandFields,
@@ -49,8 +50,7 @@ export function renderRequest(r: RequestState, ctx: RenderContext, open = ctx.op
   return html`<details class="req${needs ? " needs" : ""}" id="req-${r.id}" data-request="${r.id}" data-section="${sectionOf(r)}"${open ? html` open` : null}>
     <summary>
       <span class="rname">${requestName(r)}</span>
-      <span class="rsum">${requestSummary(r)}</span>
-      ${requestWork(r, ctx, true)}
+      <span class="rsum"><span class="rprog">${progressLine(requestProgress(r), ctx)}</span>${requestSummary(r) ? ` · ${requestSummary(r)}` : null}</span>
       <span class="rright">${cost > 0 ? html`<span class="hide-sm" title="Agent cost so far">${formatCost(cost)}</span>` : null}<span class="step">${stepLabel(r)}</span><a class="btn small" href="${profileUrl(ctx, r.id)}" target="_blank" rel="noopener">Profile</a></span>
       ${actionsSummary(r)}
     </summary>
@@ -68,8 +68,7 @@ export function requestSummary(r: RequestState): string {
   }
   const items = Object.values(r.items);
   if (items.length) {
-    const byState = ITEM_STATES.map((s) => [s, items.filter((i) => i.state === s).length] as const).filter(([, n]) => n > 0);
-    parts.push(`${plural(items.length, "failure group")}: ${byState.map(([s, n]) => `${n} ${s}`).join(", ")}`);
+    parts.push(plural(items.length, "failure group"));
   }
   const patches = Object.values(r.patches).filter((p) => !isDropped(r, p) && !isDraft(r, p));
   if (patches.length) {
@@ -88,8 +87,8 @@ export function requestSummary(r: RequestState): string {
 }
 
 // Jobs without an item (recover, route-request, plan-try-pushes, try watch…) have no group row
-// to show them while they run.
-function requestWork(r: RequestState, ctx: RenderContext, inSummary = false): Html | null {
+// to show them while they run (the summary line counts them under Working).
+function requestWork(r: RequestState, ctx: RenderContext): Html | null {
   const running = Object.values(r.jobs).filter((j) => j.item === undefined && j.endedAt === undefined);
   if (!running.length) {
     return null;
@@ -97,16 +96,10 @@ function requestWork(r: RequestState, ctx: RenderContext, inSummary = false): Ht
   const back = requestUrl(r.id);
   return html`<div class="rwork">${running.map(
     (j) =>
-      html`<div title="${j.name}"><span class="st run">${workLabel(j)}</span>${j.model ? ` · ${modelLabel(j.model)}` : null} · ${elapsed(j.startedAt, ctx)} ${stopButton(r.id, j.job, back)}${
-        j.kind === "agent" && !inSummary ? watchDetails(r.id, j.job) : null
+      html`<div title="${j.name}"><span class="st run">${workLabel(j)}</span>${j.model ? ` · ${modelLabel(j.model)}` : null} · ${elapsed(j.startedAt, ctx)} ${isPushJob(j) ? null : stopButton(r.id, j.job, back)}${
+        j.kind === "agent" ? watchDetails(r.id, j.job) : null
       }</div>`,
   )}</div>`;
-}
-
-// A recover run started by what you typed says so; its purpose keeps the text.
-function workLabel(j: JobView): Html {
-  const said = j.name === "recover" ? j.purpose?.reason : undefined;
-  return said ? html`working on <span class="said" title="${said}">“${said.split("\n")[0]}”</span>` : html`${jobLabel(j.name)}`;
 }
 
 export function renderRequestBody(r: RequestState, ctx: RenderContext): Html {
@@ -227,9 +220,14 @@ function patchTable(r: RequestState, patches: PatchView[], ctx: RenderContext, f
       : null
   }${
     dropped.length
-      ? html`<details class="fold" data-fold="dropped-${fold}"><summary>Dropped (${dropped.length})</summary>${dropped.map((p) => patchLine(p, itemOf(r, p)!.state))}</details>`
+      ? html`<details class="fold" data-fold="dropped-${fold}"><summary>Dropped (${dropped.length})</summary>${dropped.map((p) => patchLine(p, IDLE[itemOf(r, p)!.state].text(itemOf(r, p)!, 0)))}</details>`
       : null
   }`;
+}
+
+function patchState(r: RequestState, i: ItemView, ctx: RenderContext): Html {
+  const s = itemSentence(r, i, ctx);
+  return html`<span class="st ${s.cls}">${s.text}</span>`;
 }
 
 function patchLine(p: PatchView, state?: string): Html {
@@ -250,7 +248,7 @@ function patchRow(r: RequestState, p: PatchView, columns: PatchColumns, ctx: Ren
       ${p.deps.map((d) => depLine(r, d))}
       ${reviewBox(r, p, back, p.interdiffFile === undefined ? undefined : ctx.interdiff?.(p))}
     </td>
-    <td>${item ? html`<span class="st ${stateClass(item.state)}">${item.state}</span>` : null}</td>
+    <td>${item ? patchState(r, item, ctx) : null}</td>
     ${columns.effort ? html`<td class="hide-sm">${p.effort ?? ""}</td>` : null}
     ${columns.value ? html`<td class="num hide-sm">${rate === undefined ? "" : `${rate}/wk`}</td>` : null}
     ${columns.reviewers ? html`<td>${reviewers(r, p)}</td>` : null}
@@ -337,22 +335,18 @@ export function diff(text: string): Html {
   })}</pre>`;
 }
 
-function runningJob(r: RequestState, i: ItemView): JobView | undefined {
-  return i.jobs.map((j) => r.jobs[j]).findLast((j) => j.endedAt === undefined);
-}
 
 // What runs or waits for you first, then the rest; the closed ones folded under one line.
 function groupTable(r: RequestState, items: ItemView[], ctx: RenderContext): Html {
   const closed = items.filter((i) => stateClass(i.state) === "closed");
   const open = items.filter((i) => stateClass(i.state) !== "closed");
-  const busy = (i: ItemView) => runningJob(r, i) !== undefined || stateClass(i.state) === "run" || r.needsUser.some((n) => n.item === i.id);
+  const busy = (i: ItemView) => runningJobOf(r, i) !== undefined || stateClass(i.state) === "run" || r.needsUser.some((n) => n.item === i.id);
   const notStarted = (i: ItemView) => i.state === "not started";
   const sorted = [...open.filter(busy), ...open.filter((i) => !busy(i) && !notStarted(i)), ...open.filter((i) => !busy(i) && notStarted(i))];
   // A bug to file stays in sight, even for a closed group.
   const withDraft = closed.filter((i) => itemBugDraft(r, i));
   const folded = closed.filter((i) => !itemBugDraft(r, i));
-  const states = new Set(folded.map((i) => i.state));
-  const closedLabel = `${folded.length} ${states.size === 1 ? folded[0].state : "closed"}`;
+  const closedLabel = `${folded.length} closed`;
   return html`<table class="groups"><tbody>${[...sorted, ...withDraft].map((i) => itemRow(r, i, ctx))}${
     folded.length
       ? html`<tr><td colspan="2" class="foldrow"><details class="fold" data-fold="closed-groups"><summary>${closedLabel}</summary><table class="groups"><tbody>${folded.map((i) =>
@@ -363,27 +357,22 @@ function groupTable(r: RequestState, items: ItemView[], ctx: RenderContext): Htm
 }
 
 function itemRow(r: RequestState, i: ItemView, ctx: RenderContext): Html {
-  const job = runningJob(r, i);
+  const job = runningJobOf(r, i);
   const draft = itemBugDraft(r, i);
   const tests = i.group.tests;
   const cost = i.jobs.reduce((sum, j) => sum + (r.jobs[j].costUsd ?? 0), 0);
-  const work = job
-    ? html`<span class="sub"> · ${job.kind === "agent" && job.model ? modelLabel(job.model) : jobLabel(job.name)} · ${elapsed(job.startedAt, ctx)}${
-        cost > 0 ? html` · <span title="Agent cost of this group so far">${formatCost(cost)}</span>` : null
-      }</span>`
-    : null;
-  // A job running for a group not started yet (its worktree build) means it has started.
-  const preparing = job !== undefined && i.state === "not started";
-  const state = html`<span class="st ${preparing ? "run" : stateClass(i.state)}">${preparing ? "preparing" : i.state}</span>${work}${i.detail ? html`<span class="detail">: ${i.detail}</span>` : null}`;
+  const sentence = itemSentence(r, i, ctx);
+  const detail = sentence.detail;
+  const state = html`<span class="st ${sentence.cls}">${sentence.text}</span>${cost > 0 ? html`<span class="sub"> · <span title="Agent cost of this group so far">${formatCost(cost)}</span></span>` : null}${
+    detail ? html`<span class="detail">: ${detail}</span>` : null
+  }`;
   return html`<tr data-item="${i.id}">
     <td class="gname"><span title="${[...tests, i.group.configs.join(", ")].join("\n")}">${groupLabel(r, i)}</span><div class="sub clamp2" title="${i.group.message}">${i.group.message}</div></td>
-    <td>${
-      i.detail
-        ? html`<details class="clamp3" data-fold="detail-${i.id}" title="${i.state}: ${i.detail}"><summary>${state}</summary></details>`
-        : state
+    <td>${detail ? html`<details class="clamp3" data-fold="detail-${i.id}" title="${detail}"><summary>${state}</summary></details>` : state}${
+      sentence.controls ? html`<div class="jobctl">${sentence.controls}</div>` : null
     }${Object.values(r.patches)
       .filter((p) => p.item === i.id && isDraft(r, p))
-      .map((p) => html`<div class="sub">draft · ${i.state} · “${patchTitle(p)}”</div>`)}${draft ? html`<div><a class="bug tofile" href="${enterBugUrl(draft)}" target="_blank" rel="noopener" title="Opens a prefilled enter_bug.cgi">Bug to file</a> <span class="sub">“${draft.summary}”</span></div>` : null}${itemControls(r, i, job)}</td>
+      .map((p) => html`<div class="sub">draft, its critical review hasn't passed · “${patchTitle(p)}”</div>`)}${draft ? html`<div><a class="bug tofile" href="${enterBugUrl(draft)}" target="_blank" rel="noopener" title="Opens a prefilled enter_bug.cgi">Bug to file</a> <span class="sub">“${draft.summary}”</span></div>` : null}${itemControls(r, i, job)}</td>
   </tr>`;
 }
 
@@ -391,11 +380,11 @@ function itemRow(r: RequestState, i: ItemView, ctx: RenderContext): Html {
 function itemControls(r: RequestState, i: ItemView, running: JobView | undefined): Html | null {
   const back = requestUrl(r.id);
   const agent = i.jobs.map((j) => r.jobs[j]).findLast((j) => j.kind === "agent");
-  const reopen = stateClass(i.state) === "closed" && agent !== undefined;
+  const reopen = stateClass(i.state) === "closed" && hasAuthorSession(r, i.id) && !r.needsUser.some((n) => n.item === i.id);
   if (!running && !agent) {
     return null;
   }
-  return html`<div class="jobctl">${running ? stopButton(r.id, running.job, back) : null}${agent ? watchDetails(r.id, agent.job) : null}${reopen ? continueBox(r.id, i.id, back) : null}</div>`;
+  return html`<div class="jobctl">${running && !isPushJob(running) ? stopButton(r.id, running.job, back) : null}${agent ? watchDetails(r.id, agent.job) : null}${reopen ? continueBox(r.id, i.id, back) : null}</div>`;
 }
 
 // A bug the investigation asks to file without a patch to carry it (e.g. a product bug behind a
@@ -428,6 +417,6 @@ function recentJobs(r: RequestState, ctx: RenderContext): Html | null {
         j.endedAt === undefined ? "run" : j.exitCode === 0 ? "ok" : "bad"
       }">${j.endedAt === undefined ? html`running ${elapsed(j.startedAt, ctx)}` : `${formatDuration(j.durationMs ?? Date.parse(j.endedAt) - Date.parse(j.startedAt))}${j.exitCode ? `, exit ${j.exitCode}` : ""}`}</td><td class="num sub">${
         j.costUsd === undefined ? "" : formatCost(j.costUsd)
-      }</td><td>${j.endedAt === undefined ? stopButton(r.id, j.job, requestUrl(r.id)) : null}${j.kind === "agent" ? watchDetails(r.id, j.job) : null}</td></tr>`,
+      }</td><td>${j.endedAt === undefined && !isPushJob(j) ? stopButton(r.id, j.job, requestUrl(r.id)) : null}${j.kind === "agent" ? watchDetails(r.id, j.job) : null}</td></tr>`,
   )}</tbody></table></div></details>`;
 }

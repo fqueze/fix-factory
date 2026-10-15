@@ -186,16 +186,14 @@ test("promptVersion is the git blob sha", () => {
   }
 });
 
-test("streamSteps lists tool calls in short form and text messages in order, subagent steps marked", () => {
+test("streamSteps lists tool calls in short form, in order, subagent steps marked", () => {
   assert.deepEqual(streamSteps(fixture("stream-json-tools.jsonl")), [
-    { kind: "text", text: "I'll start by reading the test." },
-    { kind: "tool", tool: "Read", text: "/build/worktrees/spinner/browser/base/content/test/tabs/browser_tabSpinner.js" },
-    { kind: "tool", tool: "Grep", text: "waitForCondition\\(" },
-    { kind: "tool", tool: "Bash", text: "./mach test browser/base/content/test/tabs/browser_tabSpinner.js --repeat 20" },
-    { kind: "tool", tool: "Agent", text: "Find who resets the spinner" },
-    { kind: "tool", tool: "Glob", text: "browser/**/tabbrowser*.js", subagent: true },
-    { kind: "tool", tool: "Edit", text: "/build/worktrees/spinner/browser/base/content/test/tabs/browser_tabSpinner.js" },
-    { kind: "text", text: "The spinner waits on a paint that never comes in headless mode." },
+    { tool: "Read", text: "/build/worktrees/spinner/browser/base/content/test/tabs/browser_tabSpinner.js" },
+    { tool: "Grep", text: "waitForCondition\\(" },
+    { tool: "Bash", text: "./mach test browser/base/content/test/tabs/browser_tabSpinner.js --repeat 20" },
+    { tool: "Agent", text: "Find who resets the spinner" },
+    { tool: "Glob", text: "browser/**/tabbrowser*.js", subagent: true },
+    { tool: "Edit", text: "/build/worktrees/spinner/browser/base/content/test/tabs/browser_tabSpinner.js" },
   ]);
-  assert.deepEqual(streamSteps(fixture("stream-json-haiku.jsonl")), [{ kind: "tool", tool: "StructuredOutput", text: "the report" }]);
+  assert.deepEqual(streamSteps(fixture("stream-json-haiku.jsonl")), [{ tool: "StructuredOutput", text: "the report" }]);
 });

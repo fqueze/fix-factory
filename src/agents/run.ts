@@ -127,12 +127,11 @@ export function parseStreamJson(text: string): StreamSummary {
   return out;
 }
 
-// What an agent did, in order: its tool calls in short form and its text messages. Steps of its
-// subagents are marked, as they run beside the main conversation.
+// What an agent did, in order: its tool calls in short form (its latest message is in StreamSummary). Steps of
+// its subagents are marked, as they run beside the main conversation.
 export interface StreamStep {
-  kind: "tool" | "text";
-  tool?: string; // the tool's name, for tool steps
-  text: string; // the tool call in short form, or the message
+  tool: string;
+  text: string; // the call in short form
   subagent?: boolean;
 }
 
@@ -150,9 +149,7 @@ export function streamSteps(text: string): StreamStep[] {
     const subagent = typeof msg.parent_tool_use_id === "string" ? { subagent: true } : {};
     for (const block of msg.message.content as (ContentBlock & { input?: Record<string, unknown> })[]) {
       if (block.type === "tool_use" && typeof block.name === "string") {
-        steps.push({ kind: "tool", tool: block.name, text: toolCallText(block.name, block.input ?? {}), ...subagent });
-      } else if (block.type === "text" && typeof block.text === "string" && block.text.trim()) {
-        steps.push({ kind: "text", text: block.text.trim(), ...subagent });
+        steps.push({ tool: block.name, text: toolCallText(block.name, block.input ?? {}), ...subagent });
       }
     }
   }

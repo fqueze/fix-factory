@@ -6,7 +6,9 @@ import { FixtureStateSource } from "../state-source.ts";
 import type { RequestState } from "../../types.ts";
 import { jobLabel, type RenderContext } from "./common.ts";
 import { renderOverview } from "./overview.ts";
+import { IDLE, runningSentence } from "./progress.ts";
 import { renderRequest } from "./request.ts";
+import { ITEM_STATES } from "../commands.ts";
 
 const FIXTURES = resolve(import.meta.dirname, "../../../test/fixtures/server");
 const source = new FixtureStateSource(FIXTURES);
@@ -49,15 +51,15 @@ describe("overview", () => {
   });
 
   it("shows one line per active request with its step and Profile button", () => {
-    assert.equal((page.match(/<details class="req/g) ?? []).length, 10);
+    assert.equal((page.match(/<details class="req/g) ?? []).length, 11);
     assert.match(page, /<span class="step">6 · verify on try<\/span>/);
     const url = encodeURIComponent("http://factory:4300/api/requests/r-20261005-newtab/profile");
     assert.ok(page.includes(`href="http://localhost:4242/from-url/${url}?thread=0"`));
   });
 
   it("has the header strip and the global Tell the factory box", () => {
-    assert.match(page, /agents <b>8\/10<\/b>/);
-    assert.match(page, /<b>8<\/b> requests need you/);
+    assert.match(page, /agents <b>10\/10<\/b>/);
+    assert.match(page, /<span class="progress"><span class="busy">Working: 10 \([^<]*: [^<]*, <span data-since="[^"]+">[^<]+<\/span>;.*; 7 more\)<\/span> · <span class="waiting">Waiting for you: 15<\/span> · Done: 8<\/span>/);
     assert.ok(page.includes(cmd({ cmd: "tell-factory" })));
     assert.doesNotMatch(page, /New request|new-request/);
   });
@@ -109,11 +111,11 @@ describe("one fixture per step of docs/MVP.md", () => {
 
   it("4. investigate and fix: item states, running agent, recovery plan with a checkbox per command", () => {
     const h = expanded("r-20261013-tab-failures");
-    assert.match(h, /<span class="st run">investigating<\/span>/);
-    assert.match(h, /investigating<\/span><span class="sub"> · Opus · <span data-since="[^"]+">6 h<\/span><\/span>/);
-    assert.match(h, /<span class="st find">review findings<\/span>/);
-    assert.match(h, /<span class="st closed">handed back<\/span><span class="detail">: bug 2081413, dao active<\/span>/);
-    assert.match(h, /<span class="st wait">waiting for a build slot<\/span>/);
+    assert.match(h, /<span class="st run">investigating · <span data-since="[^"]+">6 h<\/span><\/span>/);
+    assert.match(h, /<span class="st find">stalled: nothing running<\/span><span class="detail">: the drag session is still left open on failure<\/span>/);
+    assert.match(h, /<span class="st closed">closed: handed back to you<\/span><span class="detail">: bug 2081413, dao active<\/span>/);
+    assert.match(h, /<span class="st wait">waiting for a build slot \(0 builds running\)<\/span>/);
+    assert.doesNotMatch(h, />(review findings|handed back|investigating)</, "no state names");
     const boxes = h.match(/<input type="checkbox" name="command"[^>]*>/g) ?? [];
     assert.equal(boxes.length, 8);
     assert.match(boxes[0], / checked>$/);
@@ -155,16 +157,19 @@ describe("one fixture per step of docs/MVP.md", () => {
       `<div class="rwork"><div title="recover"><span class="st run">working on <span class="said" title="${said}">“${said}”</span></span> · Opus · <span data-since="2026-10-15T08:59:00.000Z">1 min</span> <form[^>]*><input type="hidden" name="command" value="${cmd({ cmd: "stop", job: "j-recover-2", request: "r-20261013-tab-failures" })}">`,
       "g",
     );
-    const summary = h.indexOf("</summary>");
+    const summary = h.slice(0, h.indexOf("</summary>"));
     const found = [...h.matchAll(work)].map((m) => m.index);
-    assert.equal(found.length, 2);
-    assert.ok(found[0] < summary && found[1] > h.indexOf('<div class="rbody">'));
+    assert.equal(found.length, 1, "the working line once, in the body");
+    assert.ok(found[0] > h.indexOf('<div class="rbody">'));
+    assert.match(summary, /Working: 2 \(browser\/base\/content\/test\/tabs\/browser_tabSpinner\.js: investigating, <span data-since="2026-10-15T03:00:00.000Z">6 h<\/span>; /);
+    assert.ok(summary.includes(`working on <span class="said" title="${said}">“${said}”</span>, <span data-since="2026-10-15T08:59:00.000Z">1 min</span>)`));
+    assert.match(summary, /Waiting for you: 1<\/span> · Done: 1<\/span> · 5 failure groups · 1 patch<\/span>/);
     assert.ok(h.indexOf('data-watch="/api/requests/r-20261013-tab-failures/jobs/j-recover-2/activity"') > h.indexOf('<div class="rbody">'), "Watch only in the body");
     const collapsed = renderRequest(get("r-20261015-sessionstore"), ctx, false).value;
-    assert.match(collapsed, /<div title="route-request"><span class="st run">route request<\/span> · Sonnet · <span data-since/);
+    assert.match(collapsed, /Working: 1 \(route request, <span data-since/);
     const old = structuredClone(get("r-20261013-tab-failures"));
     delete old.jobs["j-recover-2"].purpose;
-    assert.match(renderRequest(old, ctx).value, /<span class="st run">recovery plan<\/span> · Opus/, "without a purpose");
+    assert.match(renderRequest(old, ctx).value, /; recovery plan, <span data-since/, "without a purpose");
   });
 
   it("4. investigate and fix: Stop on running jobs, Watch on agents, Continue on closed groups", () => {
@@ -185,31 +190,75 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.ok(!jobs.includes(cmd({ cmd: "stop", job: "j-recover", request: "r-20261013-tab-failures" })), "finished jobs can't be stopped");
   });
 
-  it("every ⚑ has a way out: accept or continue after the review limit, retry or continue a failed job, dismiss the rest", () => {
-    const r = structuredClone(get("r-20261013-tab-failures"));
-    const base = { kind: "agent" as const, cmd: ["node"], cwd: "/x", pid: 1, pidStartTime: 1, startedAt: "2026-10-15T08:00:00.000Z", endedAt: "2026-10-15T08:10:00.000Z", exitCode: 0 };
-    r.jobs["j-review"] = { ...base, job: "j-review", name: "review-patch", item: "i-drag" };
-    r.jobs["j-push"] = { ...base, kind: "script", job: "j-push", name: "try.ts push", purpose: { key: "push:A", what: "push", push: "A" }, exitCode: 1 };
+  it("every ⚑ has a way out: accept after the review limit, retry a failed or stopped job, continue with its author, dismiss the rest", () => {
+    const D = "r-20261015-downloads-stuck";
+    const h = expanded(D);
+    const flag = (key: string) => h.slice(h.indexOf(`data-key="${key}"`), h.indexOf("</div>", h.indexOf(`data-key="${key}"`)));
+    const has = (key: string, c: object) => flag(key).includes(cmd(c));
+    assert.ok(has("failed:j-review-race", { cmd: "accept-review", item: "i-race", request: D }));
+    assert.ok(has("failed:j-review-race", { cmd: "continue", request: D, item: "i-race" }));
+    assert.doesNotMatch(flag("failed:j-review-race"), />(Retry|Dismiss)</);
+    assert.ok(has("failed:j-fetch", { cmd: "retry", job: "j-fetch", request: D }));
+    assert.ok(has("failed:j-fetch", { cmd: "continue", request: D, item: "i-fetch" }));
+    assert.doesNotMatch(flag("failed:j-fetch"), />(Accept as reviewed|Dismiss)</);
+    assert.match(flag("stopped:j-author-slow"), /<span class="flag">Stopped by you: the investigation<\/span>/);
+    for (const c of [{ cmd: "retry", job: "j-author-slow", request: D }, { cmd: "continue", request: D, item: "i-slow" }, { cmd: "dismiss", key: "stopped:j-author-slow", request: D }]) {
+      assert.ok(has("stopped:j-author-slow", c), JSON.stringify(c));
+    }
+    assert.ok(has("stopped:j-plan", { cmd: "retry", job: "j-plan", request: D }));
+    assert.ok(has("stopped:j-plan", { cmd: "dismiss", key: "stopped:j-plan", request: D }));
+    assert.doesNotMatch(flag("stopped:j-plan"), /Continue/);
+    assert.match(flag("refused:c-12"), /Your comment on the fix was refused<\/span> <span class="why">the author of i-nits is running/);
+    assert.ok(has("refused:c-12", { cmd: "dismiss", key: "refused:c-12", request: D }));
+
+    const r = structuredClone(get(D));
+    r.jobs["j-push"] = { ...r.jobs["j-fetch"], job: "j-push", item: undefined, name: "try.ts push", purpose: { key: "push:A", what: "push", push: "A" } };
     r.needsUser = [
-      { key: "failed:j-review", action: "No ok after 3 critical review rounds", detail: "still racy", job: "j-review", item: "i-drag", since: r.createdAt },
-      { key: "failed:j-artifacts", action: "artifacts.ts fetch failed twice", detail: "503", job: "j-artifacts", item: "i-drag", since: r.createdAt },
       { key: "failed:j-push", action: "try.ts push failed (not retried: it may have happened)", detail: "lando", job: "j-push", since: r.createdAt },
-      { key: "stopped:j-inv-spinner", action: "investigate-and-fix stopped by you", detail: "", job: "j-inv-spinner", item: "i-spinner", since: r.createdAt },
+      { key: "approve-push:A", action: "Approve try push A", detail: "", since: r.createdAt },
       { key: "note:x", action: "Something to know", detail: "", since: r.createdAt },
     ];
-    const h = renderRequest(r, ctx).value;
-    const flag = (key: string) => h.slice(h.indexOf(`data-key="${key}"`), h.indexOf("</div>", h.indexOf(`data-key="${key}"`)));
-    const R = "r-20261013-tab-failures";
-    assert.ok(flag("failed:j-review").includes(cmd({ cmd: "accept-review", item: "i-drag", request: R })));
-    assert.match(flag("failed:j-review"), />Accept as reviewed</);
-    assert.ok(flag("failed:j-review").includes(cmd({ cmd: "continue", request: R, item: "i-drag" })));
-    assert.doesNotMatch(flag("failed:j-review"), />Retry</);
-    assert.ok(flag("failed:j-artifacts").includes(cmd({ cmd: "retry", job: "j-artifacts", request: R })));
-    assert.ok(flag("failed:j-artifacts").includes(cmd({ cmd: "continue", request: R, item: "i-drag" })));
-    assert.doesNotMatch(flag("failed:j-push"), />Retry</, "try pushes aren't retried");
-    assert.ok(flag("failed:j-push").includes(cmd({ cmd: "dismiss", key: "failed:j-push", request: R })));
-    assert.ok(flag("stopped:j-inv-spinner").includes(cmd({ cmd: "continue", request: R, item: "i-spinner" })));
-    assert.ok(flag("note:x").includes(cmd({ cmd: "dismiss", key: "note:x", request: R })));
+    const h2 = renderRequest(r, ctx).value;
+    const flag2 = (key: string) => h2.slice(h2.indexOf(`data-key="${key}"`), h2.indexOf("</div>", h2.indexOf(`data-key="${key}"`)));
+    assert.doesNotMatch(flag2("failed:j-push"), />Retry</, "try pushes aren't retried");
+    assert.ok(flag2("failed:j-push").includes(cmd({ cmd: "dismiss", key: "failed:j-push", request: D })));
+    assert.doesNotMatch(flag2("approve-push:A"), /Dismiss/, "dismissing it would approve the push");
+    assert.ok(flag2("note:x").includes(cmd({ cmd: "dismiss", key: "note:x", request: D })));
+  });
+
+  it("each group row says in plain words what is happening, what is stuck and what has stalled", () => {
+    const h = expanded("r-20261015-downloads-stuck");
+    const row = (item: string) => {
+      const start = h.indexOf(`<tr data-item="${item}">`);
+      return h.slice(start, h.indexOf("</tr>", start));
+    };
+    assert.match(row("i-race"), /<span class="st find">stuck: its critical reviews didn&#39;t pass — needs you<\/span><span class="detail">: the wait still races with the panel opening<\/span>/);
+    assert.match(row("i-race"), />Accept as reviewed</);
+    assert.match(row("i-fetch"), /stuck: fetch test artifacts failed — needs you/);
+    assert.match(row("i-slow"), /stuck: the investigation stopped by you — needs you<\/span><\/summary>|stuck: the investigation stopped by you — needs you<\/span>/);
+    assert.match(row("i-idle"), /<span class="st find">stalled: nothing running<\/span>/);
+    assert.ok(row("i-idle").includes(cmd({ cmd: "continue", request: "r-20261015-downloads-stuck", item: "i-idle" })));
+    assert.match(row("i-nits"), /<span class="st run">author addressing review nits · <span data-since="2026-10-15T08:58:00.000Z">2 min<\/span><\/span>/);
+    assert.match(row("i-review"), /<span class="st run">being reviewed by Opus · <span data-since="2026-10-15T08:59:00.000Z">1 min<\/span><\/span>/);
+    assert.match(row("i-wait"), /<span class="st wait">waiting for a build slot \(0 builds running\)<\/span>/);
+    assert.match(row("i-done"), /<span class="st closed">closed<\/span><span class="detail">: already fixed by bug 2078564<\/span>/);
+    assert.match(h, /<span class="rprog"><span class="busy">Working: 2 \(browser_download_nits\.js: author addressing review nits, <span[^>]*>2 min<\/span>; browser_download_review\.js: being reviewed by Opus, <span[^>]*>1 min<\/span>\)<\/span> · <span class="waiting">Waiting for you: 5<\/span> · Done: 1<\/span>/);
+  });
+
+  it("maps every state, with nothing running, to a sentence: stalled when something should run", () => {
+    const i = structuredClone(get("r-20261015-downloads-stuck").items["i-done"]);
+    const shouldRun = ITEM_STATES.filter((s) => IDLE[s].active);
+    assert.deepEqual(shouldRun, ["investigating", "fix verified locally", "in critical review", "review findings", "addressing review comments", "blocked"]);
+    for (const s of ITEM_STATES.filter((x) => !IDLE[x].active)) {
+      assert.doesNotMatch(IDLE[s].text({ ...i, state: s }, 2), /^(not started|in stack|in try|reviewed|left as-is|handed back)$/, s);
+    }
+    assert.equal(IDLE["waiting for a build slot"].text(i, 3), "waiting for a build slot (3 builds running)");
+    const job = { ...get("r-20261015-downloads-stuck").jobs["j-author-nits"] };
+    assert.equal(runningSentence(job), "author addressing review nits");
+    assert.equal(runningSentence({ ...job, purpose: undefined }), "investigating");
+    assert.equal(runningSentence({ ...job, name: "review-patch", model: "sonnet" }), "being reviewed by Sonnet");
+    assert.equal(runningSentence({ ...job, name: "worktree.ts create --tests a" }), "building its worktree");
+    assert.equal(runningSentence({ ...job, name: "failures.ts cluster" }), "cluster failures");
   });
 
   it("a patch whose critical review hasn't passed is a draft on its group row, without a bug to file", () => {
@@ -229,16 +278,16 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.doesNotMatch(h, /data-patch="p-drag"/);
     assert.match(h, /data-patch="p-close"/, "reviewed patches stay in the Patches section");
     const row = h.slice(h.indexOf('<tr data-item="i-drag">'), h.indexOf("</tr>", h.indexOf('<tr data-item="i-drag">')));
-    assert.match(row, /<div class="sub">draft · review findings · “Close the drag session on failure, r=dao\.”<\/div>/);
+    assert.match(row, /<div class="sub">draft, its critical review hasn't passed · “Close the drag session on failure, r=dao\.”<\/div>/);
     assert.doesNotMatch(h, /Drag\+session\+left\+open/, "no Bug to file link");
-    assert.match(h, /<span class="rsum">[^<]*· 1 patch<\/span>/);
+    assert.match(h, /Done: 1<\/span> · 5 failure groups · 1 patch<\/span>/);
     r.items["i-drag"].state = "blocked";
     assert.doesNotMatch(renderRequest(r, ctx, true).value, /data-patch="p-drag"/, "blocked after the review limit: still a draft");
     r.items["i-drag"].state = "reviewed";
     const reviewed = renderRequest(r, ctx, true).value;
     assert.match(reviewed, /data-patch="p-drag"/);
     assert.match(reviewed, /Drag\+session\+left\+open/);
-    assert.match(reviewed, /<span class="rsum">[^<]*· 2 patches, 1 bug to file<\/span>/);
+    assert.match(reviewed, /Done: 1<\/span> · 5 failure groups · 2 patches, 1 bug to file<\/span>/);
   });
 
   it("shows a refused command as a ⚑ you can dismiss", () => {
@@ -384,7 +433,7 @@ describe("a burndown with closed groups, running agents and a dropped patch", ()
     assert.doesNotMatch(h, /Bug 0/);
     assert.doesNotMatch(h, /data-patch=/);
     assert.match(h, /<details class="fold" data-fold="dropped-loose"><summary>Dropped \(1\)<\/summary><div class="sub"><span class="bug none">no bug yet<\/span> Convert scoping skip-if/);
-    assert.match(h, /<span class="rsum">7 failure groups: 1 not started, 2 investigating, 4 left as-is<\/span>/);
+    assert.match(h, /Done: 4<\/span> · 7 failure groups<\/span>/);
     assert.doesNotMatch(h, /<h3>Patches<\/h3>/, "no heading over dropped patches alone");
   });
 
@@ -395,20 +444,20 @@ describe("a burndown with closed groups, running agents and a dropped patch", ()
   });
 
   it("shows running work in the group rows, with the group's cost so far", () => {
-    assert.match(h, /investigating<\/span><span class="sub"> · Opus · <span data-since="2026-10-15T08:53:00.000Z">7 min<\/span> · <span title="Agent cost of this group so far">\$0\.40<\/span><\/span>/);
-    assert.match(h, /investigating<\/span><span class="sub"> · Opus · <span data-since="2026-10-15T08:54:00.000Z">6 min<\/span><\/span>/);
-    assert.match(h, /<span class="st run">preparing<\/span><span class="sub"> · build worktree · <span data-since/);
+    assert.match(h, /<span class="st run">investigating · <span data-since="2026-10-15T08:53:00.000Z">7 min<\/span><\/span><span class="sub"> · <span title="Agent cost of this group so far">\$0\.40<\/span><\/span>/);
+    assert.match(h, /<span class="st run">investigating · <span data-since="2026-10-15T08:54:00.000Z">6 min<\/span><\/span>/);
+    assert.match(h, /<span class="st run">building its worktree · <span data-since/);
   });
 
   it("puts the running groups first, then the others, and folds the closed ones with their full reasons", () => {
     const at = (item: string) => h.indexOf(`data-item="${item}"`);
-    const fold = h.indexOf('<details class="fold" data-fold="closed-groups"><summary>3 left as-is</summary>');
+    const fold = h.indexOf('<details class="fold" data-fold="closed-groups"><summary>3 closed</summary>');
     assert.ok(fold > 0);
     assert.ok(at("i-browser-policy-trackingprotection") < fold);
     for (const closed of ["i-annotations", "i-browser-policy-firefoxhome", "i-browser-policy-firefoxhome-2"]) {
       assert.ok(at(closed) > fold, closed);
     }
-    assert.match(h, /<details class="clamp3" data-fold="detail-i-annotations" title="left as-is: Dropped the run-if commit per review;[^"]*nothing left to convert and the DEBUG un-skip push showed no failures to fix\."><summary><span class="st closed">left as-is<\/span><span class="detail">: Dropped/);
+    assert.match(h, /<details class="clamp3" data-fold="detail-i-annotations" title="Dropped the run-if commit per review;[^"]*nothing left to convert and the DEBUG un-skip push showed no failures to fix\."><summary><span class="st closed">closed<\/span><span class="sub"> · <span title="Agent cost of this group so far">\$0\.62<\/span><\/span><span class="detail">: Dropped/);
 
     const r = structuredClone(get(ID));
     r.jobs["j-wt-sw2"].endedAt = "2026-10-15T09:00:00.000Z";

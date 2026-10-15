@@ -1,0 +1,499 @@
+{
+  "id": "r-20261015-downloads-stuck",
+  "kind": "burndown",
+  "text": "burn down browser/components/downloads/test/browser",
+  "folder": "browser/components/downloads/test/browser",
+  "createdAt": "2026-10-15T05:00:00.000Z",
+  "updatedAt": "2026-10-15T09:00:00.000Z",
+  "step": "investigate and fix",
+  "config": {},
+  "items": {
+    "i-race": {
+      "id": "i-race",
+      "folder": "browser/components/downloads/test/browser",
+      "group": {
+        "message": "Test timed out",
+        "tests": [
+          "browser/components/downloads/test/browser/browser_download_race.js"
+        ],
+        "configs": [
+          "linux2404-64/debug",
+          "windows11-64-24h2/opt"
+        ]
+      },
+      "state": "blocked",
+      "jobs": [
+        "j-author-race",
+        "j-review-race"
+      ],
+      "detail": "critical review"
+    },
+    "i-fetch": {
+      "id": "i-fetch",
+      "folder": "browser/components/downloads/test/browser",
+      "group": {
+        "message": "Test timed out",
+        "tests": [
+          "browser/components/downloads/test/browser/browser_download_fetch.js"
+        ],
+        "configs": [
+          "linux2404-64/debug",
+          "windows11-64-24h2/opt"
+        ]
+      },
+      "state": "blocked",
+      "jobs": [
+        "j-author-fetch",
+        "j-fetch"
+      ],
+      "detail": "artifacts.ts fetch failed"
+    },
+    "i-slow": {
+      "id": "i-slow",
+      "folder": "browser/components/downloads/test/browser",
+      "group": {
+        "message": "Test timed out",
+        "tests": [
+          "browser/components/downloads/test/browser/browser_download_slow.js"
+        ],
+        "configs": [
+          "linux2404-64/debug",
+          "windows11-64-24h2/opt"
+        ]
+      },
+      "state": "blocked",
+      "jobs": [
+        "j-author-slow"
+      ],
+      "detail": "stopped by you"
+    },
+    "i-idle": {
+      "id": "i-idle",
+      "folder": "browser/components/downloads/test/browser",
+      "group": {
+        "message": "Test timed out",
+        "tests": [
+          "browser/components/downloads/test/browser/browser_download_idle.js"
+        ],
+        "configs": [
+          "linux2404-64/debug",
+          "windows11-64-24h2/opt"
+        ]
+      },
+      "state": "investigating",
+      "jobs": [
+        "j-author-idle"
+      ]
+    },
+    "i-nits": {
+      "id": "i-nits",
+      "folder": "browser/components/downloads/test/browser",
+      "group": {
+        "message": "Test timed out",
+        "tests": [
+          "browser/components/downloads/test/browser/browser_download_nits.js"
+        ],
+        "configs": [
+          "linux2404-64/debug",
+          "windows11-64-24h2/opt"
+        ]
+      },
+      "state": "investigating",
+      "jobs": [
+        "j-author-nits0",
+        "j-author-nits"
+      ]
+    },
+    "i-review": {
+      "id": "i-review",
+      "folder": "browser/components/downloads/test/browser",
+      "group": {
+        "message": "Test timed out",
+        "tests": [
+          "browser/components/downloads/test/browser/browser_download_review.js"
+        ],
+        "configs": [
+          "linux2404-64/debug",
+          "windows11-64-24h2/opt"
+        ]
+      },
+      "state": "in critical review",
+      "jobs": [
+        "j-author-review",
+        "j-review-running"
+      ]
+    },
+    "i-wait": {
+      "id": "i-wait",
+      "folder": "browser/components/downloads/test/browser",
+      "group": {
+        "message": "Test timed out",
+        "tests": [
+          "browser/components/downloads/test/browser/browser_download_wait.js"
+        ],
+        "configs": [
+          "linux2404-64/debug",
+          "windows11-64-24h2/opt"
+        ]
+      },
+      "state": "waiting for a build slot",
+      "jobs": []
+    },
+    "i-done": {
+      "id": "i-done",
+      "folder": "browser/components/downloads/test/browser",
+      "group": {
+        "message": "Test timed out",
+        "tests": [
+          "browser/components/downloads/test/browser/browser_download_done.js"
+        ],
+        "configs": [
+          "linux2404-64/debug",
+          "windows11-64-24h2/opt"
+        ]
+      },
+      "state": "left as-is",
+      "jobs": [
+        "j-author-done"
+      ],
+      "detail": "already fixed by bug 2078564"
+    }
+  },
+  "patches": {
+    "p-race": {
+      "id": "p-race",
+      "item": "i-race",
+      "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "worktree": "/build/worktrees/i-race",
+      "title": "Bug XXXXXXX - Wait for the download to finish before removing it, r=mak.",
+      "bug": null,
+      "deps": [],
+      "replyDrafts": []
+    }
+  },
+  "stacks": {},
+  "pushes": {},
+  "jobs": {
+    "j-author-race": {
+      "job": "j-author-race",
+      "kind": "agent",
+      "name": "investigate-and-fix",
+      "cmd": [
+        "node"
+      ],
+      "cwd": "/build/worktrees/i-race",
+      "pid": 1000,
+      "pidStartTime": 1,
+      "startedAt": "2026-10-15T06:00:00.000Z",
+      "item": "i-race",
+      "model": "opus",
+      "sessionId": "s-race",
+      "purpose": {
+        "key": "author:i-race:initial",
+        "what": "author",
+        "item": "i-race",
+        "reason": "initial"
+      },
+      "endedAt": "2026-10-15T06:40:00.000Z",
+      "exitCode": 0,
+      "durationMs": 60000
+    },
+    "j-review-race": {
+      "job": "j-review-race",
+      "kind": "agent",
+      "name": "review-patch",
+      "cmd": [
+        "node"
+      ],
+      "cwd": "/build/worktrees/i-race",
+      "pid": 1000,
+      "pidStartTime": 1,
+      "startedAt": "2026-10-15T08:00:00.000Z",
+      "item": "i-race",
+      "model": "opus",
+      "sessionId": "s-rev",
+      "purpose": {
+        "key": "review:p-race:j-author-race",
+        "what": "review",
+        "item": "i-race"
+      },
+      "endedAt": "2026-10-15T08:10:00.000Z",
+      "exitCode": 0,
+      "durationMs": 60000
+    },
+    "j-author-fetch": {
+      "job": "j-author-fetch",
+      "kind": "agent",
+      "name": "investigate-and-fix",
+      "cmd": [
+        "node"
+      ],
+      "cwd": "/build/worktrees/i-fetch",
+      "pid": 1000,
+      "pidStartTime": 1,
+      "startedAt": "2026-10-15T06:00:00.000Z",
+      "item": "i-fetch",
+      "model": "opus",
+      "sessionId": "s-fetch",
+      "purpose": {
+        "key": "author:i-fetch:initial",
+        "what": "author",
+        "item": "i-fetch",
+        "reason": "initial"
+      },
+      "endedAt": "2026-10-15T06:30:00.000Z",
+      "exitCode": 0,
+      "durationMs": 60000
+    },
+    "j-fetch": {
+      "job": "j-fetch",
+      "kind": "script",
+      "name": "artifacts.ts fetch",
+      "cmd": [
+        "node"
+      ],
+      "cwd": "/build/worktrees/i-fetch",
+      "pid": 1000,
+      "pidStartTime": 1,
+      "startedAt": "2026-10-15T07:00:00.000Z",
+      "item": "i-fetch",
+      "purpose": {
+        "key": "artifacts:i-fetch",
+        "what": "artifacts",
+        "item": "i-fetch"
+      },
+      "endedAt": "2026-10-15T07:01:00.000Z",
+      "exitCode": 1,
+      "durationMs": 60000,
+      "error": "HTTP 503 from taskcluster"
+    },
+    "j-author-slow": {
+      "job": "j-author-slow",
+      "kind": "agent",
+      "name": "investigate-and-fix",
+      "cmd": [
+        "node"
+      ],
+      "cwd": "/build/worktrees/i-slow",
+      "pid": 1000,
+      "pidStartTime": 1,
+      "startedAt": "2026-10-15T05:00:00.000Z",
+      "item": "i-slow",
+      "model": "opus",
+      "sessionId": "s-slow",
+      "purpose": {
+        "key": "author:i-slow:initial",
+        "what": "author",
+        "item": "i-slow",
+        "reason": "initial"
+      },
+      "endedAt": "2026-10-15T08:30:00.000Z",
+      "exitCode": -1,
+      "durationMs": 60000,
+      "error": "cancelled by you"
+    },
+    "j-author-idle": {
+      "job": "j-author-idle",
+      "kind": "agent",
+      "name": "investigate-and-fix",
+      "cmd": [
+        "node"
+      ],
+      "cwd": "/build/worktrees/i-idle",
+      "pid": 1000,
+      "pidStartTime": 1,
+      "startedAt": "2026-10-15T06:00:00.000Z",
+      "item": "i-idle",
+      "model": "opus",
+      "sessionId": "s-idle",
+      "purpose": {
+        "key": "author:i-idle:initial",
+        "what": "author",
+        "item": "i-idle",
+        "reason": "initial"
+      },
+      "endedAt": "2026-10-15T07:00:00.000Z",
+      "exitCode": 0,
+      "durationMs": 60000
+    },
+    "j-author-nits0": {
+      "job": "j-author-nits0",
+      "kind": "agent",
+      "name": "investigate-and-fix",
+      "cmd": [
+        "node"
+      ],
+      "cwd": "/build/worktrees/i-nits",
+      "pid": 1000,
+      "pidStartTime": 1,
+      "startedAt": "2026-10-15T06:00:00.000Z",
+      "item": "i-nits",
+      "model": "opus",
+      "sessionId": "s-nits",
+      "purpose": {
+        "key": "author:i-nits:initial",
+        "what": "author",
+        "item": "i-nits",
+        "reason": "initial"
+      },
+      "endedAt": "2026-10-15T07:00:00.000Z",
+      "exitCode": 0,
+      "durationMs": 60000
+    },
+    "j-author-nits": {
+      "job": "j-author-nits",
+      "kind": "agent",
+      "name": "investigate-and-fix",
+      "cmd": [
+        "node"
+      ],
+      "cwd": "/build/worktrees/i-nits",
+      "pid": 1000,
+      "pidStartTime": 1,
+      "startedAt": "2026-10-15T08:58:00.000Z",
+      "item": "i-nits",
+      "model": "opus",
+      "sessionId": "s-nits",
+      "purpose": {
+        "key": "author:i-nits:nits",
+        "what": "author",
+        "item": "i-nits",
+        "reason": "nits"
+      }
+    },
+    "j-author-review": {
+      "job": "j-author-review",
+      "kind": "agent",
+      "name": "investigate-and-fix",
+      "cmd": [
+        "node"
+      ],
+      "cwd": "/build/worktrees/i-review",
+      "pid": 1000,
+      "pidStartTime": 1,
+      "startedAt": "2026-10-15T06:00:00.000Z",
+      "item": "i-review",
+      "model": "opus",
+      "sessionId": "s-review",
+      "purpose": {
+        "key": "author:i-review:initial",
+        "what": "author",
+        "item": "i-review",
+        "reason": "initial"
+      },
+      "endedAt": "2026-10-15T08:00:00.000Z",
+      "exitCode": 0,
+      "durationMs": 60000
+    },
+    "j-review-running": {
+      "job": "j-review-running",
+      "kind": "agent",
+      "name": "review-patch",
+      "cmd": [
+        "node"
+      ],
+      "cwd": "/build/worktrees/i-review",
+      "pid": 1000,
+      "pidStartTime": 1,
+      "startedAt": "2026-10-15T08:59:00.000Z",
+      "item": "i-review",
+      "model": "opus",
+      "sessionId": "s-rev2",
+      "purpose": {
+        "key": "review:p-review:j-author-review",
+        "what": "review",
+        "item": "i-review"
+      }
+    },
+    "j-author-done": {
+      "job": "j-author-done",
+      "kind": "agent",
+      "name": "investigate-and-fix",
+      "cmd": [
+        "node"
+      ],
+      "cwd": "/build/worktrees/i-done",
+      "pid": 1000,
+      "pidStartTime": 1,
+      "startedAt": "2026-10-15T06:00:00.000Z",
+      "item": "i-done",
+      "model": "opus",
+      "sessionId": "s-done",
+      "purpose": {
+        "key": "author:i-done:initial",
+        "what": "author",
+        "item": "i-done",
+        "reason": "initial"
+      },
+      "endedAt": "2026-10-15T06:20:00.000Z",
+      "exitCode": 0,
+      "durationMs": 60000
+    },
+    "j-plan": {
+      "job": "j-plan",
+      "kind": "agent",
+      "name": "plan-try-pushes",
+      "cmd": [
+        "node"
+      ],
+      "cwd": "/build/worktrees/state",
+      "pid": 1000,
+      "pidStartTime": 1,
+      "startedAt": "2026-10-15T08:40:00.000Z",
+      "model": "opus",
+      "sessionId": "s-plan",
+      "purpose": {
+        "key": "plan-pushes",
+        "what": "plan-pushes"
+      },
+      "endedAt": "2026-10-15T08:45:00.000Z",
+      "exitCode": -1,
+      "durationMs": 60000,
+      "error": "cancelled by you"
+    }
+  },
+  "needsUser": [
+    {
+      "key": "failed:j-review-race",
+      "action": "No ok after 3 critical review rounds",
+      "detail": "the wait still races with the panel opening",
+      "job": "j-review-race",
+      "item": "i-race",
+      "since": "2026-10-15T08:50:00.000Z"
+    },
+    {
+      "key": "failed:j-fetch",
+      "action": "artifacts.ts fetch failed twice",
+      "detail": "HTTP 503 from taskcluster",
+      "job": "j-fetch",
+      "item": "i-fetch",
+      "since": "2026-10-15T08:50:00.000Z"
+    },
+    {
+      "key": "stopped:j-author-slow",
+      "action": "investigate-and-fix stopped by you",
+      "detail": "Retry it, or tell its author what to do instead.",
+      "job": "j-author-slow",
+      "item": "i-slow",
+      "since": "2026-10-15T08:50:00.000Z"
+    },
+    {
+      "key": "stopped:j-plan",
+      "action": "plan-try-pushes stopped by you",
+      "detail": "Retry it, or dismiss this.",
+      "job": "j-plan",
+      "since": "2026-10-15T08:50:00.000Z"
+    }
+  ],
+  "refused": [
+    {
+      "key": "refused:c-12",
+      "command": "c-12",
+      "cmd": "comment-fix",
+      "detail": "the author of i-nits is running: send it again when it's done",
+      "t": "2026-10-15T08:59:00.000Z"
+    }
+  ],
+  "recoveryPlans": [],
+  "notes": []
+}
