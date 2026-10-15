@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { appendFileSync, mkdtempSync, rmSync } from "node:fs";
+import { appendFileSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, test } from "node:test";
@@ -24,8 +24,21 @@ test("appendCommand fills id, v and t", () => {
   assert.deepEqual(readCommands(dir, 0).commands, [a, b]);
 });
 
-test("appendCommand rejects lines over 4 KB", () => {
-  assert.throws(() => appendCommand(dir, { cmd: "tell-factory", text: "x".repeat(5000) }), /line limit/);
+test("texts over 2 KB go to commands-data and come back on read", () => {
+  const long = "é".repeat(3000);
+  const a = appendCommand(dir, { cmd: "tell-factory", text: long, id: "c1" });
+  const b = appendCommand(dir, { cmd: "stack-comments", stack: "s1", id: "c2", comments: [{ patch: "p1", text: "short" }, { patch: "p2", text: long }] });
+  const raw = readFileSync(commandsPath(dir), "utf8");
+  assert.ok(raw.length < 1000);
+  assert.match(raw, /"text":\{"textFile":"commands-data\/c1\.txt"\}/);
+  assert.equal(readFileSync(join(dir, "commands-data", "c1.txt"), "utf8"), long);
+  assert.equal(readFileSync(join(dir, "commands-data", "c2.comments.1.text.txt"), "utf8"), long);
+  assert.deepEqual(readCommands(dir, 0).commands, [a, b]);
+});
+
+test("appendCommand still rejects lines over 4 KB made of short strings", () => {
+  const comments = Array.from({ length: 100 }, (_, i) => ({ patch: `p${i}`, text: "x".repeat(50) }));
+  assert.throws(() => appendCommand(dir, { cmd: "stack-comments", stack: "s1", comments }), /line limit/);
 });
 
 test("readCommands returns the new offset and ignores a partial last line", () => {
@@ -58,6 +71,19 @@ test("processNewCommands executes each command once across restarts", async () =
   appendCommand(dir, { cmd: "start-now", id: "c3" });
   assert.equal(await processNewCommands(dir, run), 1);
   assert.deepEqual(seen, ["c1", "c2", "c3"]);
+});
+
+test("overlapping processNewCommands calls don't run a command twice", async () => {
+  appendCommand(dir, { cmd: "start-now", id: "c1" });
+  appendCommand(dir, { cmd: "start-now", id: "c2" });
+  const seen: string[] = [];
+  const slow = async (c: Command) => {
+    await new Promise((r) => setTimeout(r, 20));
+    seen.push(c.id);
+  };
+  const counts = await Promise.all([processNewCommands(dir, slow), processNewCommands(dir, slow), processNewCommands(dir, slow)]);
+  assert.deepEqual(counts, [2, 0, 0]);
+  assert.deepEqual(seen, ["c1", "c2"]);
 });
 
 test("processNewCommands keeps the cursor before a command that throws", async () => {
