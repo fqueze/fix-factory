@@ -1,0 +1,369 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fix factory (MVP)</title>
+<style>
+:root {
+  color-scheme: light;
+  --bg: #f4f4f2; --surface-1: #fcfcfb; --border: #e2e1dc;
+  --text-primary: #0b0b0b; --text-secondary: #52514e; --text-muted: #7a7974;
+  --link: #1c5cab; --accent: #2a78d6;
+  --good: #0ca30c; --warning: #fab219; --serious: #ec835a; --critical: #d03b3b;
+  --track: #ebeae6; --action-bg: #fff6e0;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --bg: #111110; --surface-1: #1a1a19; --border: #2e2e2b;
+    --text-primary: #ffffff; --text-secondary: #c3c2b7; --text-muted: #8e8d86;
+    --link: #86b6ef; --accent: #3987e5;
+    --track: #2a2a27; --action-bg: #2e2716;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; background: var(--bg); color: var(--text-primary); }
+a { color: var(--link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, .mono { font-family: ui-monospace, Menlo, monospace; font-size: 12px; }
+.mockbanner { background: var(--warning); color: #000; text-align: center; font-size: 12px; padding: 2px; }
+header { background: var(--surface-1); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 2; }
+.hwrap { max-width: 1100px; margin: 0 auto; padding: 8px 12px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+header h1 { font-size: 16px; margin: 0; }
+.strip { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.strip b { color: var(--text-primary); }
+.spacer { flex: 1; }
+.btn { display: inline-block; border: 1px solid var(--border); background: var(--surface-1); color: var(--text-primary); border-radius: 6px; padding: 3px 9px; font: inherit; font-size: 13px; cursor: pointer; white-space: nowrap; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.small { font-size: 12px; padding: 1px 7px; }
+.btn[disabled] { opacity: .45; cursor: not-allowed; }
+main { max-width: 1100px; margin: 0 auto; padding: 12px; }
+.ask { display: flex; gap: 6px; margin: 0 0 10px; }
+.ask input { flex: 1; min-width: 0; font: inherit; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-1); color: var(--text-primary); }
+h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--text-secondary); margin: 18px 0 6px; font-weight: 600; }
+h2 .count { color: var(--text-muted); font-weight: normal; }
+details.req { background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 6px; }
+details.req.needs { border-left: 4px solid var(--warning); }
+details.req > summary { list-style: none; cursor: pointer; padding: 8px 12px; display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; align-items: center; }
+details.req > summary::-webkit-details-marker { display: none; }
+.rname { font-weight: 600; }
+.rname::before { content: "▸ "; color: var(--text-muted); }
+details[open] > summary .rname::before { content: "▾ "; }
+.rsum { font-size: 12px; color: var(--text-secondary); grid-column: 1; }
+.rright { grid-column: 2; grid-row: 1 / span 2; display: flex; gap: 8px; align-items: center; font-size: 12px; color: var(--text-muted); }
+.step { font-size: 11px; border: 1px solid var(--border); border-radius: 10px; padding: 0 7px; color: var(--text-secondary); white-space: nowrap; }
+.action { grid-column: 1 / -1; background: var(--action-bg); border-radius: 6px; padding: 5px 8px; margin-top: 4px; font-size: 13px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.action .flag { font-weight: 600; }
+.action .flag::before { content: "⚑ "; color: var(--serious); }
+.action .why { color: var(--text-secondary); font-size: 12px; flex: 1 1 260px; }
+.action ul { margin: 2px 0; padding-left: 0; list-style: none; flex-basis: 100%; font-size: 12px; }
+.action li { padding: 2px 0; }
+.rbody { padding: 0 12px 12px; border-top: 1px solid var(--border); }
+.rbody h3 { font-size: 12px; color: var(--text-secondary); font-weight: 600; margin: 14px 0 4px; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.rbody h3 .sub { font-weight: normal; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { text-align: left; font-weight: 500; color: var(--text-muted); font-size: 12px; padding: 4px 6px; border-bottom: 1px solid var(--border); }
+td { padding: 6px; border-bottom: 1px solid var(--border); vertical-align: top; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.scroll { overflow-x: auto; }
+.phab { display: inline-flex; vertical-align: -3px; color: var(--text-secondary); margin-right: 4px; }
+.phab svg { width: 16px; height: 16px; }
+.bug { font-weight: 500; white-space: nowrap; margin-right: 4px; }
+.bug.tofile { color: var(--critical); }
+.bug.tofile::before { content: "⚑ "; }
+.bug.none { color: var(--text-muted); font-weight: normal; }
+.sub { color: var(--text-muted); font-size: 12px; }
+.dep { font-size: 12px; margin-top: 2px; color: var(--text-secondary); }
+.dep.met { color: var(--text-muted); }
+.st { font-size: 12px; white-space: nowrap; }
+.st::before { margin-right: 3px; }
+.st.run::before { content: "◔"; color: var(--accent); }
+.st.wait::before { content: "◌"; color: var(--text-muted); }
+.st.find::before { content: "↺"; color: var(--serious); }
+.st.ok::before { content: "✓"; color: var(--good); font-weight: 700; }
+.st.closed { color: var(--text-muted); }
+.st.closed::before { content: "–"; }
+.rv { display: inline-block; font-size: 12px; white-space: nowrap; margin: 0 6px 2px 0; }
+.rv.ok::before { content: "✓ "; color: var(--good); font-weight: 700; }
+.rv.block::before { content: "✗ "; color: var(--critical); font-weight: 700; }
+.rv.block { font-weight: 600; }
+.rv.pend::before { content: "… "; color: var(--text-muted); }
+.landable { font-size: 11px; color: var(--good); white-space: nowrap; display: block; }
+.box { background: var(--bg); border-radius: 8px; padding: 8px; margin-top: 6px; }
+.box h4 { margin: 0 0 4px; font-size: 12px; color: var(--text-secondary); font-weight: 500; }
+.box .row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 6px; }
+.box input { font: inherit; font-size: 13px; padding: 3px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-1); color: var(--text-primary); flex: 1 1 200px; min-width: 0; }
+pre.diff { margin: 0 0 8px; font: 12px/1.45 ui-monospace, Menlo, monospace; overflow-x: auto; background: var(--surface-1); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; }
+pre.diff .a { color: var(--good); } pre.diff .r { color: var(--critical); } pre.diff .h { color: var(--text-muted); }
+.comment { border-left: 3px solid var(--border); padding: 2px 8px; margin: 4px 0; font-size: 12px; }
+textarea { width: 100%; font: inherit; font-size: 13px; border: 1px solid var(--border); border-radius: 6px; padding: 6px; background: var(--surface-1); color: var(--text-primary); }
+.res { white-space: nowrap; }
+.res.ok::before { content: "✓ "; color: var(--good); font-weight: 700; }
+.res.bad::before { content: "✗ "; color: var(--critical); font-weight: 700; }
+.res.run::before { content: "◔ "; color: var(--accent); }
+.res.plan::before { content: "◌ "; color: var(--text-muted); }
+.checks { font-size: 12px; margin: 6px 0; display: flex; gap: 4px 14px; flex-wrap: wrap; }
+.checks .ok::before { content: "✓ "; color: var(--good); font-weight: 700; }
+.checks .bad::before { content: "✗ "; color: var(--critical); font-weight: 700; }
+.simple { background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 4px 12px; }
+.simple .row { display: flex; gap: 10px; padding: 6px 0; border-top: 1px solid var(--border); align-items: baseline; flex-wrap: wrap; }
+.simple .row:first-child { border-top: 0; }
+.simple .row .grow { flex: 1 1 300px; }
+details.archive > summary { cursor: pointer; color: var(--text-secondary); font-size: 13px; padding: 6px 0; }
+footer { max-width: 1100px; margin: 0 auto; padding: 8px 12px 24px; font-size: 12px; color: var(--text-muted); }
+@media (max-width: 700px) {
+  .hide-sm { display: none; }
+  details.req > summary { grid-template-columns: 1fr; }
+  .rright { grid-column: 1; grid-row: auto; }
+}
+</style>
+</head>
+<body>
+<svg style="display:none"><symbol id="phab" viewBox="0 0 16 16"><path d="M1 8s2.6-5 7-5 7 5 7 5-2.6 5-7 5-7-5-7-5z" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="8" cy="8" r="2.3" fill="currentColor"/></symbol></svg>
+<div class="mockbanner">MVP mockup: only what docs/MVP.md builds first. Sample data</div>
+<header><div class="hwrap">
+  <h1>🏭 Fix factory</h1>
+  <div class="strip">
+    <span>agents <b>7/10</b></span>
+    <span>builds <b>2/3</b></span>
+    <span><b>5</b> requests need you</span>
+  </div>
+  <div class="spacer"></div>
+  <button class="btn primary">+ New request</button>
+</div></header>
+
+<main>
+  <div class="ask">
+    <input placeholder="Tell the factory… (e.g. “Lando was down this morning, re-push what failed”)">
+    <button class="btn">Send</button>
+  </div>
+
+  <h2>Active <span class="count">6</span></h2>
+
+  <!-- Step 2: approve the un-skip push -->
+  <details class="req needs">
+    <summary>
+      <span class="rname">Flakiness burndown: toolkit/components/extensions/test/xpcshell</span>
+      <span class="rsum">23 skip-ifs: 6 scoping → run-if, 17 flakiness → removed in the DEBUG commit · run-if commit reviewed ✓</span>
+      <span class="rright"><span class="step">2 · first signal</span><a class="btn small" href="#">Profile</a></span>
+      <div class="action">
+        <span class="flag">Approve the un-skip push</span>
+        <span class="why">Sonnet's plan: xpcshell on the 9 configs where the skips applied, --rebuild 10 (rates 2–15%) · dry run: 186 tasks</span>
+        <button class="btn small primary">Approve</button><button class="btn small">Command + tasks</button>
+      </div>
+    </summary>
+  </details>
+
+  <!-- Recovery plan waiting for approval -->
+  <details class="req needs">
+    <summary>
+      <span class="rname">Fix the failures of try push 3f9a2c71e0d4</span>
+      <span class="rsum">4 failure groups · 3 fixed and reviewed · 1 investigating for 6 h</span>
+      <span class="rright"><span class="step">4 · investigate and fix</span><a class="btn small" href="#">Profile</a></span>
+      <div class="action">
+        <span class="flag">Recovery plan</span>
+        <span class="why">You said: “the browser_tabSpinner agent has been at it for 6 hours”</span>
+        <ul>
+          <li><label><input type="checkbox" checked> <code>resume-agent</code> browser_tabSpinner.js: “Stop and report what you have.” <span class="sub">Its last 40 min were repeated --repeat 50 runs with 0 failures.</span></label></li>
+          <li><label><input type="checkbox"> <code>cancel-job</code> + <code>start-agent</code> with a note: “--repeat never reproduced it; read the profile from task Zx3…” <span class="sub">If the report has no lead.</span></label></li>
+        </ul>
+        <button class="btn small primary">Run checked</button><button class="btn small">Reply…</button>
+      </div>
+    </summary>
+  </details>
+
+  <!-- Steps 4-6, expanded -->
+  <details class="req needs" open>
+    <summary>
+      <span class="rname">xpcshell tests writing to the test directory</span>
+      <span class="rsum">291 failures → 12 groups · storage/test/unit: stack ready, try plan waiting · 9 other groups in progress</span>
+      <span class="rright"><span class="step">6 · verify on try</span><a class="btn small" href="#">Profile</a></span>
+      <div class="action">
+        <span class="flag">Approve 2 try pushes for storage/test/unit</span>
+        <span class="why">details below · 1 bug to file</span>
+        <button class="btn small primary">Approve both</button>
+      </div>
+    </summary>
+    <div class="rbody">
+      <h3>storage/test/unit <span class="sub">· stack order: easy and valuable first, each patch after its hard deps</span></h3>
+      <div class="scroll">
+      <table>
+        <thead><tr><th>Patch</th><th>State</th><th class="hide-sm" title="Expected review effort, 1 = trivial">Effort</th><th class="num hide-sm" title="Failures per week fixed">Value</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><span class="bug none">Bug XXXXXXX</span> Save the prefs file of test_libPrefs.js in the temp dir, r=gstoll. <span class="sub">(meta bug)</span></td>
+            <td><span class="st ok">reviewed</span></td>
+            <td class="hide-sm">1</td><td class="num hide-sm">31/wk</td>
+          </tr>
+          <tr>
+            <td><span class="bug none">Bug XXXXXXX</span> Don't write into the test directory in storage xpcshell tests, r=mak. <span class="sub">(meta bug)</span></td>
+            <td><span class="st ok">reviewed</span></td>
+            <td class="hide-sm">1</td><td class="num hide-sm">24/wk</td>
+          </tr>
+          <tr>
+            <td><a class="bug tofile" href="#" title="Opens a prefilled enter_bug.cgi">Bug to file</a> Make nsLocalFile::CopyDirectoryTo copy the contents of read-only directories, r=#xpcom-reviewers.
+              <div class="box">
+                <h4>Bug draft · Core::XPCOM · “CopyDirectoryTo leaves a read-only source directory's contents behind”</h4>
+                <div class="row"><input placeholder="Paste the bug number, or comment on the draft"><button class="btn small">Send</button></div>
+              </div>
+            </td>
+            <td><span class="st ok">reviewed</span></td>
+            <td class="hide-sm">3</td><td class="num hide-sm">40/wk</td>
+          </tr>
+          <tr>
+            <td><span class="bug none">Bug XXXXXXX</span> Run the storage tests on a per-test copy of their fixture dir, r=mak. <span class="sub">(meta bug)</span>
+              <div class="dep">⛔ hard: needs the CopyDirectoryTo fix above (copying read-only fixtures loses their contents)</div></td>
+            <td><span class="st ok">reviewed</span></td>
+            <td class="hide-sm">2</td><td class="num hide-sm">12/wk</td>
+          </tr>
+        </tbody>
+      </table>
+      </div>
+      <div class="sub" style="margin-top:4px">Stack review (Opus): no findings.</div>
+
+      <h3>Try plan for storage/test/unit <span class="sub">· Sonnet, from the un-skip push 27999ea83b92 and the patches</span></h3>
+      <table>
+        <tbody>
+          <tr><td class="res plan">push A</td><td>Same configs and paths as the un-skip push, so results are comparable · xpcshell, 14 configs, --rebuild 5 · 312 tasks</td><td><button class="btn small">Command</button></td></tr>
+          <tr><td class="res plan">push B</td><td>The CopyDirectoryTo product change: xpcom gtests + xpcshell on all desktop platforms, --no-artifact · 96 tasks</td><td><button class="btn small">Command</button></td></tr>
+        </tbody>
+      </table>
+
+      <h3>Other groups</h3>
+      <div class="scroll">
+      <table>
+        <tbody>
+          <tr><td>browser/components/migration/tests/unit <span class="sub">(31 tests)</span></td><td><span class="st run">investigating</span></td><td class="sub hide-sm">Opus · 52 min</td></tr>
+          <tr><td>toolkit/mozapps/update/tests <span class="sub">(114 tests)</span></td><td><span class="st find">review findings → author</span></td><td class="sub hide-sm">“the continue file is still written next to the test”</td></tr>
+          <tr><td>security/manager/ssl/tests/unit <span class="sub">(22 tests)</span></td><td><span class="st run">in critical review</span></td><td class="sub hide-sm">Opus</td></tr>
+          <tr><td>netwerk/test/unit <span class="sub">(9 tests)</span></td><td><span class="st wait">waiting for a build slot</span></td><td class="sub hide-sm"></td></tr>
+          <tr><td>dom/localstorage/test/unit <span class="sub">(4 tests)</span></td><td><span class="st closed">handed back: bug 2081413, asuth active</span></td><td class="sub hide-sm"></td></tr>
+        </tbody>
+      </table>
+      </div>
+
+      <h3>Try pushes</h3>
+      <table>
+        <tbody>
+          <tr><td class="mono"><a href="#">27999ea83b92</a></td><td>Make test dirs read-only to find every test writing to them</td><td class="res bad">291 failures, 12 groups</td></tr>
+        </tbody>
+      </table>
+      <div class="ask" style="margin-top:10px"><input placeholder="Tell the factory about this request…"><button class="btn">Send</button></div>
+    </div>
+  </details>
+
+  <!-- Steps 7-8 -->
+  <details class="req needs">
+    <summary>
+      <span class="rname">Permissions left changed by browser-chrome tests</span>
+      <span class="rsum">16 patches · try pushes green · stack reviewed</span>
+      <span class="rright"><span class="step">7 · meta bug</span><a class="btn small" href="#">Profile</a></span>
+      <div class="action">
+        <span class="flag">File the meta bug, then review and submit</span>
+        <span class="why">the meta-bug comment lists the stack in review order, with effort, value and repro</span>
+        <a class="btn small" href="#">Meta: Bug to file ↗</a><button class="btn small">Paste number…</button>
+        <div class="checks" style="flex-basis:100%">
+          <span class="ok">no WIP/DEBUG</span><span class="ok">try complete and green</span><span class="ok">r= on every patch</span><span class="bad">13 patches still say Bug XXXXXXX</span>
+        </div>
+        <button class="btn small">Open in stack-viewer ↗</button><button class="btn small primary" disabled>moz-phab submit</button>
+      </div>
+    </summary>
+  </details>
+
+  <!-- Step 9, expanded -->
+  <details class="req needs" open>
+    <summary>
+      <span class="rname">Flakiness burndown: browser/extensions/newtab/test/browser</span>
+      <span class="rsum">9 in review: 2 accepted, 1 changes requested, 2 comments addressed · 30 landed</span>
+      <span class="rright"><span class="step">9 · review comments</span><a class="btn small" href="#">Profile</a></span>
+      <div class="action"><span class="flag">Post 2 replies, then resubmit D327101, D327084</span><span class="why">comments addressed and re-reviewed (Opus) · interdiffs below</span><button class="btn small primary">moz-phab submit (2 revisions)</button></div>
+    </summary>
+    <div class="rbody">
+      <h3>Patches</h3>
+      <div class="scroll">
+      <table>
+        <thead><tr><th>Patch</th><th>Reviewers</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><a class="phab" href="#" title="D327083"><svg><use href="#phab"/></svg></a><a class="bug" href="#">Bug 2025752</a> Wait on panel-list's shown/hidden events instead of its open attribute, r=#home-newtab-reviewers.</td>
+            <td><span class="rv ok">mconley</span><span class="landable">landable</span></td>
+          </tr>
+          <tr>
+            <td><a class="phab" href="#" title="D327101"><svg><use href="#phab"/></svg></a><a class="bug" href="#">Bug 2011958</a> Count the sponsored tiles rather than the whole row, r=mconley.
+              <div class="box">
+                <h4>Interdiff (same parent)</h4>
+<pre class="diff"><span class="h">@@ browser_topsites_sponsored.js</span>
+<span class="r">-  let tiles = row.querySelectorAll(".top-site-outer");</span>
+<span class="r">-  is(tiles.length - 1, 2, "two sponsored tiles");</span>
+<span class="a">+  let sponsored = row.querySelectorAll(".top-site-outer.sponsored");</span>
+<span class="a">+  is(sponsored.length, 2, "two sponsored tiles");</span></pre>
+                <div class="comment"><b>mconley</b>: Could we select the sponsored tiles directly instead of subtracting?</div>
+                <h4>Draft reply</h4>
+                <textarea rows="1">Done.</textarea>
+                <div class="row"><button class="btn small primary">Copy reply</button><a class="btn small" href="#" title="D327101#inline-1873402">Open comment ↗</a><input placeholder="Comment on the fix…"></div>
+              </div>
+            </td>
+            <td><span class="rv ok">mconley</span><div class="sub">accepted with comments</div></td>
+          </tr>
+          <tr>
+            <td><a class="phab" href="#" title="D327084"><svg><use href="#phab"/></svg></a><a class="bug" href="#">Bug 2025752</a> Exclude the add-shortcut tile from the menu test selectors, r=mconley.
+              <div class="sub">“factor into a helper”: done · draft reply ready ▸</div>
+              <div class="dep">🔗 soft: the skip-if removal for browser_topsites_section.js is here because this lands after D327083</div></td>
+            <td><span class="rv ok">mconley</span><div class="sub">accepted with comments</div></td>
+          </tr>
+          <tr>
+            <td><a class="phab" href="#" title="D327095"><svg><use href="#phab"/></svg></a><a class="bug" href="#">Bug 2067207</a> Check version.txt before recording the train-hop Glean metric, r=mconley.
+              <div class="sub">changes requested 2 h ago · author working on it</div></td>
+            <td><span class="rv block">mconley</span></td>
+          </tr>
+          <tr>
+            <td><a class="phab" href="#" title="D327088"><svg><use href="#phab"/></svg></a><a class="bug" href="#">Bug 1780305</a> Wait for ExperimentManager.onStartup() before enrolling in NimbusTestUtils, r=beth.</td>
+            <td><span class="rv pend">beth</span></td>
+          </tr>
+          <tr><td colspan="2" class="sub">+ 4 more in review · 30 landed ▸</td></tr>
+        </tbody>
+      </table>
+      </div>
+      <div style="margin-top:8px"><button class="btn small">Open in stack-viewer ↗</button></div>
+    </div>
+  </details>
+
+  <!-- Step 10 -->
+  <details class="req needs">
+    <summary>
+      <span class="rname">Mouse button left pressed after synthetic clicks</span>
+      <span class="rsum">28 patches · 7 landed · 9 accepted, 5 of them landable now</span>
+      <span class="rright"><span class="step">10 · landing</span><a class="btn small" href="#">Profile</a></span>
+      <div class="action"><span class="flag">Reorg ready: 5 landable patches moved to the bottom</span><span class="why">1 text conflict resolved (Sonnet) · 3 revisions changed</span><button class="btn small">Interdiffs</button><button class="btn small primary">moz-phab submit (3 revisions)</button></div>
+    </summary>
+  </details>
+
+  <h2>Queued <span class="count">1</span></h2>
+  <div class="simple">
+    <div class="row"><span class="grow"><b>Flakiness burndown: browser/base/content/test/popups</b> <span class="sub">· waits for an agent slot</span></span><button class="btn small">Start now</button></div>
+  </div>
+
+  <h2>Recent try pushes</h2>
+  <div class="simple scroll">
+    <table>
+      <tbody>
+        <tr><td class="mono"><a href="#">5be03d71aa90</a></td><td class="hide-sm">mouse-button</td><td>Verify the harness check with all 7 fixes</td><td class="res ok">green</td></tr>
+        <tr><td class="mono"><a href="#">dbfcf15fdf1f</a></td><td class="hide-sm">newtab</td><td>Verify the rewritten Glean patch</td><td class="res run">412/440, 0 failures</td></tr>
+        <tr><td class="mono"><a href="#">c91e44d2b6f0</a></td><td class="hide-sm">permissions</td><td>Verify the webrtc and captive portal cleanups</td><td class="res bad">1 new failure → back to its author</td></tr>
+        <tr><td class="mono"><a href="#">27999ea83b92</a></td><td class="hide-sm">xpcshell-cwd</td><td>Make test dirs read-only to find every test writing to them</td><td class="res bad">291 failures, 12 groups</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>Finished</h2>
+  <details class="archive">
+    <summary>▸ 3 requests, everything landed</summary>
+    <div class="simple">
+      <div class="row"><span class="grow"><b>Errorsummary crashes on retried tests</b> <span class="sub">· 1 patch, landed Oct 13</span></span><a class="btn small" href="#">Profile</a></div>
+    </div>
+  </details>
+</main>
+<footer>Tool feedback: <a href="#">fx-tests (9)</a> · <a href="#">profiler-cli (5)</a> · <a href="#">factory scripts (3)</a></footer>
+</body>
+</html>
