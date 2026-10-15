@@ -1,8 +1,6 @@
 import { readFileSync, realpathSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { isAbsolute, join, relative, resolve } from "node:path";
-import { parseArgs } from "node:util";
-import { loadConfig } from "../config.ts";
 import type { FactoryConfig, PatchView } from "../types.ts";
 import { HostCheck } from "./host-check.ts";
 import { commandsFromForm, validateCommand } from "./commands.ts";
@@ -12,7 +10,7 @@ import { renderRequest } from "./pages/request.ts";
 import { buildRequestProfile } from "./request-profile.ts";
 import { buildStackReview, findStack, isRevName } from "./stack-review.ts";
 import type { CommandInput } from "../state/commands.ts";
-import { FixtureStateSource, type CommandSink, type StateSource } from "./state-source.ts";
+import type { CommandSink, StateSource } from "./state-source.ts";
 
 export interface ServerOptions {
   config: Pick<FactoryConfig, "port" | "profilerOrigin" | "stackViewerCommand" | "stateDir" | "maxAgents" | "maxBuilds" | "allowedHosts">;
@@ -315,30 +313,8 @@ function readBody(req: IncomingMessage): Promise<string> {
   });
 }
 
-// `node src/server/server.ts --fixtures test/fixtures/server/` serves fixture states
-// and prints commands instead of appending them, to look at the page without the
-// orchestrator. Without --fixtures, the integrator's entry point wires src/state/.
+// Kept so `node src/server/server.ts --fixtures <dir>` still works.
 if (import.meta.main) {
-  const { values } = parseArgs({ options: { fixtures: { type: "string" }, port: { type: "string" } } });
-  if (!values.fixtures) {
-    process.stderr.write("usage: node src/server/server.ts --fixtures <dir> [--port N]\n");
-    process.exit(2);
-  }
-  let config: FactoryConfig;
-  try {
-    config = loadConfig();
-  } catch {
-    config = JSON.parse(readFileSync(resolve(import.meta.dirname, "../../factory.config.example.json"), "utf8")) as FactoryConfig;
-  }
-  if (values.port) {
-    config.port = Number(values.port);
-  }
-  const state = new FixtureStateSource(resolve(values.fixtures));
-  state.watch();
-  const sink: CommandSink = { append: (c) => process.stdout.write(JSON.stringify(c) + "\n") };
-  // interdiffFile paths in the fixtures are relative to the fixture directory.
-  config.stateDir = resolve(values.fixtures);
-  createFactoryServer({ config, state, sink }).listen(config.port, () => {
-    process.stderr.write(`fix-factory page on http://localhost:${config.port}/ (fixtures from ${values.fixtures})\n`);
-  });
+  // Not a top-level await: main.ts imports this module, which must finish evaluating first.
+  void import("./main.ts").then((m) => m.main(process.argv.slice(2)));
 }
