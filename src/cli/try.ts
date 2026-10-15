@@ -31,9 +31,10 @@
 //                                                              once per failed job, as it appears
 //   {type: "progress", done, total, failures}                 when a count changes
 //   {type: "finished", result: "green" | "failures", summary, rev, done, total, failures, notRun}
-//   "green" means no failed job, not no failed test: a test that failed then passed
-//   on retry inside a job is invisible here (fx-tests --all-jobs sees it). notRun
-//   lists the jobs left unscheduled because something they depend on failed.
+//   "green" means every job ran and none failed, not no failed test: a test that
+//   failed then passed on retry inside a job is invisible here (fx-tests --all-jobs
+//   sees it). notRun lists the jobs left unscheduled because something they depend
+//   on failed or was cancelled; a decision task that scheduled nothing is "failures".
 //   A Lando job that failed, was cancelled or isn't a try push ends with
 //   {"error": ...} and exit 1.
 
@@ -64,6 +65,7 @@ const REJECTED_FLAGS: Record<string, string> = {
   "-i": "nobody is there to answer",
   // Its prompt would be answered by the "y" meant for the large push prompt.
   "--pernosco": "it asks for confirmation, and nobody is there to answer",
+  "--purge": "it clears the try history instead of pushing",
 };
 
 // The others are interactive (chooser, perf), push more than once (compare) or
@@ -95,6 +97,10 @@ export function checkTryArgs(args: string[]): void {
     // After a "--", argparse takes everything as paths, including our --no-push.
     if (arg === "--") {
       throw new UsageError('"--" is not allowed in mach try arguments');
+    }
+    // A group of short flags such as -xi still opens fzf.
+    if (/^-[a-zA-Z]{2,}$/.test(arg) && arg.includes("i")) {
+      throw new UsageError(`${arg} is not allowed: -i ${REJECTED_FLAGS["-i"]}`);
     }
     const flag = rejection(arg);
     if (flag) {
@@ -198,14 +204,19 @@ export function findDuplicate(result: { tryTaskConfig: Record<string, unknown>; 
   return index === -1 ? undefined : (pending[index].push ?? String(index));
 }
 
-export async function dryRun(cwd: string, args: string[], opts: { pending?: PendingPush[]; exec?: typeof exec } = {}): Promise<DryRunResult> {
+export async function dryRun(cwd: string, args: string[], opts: { pending?: PendingPush[]; exec?: typeof exec; timeoutS?: number } = {}): Promise<DryRunResult> {
   checkTryArgs(args);
   const run = opts.exec ?? exec;
   const command = ["./mach", "try", ...args];
   // Right after the selector, so nothing can turn it into a path or an option value.
   const noPush = ["./mach", "try", args[0], "--no-push", ...args.slice(1)];
-  // "y" answers the large push prompt, which otherwise crashes on EOF.
-  const r = await run(noPush, { cwd, input: "y\n" });
+  // "y" answers the large push prompt, which otherwise crashes on EOF. timeout(1)
+  // because anything else waiting for input would hang the job forever.
+  const timeoutS = opts.timeoutS ?? 1200;
+  const r = await run(["timeout", "--kill-after=30", String(timeoutS), ...noPush], { cwd, input: "y\n" });
+  if (r.code === 124 || r.code === 137) {
+    throw new Error(`mach try --no-push timed out after ${timeoutS} s: ${(r.stdout + r.stderr).trim().slice(-2000)}`);
+  }
   if (r.code !== 0) {
     throw new Error(`mach try --no-push exited with ${r.code}: ${(r.stdout + r.stderr).trim().slice(-2000)}`);
   }
@@ -467,13 +478,15 @@ export interface PushStatus {
   failed: TreeherderJob[];
   notRun: string[];
   complete: boolean;
-  // Complete only if the next poll agrees: see pushStatus.
+  // Complete only once later polls agree: see pushStatus.
   confirm: boolean;
+  scheduledNothing: boolean;
 }
 
 // How long a decision task that scheduled nothing waits before the push counts as
-// done, for Treeherder to ingest the tasks it might have scheduled.
-const INGESTION_DELAY_MS = 15 * 60_000;
+// done, for Treeherder to ingest the tasks it might have scheduled; also how long
+// a push with only unscheduled jobs left and no failure must stay unchanged.
+export const INGESTION_DELAY_MS = 15 * 60_000;
 
 export function pushStatus(jobs: TreeherderJob[], now = Date.now()): PushStatus {
   const completed = jobs.filter((j) => j.state === "completed");
@@ -508,9 +521,11 @@ export function pushStatus(jobs: TreeherderJob[], now = Date.now()): PushStatus 
       complete = true;
     } else if (hasOtherJobs && unscheduled.length === 0) {
       complete = true;
-    } else if (unscheduled.length > 0 && failed.length > 0) {
-      // Dependents of a job that just succeeded can also look unscheduled for a
-      // moment, so this needs a second poll to agree.
+    } else if (unscheduled.length > 0) {
+      // Tasks stay unscheduled until their deadline, a day later, when something
+      // they depend on failed or was cancelled. Dependents of a job that just
+      // succeeded can also look unscheduled for a moment, so watch waits for a
+      // second poll to agree (with a failure), or for 15 min without change.
       complete = true;
       confirm = true;
     }
@@ -523,6 +538,7 @@ export function pushStatus(jobs: TreeherderJob[], now = Date.now()): PushStatus 
     notRun: unscheduled.map((j) => j.job_type_name),
     complete,
     confirm,
+    scheduledNothing,
   };
 }
 
@@ -537,6 +553,12 @@ export function summarize(jobs: TreeherderJob[], status = pushStatus(jobs)): str
     .filter(Boolean)
     .join(", ");
   const tail = extras ? ` (${extras})` : "";
+  if (status.scheduledNothing) {
+    return "The decision task scheduled nothing: no test ran.";
+  }
+  if (status.failures === 0 && status.notRun.length > 0) {
+    return `${status.total} jobs, none failed but some never ran${tail}.`;
+  }
   if (status.failures === 0) {
     return `${status.total} jobs, all green${tail}.`;
   }
@@ -645,7 +667,8 @@ export async function watch(target: { rev: string } | { landoJobId: number }, de
 
   const reported = new Set<number>();
   let lastProgress = "";
-  let toConfirm = "";
+  let lastSignature = "";
+  let unchangedSince = deps.now();
   for (;;) {
     const jobs = await poller.attempt(() => fetchJobs(deps, push.id, opts.pageSize));
     if (jobs) {
@@ -671,12 +694,16 @@ export async function watch(target: { rev: string } | { landoJobId: number }, de
         deps.emit({ type: "progress", done: status.done, total: status.total, failures: status.failures });
       }
       const signature = `${progress}/${status.notRun.length}`;
-      const confirmed = !status.confirm || toConfirm === signature;
-      toConfirm = status.complete && status.confirm ? signature : "";
-      if (status.complete && confirmed) {
+      if (signature !== lastSignature) {
+        lastSignature = signature;
+        unchangedSince = deps.now();
+      }
+      const stable = status.failures > 0 ? deps.now() > unchangedSince : deps.now() - unchangedSince >= INGESTION_DELAY_MS;
+      if (status.complete && (!status.confirm || stable)) {
         const finished: WatchFinished = {
           type: "finished",
-          result: status.failures === 0 ? "green" : "failures",
+          // A push that ran nothing must not pass a "try is green" check.
+          result: status.failures === 0 && status.notRun.length === 0 && !status.scheduledNothing ? "green" : "failures",
           summary: summarize(jobs, status),
           rev,
           done: status.done,

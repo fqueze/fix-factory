@@ -10,6 +10,7 @@ import type { ExecResult } from "../lib/exec.ts";
 import {
   checkTryArgs,
   dryRun,
+  INGESTION_DELAY_MS,
   fetchJobs,
   findDuplicate,
   parseDryRunOutput,
@@ -50,7 +51,7 @@ function fakeExec(machStdout: string, files = "") {
   const calls: { cmd: string[]; input?: string }[] = [];
   const run = async (cmd: string[], opts: { input?: string } = {}): Promise<ExecResult> => {
     calls.push({ cmd, input: opts.input });
-    if (cmd[0] === "./mach") {
+    if (cmd[0] === "timeout") {
       return { code: 0, stdout: machStdout, stderr: "" };
     }
     if (cmd[1] === "rev-list") {
@@ -71,6 +72,8 @@ test("checkTryArgs rejects flags and selectors that can't work unattended", () =
   assert.throws(() => checkTryArgs(["fuzzy", "-q", "x", "--no-p=1"]), /--no-p=1 is not allowed/);
   assert.throws(() => checkTryArgs(["fuzzy", "-q", "x", "--", "xpcom/tests/unit"]), /"--" is not allowed/);
   assert.throws(() => checkTryArgs(["fuzzy", "xpcom/tests/unit"]), /needs -q/);
+  assert.throws(() => checkTryArgs(["fuzzy", "-q", "x", "-xi"]), /-xi is not allowed/);
+  assert.throws(() => checkTryArgs(["again", "--purge"]), /--purge/);
   assert.throws(() => checkTryArgs(["chooser"]), /must be a selector/);
   assert.throws(() => checkTryArgs(["-q", "x"]), /must be a selector/);
   assert.throws(() => checkTryArgs([]), /missing/);
@@ -117,7 +120,7 @@ test("dryRun puts --no-push right after the selector and reports the stack", asy
   const { run, calls } = fakeExec(text("dry-run-rebuild.txt"));
   const args = ["fuzzy", "-q", "'xpcshell 'linux2404-64/opt", "--rebuild", "3", "--artifact", "xpcom/tests/unit"];
   const r = await dryRun("/wt", args, { exec: run });
-  assert.deepEqual(calls[0].cmd, ["./mach", "try", "fuzzy", "--no-push", "-q", "'xpcshell 'linux2404-64/opt", "--rebuild", "3", "--artifact", "xpcom/tests/unit"]);
+  assert.deepEqual(calls[0].cmd, ["timeout", "--kill-after=30", "1200", "./mach", "try", "fuzzy", "--no-push", "-q", "'xpcshell 'linux2404-64/opt", "--rebuild", "3", "--artifact", "xpcom/tests/unit"]);
   assert.equal(calls[0].input, "y\n");
   assert.deepEqual(r.command, ["./mach", "try", ...args]);
   assert.equal(r.taskCount, 18);
@@ -383,11 +386,43 @@ test("watch finishes when the only jobs left are unscheduled behind a failure", 
   assert.equal(world.now(), 60_000);
 });
 
-test("pushStatus: unscheduled jobs without any failure are still to come", () => {
-  const jobs = rows(json("jobs-d25e111ef965.json")).map((j, i) =>
-    i === 5 ? { ...j, state: "unscheduled", result: "unknown" } : j.result === "testfailed" ? { ...j, result: "success" } : j,
-  );
-  assert.equal(pushStatus(jobs).complete, false);
+test("watch: unscheduled jobs without a failure finish after 15 min without change", async () => {
+  // As if a build's dependency had been cancelled: its dependents never get scheduled.
+  const final = json("jobs-d25e111ef965.json") as JobsPage;
+  const names = final.job_property_names;
+  const jobs: JobsPage = {
+    ...final,
+    results: final.results.map((r, i) => {
+      const row = r.map((v) => (v === "testfailed" ? "success" : v));
+      if (i === 5) {
+        row[names.indexOf("state")] = "unscheduled";
+        row[names.indexOf("result")] = "unknown";
+      }
+      return row;
+    }),
+  };
+  const world = fakeWorld({ landoLandsAt: 0, pushAppearsAt: 0, jobs: () => jobs });
+  const finished = await watch({ rev: REV }, world.deps, { intervalMs: 60_000 });
+  assert.equal(world.now(), INGESTION_DELAY_MS);
+  assert.equal(finished.result, "failures");
+  assert.deepEqual(finished.notRun, [rows(jobs)[5].job_type_name]);
+  assert.equal(finished.summary, "54 jobs, none failed but some never ran (1 retried, 1 not run).");
+});
+
+test("watch: a decision task that scheduled nothing isn't green", async () => {
+  const final = json("jobs-d25e111ef965.json") as JobsPage;
+  const decision = { ...final, results: final.results.filter((r) => r[final.job_property_names.indexOf("job_type_name")] === "Gecko Decision Task") };
+  const decisionEnd = utc(rows(decision)[0].last_modified);
+  const world = fakeWorld({ landoLandsAt: decisionEnd + 5 * 60_000, pushAppearsAt: 0, jobs: () => decision });
+  const finished = await watch({ rev: REV }, world.deps, { intervalMs: 60_000 });
+  assert.equal(world.now(), decisionEnd + INGESTION_DELAY_MS);
+  assert.equal(finished.result, "failures");
+  assert.equal(finished.summary, "The decision task scheduled nothing: no test ran.");
+});
+
+test("dryRun reports a mach that hangs", async () => {
+  const run = async (): Promise<ExecResult> => ({ code: 124, stdout: "Would you like to proceed anyway? [Y/n]: ", stderr: "" });
+  await assert.rejects(dryRun("/wt", ["fuzzy", "-q", "x"], { exec: run, timeoutS: 5 }), /timed out after 5 s/);
 });
 
 test("fetchJobs follows pagination", async () => {
