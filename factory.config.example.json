@@ -6,6 +6,7 @@
   "claudeCommand": ["mozsb", "claude"],
   "stackViewerCommand": ["stack-viewer"],
   "profilerOrigin": "http://localhost:4242",
+  "allowedHosts": [],
   "maxAgents": 10,
   "maxBuilds": 3,
   "dryRun": true

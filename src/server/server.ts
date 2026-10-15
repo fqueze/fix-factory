@@ -15,8 +15,7 @@ import type { CommandInput } from "../state/commands.ts";
 import { FixtureStateSource, type CommandSink, type StateSource } from "./state-source.ts";
 
 export interface ServerOptions {
-  // allowedHosts: extra Host names to answer to (proposed FactoryConfig field).
-  config: Pick<FactoryConfig, "port" | "profilerOrigin" | "stackViewerCommand" | "stateDir" | "maxAgents" | "maxBuilds"> & { allowedHosts?: unknown };
+  config: Pick<FactoryConfig, "port" | "profilerOrigin" | "stackViewerCommand" | "stateDir" | "maxAgents" | "maxBuilds" | "allowedHosts">;
   state: StateSource;
   sink: CommandSink;
   now?: () => number;
@@ -44,8 +43,7 @@ class HttpError extends Error {
 
 export function createFactoryServer(opts: ServerOptions): FactoryServer {
   const now = opts.now ?? Date.now;
-  const allowedHosts = Array.isArray(opts.config.allowedHosts) ? opts.config.allowedHosts.filter((h): h is string => typeof h === "string") : [];
-  const hosts = new HostCheck(allowedHosts, opts.machineName);
+  const hosts = new HostCheck(opts.config.allowedHosts ?? [], opts.machineName);
   void hosts.addFqdn(opts.machineName);
   const sseClients = new Set<ServerResponse>();
   const broadcast = (data: string) => {
