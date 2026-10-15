@@ -8,6 +8,7 @@ Design docs, read in this order:
 - [docs/COMPONENTS.md](docs/COMPONENTS.md): scripts and prompts
 - [docs/PROMPTS.md](docs/PROMPTS.md): every prompt in full (generated, `node src/tools/prompts-doc.ts`)
 - [docs/CONTRACTS.md](docs/CONTRACTS.md): conventions between the pieces
+- [docs/ORCHESTRATOR.md](docs/ORCHESTRATOR.md): what the orchestrator does at each step
 - [docs/mockup-mvp.html](docs/mockup-mvp.html): status page mockup for the first version
 - [docs/mockup.html](docs/mockup.html): status page mockup for the full design
 - [docs/initial-prompt.md](docs/initial-prompt.md): the original request
