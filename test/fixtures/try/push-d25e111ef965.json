@@ -1,0 +1,44 @@
+{
+ "meta": {
+  "revision": "d25e111ef965eff6bb71d4f1d040318133886305",
+  "count": 1,
+  "repository": "try",
+  "filter_params": {
+   "revisions_long_revision": "d25e111ef965eff6bb71d4f1d040318133886305"
+  }
+ },
+ "results": [
+  {
+   "id": 2065854,
+   "revision": "d25e111ef965eff6bb71d4f1d040318133886305",
+   "author": "fqueze@mozilla.com",
+   "branch": null,
+   "revisions": [
+    {
+     "result_set_id": 2065854,
+     "repository_id": 4,
+     "revision": "d25e111ef965eff6bb71d4f1d040318133886305",
+     "author": "Florian Qu\u00e8ze <florian@queze.net>",
+     "comments": "Bug 2080923 - Remove the unused RegisterAppMemory API\n\nFuzzy query='xpcshell 'linux !tsan !ccov !wayland&query='xpcshell 'windows !ccov !msix&query='xpcshell 'macosx !ccov&query='xpcshell 'android 'debug&paths=toolkit/crashreporter/test/unit\n\nmach try command: `./mach try fuzzy --no-artifact -q \"'xpcshell 'linux !tsan !ccov !wayland\" -q \"'xpcshell 'windows !ccov !msix\" -q \"'xpcshell 'macosx !ccov\" -q \"'xpcshell 'android 'debug\" -m \"Bug 2080923 - Remove the unused RegisterAppMemory API\" toolkit/crashreporter/test/unit`\n\nPushed via `mach try fuzzy`"
+    },
+    {
+     "result_set_id": 2065854,
+     "repository_id": 4,
+     "revision": "517af2f1fa6e43256e2f710d487715cb8420ea80",
+     "author": "Florian Qu\u00e8ze <florian@queze.net>",
+     "comments": "Bug 2080923 - Remove the unused RegisterAppMemory API. r?#crashreporting-reviewers\n\nIts only consumer, the GC stack capture, was removed in bug 1125929."
+    },
+    {
+     "result_set_id": 2065854,
+     "repository_id": 4,
+     "revision": "4f862de08228f1d6892687c778272f06d4576fc0",
+     "author": "Florian Qu\u00e8ze <florian@queze.net>",
+     "comments": "Bug 2080923 - Only run test_crashreporter_appmem.js where RegisterAppMemory is implemented. r?#crashreporting-reviewers"
+    }
+   ],
+   "revision_count": 3,
+   "push_timestamp": 1791837446,
+   "repository_id": 4
+  }
+ ]
+}
