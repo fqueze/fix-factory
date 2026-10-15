@@ -23,8 +23,13 @@ A tick runs on any change to `commands.jsonl` or a job file, and at least every 
 - **Authors** are resumed in their own session.
 - **When step 3 runs:** at whichever comes first, the push finishing or 2 h after it started, so slow pools don't
   hold everything up. It runs again when the push finishes, adding new groups.
-- **Try failures** go to the patch that touches the failing test, or else a file in its folder. Anything else goes
-  to Haiku, then to you.
+- **Try failures:**
+  - **Matched:** a failure in a test that a patch touches, or in that patch's folder, goes to that patch's author.
+  - **Unmatched:** Haiku (`triage-try`) classifies each one, using its log and the test's history on central:
+    - caused by a patch (a product change breaking another test) → that patch's author;
+    - also failing on central → only noted on the page;
+    - new and unexplained → a new work item;
+    - infra → noted on the page. A retrigger is a push, so it needs your approval.
 - **Submission detected:** while a submit is waiting for you, `stack.ts import` runs every 2 min. Once every patch
   has a `Differential Revision:` trailer, the request moves to review comments.
 - **Phabricator:**
