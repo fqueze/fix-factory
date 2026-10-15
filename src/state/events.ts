@@ -1,5 +1,5 @@
 // requests/<requestId>/events.jsonl: append, read, list and tail.
-import { existsSync, readdirSync, watch, type FSWatcher } from "node:fs";
+import { existsSync, readdirSync, readFileSync, watch, type FSWatcher } from "node:fs";
 import { join } from "node:path";
 import type { Event, Iso, RequestId } from "../types.ts";
 import { appendJsonLine, checkId, readJsonLinesFrom } from "./jsonl.ts";
@@ -20,10 +20,28 @@ export function appendEvent(stateDir: string, event: EventInput): Event {
   return full;
 }
 
-// Events after a byte offset, plus the offset to continue from.
+// Events after a byte offset, plus the offset to continue from, with their data files read back.
 export function readEventsFrom(stateDir: string, requestId: RequestId, fromOffset: number): { events: Event[]; offset: number } {
   const { lines, offset } = readJsonLinesFrom(eventsPath(stateDir, requestId), fromOffset);
-  return { events: lines.map((l) => l.value as Event), offset };
+  return { events: lines.map((l) => internalizeEvent(stateDir, l.value) as Event), offset };
+}
+
+const DATA_FILE = /^requests\/[A-Za-z0-9][A-Za-z0-9._-]*\/event-data\/[A-Za-z0-9][A-Za-z0-9._-]*\.json$/;
+
+// An event over the line limit has its biggest values in requests/<id>/event-data/ files, and
+// {"dataFile": <path relative to stateDir>} in their place (see appendEventSafe in
+// src/orchestrator/event-data.ts and docs/CONTRACTS.md). This puts them back.
+export function internalizeEvent(stateDir: string, value: unknown): unknown {
+  if (Array.isArray(value)) return value.map((v) => internalizeEvent(stateDir, v));
+  if (value !== null && typeof value === "object") {
+    const dataFile = (value as { dataFile?: unknown }).dataFile;
+    if (typeof dataFile === "string" && Object.keys(value).length === 1) {
+      if (!DATA_FILE.test(dataFile)) throw new Error(`event data file outside event-data: ${JSON.stringify(dataFile)}`);
+      return internalizeEvent(stateDir, JSON.parse(readFileSync(join(stateDir, dataFile), "utf8")));
+    }
+    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, internalizeEvent(stateDir, v)]));
+  }
+  return value;
 }
 
 export function readEvents(stateDir: string, requestId: RequestId): Event[] {

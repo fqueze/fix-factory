@@ -41,8 +41,8 @@ cache/artifacts/<taskId>/...      # downloaded try logs and profiles
 - An event that would be over 4 KB has its biggest values (any field but `v`, `t`, `request`, `type`) moved,
   largest first until it fits, to `requests/<id>/event-data/<name>.json` (the value as JSON), replaced by
   `{"dataFile": "requests/<id>/event-data/<name>.json"}`. Readers replace every object that is exactly
-  `{"dataFile": ...}` (with a path under that request's `event-data/`) by the file's content before folding:
-  `internalizeEvent` in `src/orchestrator/event-data.ts`.
+  `{"dataFile": ...}` (with a path under that request's `event-data/`) by the file's content:
+  `readEventsFrom` in `src/state/events.ts` does it.
 - Files a job needs before it starts (an agent's `prompt.md`) are written into its directory by `startJob`.
 - `job-started` events of the orchestrator's jobs carry `purpose` (`JobPurpose`): what the job is for, so a
   restarted orchestrator knows.

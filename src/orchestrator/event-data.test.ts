@@ -3,9 +3,9 @@ import assert from "node:assert/strict";
 import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { readEvents } from "../state/events.ts";
+import { internalizeEvent, readEvents } from "../state/events.ts";
 import { foldEvents } from "../state/fold.ts";
-import { appendEventSafe, internalizeEvent, readFullEvents } from "./event-data.ts";
+import { appendEventSafe } from "./event-data.ts";
 
 test("an event over 4 KB keeps its envelope and moves its biggest values to data files", () => {
   const dir = mkdtempSync(join(tmpdir(), "event-data-"));
@@ -18,14 +18,16 @@ test("an event over 4 KB keeps its envelope and moves its biggest values to data
 
     const raw = readFileSync(join(dir, "requests", request, "events.jsonl"), "utf8").trim().split("\n");
     assert.ok(raw.every((l) => Buffer.byteLength(l) < 4096));
-    assert.equal(readEvents(dir, request)[0].type, "request-created");
-    const review = readEvents(dir, request)[1] as unknown as { type: string; comments: unknown };
-    assert.equal(review.type, "review-status");
-    assert.match(JSON.stringify(review.comments), /^\{"dataFile":"requests\/r-1\/event-data\/[^"]+\.json"\}$/);
+    const line = JSON.parse(raw[1]) as { type: string; comments: unknown };
+    assert.equal(line.type, "review-status");
+    assert.match(JSON.stringify(line.comments), /^\{"dataFile":"requests\/r-1\/event-data\/[^"]+\.json"\}$/);
     assert.equal(readdirSync(join(dir, "requests", request, "event-data")).length, 2);
 
-    const s = foldEvents(readFullEvents(dir, request));
+    // readEvents reads them back whole.
+    const s = foldEvents(readEvents(dir, request));
     assert.equal(s.stacks.s.summary, "x".repeat(10_000));
+    assert.equal(s.patches.p, undefined);
+    assert.deepEqual((readEvents(dir, request)[1] as { comments: unknown }).comments, comments);
     assert.throws(() => internalizeEvent(dir, { dataFile: "../../etc/passwd" }), /outside event-data/);
   } finally {
     rmSync(dir, { recursive: true, force: true });

@@ -13,12 +13,12 @@ import { parseArgs } from "node:util";
 import { loadConfig } from "../config.ts";
 import { execOk } from "../lib/exec.ts";
 import { processNewCommands, readCommands } from "../state/commands.ts";
-import { listRequests } from "../state/events.ts";
+import { listRequests, readEvents } from "../state/events.ts";
 import { foldEvents } from "../state/fold.ts";
 import { cancelJob, jobDir, jobStatus, reconcile, type ExitInfo } from "../state/jobs.ts";
 import type { Command, FactoryConfig, JobId, RequestId, RequestState } from "../types.ts";
 import { commandEffects } from "./commands.ts";
-import { appendEventSafe, readFullEvents } from "./event-data.ts";
+import { appendEventSafe } from "./event-data.ts";
 import { handleWatchLines } from "./handlers.ts";
 import { CANCELLED, next, type Action, type Ctx } from "./next.ts";
 import { DEFAULT_PRIORITY, type JobPlan } from "./plan.ts";
@@ -71,7 +71,7 @@ export class Orchestrator {
   }
 
   private load(id: RequestId): Loaded {
-    const events = readFullEvents(this.config.stateDir, id);
+    const events = readEvents(this.config.stateDir, id);
     return { s: foldEvents(events), view: buildView(events) };
   }
 

@@ -7,6 +7,7 @@ import { readCommands } from "../state/commands.ts";
 import { appendEvent, eventsPath, type EventInput } from "../state/events.ts";
 import { foldEvents } from "../state/fold.ts";
 import type { Event } from "../types.ts";
+import { appendEventSafe } from "../orchestrator/event-data.ts";
 import { StateDirCommandSink, StateDirSource } from "./state-dir.ts";
 
 let stateDir: string;
@@ -58,6 +59,17 @@ describe("StateDirSource", () => {
     );
     assert.equal(s.getEvents("r-a").length, 2);
     assert.equal(s.getRequest("r-nope"), undefined);
+  });
+
+  it("reads an event over 4 KB whole, from its data files, at start and when tailing", async () => {
+    appendEventSafe(stateDir, created("r-a"));
+    appendEventSafe(stateDir, { request: "r-a", type: "stack", stack: "s", folder: "a", branch: "b", worktree: "/w", order: [], summary: "x".repeat(10_000) });
+    const s = start();
+    assert.equal(s.getRequest("r-a")?.stacks.s.summary, "x".repeat(10_000));
+    const changed = nextChange(s, (id) => s.getRequest(id)?.metaBug !== undefined);
+    appendEventSafe(stateDir, { request: "r-a", type: "meta-bug", bug: null, draft: { product: "Testing", component: "General", summary: "meta", description: "y".repeat(10_000) } });
+    await changed;
+    assert.equal(s.getRequest("r-a")?.metaBug?.draft?.description, "y".repeat(10_000));
   });
 
   it("sees and notifies events appended after start", async () => {
