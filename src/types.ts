@@ -207,7 +207,7 @@ export type PlannedCommand =
   | { cmd: "retry-job"; job: JobId; reason: string }
   | { cmd: "cancel-job"; job: JobId; reason: string }
   | { cmd: "resume-agent"; item: ItemId; message: string; reason: string }
-  | { cmd: "start-agent"; item: ItemId; prompt: string; reason: string }
+  | { cmd: "start-agent"; item: ItemId; prompt: string; reason: string } // prompt: instructions for a fresh investigate-and-fix run
   | { cmd: "set-state"; item: ItemId; state: ItemState; reason: string }
   | { cmd: "redo-step"; item?: ItemId; step: RequestStep; reason: string }
   | { cmd: "edit-config"; config: Record<string, unknown>; reason: string }

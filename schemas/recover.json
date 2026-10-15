@@ -91,7 +91,8 @@
                 "type": "string"
               },
               "prompt": {
-                "type": "string"
+                "type": "string",
+                "description": "Instructions for the new investigate-and-fix run, appended to its usual prompt"
               },
               "reason": {
                 "type": "string"

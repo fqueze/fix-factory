@@ -165,17 +165,18 @@ describe("commands", () => {
 
   it("start-agent starts a fresh session on the item, which later resumes use", () => {
     const sc = withPatch();
-    const c = cmd({ cmd: "start-agent", item: "i-a", prompt: "investigate-and-fix", reason: "avoid the timeout approach" });
+    const c = cmd({ cmd: "start-agent", item: "i-a", prompt: "Fix it in the product, not with a wait.", reason: "avoid the timeout approach" });
     run(sc, c);
     const plan = sc.plan(`author:i-a:start:${c.id}`);
     assert.equal(plan.agent?.resume, false);
     assert.notEqual(plan.agent?.sessionId, "s-1");
-    assert.match(String(plan.agent?.vars?.failureSummary), /Note from the factory: avoid the timeout approach/);
+    assert.equal(plan.name, "investigate-and-fix");
+    assert.match(String(plan.agent?.vars?.failureSummary), /Instructions for this run: Fix it in the product, not with a wait\./);
     sc.complete(`author:i-a:start:${c.id}`, { report: { state: "left as-is", summary: "s", cause: "c", verification: "v", commits: [], landsAfter: [], feedback: [] } });
     const fix = cmd({ cmd: "comment-fix", patch: "p-a", text: "x" });
     run(sc, fix);
     assert.equal(sc.plan(`author:i-a:comment:${fix.id}`).agent?.sessionId, plan.agent?.sessionId);
-    run(sc, cmd({ cmd: "start-agent", item: "i-a", prompt: "review-patch", reason: "r" }));
-    assert.equal(executed(sc).at(-1)?.ok, false);
+    run(sc, cmd({ cmd: "start-agent", item: "i-nope", prompt: "x", reason: "r" }));
+    assert.equal(executed(sc).at(-1)?.ok, false, "an item without an earlier run can't be started again");
   });
 });
