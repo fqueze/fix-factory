@@ -459,7 +459,7 @@ export const GENERIC_MESSAGES: { pattern: RegExp; why: string }[] = [
     why: "assertion without a description: only the function name says where",
   },
   {
-    pattern: /^(\[[\w$.]+ : <n>\] )?((undefined|null) )?- got [^,]*, expected .*$/,
+    pattern: /^(\[[\w$.]+ : <n>\] )?((undefined|null) )?- got .*, expected .*$/,
     why: "assertion without a description",
   },
 ];
@@ -472,11 +472,12 @@ export function normalizeMessage(message: string): string {
   let m = message.trim();
   m = m.replace(/^TEST-UNEXPECTED-[A-Z]+ \| [^|]+ \| /, "");
   m = m.replace(/\{?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\}?/gi, "<uuid>");
-  // URLs keep their path, with the port after the host normalized. Unix and Windows paths with at
+  // URLs keep their path, with the port after the host normalized; file:// URLs are left to the
+  // path rule, since their paths hold temporary directories. Unix and Windows paths with at
   // least two components become <path>, except a source file, which keeps its name: it says where
   // the code failed, while other paths (profile dirs, test data) differ between runs.
   m = m.replace(
-    /\b((?:file|resource|chrome|moz-extension|https?):\/\/[^\s'"()`]*)|(?<![\w:])(?:[A-Za-z]:)?(?:[\\/][\w.@~+-]+){2,}/gi,
+    /\b((?:resource|chrome|moz-extension|https?):\/\/[^\s'"()`]*)|(?<![\w:])(?:[A-Za-z]:)?(?:[\\/][\w.@~+-]+){2,}/gi,
     (match, url: string | undefined) => {
       if (url) return url.replace(/^([a-z-]+:\/\/[^/:]*):\d+/i, "$1:<port>");
       const base = match.split(/[\\/]/).pop() ?? "";
@@ -691,11 +692,13 @@ export function buildTryTable(t: FxTry, jobs: TreeherderJob[], tasks: Map<string
     }
   }
   // Only for jobs fx-tests task couldn't read: the push view mixes the messages of every config.
+  // Runs with result "retry" are superseded by their rerun, whatever the push view says about them.
+  const superseded = new Set(jobs.filter((j) => j.result === "retry").map((j) => `${j.task_id}.${j.retry_id}`));
   for (const f of tryFailures(t)) {
     for (const x of f.taskIds ?? []) {
       const id = `${x.taskId}.${x.retryId}`;
       const r = tasks.get(id);
-      if (r?.ok) continue;
+      if (r?.ok || superseded.has(id)) continue;
       addFail(f.path, configOf(x.jobName), messagesOf(f), x.taskId);
       // A job fx-tests task couldn't read stays unparsed: its other tests have no result at all.
       if (!r) blamed.add(id);

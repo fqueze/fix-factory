@@ -242,6 +242,32 @@ test("try-table: a run with result retry is ignored in favour of its rerun", asy
   assert.deepEqual(t.rows, before.rows);
 });
 
+test("try-table: the push view's failures on a retried run don't count when the rerun differs", async () => {
+  const capture: TryCapture = load("try-b0e7e1700424.json");
+  const names = capture.jobs.job_property_names;
+  const [taskIdx, retryIdx, resultIdx] = ["task_id", "retry_id", "result"].map((n) => names.indexOf(n));
+  const linux = "RZLa8YCLTly4eYhOPFYYyA";
+  const dmd = "memory/replace/dmd/test/test_dmd.js";
+  const row = capture.jobs.results.find((r) => r[taskIdx] === linux)!;
+  const retried = [...row];
+  retried[resultIdx] = "retry";
+  row[retryIdx] = 1;
+  capture.jobs.results.push(retried);
+  const r = capture.tasks[`${linux}.0`];
+  assert.ok(r.ok);
+  delete capture.tasks[`${linux}.0`];
+  // The rerun: test_dmd passed this time. The push view still blames run 0 for it.
+  capture.tasks[`${linux}.1`] = {
+    ok: true,
+    task: { ...r.task, retryId: 1, failures: r.task.failures.filter((f) => f.path !== dmd), passed: [...(r.task.passed ?? []), { path: dmd, statuses: ["PASS"] }] },
+  };
+  const t = await tryTable("b0e7e1700424", {}, deps(capture));
+  const cell = t.rows.find((x) => x.test === dmd && x.config === "test-linux2404-64/opt-xpcshell");
+  assert.equal(cell?.result, "pass");
+  assert.deepEqual(cell.taskIds, [linux]);
+  assert.deepEqual(t.unparsed, []);
+});
+
 test("try-table: a failure with passing retriggers lists them", async () => {
   const capture: TryCapture = load("try-fbbe37af13b3.json");
   const t = await tryTable("fbbe37af13b3", {}, deps(capture));
@@ -331,6 +357,11 @@ test("normalizeMessage strips numbers, hex, uuids, paths, timings, pids and port
   assert.equal(normalizeMessage("Connection to http://localhost:49152/foo refused after 1500ms"), normalizeMessage("Connection to http://localhost:8080/foo refused after 3 s"));
   assert.equal(normalizeMessage("[Parent 1234, Main Thread] WARNING"), normalizeMessage("[Parent 98, Main Thread] WARNING"));
   assert.equal(normalizeMessage("Failed to load URL: 804b0014"), "failed to load url: <hex>");
+  // file:// URLs hold temporary directories: the same failure must normalize the same.
+  assert.equal(
+    normalizeMessage("Could not read file:///tmp/xpc-other-Ab3kQz/data/foo.txt"),
+    normalizeMessage("Could not read file:///tmp/xpc-other-Zz9pLm/data/foo.txt"),
+  );
   // Only the port after a host; line and column numbers stay part of the URL.
   assert.equal(
     normalizeMessage("error at resource://testing-common/sinon-7.2.7.js:1234:56"),
@@ -355,6 +386,7 @@ test("generic messages", () => {
     " - Got 2, expected 3",
     "undefined - Got 2, expected 3",
     "uncaught exception: [object Object]",
+    '- got "a, b", expected "c"',
     "Test timed out.",
     "",
   ]) {
