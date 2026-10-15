@@ -1,7 +1,7 @@
 import type { BugDraft, InvestigateReport, ItemView, JobView, PatchView, PushView, RequestState, StackView } from "../../types.ts";
 import { ITEM_STATES } from "../commands.ts";
 import { html, join, type Html } from "../html.ts";
-import { actionsSummary, approvePushControls, bugBox, commandDetails, copyButton, recoveryPlan, recoveryPlanFor, stackViewerLink, summaryId } from "./actions.ts";
+import { actionsSummary, approvePushControls, bugBox, commandDetails, copyButton, recoveryPlan, recoveryPlanFor, stackViewerLink, summaryId, youSaid } from "./actions.ts";
 import {
   bugUrl,
   commandFields,
@@ -47,6 +47,7 @@ export function renderRequest(r: RequestState, ctx: RenderContext, open = ctx.op
     <summary>
       <span class="rname">${requestName(r)}</span>
       <span class="rsum">${requestSummary(r)}</span>
+      ${requestWork(r, ctx)}
       <span class="rright">${cost > 0 ? html`<span class="hide-sm" title="Agent cost so far">${formatCost(cost)}</span>` : null}<span class="step">${stepLabel(r)}</span><a class="btn small" href="${profileUrl(ctx, r.id)}" target="_blank" rel="noopener">Profile</a></span>
       ${actionsSummary(r)}
     </summary>
@@ -83,6 +84,18 @@ export function requestSummary(r: RequestState): string {
   return parts.join(" · ");
 }
 
+// Jobs without an item (recover, route-request, plan-try-pushes, try watch…) have no group row
+// to show them while they run.
+function requestWork(r: RequestState, ctx: RenderContext): Html | null {
+  const running = Object.values(r.jobs).filter((j) => j.item === undefined && j.endedAt === undefined);
+  if (!running.length) {
+    return null;
+  }
+  return html`<div class="rwork">${running.map(
+    (j) => html`<div title="${j.name}"><span class="st run">${jobLabel(j.name)}</span>${j.model ? ` · ${modelLabel(j.model)}` : null} · ${elapsed(j.startedAt, ctx)}</div>`,
+  )}</div>`;
+}
+
 export function renderRequestBody(r: RequestState, ctx: RenderContext): Html {
   const back = requestUrl(r.id);
   const stacks = Object.values(r.stacks);
@@ -96,6 +109,7 @@ export function renderRequestBody(r: RequestState, ctx: RenderContext): Html {
   const plans = r.recoveryPlans.filter((p) => !shownPlans.has(p));
 
   return html`<div class="rbody">
+    ${requestWork(r, ctx)}
     ${configLine(r)}
     ${r.metaBug ? metaBugLine(r, back) : null}
     ${stacks.map((s) => stackSection(r, s, ctx))}
@@ -103,7 +117,7 @@ export function renderRequestBody(r: RequestState, ctx: RenderContext): Html {
     ${items.length ? html`<h3>${stacks.length ? "Other groups" : "Failure groups"}</h3>${groupTable(r, items, ctx)}` : null}
     ${planned.length ? html`<h3>Try plan <span class="sub">· waiting for your approval</span></h3><table><tbody>${planned.map((p) => html`<tr><td class="res plan">push ${p.id}</td><td>${p.purpose}${p.taskCount === undefined ? null : html` · ${p.taskCount} tasks`}</td><td>${commandDetails(p)}</td></tr>`)}</tbody></table><div style="margin-top:6px">${approvePushControls(r, planned, back)}</div>` : null}
     ${sent.length ? html`<h3>Try pushes</h3><table><tbody>${sent.map(pushRow)}</tbody></table>` : null}
-    ${plans.length ? html`<details style="margin-top:10px"><summary class="sub">Earlier recovery plans (${plans.length})</summary>${plans.map((p) => html`<div class="action"><span class="flag">Recovery plan</span> <span class="why">You said: “${p.text}”</span>${recoveryPlan(r, p, back)}</div>`)}</details>` : null}
+    ${plans.length ? html`<details style="margin-top:10px"><summary class="sub">Earlier recovery plans (${plans.length})</summary>${plans.map((p) => html`<div class="action"><span class="flag">Recovery plan</span> ${youSaid(`You said: “${p.text}”`)}${recoveryPlan(r, p, back)}</div>`)}</details>` : null}
     ${recentJobs(r, ctx)}
     ${r.notes.length ? html`<h3>Notes</h3>${r.notes.slice(-5).map((n) => html`<div class="sub">${formatDate(n.t)} · ${n.text}</div>`)}` : null}
     <form class="ask cmd" style="margin-top:10px" method="post" action="/api/commands">${commandFields([{ cmd: "tell-factory", request: r.id }], back)}<input type="text" name="text" required placeholder="Tell the factory about this request…"><button class="btn">Send</button></form>

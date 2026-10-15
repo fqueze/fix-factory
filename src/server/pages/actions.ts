@@ -1,6 +1,6 @@
 import type { NeedsUser, PlannedCommand, PushView, RequestState, StackView } from "../../types.ts";
 import { html, join, type Html } from "../html.ts";
-import { actionKind, commandFields, enterBugUrl, requestUrl, stackOfPatch, submitChecks } from "./common.ts";
+import { actionKind, commandFields, enterBugUrl, jobLabel, requestUrl, stackOfPatch, submitChecks } from "./common.ts";
 
 // The ⚑ area of one open needs-user entry: what you're asked, why, and the buttons.
 export function renderAction(r: RequestState, n: NeedsUser): Html {
@@ -48,7 +48,7 @@ export function renderAction(r: RequestState, n: NeedsUser): Html {
     case "recovery": {
       const plan = recoveryPlanFor(r, n);
       return plan
-        ? html`<div class="action" data-key="${n.key}"><span class="flag">${n.action}</span> <span class="why">${n.detail || html`You said: “${plan.text}”`}</span>${recoveryPlan(r, plan, back)}</div>`
+        ? html`<div class="action" data-key="${n.key}"><span class="flag">${n.action}</span> ${youSaid(n.detail || `You said: “${plan.text}”`)}${recoveryPlan(r, plan, back)}</div>`
         : html`<div class="action" data-key="${n.key}"><span class="flag">${n.action}</span> <span class="why">${n.detail}</span></div>`;
     }
     case "other":
@@ -126,24 +126,54 @@ function mozPhabButton(request: string, stack: StackView, disabled: boolean): Ht
   }>Copy the moz-phab command</button>`;
 }
 
-function plannedTarget(c: PlannedCommand, r: RequestState): string {
+// A planned command in plain words.
+function plannedText(c: PlannedCommand, r: RequestState): string {
   switch (c.cmd) {
     case "retry-job":
+      return `retry ${jobName(r, c.job)}`;
     case "cancel-job":
-      return r.jobs[c.job]?.name ?? c.job;
+      return `stop ${jobName(r, c.job)}`;
     case "resume-agent":
-      return `${itemLabel(r, c.item)}: “${c.message}”`;
+      return `tell ${itemLabel(r, c.item)}’s author: “${c.message}”`;
     case "start-agent":
-      return `${itemLabel(r, c.item)}: ${c.prompt}`;
+      return c.prompt === "investigate-and-fix" ? `restart the investigation of ${itemLabel(r, c.item)}` : `start ${jobLabel(c.prompt)} again for ${itemLabel(r, c.item)}`;
     case "set-state":
-      return `${itemLabel(r, c.item)} → ${c.state}`;
+      return `mark ${itemLabel(r, c.item)} as ${c.state}`;
     case "redo-step":
-      return c.item ? `${itemLabel(r, c.item)}: ${c.step}` : c.step;
+      return `redo step ${c.step}${c.item ? ` for ${itemLabel(r, c.item)}` : ""}`;
     case "edit-config":
-      return JSON.stringify(c.config);
+      return `change the request config: ${JSON.stringify(c.config)}`;
     case "shell":
-      return `${c.cwd}$ ${c.command}`;
+      return `run in ${c.cwd}: ${c.command}`;
   }
+}
+
+function plannedLabel(c: PlannedCommand, r: RequestState): Html {
+  switch (c.cmd) {
+    case "edit-config":
+      return html`change the request config <code>${JSON.stringify(c.config)}</code>`;
+    case "shell":
+      return html`run in <code>${c.cwd}</code>: <code>${c.command}</code>`;
+    default:
+      return html`${plannedText(c, r)}`;
+  }
+}
+
+// The job's label, and its group when it has one. A plan can name a job the state doesn't have.
+function jobName(r: RequestState, id: string): string {
+  const j = r.jobs[id];
+  if (!j) {
+    return id;
+  }
+  if (j.item === undefined) {
+    return jobLabel(j.name);
+  }
+  return j.name === "investigate-and-fix" ? `the investigation of ${itemLabel(r, j.item)}` : `${jobLabel(j.name)} of ${itemLabel(r, j.item)}`;
+}
+
+// What you told the factory, on one line; the full text in the title.
+export function youSaid(text: string): Html {
+  return html`<span class="why clamp1" title="${text}">${text}</span>`;
 }
 
 function itemLabel(r: RequestState, item: string): string {
@@ -152,15 +182,15 @@ function itemLabel(r: RequestState, item: string): string {
 }
 
 export function recoveryPlan(r: RequestState, plan: RequestState["recoveryPlans"][number], back: string): Html {
-  return html`<form class="inline cmd" method="post" action="/api/commands"><input type="hidden" name="back" value="${back}"><ul>${plan.plan.map(
+  return html`<form class="inline cmd" method="post" action="/api/commands"><input type="hidden" name="back" value="${back}"><ul class="plan">${plan.plan.map(
     (c) =>
       // The shell escape hatch is opt-in; everything else is checked.
-      html`<li><label><input type="checkbox" name="command" value="${JSON.stringify({ ...c, request: r.id })}"${c.cmd === "shell" ? null : html` checked`}> <code>${c.cmd}</code> ${
-        c.cmd === "shell" ? html`<code>${plannedTarget(c, r)}</code>` : plannedTarget(c, r)
-      } <span class="sub">${c.reason}</span></label></li>`,
-  )}${plan.cannotDo.map((t) => html`<li>✋ Can't do: ${t}</li>`)}${plan.questions.map((t) => html`<li>❓ ${t}</li>`)}</ul>${
-    plan.plan.length ? html`<button class="btn small primary">Run checked</button>` : null
-  }</form><form class="inline cmd" method="post" action="/api/commands">${commandFields([{ cmd: "reply-recovery", request: r.id, job: plan.job }], back)}<input type="text" name="text" required placeholder="Reply…"><button class="btn small">Reply</button></form>`;
+      html`<li><label title="${plannedText(c, r)}"><input type="checkbox" name="command" value="${JSON.stringify({ ...c, request: r.id })}"${c.cmd === "shell" ? null : html` checked`}> ${plannedLabel(c, r)}</label><span class="reason clamp1" data-expand>${c.reason}</span></li>`,
+  )}</ul>${plan.plan.length ? html`<button class="btn small primary">Run checked</button>` : null}</form>${
+    plan.cannotDo.length || plan.questions.length
+      ? html`<ul class="plan-notes">${plan.cannotDo.map((t) => html`<li>✋ Can't do: ${t}</li>`)}${plan.questions.map((t) => html`<li>❓ ${t}</li>`)}</ul>`
+      : null
+  }<form class="inline cmd" method="post" action="/api/commands">${commandFields([{ cmd: "reply-recovery", request: r.id, job: plan.job }], back)}<input type="text" name="text" required placeholder="Reply…"><button class="btn small">Reply</button></form>`;
 }
 
 export function actionsSummary(r: RequestState): Html {

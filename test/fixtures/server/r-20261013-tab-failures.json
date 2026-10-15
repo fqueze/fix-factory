@@ -141,6 +141,37 @@
       "exitCode": 0,
       "durationMs": 240000,
       "costUsd": 0.88
+    },
+    "j-artifacts": {
+      "job": "j-artifacts",
+      "kind": "script",
+      "name": "artifacts.ts fetch",
+      "cmd": [
+        "node"
+      ],
+      "cwd": "/build/fix-factory-state",
+      "pid": 1000,
+      "pidStartTime": 1,
+      "startedAt": "2026-10-15T07:00:00.000Z",
+      "item": "i-drag",
+      "endedAt": "2026-10-15T07:01:00.000Z",
+      "exitCode": 1,
+      "durationMs": 60000,
+      "error": "HTTP 503 from taskcluster"
+    },
+    "j-recover-2": {
+      "job": "j-recover-2",
+      "kind": "agent",
+      "name": "recover",
+      "cmd": [
+        "node"
+      ],
+      "cwd": "/build/fix-factory-state",
+      "pid": 1000,
+      "pidStartTime": 1,
+      "startedAt": "2026-10-15T08:59:00.000Z",
+      "model": "opus",
+      "sessionId": "7d2a"
     }
   },
   "needsUser": [
@@ -163,6 +194,42 @@
           "item": "i-spinner",
           "message": "Stop and report what you have.",
           "reason": "Its last 40 min were repeated --repeat 50 runs with 0 failures."
+        },
+        {
+          "cmd": "start-agent",
+          "item": "i-pin",
+          "prompt": "investigate-and-fix",
+          "reason": "The first run died when the build slot was taken away; nothing was lost but its session."
+        },
+        {
+          "cmd": "set-state",
+          "item": "i-mute",
+          "state": "left as-is",
+          "reason": "Bug 2081413 already covers it and dao is on it."
+        },
+        {
+          "cmd": "retry-job",
+          "job": "j-artifacts",
+          "reason": "Taskcluster answered 503 at 07:00; it is back up."
+        },
+        {
+          "cmd": "cancel-job",
+          "job": "j-inv-spinner",
+          "reason": "If the report has no lead: six hours without a reproduction."
+        },
+        {
+          "cmd": "redo-step",
+          "step": "work list",
+          "reason": "The try push was retriggered since the work list was made, and two more groups failed."
+        },
+        {
+          "cmd": "edit-config",
+          "config": {
+            "platforms": [
+              "linux64/debug"
+            ]
+          },
+          "reason": "You said only Linux debug matters."
         },
         {
           "cmd": "shell",

@@ -56,7 +56,7 @@ describe("overview", () => {
   });
 
   it("has the header strip and the global Tell the factory box", () => {
-    assert.match(page, /agents <b>7\/10<\/b>/);
+    assert.match(page, /agents <b>8\/10<\/b>/);
     assert.match(page, /<b>8<\/b> requests need you/);
     assert.ok(page.includes(cmd({ cmd: "tell-factory" })));
     assert.doesNotMatch(page, /New request|new-request/);
@@ -115,13 +115,48 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.match(h, /<span class="st closed">handed back<\/span><span class="detail">: bug 2081413, dao active<\/span>/);
     assert.match(h, /<span class="st wait">waiting for a build slot<\/span>/);
     const boxes = h.match(/<input type="checkbox" name="command"[^>]*>/g) ?? [];
-    assert.equal(boxes.length, 2);
+    assert.equal(boxes.length, 8);
     assert.match(boxes[0], / checked>$/);
-    assert.doesNotMatch(boxes[1], /checked/, "shell commands are opt-in");
+    assert.doesNotMatch(boxes[7], /checked/, "shell commands are opt-in");
     assert.match(h, /Run checked/);
     assert.ok(h.includes(cmd({ cmd: "reply-recovery", request: "r-20261013-tab-failures", job: "j-recover" })));
     assert.match(h, /Can't do: Read the profile/);
     assert.match(h, /Should the next attempt use a debug build\?/);
+  });
+
+  it("4. investigate and fix: one plain-words line per planned command, its reason clamped, notes after the list", () => {
+    const h = expanded("r-20261013-tab-failures");
+    const labels = [...h.matchAll(/<li><label title="([^"]*)"><input type="checkbox"[^>]*> (.*?)<\/label><span class="reason clamp1" data-expand>/g)].map((m) => [m[1], m[2]]);
+    assert.deepEqual(
+      labels.map(([title]) => title),
+      [
+        "tell browser_tabSpinner.js’s author: “Stop and report what you have.”",
+        "restart the investigation of browser_pinnedTabs.js",
+        "mark browser_mute.js as left as-is",
+        "retry fetch test artifacts of browser_tab_drag_drop.js",
+        "stop the investigation of browser_tabSpinner.js",
+        "redo step work list",
+        "change the request config: {&quot;platforms&quot;:[&quot;linux64/debug&quot;]}",
+        "run in /build/worktrees/spinner: git stash list",
+      ],
+    );
+    assert.equal(labels[7][1], "run in <code>/build/worktrees/spinner</code>: <code>git stash list</code>");
+    assert.match(h, /<span class="reason clamp1" data-expand>Taskcluster answered 503 at 07:00; it is back up\.<\/span>/);
+    const list = h.indexOf('<ul class="plan">');
+    const notes = h.indexOf('<ul class="plan-notes">');
+    assert.ok(list >= 0 && notes > h.indexOf("</ul>", list), "Can't do and questions come after the list");
+    assert.match(h, /<span class="why clamp1" title="You said: “the browser_tabSpinner agent has been at it for 6 hours”">/);
+  });
+
+  it("4. investigate and fix: a running request-level job shows in the summary line and at the top of the body", () => {
+    const h = expanded("r-20261013-tab-failures");
+    const work = /<div class="rwork"><div title="recover"><span class="st run">recovery plan<\/span> · Opus · <span data-since="2026-10-15T08:59:00.000Z">1 min<\/span><\/div><\/div>/g;
+    const summary = h.indexOf("</summary>");
+    const found = [...h.matchAll(work)].map((m) => m.index);
+    assert.equal(found.length, 2);
+    assert.ok(found[0] < summary && found[1] > h.indexOf('<div class="rbody">'));
+    const collapsed = renderRequest(get("r-20261015-sessionstore"), ctx, false).value;
+    assert.match(collapsed, /<div title="route-request"><span class="st run">route request<\/span> · Sonnet · <span data-since/);
   });
 
   it("4. investigate and fix: Bug to file link and the paste-number/comment box", () => {

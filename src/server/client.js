@@ -122,9 +122,12 @@
   // Clicks in a ⚑ area that aren't on a control mustn't fold the request.
   document.addEventListener("click", function (event) {
     var t = event.target;
-    if (t.closest && t.closest("summary .action") && !t.closest("button, a, input, textarea, select, label")) {
+    if (!t.closest) return;
+    if (t.closest("summary .action") && !t.closest("button, a, input, textarea, select, label")) {
       event.preventDefault();
     }
+    var clamped = t.closest("[data-expand]");
+    if (clamped) clamped.classList.toggle("open");
   });
 
   document.addEventListener("submit", function (event) {
