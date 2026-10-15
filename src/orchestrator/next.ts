@@ -1102,24 +1102,22 @@ class Planner {
 
   private verify(): void {
     if (this.s.step !== "verify on try") return;
+    // Every verification push's failures are routed, also those of a stack being redone: its
+    // other authors still need to hear about theirs.
+    for (const push of Object.values(this.s.pushes)) {
+      const stack = this.view.byKey.get(`dry-run:${push.id}`)?.[0].purpose.stack;
+      if (stack && this.s.stacks[stack] && push.rev) this.routeTryFailures(push.id, this.s.stacks[stack].order.map((pid) => this.s.patches[pid]));
+    }
     let green = this.stackInfos.size > 0;
     for (const info of this.stackInfos.values()) {
       const pushes = info.ready ? this.verifyPushes(info) : undefined;
-      if (!pushes) {
-        green = false;
-        continue;
-      }
-      for (const push of pushes) {
-        this.routeTryFailures(push, info);
-        if (this.s.pushes[push]?.result !== "green") green = false;
-      }
+      if (!pushes || pushes.some((push) => this.s.pushes[push]?.result !== "green")) green = false;
     }
     if (green) this.setStep("meta bug");
   }
 
-  private routeTryFailures(push: PushId, info: StackInfo): void {
+  private routeTryFailures(push: PushId, patches: PatchView[]): void {
     const p = this.s.pushes[push];
-    const patches = info.patches.map((x) => this.s.patches[x.id]);
     for (const run of this.pushRuns(push)) {
       const table = this.want(`try-table:${push}:${run}`, () => this.cli("try-table", "failures.ts", ["try-table", p.rev!], { purpose: { push } }));
       if (!table) continue;
@@ -1279,7 +1277,8 @@ class Planner {
     const revisions = Object.values(this.s.patches).filter((p) => p.revision !== undefined);
     if (revisions.length > 0 && this.pollDue()) {
       const n = this.view.jobs.filter((j) => j.purpose.what === "poll").length;
-      this.want(`poll:${n}`, () => this.cli("poll", "phab.ts", ["poll", ...revisions.map((p) => `D${p.revision}`)], { priority: REVIEW_PRIORITY }));
+      const ds = revisions.map((p) => p.revision!).sort((a, b) => a - b);
+      this.want(`poll:${n}`, () => this.cli("poll", "phab.ts", ["poll", ...ds.map((d) => `D${d}`)], { priority: REVIEW_PRIORITY }));
     }
     const lastPoll = this.view.jobs.filter((j) => j.purpose.what === "poll" && succeeded(j)).at(-1);
     for (const n of this.s.needsUser.filter((x) => x.key.startsWith("resubmit:"))) {
@@ -1374,7 +1373,8 @@ class Planner {
     for (const st of Object.values(this.s.stacks)) {
       const ps = st.order.map((pid) => this.s.patches[pid]);
       const fresh = (p: PatchView) => p.review?.comments.some((c) => !c.done) ?? false;
-      const h = shortHash(ps.map((p) => `${p.id}:${p.sha}:${accepted(p)}:${landed(p)}:${fresh(p)}`));
+      // What makes patches landable, not their order or shas: the reorder below changes those.
+      const h = shortHash(ps.map((p) => `${p.id}:${accepted(p)}:${landed(p)}:${fresh(p)}`).sort());
       const file = dataPath(this.config, this.s.id, `landable-${st.id}-${h}.json`);
       const ord = this.want(`order-landable:${st.id}:${h}`, () =>
         this.cli("order", "stack.ts", ["order", file, "--landable"], {
@@ -1395,7 +1395,7 @@ class Planner {
       if (!ord) continue;
       const o = this.out<OrderOutput>(ord);
       if (!o.landable?.length || o.landable.every((pid) => landed(this.s.patches[pid]))) continue;
-      if (o.order.join() !== st.order.join()) {
+      if (o.order.join() !== st.order.join() || this.view.byKey.has(`rewrite-land:${st.id}:${h}`)) {
         const rw = this.want(`rewrite-land:${st.id}:${h}`, () =>
           this.cli("rewrite", "stack.ts", ["rewrite", "--cwd", st.worktree, "--base", st.base ?? this.config.baseRef, "--branch", st.branch, "--order", o.order.map((pid) => this.s.patches[pid].sha).join(",")], {
             cwd: st.worktree,
@@ -1405,6 +1405,11 @@ class Planner {
         if (!rw) continue;
         if (this.out<{ conflict?: { sha: string; files: string[] } }>(rw).conflict) {
           this.raise(`failed:${rw.job}`, { action: "Conflict while moving landable patches down", detail: "stack.ts rewrite stopped on a conflict", job: rw.job, stack: st.id });
+          continue;
+        }
+        if (o.order.join() !== st.order.join()) {
+          const { id, ...rest } = st;
+          this.event(this.ev("stack", { stack: id, ...rest, order: o.order }));
           continue;
         }
         const adapts = o.flippedSoftDeps.map((d, i) =>

@@ -1,0 +1,847 @@
+// One test per step transition of docs/MVP.md, plus the rules of docs/ORCHESTRATOR.md.
+import { describe, it } from "node:test";
+import assert from "node:assert/strict";
+import { config, HOUR, ID, Scenario, sha } from "./testkit.ts";
+
+const parse = { config: { folders: [], tests: [], platforms: [], constraints: [] }, questions: [], feedback: [] };
+const none = { verdict: "none", quote: "no bug", feedback: [] };
+const ok = { verdict: "ok", findings: [], feedback: [] };
+const lintOk = { ok: true, violations: [] };
+const fixed = (commits: string[], extra = {}) => ({ state: "fix verified locally", summary: "fixed", cause: "c", verification: "v", commits, landsAfter: [], feedback: [], ...extra });
+const imported = (s: string, title: string, files: string[], bug: number | null = null) => [{ sha: s, title, bug, reviewers: [], files, insertions: 1, deletions: 0, testOnly: true }];
+const table = (rows: unknown[] = [], unparsed: unknown[] = []) => ({ rev: "abc", pushId: 1, project: "try", complete: true, pending: 0, configs: [], rows, unparsed });
+const failure = (test: string, message: string) => ({ test, config: "linux/opt-xpcshell", message, taskIds: ["T1"], count: 1 });
+const group = (key: string, test: string, message: string, rate = 1) => ({ key, message, tests: [test], configs: ["linux/opt-xpcshell"], ratePerWeek: rate, taskIds: ["T1"] });
+
+// A try-push request whose initial push has finished.
+function tryPushFinished(): Scenario {
+  const sc = new Scenario("try-push", { rev: "abc" });
+  sc.step();
+  sc.complete("parse", { report: parse });
+  sc.settle();
+  sc.complete("watch:initial", { output: "" });
+  sc.add({ type: "try-finished", request: ID, push: "initial", result: "failures", summary: "2 failures" });
+  return sc;
+}
+
+// The work list of tryPushFinished, with these groups.
+function workList(groups: ReturnType<typeof group>[]): Scenario {
+  const sc = tryPushFinished();
+  sc.step();
+  sc.complete("try-table:initial:final", { output: table() });
+  sc.complete("collect:initial:final", { output: groups.map((g) => failure(g.tests[0], g.message)) });
+  sc.step();
+  sc.complete("cluster:initial:final", { output: { groups, singles: [] } });
+  if (groups.length > 1) {
+    sc.step();
+    sc.complete("merge:initial:final", { report: { groups: groups.map((g) => ({ message: g.message, tests: g.tests, configs: g.configs, from: [g.key], reason: "unchanged" })), feedback: [] } });
+  }
+  sc.settle();
+  return sc;
+}
+
+// An item through prior art to its investigate-and-fix run.
+function investigating(sc: Scenario, item: string): void {
+  sc.settle();
+  sc.complete(`prior-art:${item}`, { output: { bugs: [] } });
+  sc.settle();
+  sc.complete(`prior-art-verdict:${item}`, { report: none });
+  sc.settle();
+  sc.complete(`wt:${item}`, { output: { name: `${ID}-${item}`, path: `/wt/${ID}-${item}`, branch: `${ID}-${item}` } });
+  sc.settle();
+}
+
+// The author reports a fix; import, lint and review all pass.
+function reviewed(sc: Scenario, item: string, commit: string, test: string, opts: { title?: string; bug?: number | null; report?: object } = {}): void {
+  sc.complete(`author:${item}:initial`, { report: fixed([commit], opts.report) });
+  sc.settle();
+  const author = sc.view().byKey.get(`author:${item}:initial`)![0].job;
+  sc.complete(`import:${author}`, { output: imported(commit, opts.title ?? `Bug XXXXXXX - Fix ${test}, r=smaug.`, [test], opts.bug ?? null) });
+  sc.settle();
+  const patch = `p-${item.slice(2)}`;
+  sc.complete(`msg:${patch}:${commit}`, { output: "Bug XXXXXXX - Fix\n\nBody.\n" });
+  sc.settle();
+  sc.complete(`lint:${patch}:${commit}`, { output: lintOk });
+  if (sc.view().byKey.has(`lint-bug:${author}`)) sc.complete(`lint-bug:${author}`, { output: lintOk });
+  sc.settle();
+  sc.complete(`review:${patch}:${author}`, { report: ok });
+  sc.settle();
+}
+
+describe("1. request", () => {
+  it("parses the request, then a try-push request goes to the work list with its push", () => {
+    const sc = new Scenario("try-push", { rev: "abc", text: "fix these" });
+    assert.deepEqual(sc.step(), ["parse"]);
+    const plan = sc.plan("parse");
+    assert.equal(plan.name, "parse-request");
+    assert.deepEqual(plan.agent?.vars, { kind: "try-push", text: "fix these" });
+    assert.deepEqual(sc.step(), []);
+    sc.complete("parse", { report: { ...parse, questions: ["which platforms?"] } });
+    assert.deepEqual(sc.state().config.questions, ["which platforms?"]);
+    assert.deepEqual(sc.settle(), ["watch:initial"]);
+    const s = sc.state();
+    assert.equal(s.step, "work list");
+    assert.equal(s.pushes.initial.rev, "abc");
+    assert.equal(sc.plan("watch:initial").kind, "try-watch");
+    assert.deepEqual(sc.plan("watch:initial").cli, { tool: "try.ts", args: ["watch", "abc"] });
+  });
+
+  it("a burndown goes to the first signal", () => {
+    const sc = new Scenario("burndown", { folder: "dom/base/test" });
+    sc.step();
+    sc.complete("parse", { report: parse });
+    sc.step();
+    assert.equal(sc.state().step, "first signal");
+  });
+});
+
+describe("2. first signal", () => {
+  const ann = (condition: string, kind = "skip-if") => ({ manifest: "dom/base/test/mochitest.toml", test: "test_a.html", kind, condition, line: 3, commit: null, bug: { id: 123, summary: "Intermittent", firstComment: "fails" }, commentBugs: [] });
+
+  function burndown(): Scenario {
+    const sc = new Scenario("burndown", { folder: "dom/base/test" });
+    sc.step();
+    sc.complete("parse", { report: parse });
+    sc.settle();
+    return sc;
+  }
+
+  it("lists the skips, classifies each, writes the annotation patches, reviews the run-if and plans the un-skip push", () => {
+    const sc = burndown();
+    assert.deepEqual(sc.view().jobs.filter((j) => !j.end).map((j) => j.purpose.key), ["annotations"]);
+    sc.complete("annotations", { output: [ann("os == 'mac'"), ann("debug", "fail-if"), ann("tsan")] });
+    assert.deepEqual(sc.settle().sort(), ["classify:0", "classify:2", "wt:signal"]);
+    assert.equal(sc.plan("classify:0").name, "classify-annotation");
+    assert.deepEqual(sc.plan("classify:0").agent?.vars, { annotation: "skip-if = os == 'mac'", manifest: "dom/base/test/mochitest.toml [test_a.html]", bug: 123, summary: "Intermittent", comment: "fails" });
+    sc.complete("classify:0", { report: { kind: "scoping", reason: "no mac", feedback: [] } });
+    sc.complete("classify:2", { report: { kind: "flakiness", reason: "races", feedback: [] } });
+    assert.deepEqual(sc.settle(), []);
+    sc.complete("wt:signal", { output: { name: `${ID}-signal`, path: `/wt/${ID}-signal`, branch: `${ID}-signal` } });
+    assert.deepEqual(sc.settle(), ["author:i-annotations:initial"]);
+    const author = sc.plan("author:i-annotations:initial");
+    assert.equal(author.name, "write-annotation-patches");
+    assert.equal(author.cwd, `/wt/${ID}-signal`);
+    const annotations = JSON.parse(author.files![0].content);
+    assert.deepEqual(annotations.map((a: { kind: string }) => a.kind), ["scoping", "flakiness"]);
+    assert.equal(sc.state().items["i-annotations"].state, "investigating");
+
+    // The run-if commit goes through import, lint and critical review like any fix.
+    sc.complete("author:i-annotations:initial", { report: { runIf: sha("1"), debug: sha("2"), summary: "done", feedback: [] } });
+    const authorJob = sc.view().byKey.get("author:i-annotations:initial")![0].job;
+    assert.deepEqual(sc.settle(), [`import:${authorJob}`]);
+    sc.complete(`import:${authorJob}`, { output: imported(sha("1"), "Bug XXXXXXX - Turn scoping skips into run-if, r=jmaher.", ["dom/base/test/mochitest.toml"]) });
+    sc.settle();
+    sc.complete(`msg:p-annotations:${sha("1")}`, { output: "msg" });
+    sc.settle();
+    sc.complete(`lint:p-annotations:${sha("1")}`, { output: lintOk });
+    assert.deepEqual(sc.settle(), [`review:p-annotations:${authorJob}`]);
+    sc.complete(`review:p-annotations:${authorJob}`, { report: ok });
+    assert.deepEqual(sc.settle(), ["plan:unskip"]);
+    assert.equal(sc.state().items["i-annotations"].state, "reviewed");
+    const plan = sc.plan("plan:unskip");
+    assert.equal(plan.agent?.vars?.branch, `${ID}-signal`);
+    assert.equal(plan.agent?.vars?.failuresFile, "/state/requests/r-20261015-test/data/annotations.json");
+
+    sc.complete("plan:unskip", { report: { pushes: [{ purpose: "reproduce", tryArgs: ["fuzzy", "-q", "xpcshell"], rebuild: 10 }], feedback: [] } });
+    assert.deepEqual(sc.settle(), ["dry-run:unskip"]);
+    assert.deepEqual(sc.plan("dry-run:unskip").cli?.args, ["dry-run", "--cwd", `/wt/${ID}-signal`, "--", "fuzzy", "-q", "xpcshell"]);
+    sc.complete("dry-run:unskip", { output: { command: ["./mach", "try", "fuzzy", "-q", "xpcshell"], taskCount: 40, tasks: [], tryTaskConfig: {}, commits: [], warnings: ["artifact push"] } });
+    sc.settle();
+    assert.deepEqual(sc.open(), ["approve-push:unskip"]);
+    assert.equal(sc.state().needsUser[0].detail, "40 tasks · reproduce · artifact push");
+    assert.equal(sc.state().step, "first signal");
+
+    // Approved: pushed, watched, and the step moves on once the push exists.
+    sc.add({ type: "user-done", request: ID, key: "approve-push:unskip" });
+    assert.deepEqual(sc.settle(), ["push:unskip"]);
+    assert.deepEqual(sc.plan("push:unskip").cli?.args, ["push", "--cwd", `/wt/${ID}-signal`, "--", "fuzzy", "-q", "xpcshell"]);
+    sc.complete("push:unskip", { output: { landoJobId: 7, landoUrl: "l", treeherderUrl: "t" } });
+    assert.deepEqual(sc.settle(), ["watch:unskip"]);
+    assert.deepEqual(sc.plan("watch:unskip").cli?.args, ["watch", "--lando", "7"]);
+    sc.add({ type: "try-pushed", request: ID, push: "unskip", rev: "def", url: "u" });
+    sc.settle();
+    assert.equal(sc.state().step, "work list");
+  });
+
+  it("without skip-ifs, the work list comes from the folder's history on central", () => {
+    const sc = burndown();
+    sc.complete("annotations", { output: [ann("debug", "fail-if")] });
+    assert.deepEqual(sc.settle(), ["collect:folder:folder"]);
+    assert.equal(sc.state().step, "work list");
+    assert.deepEqual(sc.plan("collect:folder:folder").cli?.args, ["collect", "dom/base/test"]);
+  });
+});
+
+describe("try pushes", () => {
+  it("fetches the artifacts of each failed job as it arrives, once", () => {
+    const sc = new Scenario("try-push", { rev: "abc" });
+    sc.step();
+    sc.complete("parse", { report: parse });
+    sc.settle();
+    sc.add({ type: "try-job-failed", request: ID, push: "initial", taskId: "T1", retryId: 0, jobName: "j", platform: "p", result: "testfailed" });
+    assert.deepEqual(sc.step(), ["artifacts:T1:0"]);
+    assert.deepEqual(sc.plan("artifacts:T1:0").cli?.args, ["fetch", "T1", "--run", "0", "--into", "/state/cache/artifacts/T1"]);
+    assert.deepEqual(sc.step(), []);
+  });
+});
+
+describe("3. work list", () => {
+  it("runs when the push finishes: results table, failures, clusters, merge, items, then step 4", () => {
+    const sc = tryPushFinished();
+    assert.deepEqual(sc.step().sort(), ["collect:initial:final", "try-table:initial:final"]);
+    sc.complete("try-table:initial:final", { output: table() });
+    sc.complete("collect:initial:final", { output: [failure("a/test_a.js", "boom"), failure("b/test_b.js", "bang")] });
+    assert.deepEqual(sc.step(), ["cluster:initial:final"]);
+    assert.deepEqual(sc.plan("cluster:initial:final").cli?.args, ["cluster", `/state/jobs/${sc.view().byKey.get("collect:initial:final")![0].job}/out.log`]);
+    sc.complete("cluster:initial:final", { output: { groups: [group("ka", "a/test_a.js", "boom", 2)], singles: [group("kb", "b/test_b.js", "Test timed out")] } });
+    assert.deepEqual(sc.step(), ["merge:initial:final"]);
+    sc.complete("merge:initial:final", {
+      report: { groups: [{ message: "boom", tests: ["a/test_a.js", "b/test_b.js"], configs: ["c"], from: ["ka", "kb"], reason: "same crash" }], feedback: [] },
+    });
+    sc.step();
+    const s = sc.state();
+    assert.equal(s.step, "investigate and fix");
+    assert.deepEqual(Object.keys(s.items), ["i-test-a"]);
+    assert.equal(s.items["i-test-a"].folder, "a");
+    assert.equal(s.items["i-test-a"].group.ratePerWeek, 3);
+    assert.deepEqual(s.items["i-test-a"].group.tests, ["a/test_a.js", "b/test_b.js"]);
+  });
+
+  it("runs at 2 h when the push hasn't finished, then again when it finishes, adding only new groups", () => {
+    const sc = new Scenario("try-push", { rev: "abc" });
+    sc.step();
+    sc.complete("parse", { report: parse });
+    sc.settle();
+    sc.now += HOUR;
+    assert.deepEqual(sc.step(), []);
+    sc.now += HOUR;
+    assert.deepEqual(sc.step().sort(), ["collect:initial:early", "try-table:initial:early"]);
+    sc.complete("try-table:initial:early", { output: table() });
+    sc.complete("collect:initial:early", { output: [failure("a/test_a.js", "boom")] });
+    sc.step();
+    sc.complete("cluster:initial:early", { output: { groups: [group("ka", "a/test_a.js", "boom")], singles: [] } });
+    sc.settle();
+    assert.deepEqual(Object.keys(sc.state().items), ["i-test-a"]);
+    assert.equal(sc.state().step, "investigate and fix");
+
+    sc.add({ type: "try-finished", request: ID, push: "initial", result: "failures", summary: "s" });
+    assert.ok(sc.step().includes("collect:initial:final"));
+    sc.complete("try-table:initial:final", { output: table() });
+    sc.complete("collect:initial:final", { output: [failure("a/test_a.js", "boom"), failure("b/test_b.js", "bang")] });
+    sc.step();
+    sc.complete("cluster:initial:final", { output: { groups: [group("ka", "a/test_a.js", "boom"), group("kb", "b/test_b.js", "bang")], singles: [] } });
+    sc.step();
+    sc.complete("merge:initial:final", { report: { groups: [{ message: "boom", tests: ["a/test_a.js"], configs: [], from: ["ka"], reason: "unchanged" }, { message: "bang", tests: ["b/test_b.js"], configs: [], from: ["kb"], reason: "unchanged" }], feedback: [] } });
+    sc.step();
+    assert.deepEqual(Object.keys(sc.state().items), ["i-test-a", "i-test-b"]);
+  });
+
+  it("triages the jobs fx-tests couldn't parse: new failures become items, the rest is noted", () => {
+    const sc = tryPushFinished();
+    sc.step();
+    sc.complete("try-table:initial:final", { output: table([], [{ taskId: "T9", retryId: 0, jobName: "j", config: "c", result: "busted", reason: "crash" }]) });
+    sc.complete("collect:initial:final", { output: [] });
+    assert.deepEqual(sc.step(), ["triage:initial:final"]);
+    assert.equal(sc.plan("triage:initial:final").agent?.vars?.logsDir, "/state/cache/artifacts");
+    sc.complete("triage:initial:final", {
+      report: {
+        cells: [
+          { test: "c/test_c.js", config: "linux", verdict: "still failing", evidence: "TEST-UNEXPECTED-FAIL | c/test_c.js | crash" },
+          { taskId: "T8", verdict: "infra", evidence: "worker lost" },
+        ],
+        feedback: [],
+      },
+    });
+    sc.step();
+    assert.deepEqual(Object.keys(sc.state().items), ["i-test-c"]);
+    assert.match(sc.of("note")[0].text, /^Infra failures/);
+    assert.equal(sc.state().step, "investigate and fix");
+  });
+
+  it("ends the request when there's nothing to fix", () => {
+    const sc = tryPushFinished();
+    sc.step();
+    sc.complete("try-table:initial:final", { output: table() });
+    sc.complete("collect:initial:final", { output: [] });
+    sc.step();
+    assert.equal(sc.state().step, "done");
+  });
+});
+
+describe("4. investigate and fix", () => {
+  it("someone active: take-it waits for you, take it lets the item go on", () => {
+    const sc = workList([group("ka", "a/test_a.js", "boom")]);
+    assert.deepEqual(sc.view().jobs.filter((j) => !j.end).map((j) => j.purpose.key), ["prior-art:i-test-a"]);
+    sc.complete("prior-art:i-test-a", { output: { bugs: [] } });
+    sc.settle();
+    assert.match(String(sc.plan("prior-art-verdict:i-test-a").agent?.vars?.facts), /^in \/state\/jobs\/j-\d+\/out.log$/);
+    sc.complete("prior-art-verdict:i-test-a", { report: { verdict: "active", quote: "revision in review by janv", feedback: [] } });
+    assert.deepEqual(sc.settle(), []);
+    assert.deepEqual(sc.open(), ["take-it:i-test-a"]);
+    sc.add({ type: "user-done", request: ID, key: "take-it:i-test-a" });
+    assert.deepEqual(sc.settle(), ["wt:i-test-a"]);
+    const wt = sc.plan("wt:i-test-a");
+    assert.equal(wt.kind, "build");
+    assert.deepEqual(wt.cli?.args, ["create", `${ID}-i-test-a`, "--base", "origin/main", "--build", "artifact"]);
+  });
+
+  it("investigates in the worktree, imports the commits, lints, reviews; a bug draft asks you to file it", () => {
+    const sc = workList([group("ka", "a/test_a.js", "boom", 2)]);
+    investigating(sc, "i-test-a");
+    const author = sc.plan("author:i-test-a:initial");
+    assert.equal(author.name, "investigate-and-fix");
+    assert.equal(author.cwd, `/wt/${ID}-i-test-a`);
+    assert.equal(author.agent?.resume, false);
+    assert.match(String(author.agent?.vars?.failureSummary), /^"boom" on 1 configs, 2 failures\/week; the full group, with its configs and task ids, is in \/state\/requests\/.*\/data\/items\/i-test-a.json\.$/);
+    assert.equal(sc.state().items["i-test-a"].state, "investigating");
+
+    const draft = { product: "Core", component: "XPCOM", summary: "s", description: "d" };
+    sc.complete("author:i-test-a:initial", { report: fixed([sha("1")], { bugDraft: draft, landsAfter: [{ what: "D123", reason: "uses its helper" }] }) });
+    assert.equal(sc.state().items["i-test-a"].state, "fix verified locally");
+    const job = sc.view().byKey.get("author:i-test-a:initial")![0].job;
+    assert.deepEqual(sc.settle(), [`import:${job}`]);
+    assert.deepEqual(sc.plan(`import:${job}`).cli?.args, ["import", "--cwd", `/wt/${ID}-i-test-a`, `${sha("1")}^..${sha("1")}`]);
+    sc.complete(`import:${job}`, { output: imported(sha("1"), "Bug XXXXXXX - Fix test_a, r=smaug.", ["a/test_a.js"]) });
+    const patch = sc.state().patches["p-test-a"];
+    assert.equal(patch.bug, null);
+    assert.deepEqual(patch.bugDraft, draft);
+    assert.deepEqual(patch.deps.map((d) => d.needs), ["D123"]);
+    assert.deepEqual(sc.settle().sort(), [`lint-bug:${job}`, `msg:p-test-a:${sha("1")}`]);
+    sc.complete(`msg:p-test-a:${sha("1")}`, { output: "Bug XXXXXXX - Fix\n" });
+    assert.deepEqual(sc.settle(), [`lint:p-test-a:${sha("1")}`]);
+    sc.complete(`lint:p-test-a:${sha("1")}`, { output: lintOk });
+    sc.complete(`lint-bug:${job}`, { output: lintOk });
+    assert.deepEqual(sc.settle(), [`review:p-test-a:${job}`]);
+    assert.deepEqual(sc.open(), ["file-bug:p-test-a"]);
+    const review = sc.plan(`review:p-test-a:${job}`);
+    assert.deepEqual(review.agent?.vars, { sha: sha("1"), worktree: `/wt/${ID}-i-test-a`, report: `/state/requests/${ID}/reports/${job}.json` });
+    assert.notEqual(review.agent?.sessionId, author.agent?.sessionId);
+    assert.equal(sc.state().items["i-test-a"].state, "in critical review");
+    sc.complete(`review:p-test-a:${job}`, { report: ok });
+    sc.settle();
+    assert.equal(sc.state().items["i-test-a"].state, "reviewed");
+  });
+
+  it("lint violations go back to the author at most twice, then come to you", () => {
+    const sc = workList([group("ka", "a/test_a.js", "boom")]);
+    investigating(sc, "i-test-a");
+    const session = sc.plan("author:i-test-a:initial").agent!.sessionId;
+    let author = "author:i-test-a:initial";
+    for (let round = 0; round < 3; round++) {
+      const commit = sha(String(round + 1));
+      sc.complete(author, { report: fixed([commit]) });
+      sc.settle();
+      const job = sc.view().byKey.get(author)!.at(-1)!.job;
+      sc.complete(`import:${job}`, { output: imported(commit, "Bug XXXXXXX - Fix", ["a/test_a.js"]) });
+      sc.settle();
+      sc.complete(`msg:p-test-a:${commit}`, { output: "m" });
+      sc.settle();
+      sc.complete(`lint:p-test-a:${commit}`, { output: { ok: false, violations: [{ rule: "noHedging", line: 3, text: "probably" }] } });
+      const started = sc.settle();
+      if (round < 2) {
+        author = `author:i-test-a:lint:${job}`;
+        assert.deepEqual(started, [author]);
+        const plan = sc.plan(author);
+        assert.equal(plan.agent?.resume, true);
+        assert.equal(plan.agent?.sessionId, session);
+        assert.equal(plan.name, "investigate-and-fix");
+        assert.match(plan.agent?.message ?? "", /noHedging \(line 3\): probably/);
+      } else {
+        assert.deepEqual(started, []);
+        assert.ok(sc.open()[0].startsWith("failed:"));
+        assert.equal(sc.state().items["i-test-a"].state, "blocked");
+      }
+    }
+  });
+
+  it("critical review findings go back to the author for at most 3 rounds, then come to you", () => {
+    const sc = workList([group("ka", "a/test_a.js", "boom")]);
+    investigating(sc, "i-test-a");
+    let author = "author:i-test-a:initial";
+    for (let round = 0; round < 4; round++) {
+      const commit = sha(String(round + 1));
+      sc.complete(author, { report: fixed([commit]) });
+      sc.settle();
+      const job = sc.view().byKey.get(author)!.at(-1)!.job;
+      sc.complete(`import:${job}`, { output: imported(commit, "Bug 1 - Fix", ["a/test_a.js"], 1) });
+      sc.settle();
+      sc.complete(`msg:p-test-a:${commit}`, { output: "m" });
+      sc.settle();
+      sc.complete(`lint:p-test-a:${commit}`, { output: lintOk });
+      sc.settle();
+      sc.complete(`review:p-test-a:${job}`, { report: { verdict: "findings", findings: [{ severity: "must-fix", file: "a.js", line: 2, text: "guard on the victim's side" }], feedback: [] } });
+      const started = sc.settle();
+      if (round < 3) {
+        author = `author:i-test-a:review:${job}`;
+        assert.deepEqual(started, [author]);
+        assert.match(sc.plan(author).agent?.message ?? "", /\[must-fix\] a.js:2 guard on the victim's side/);
+        assert.equal(sc.state().items["i-test-a"].state, "review findings");
+      } else {
+        assert.deepEqual(started, []);
+        assert.equal(sc.state().items["i-test-a"].state, "blocked");
+        assert.equal(sc.state().needsUser[0].action, "No ok after 3 critical review rounds");
+      }
+    }
+  });
+
+  it("an author that leaves it as is ends the item; a blocked one comes to you", () => {
+    const sc = workList([group("ka", "a/test_a.js", "boom"), group("kb", "b/test_b.js", "bang")]);
+    investigating(sc, "i-test-a");
+    investigating(sc, "i-test-b");
+    sc.complete("author:i-test-a:initial", { report: { ...fixed([]), state: "left as-is", summary: "fixed on central" } });
+    sc.complete("author:i-test-b:initial", { report: { ...fixed([]), state: "blocked", summary: "needs a mac" } });
+    assert.deepEqual(sc.settle(), []);
+    assert.equal(sc.state().items["i-test-a"].state, "left as-is");
+    assert.equal(sc.state().items["i-test-b"].state, "blocked");
+    assert.equal(sc.state().needsUser.find((n) => n.item === "i-test-b")?.detail, "needs a mac");
+  });
+});
+
+describe("failures", () => {
+  it("retries a script once, then blocks it and shows you the error", () => {
+    const sc = workList([group("ka", "a/test_a.js", "boom")]);
+    sc.complete("prior-art:i-test-a", { exitCode: 1, error: "bugzilla is down" });
+    assert.deepEqual(sc.step(), ["prior-art:i-test-a"]);
+    assert.deepEqual(sc.plan("prior-art:i-test-a").cli?.args, ["prior-art", "a/test_a.js"]);
+    const second = sc.complete("prior-art:i-test-a", { exitCode: 1, error: "bugzilla is still down" });
+    assert.deepEqual(sc.step(), []);
+    const n = sc.state().needsUser[0];
+    assert.equal(n.key, `failed:${second}`);
+    assert.equal(n.detail, "bugzilla is still down");
+    assert.equal(n.job, second);
+    assert.equal(sc.state().items["i-test-a"].state, "blocked");
+    assert.deepEqual(sc.step(), []);
+  });
+
+  it("resumes an agent whose report doesn't match its schema with the errors, once", () => {
+    const sc = workList([group("ka", "a/test_a.js", "boom")]);
+    investigating(sc, "i-test-a");
+    const session = sc.plan("author:i-test-a:initial").agent!.sessionId;
+    sc.complete("author:i-test-a:initial", { error: "invalid report: $.commits: required" });
+    assert.deepEqual(sc.step(), ["author:i-test-a:initial"]);
+    const retry = sc.plan("author:i-test-a:initial");
+    assert.equal(retry.agent?.resume, true);
+    assert.equal(retry.agent?.sessionId, session);
+    assert.match(retry.agent?.message ?? "", /\$\.commits: required/);
+    sc.complete("author:i-test-a:initial", { error: "invalid report: $.commits: required" });
+    sc.step();
+    assert.ok(sc.open()[0].startsWith("failed:"));
+  });
+
+  it("does nothing after you cancel a job", () => {
+    const sc = workList([group("ka", "a/test_a.js", "boom")]);
+    sc.complete("prior-art:i-test-a", { exitCode: 143, error: "cancelled by you" });
+    assert.deepEqual(sc.step(), []);
+    assert.deepEqual(sc.open(), []);
+  });
+});
+
+// Two reviewed items in one folder, ready for step 5.
+function twoReviewed(): Scenario {
+  const sc = workList([group("ka", "a/test_a.js", "boom", 3), group("kb", "a/test_b.js", "bang", 1)]);
+  investigating(sc, "i-test-a");
+  investigating(sc, "i-test-b");
+  reviewed(sc, "i-test-a", sha("1"), "a/test_a.js");
+  reviewed(sc, "i-test-b", sha("2"), "a/test_b.js", { title: "Bug 22 - Fix test_b, r=smaug.", bug: 22 });
+  return sc;
+}
+
+// twoReviewed, assembled, ordered b then a, reviewed and summarized: step 6.
+function stacked(): Scenario {
+  const sc = twoReviewed();
+  sc.complete("wt:a", { output: { name: `${ID}-a`, path: `/wt/${ID}-a`, branch: `${ID}-a` } });
+  sc.settle();
+  const key = sc.view().jobs.find((j) => j.purpose.what === "assemble")!.purpose.key;
+  sc.complete(key, { output: { branch: `${ID}-a`, commits: [{ sha: sha("1"), newSha: sha("a") }, { sha: sha("2"), newSha: sha("b") }], skipped: [], empty: [] } });
+  sc.settle();
+  const hash = key.split(":")[2];
+  sc.complete(`deps:a:${hash}`, { output: [] });
+  sc.complete(`effort:p-test-a:${sha("1")}`, { report: { effort: 2, reason: "r", feedback: [] } });
+  sc.complete(`effort:p-test-b:${sha("2")}`, { report: { effort: 1, reason: "r", feedback: [] } });
+  sc.settle();
+  sc.complete(`order:a:${hash}`, { output: { order: ["p-test-b", "p-test-a"], flippedSoftDeps: [] } });
+  sc.settle();
+  sc.complete(`reorder:a:${hash}`, { output: { mapping: { [sha("b")]: sha("c"), [sha("a")]: sha("d") } } });
+  sc.settle();
+  sc.complete(`review-stack:a:${hash}`, { report: { findings: [], addDeps: [], removeDeps: [], feedback: [] } });
+  sc.settle();
+  sc.complete(`summary:a:${hash}`, { output: { markdown: "| table |", metaComment: "This stack fixes 2 failures." } });
+  sc.settle();
+  return sc;
+}
+
+describe("5. stack", () => {
+  it("assembles a settled folder, finds deps and efforts, orders, reviews the stack and summarizes it", () => {
+    const sc = twoReviewed();
+    assert.equal(sc.state().step, "stack");
+    assert.deepEqual(sc.view().jobs.filter((j) => !j.end).map((j) => j.purpose.key), ["wt:a"]);
+    sc.complete("wt:a", { output: { name: `${ID}-a`, path: `/wt/${ID}-a`, branch: `${ID}-a` } });
+    const [assemble] = sc.settle();
+    assert.match(assemble, /^assemble:a:[0-9a-f]{10}$/);
+    assert.deepEqual(sc.plan(assemble).cli?.args, ["assemble", "--cwd", `/wt/${ID}-a`, "--branch", `${ID}-a`, "--base", "origin/main", "--leave-conflict", sha("1"), sha("2")]);
+    sc.complete(assemble, { output: { branch: `${ID}-a`, commits: [{ sha: sha("1"), newSha: sha("a") }, { sha: sha("2"), newSha: sha("b") }], skipped: [], empty: [] } });
+    assert.equal(sc.state().patches["p-test-a"].sha, sha("a"));
+    assert.equal(sc.state().patches["p-test-a"].worktree, `/wt/${ID}-a`);
+    const hash = assemble.split(":")[2];
+    assert.deepEqual(sc.settle().sort(), [`deps:a:${hash}`, `effort:p-test-a:${sha("1")}`, `effort:p-test-b:${sha("2")}`]);
+    sc.complete(`deps:a:${hash}`, { output: [{ patch: sha("a"), needs: sha("b"), kind: "hard", reason: "textual", source: "textual" }] });
+    assert.deepEqual(sc.state().patches["p-test-a"].deps.map((d) => d.needs), ["p-test-b"]);
+    sc.complete(`effort:p-test-a:${sha("1")}`, { report: { effort: 2, reason: "r", feedback: [] } });
+    sc.complete(`effort:p-test-b:${sha("2")}`, { report: { effort: 1, reason: "r", feedback: [] } });
+    assert.deepEqual(sc.settle(), [`order:a:${hash}`]);
+    const input = JSON.parse(sc.plan(`order:a:${hash}`).files![0].content);
+    assert.deepEqual(input.patches, [{ id: "p-test-a", effort: 2, value: 3, testOnly: true }, { id: "p-test-b", effort: 1, value: 1, testOnly: true }]);
+    sc.complete(`order:a:${hash}`, { output: { order: ["p-test-b", "p-test-a"], flippedSoftDeps: [] } });
+    assert.deepEqual(sc.settle(), [`reorder:a:${hash}`]);
+    assert.deepEqual(sc.plan(`reorder:a:${hash}`).cli?.args.slice(-2), ["--order", `${sha("b")},${sha("a")}`]);
+    sc.complete(`reorder:a:${hash}`, { output: { mapping: { [sha("b")]: sha("c"), [sha("a")]: sha("d") } } });
+    assert.deepEqual(sc.settle(), [`review-stack:a:${hash}`]);
+    assert.deepEqual(sc.state().stacks.a.order, ["p-test-b", "p-test-a"]);
+    assert.equal(sc.state().patches["p-test-b"].sha, sha("c"));
+    sc.complete(`review-stack:a:${hash}`, { report: { findings: [{ patch: sha("c"), severity: "nit", text: "typo" }], addDeps: [], removeDeps: [], feedback: [] } });
+    assert.deepEqual(sc.settle(), [`summary:a:${hash}`]);
+    sc.complete(`summary:a:${hash}`, { output: { markdown: "| table |", metaComment: "This stack fixes 2 failures." } });
+    sc.settle();
+    const s = sc.state();
+    assert.equal(s.stacks.a.summary, "This stack fixes 2 failures.");
+    assert.equal(s.items["i-test-a"].state, "in stack");
+    assert.equal(s.step, "verify on try");
+  });
+
+  it("waits for every item of the folder", () => {
+    const sc = workList([group("ka", "a/test_a.js", "boom"), group("kb", "a/test_b.js", "bang")]);
+    investigating(sc, "i-test-a");
+    investigating(sc, "i-test-b");
+    reviewed(sc, "i-test-a", sha("1"), "a/test_a.js");
+    assert.ok(!sc.view().byKey.has("wt:a"));
+  });
+
+  it("sends a stack review's must-fix finding to that patch's author", () => {
+    const sc = twoReviewed();
+    sc.complete("wt:a", { output: { path: `/wt/${ID}-a` } });
+    sc.settle();
+    const key = sc.view().jobs.find((j) => j.purpose.what === "assemble")!.purpose.key;
+    const hash = key.split(":")[2];
+    sc.complete(key, { output: { commits: [{ sha: sha("1"), newSha: sha("a") }, { sha: sha("2"), newSha: sha("b") }] } });
+    sc.settle();
+    sc.complete(`deps:a:${hash}`, { output: [] });
+    sc.complete(`effort:p-test-a:${sha("1")}`, { report: { effort: 2, reason: "r", feedback: [] } });
+    sc.complete(`effort:p-test-b:${sha("2")}`, { report: { effort: 1, reason: "r", feedback: [] } });
+    sc.settle();
+    sc.complete(`order:a:${hash}`, { output: { order: ["p-test-a", "p-test-b"], flippedSoftDeps: [] } });
+    assert.deepEqual(sc.settle(), [`review-stack:a:${hash}`]);
+    const review = sc.complete(`review-stack:a:${hash}`, { report: { findings: [{ patch: sha("b"), severity: "must-fix", text: "same approach as test_a" }], addDeps: [], removeDeps: [], feedback: [] } });
+    assert.deepEqual(sc.settle(), [`author:i-test-b:stack-review:${review}`]);
+    assert.match(sc.plan(`author:i-test-b:stack-review:${review}`).agent?.message ?? "", /same approach as test_a/);
+    assert.equal(sc.state().items["i-test-b"].state, "investigating");
+  });
+
+  it("hands a text conflict to resolve-conflict, then assembles the rest", () => {
+    const sc = twoReviewed();
+    sc.complete("wt:a", { output: { path: `/wt/${ID}-a` } });
+    sc.settle();
+    const key = sc.view().jobs.find((j) => j.purpose.what === "assemble")!.purpose.key;
+    const hash = key.split(":")[2];
+    sc.complete(key, { output: { commits: [], conflict: { sha: sha("1"), files: ["a/test_a.js"] }, remaining: [sha("2")] } });
+    assert.deepEqual(sc.settle(), [`resolve:a:${hash}:${sha("1")}`]);
+    assert.deepEqual(sc.plan(`resolve:a:${hash}:${sha("1")}`).agent?.vars, { sha: sha("1"), base: `${ID}-a`, files: "a/test_a.js" });
+    sc.complete(`resolve:a:${hash}:${sha("1")}`, { report: { state: "resolved", commit: sha("a"), explanation: "kept both", feedback: [] } });
+    assert.equal(sc.state().patches["p-test-a"].sha, sha("a"));
+    const rest = `assemble:a:${hash}:after:${sha("1").slice(0, 12)}`;
+    assert.deepEqual(sc.settle(), [rest]);
+    assert.deepEqual(sc.plan(rest).cli?.args, ["assemble", "--cwd", `/wt/${ID}-a`, "--branch", `${ID}-a`, "--leave-conflict", sha("2")]);
+    sc.complete(rest, { output: { commits: [{ sha: sha("2"), newSha: sha("b") }] } });
+    assert.ok(sc.settle().includes(`deps:a:${hash}`));
+  });
+});
+
+describe("6. verify on try", () => {
+  it("plans the pushes, then routes matched failures to their author and the rest to triage", () => {
+    const sc = stacked();
+    assert.equal(sc.state().step, "verify on try");
+    const planKey = sc.view().jobs.find((j) => j.purpose.what === "plan-pushes")!.purpose.key;
+    const vars = sc.plan(planKey).agent!.vars!;
+    assert.equal(vars.branch, `${ID}-a`);
+    const failures = JSON.parse(sc.plan(planKey).files![0].content);
+    assert.deepEqual(failures.map((f: { patch: string }) => f.patch), ["p-test-a", "p-test-b"]);
+    sc.complete(planKey, { report: { pushes: [{ purpose: "verify", tryArgs: ["fuzzy", "-q", "x"], rebuild: 5 }], feedback: [] } });
+    const [dry] = sc.settle();
+    const push = sc.purpose(dry).push!;
+    sc.complete(dry, { output: { command: ["./mach", "try", "fuzzy", "-q", "x"], taskCount: 5, tasks: [], tryTaskConfig: {}, commits: [], warnings: [] } });
+    sc.add({ type: "user-done", request: ID, key: `approve-push:${push}` });
+    assert.deepEqual(sc.settle(), [`push:${push}`]);
+    sc.complete(`push:${push}`, { output: { rev: "fed", landoJobId: 1, treeherderUrl: "t" } });
+    assert.equal(sc.state().items["i-test-a"].state, "in try");
+    assert.deepEqual(sc.settle(), [`watch:${push}`]);
+    sc.add({ type: "try-finished", request: ID, push, result: "failures", summary: "s" });
+    sc.settle();
+    sc.complete(`try-table:${push}:final`, {
+      output: table([
+        { test: "a/test_a.js", config: "linux", result: "fail", failures: ["still boom"], taskIds: ["T1"] },
+        { test: "z/test_z.js", config: "linux", result: "fail", failures: ["zap"], taskIds: ["T2"] },
+      ]),
+    });
+    const started = sc.settle();
+    assert.deepEqual(started.sort(), [`author:i-test-a:try:${push}`, `triage:${push}:final`].sort());
+    assert.match(sc.plan(`author:i-test-a:try:${push}`).agent?.message ?? "", /a\/test_a.js on linux: still boom/);
+    sc.complete(`triage:${push}:final`, { report: { cells: [{ test: "z/test_z.js", verdict: "broken by patch", patch: sha("c"), evidence: "TypeError" }], feedback: [] } });
+    assert.deepEqual(sc.settle(), [`author:i-test-b:try:${push}`]);
+    assert.equal(sc.state().step, "verify on try");
+  });
+
+  it("moves to the meta bug once every push is green", () => {
+    const sc = stacked();
+    const planKey = sc.view().jobs.find((j) => j.purpose.what === "plan-pushes")!.purpose.key;
+    sc.complete(planKey, { report: { pushes: [{ purpose: "verify", tryArgs: ["fuzzy", "-q", "x"], rebuild: 5 }], feedback: [] } });
+    const [dry] = sc.settle();
+    const push = sc.purpose(dry).push!;
+    sc.complete(dry, { output: { command: ["./mach", "try", "fuzzy"], taskCount: 5, tasks: [], tryTaskConfig: {}, commits: [], warnings: [] } });
+    sc.add({ type: "user-done", request: ID, key: `approve-push:${push}` });
+    sc.add({ type: "try-pushed", request: ID, push, rev: "fed", url: "u" });
+    sc.add({ type: "try-finished", request: ID, push, result: "green", summary: "green" });
+    sc.settle();
+    sc.complete(`try-table:${push}:final`, { output: table() });
+    sc.settle();
+    assert.equal(sc.state().step, "meta bug");
+  });
+});
+
+function verified(): Scenario {
+  const sc = stacked();
+  const planKey = sc.view().jobs.find((j) => j.purpose.what === "plan-pushes")!.purpose.key;
+  sc.complete(planKey, { report: { pushes: [{ purpose: "verify", tryArgs: ["fuzzy", "-q", "x"], rebuild: 5 }], feedback: [] } });
+  const [dry] = sc.settle();
+  const push = sc.purpose(dry).push!;
+  sc.complete(dry, { output: { command: ["./mach", "try", "fuzzy"], taskCount: 5, tasks: [], tryTaskConfig: {}, commits: [], warnings: [] } });
+  sc.add({ type: "user-done", request: ID, key: `approve-push:${push}` });
+  sc.add({ type: "try-pushed", request: ID, push, rev: "fed", url: "u" });
+  sc.add({ type: "try-finished", request: ID, push, result: "green", summary: "green" });
+  sc.settle();
+  sc.complete(`try-table:${push}:final`, { output: table() });
+  sc.settle();
+  return sc;
+}
+
+describe("7. meta bug", () => {
+  it("drafts the meta bug, and its number goes in every patch without a bug of its own", () => {
+    const sc = verified();
+    const s = sc.state();
+    assert.equal(s.metaBug?.bug, null);
+    assert.deepEqual(s.metaBug?.draft?.keywords, ["meta"]);
+    assert.equal(s.metaBug?.draft?.description, "This stack fixes 2 failures.");
+    assert.deepEqual(sc.open(), ["meta-bug:a"]);
+    sc.add({ type: "meta-bug", request: ID, bug: 999, draft: s.metaBug!.draft });
+    sc.add({ type: "user-done", request: ID, key: "meta-bug:a" });
+    const [rewrite] = sc.settle();
+    assert.match(rewrite, /^rewrite-bugs:a:/);
+    assert.deepEqual(JSON.parse(sc.plan(rewrite).files![0].content), { [sha("d")]: { bug: 999 } });
+    sc.complete(rewrite, { output: { mapping: { [sha("c")]: sha("e"), [sha("d")]: sha("f") } } });
+    assert.equal(sc.state().patches["p-test-a"].title, "Bug 999 - Fix a/test_a.js, r=smaug.");
+    assert.equal(sc.state().patches["p-test-a"].bug, 999);
+    sc.settle();
+    assert.equal(sc.state().step, "submit");
+  });
+});
+
+function submitting(): Scenario {
+  const sc = verified();
+  sc.add({ type: "meta-bug", request: ID, bug: 999 });
+  sc.settle();
+  const rewrite = sc.view().jobs.find((j) => j.purpose.key.startsWith("rewrite-bugs:"))!.purpose.key;
+  sc.complete(rewrite, { output: { mapping: { [sha("c")]: sha("e"), [sha("d")]: sha("f") } } });
+  sc.settle();
+  return sc;
+}
+
+describe("8. submit", () => {
+  it("checks the stack, asks you to submit, and notices the Differential Revision trailers", () => {
+    const sc = submitting();
+    assert.equal(sc.state().step, "submit");
+    assert.deepEqual(sc.plan("reviewers:a").cli?.args, ["reviewers", "a/test_b.js", "a/test_a.js", "--repo", `/wt/${ID}-a`]);
+    sc.complete("reviewers:a", { output: { files: [], suggestions: [{ name: "smaug", source: "mots" }] } });
+    const [check] = sc.settle();
+    assert.match(check, /^check:a:/);
+    assert.deepEqual(JSON.parse(sc.plan(check).files![0].content).map((p: { result: string }) => p.result), ["green"]);
+    sc.complete(check, { output: { ok: true, failures: [] } });
+    const started = sc.settle();
+    assert.deepEqual(started, ["import-submit:a:0"]);
+    assert.deepEqual(sc.open(), ["submit:a"]);
+    sc.complete("import-submit:a:0", { output: imported(sha("e"), "Bug 22 - Fix test_b, r=smaug.", [], 22).concat(imported(sha("f"), "Bug 999 - Fix a, r=smaug.", [], 999)) });
+    assert.deepEqual(sc.settle(), []);
+    sc.now += 2 * 60_000;
+    assert.deepEqual(sc.settle(), ["import-submit:a:1"]);
+    const withRevisions = [
+      { ...imported(sha("e"), "Bug 22 - Fix test_b, r=smaug.", [], 22)[0], revision: 100 },
+      { ...imported(sha("f"), "Bug 999 - Fix a, r=smaug.", [], 999)[0], revision: 101 },
+    ];
+    sc.complete("import-submit:a:1", { output: withRevisions });
+    sc.settle();
+    assert.equal(sc.state().patches["p-test-a"].revision, 101);
+    assert.deepEqual(sc.open(), []);
+    assert.equal(sc.state().items["i-test-a"].state, "waiting for review");
+    assert.equal(sc.state().step, "review comments");
+  });
+
+  it("adds the suggested reviewer to patches without r=, then shows failed checks to you", () => {
+    const sc = submitting();
+    const s = sc.state();
+    const { deps: _d, review: _r, replyDrafts: _rd, id, ...p } = s.patches["p-test-a"];
+    sc.add({ type: "patch", request: ID, patch: id, ...p, title: "Bug 999 - Fix a" });
+    sc.complete("reviewers:a", { output: { files: [], suggestions: [{ name: "#dom-core", source: "mots" }] } });
+    const [rewrite] = sc.settle();
+    assert.match(rewrite, /^rewrite-reviewers:a:/);
+    const edits = JSON.parse(sc.plan(rewrite).files![0].content);
+    assert.equal(edits[sha("f")].message, "Bug 999 - Fix a, r=#dom-core.\n\nBody.\n");
+    sc.complete(rewrite, { output: { mapping: { [sha("f")]: sha("9") } } });
+    assert.equal(sc.state().patches["p-test-a"].title, "Bug 999 - Fix a, r=#dom-core.");
+    const [check] = sc.settle();
+    const job = sc.complete(check, { output: { ok: false, failures: [{ rule: "try", message: "try isn't green" }] } });
+    sc.settle();
+    assert.deepEqual(sc.open(), [`failed:${job}`]);
+  });
+});
+
+function inReview(): Scenario {
+  const sc = submitting();
+  sc.complete("reviewers:a", { output: { files: [], suggestions: [] } });
+  const [check] = sc.settle();
+  sc.complete(check, { output: { ok: true, failures: [] } });
+  sc.settle();
+  sc.complete("import-submit:a:0", {
+    output: [
+      { ...imported(sha("e"), "Bug 22 - Fix test_b, r=smaug.", [], 22)[0], revision: 100 },
+      { ...imported(sha("f"), "Bug 999 - Fix a, r=smaug.", [], 999)[0], revision: 101 },
+    ],
+  });
+  sc.settle();
+  return sc;
+}
+
+const polled = (status: string, comments: unknown[] = [], reviewer = "accepted") => [
+  { revision: 100, phid: "x", title: "t", status, reviewers: [{ name: "smaug", status: reviewer }], comments: [] },
+  { revision: 101, phid: "y", title: "t", status, reviewers: [{ name: "smaug", status: reviewer }], comments },
+];
+
+describe("9. review comments", () => {
+  it("polls Phabricator only while you're present, every 3 h, and right away when you come back", () => {
+    const sc = inReview();
+    assert.deepEqual(sc.view().jobs.filter((j) => !j.end).map((j) => j.purpose.key), ["poll:0"]);
+    assert.deepEqual(sc.plan("poll:0").cli?.args, ["poll", "D100", "D101"]);
+    assert.equal(sc.plan("poll:0").priority, 0);
+    sc.complete("poll:0", { output: polled("needs-review", [], "pending") });
+    assert.equal(sc.state().patches["p-test-a"].review?.status, "needs-review");
+    sc.now += 2 * HOUR;
+    assert.deepEqual(sc.settle(), []);
+    sc.now += HOUR;
+    assert.deepEqual(sc.settle(), ["poll:1"]);
+    sc.complete("poll:1", { output: polled("needs-review", [], "pending") });
+    sc.present = false;
+    sc.now += 4 * HOUR;
+    assert.deepEqual(sc.settle(), []);
+    sc.present = true;
+    sc.presentSince = sc.now;
+    assert.deepEqual(sc.settle(), ["poll:2"]);
+    sc.complete("poll:2", { output: polled("needs-review", [], "pending") });
+    sc.now += 30 * 60_000;
+    assert.deepEqual(sc.settle(), []);
+  });
+
+  it("classifies new comments, the author addresses them first, then the stack is rewritten and you resubmit", () => {
+    const sc = inReview();
+    const comment = { id: 7, author: "smaug", file: "a/test_a.js", line: 3, length: 1, text: "Use waitForCondition", done: false };
+    const mine = { id: 8, author: "florian", text: "ok", done: false, replyTo: 7, length: 1 };
+    sc.complete("poll:0", { output: polled("needs-revision", [comment, mine], "blocking") });
+    const [classify] = sc.settle();
+    assert.match(classify, /^classify-comments:p-test-a:/);
+    assert.equal(sc.plan(classify).priority, 0);
+    sc.complete(classify, { report: { comments: [{ id: 7, kind: "change request", impliesChange: true }], feedback: [] } });
+    assert.equal(sc.state().patches["p-test-a"].review?.comments[0].kind, "change request");
+    const [address] = sc.settle();
+    const plan = sc.plan(address);
+    assert.equal(plan.name, "address-review");
+    assert.equal(plan.agent?.resume, true);
+    assert.equal(plan.agent?.sessionId, sc.plan("author:i-test-a:initial").agent?.sessionId);
+    assert.equal(plan.priority, 0);
+    assert.deepEqual(plan.purpose.comments, [7]);
+    assert.deepEqual(JSON.parse(plan.files![0].content).map((c: { id: number }) => c.id), [7]);
+    assert.equal(sc.state().items["i-test-a"].state, "addressing review comments");
+
+    const job = sc.complete(address, { report: { state: "addressed", summary: "s", commits: [sha("7")], replies: [{ commentId: 7, text: "waitForCondition hides the race." }], feedback: [] } });
+    assert.deepEqual(sc.state().patches["p-test-a"].replyDrafts, [{ commentId: 7, text: "waitForCondition hides the race." }]);
+    sc.settle();
+    sc.complete(`import:${job}`, { output: imported(sha("7"), "Bug 999 - Fix a, r=smaug.", ["a/test_a.js"], 999).map((c) => ({ ...c, revision: 101 })) });
+    sc.settle();
+    sc.complete(`msg:p-test-a:${sha("7")}`, { output: "m" });
+    sc.complete(`lint-reply:${job}:7`, { output: lintOk });
+    sc.settle();
+    sc.complete(`lint:p-test-a:${sha("7")}`, { output: lintOk });
+    sc.settle();
+    sc.complete(`review:p-test-a:${job}`, { report: ok });
+    assert.deepEqual(sc.settle(), [`rewrite-review:a:${job}`]);
+    assert.deepEqual(sc.plan(`rewrite-review:a:${job}`).cli?.args.slice(-2), ["--order", `${sha("e")},${sha("7")}`]);
+    sc.complete(`rewrite-review:a:${job}`, { output: { mapping: { [sha("e")]: sha("e"), [sha("7")]: sha("8") } } });
+    assert.deepEqual(sc.settle(), [`interdiff:p-test-a:${job}`]);
+    assert.deepEqual(sc.plan(`interdiff:p-test-a:${job}`).cli?.args, ["interdiff", "--cwd", `/wt/${ID}-a`, sha("1"), sha("8")]);
+    const inter = sc.complete(`interdiff:p-test-a:${job}`, { output: { diff: "-a\n+b\n", method: "same-parent" } });
+    assert.equal(sc.state().patches["p-test-a"].interdiffFile, `requests/${ID}/data/interdiff-p-test-a-${inter}.diff`);
+    sc.settle();
+    const n = sc.state().needsUser.find((x) => x.key.startsWith("resubmit:"))!;
+    assert.equal(n.action, "Post 1 reply, then resubmit D101");
+    assert.equal(n.stack, "a");
+    assert.equal(sc.state().items["i-test-a"].state, "waiting for review");
+  });
+});
+
+describe("10. landing", () => {
+  it("moves accepted patches to the bottom and asks you to land; done once everything has landed", () => {
+    const sc = inReview();
+    sc.complete("poll:0", { output: polled("accepted") });
+    sc.settle();
+    assert.equal(sc.state().step, "landing");
+    const key = sc.view().jobs.find((j) => j.purpose.key.startsWith("order-landable:"))!.purpose.key;
+    assert.deepEqual(sc.plan(key).cli?.args.slice(-1), ["--landable"]);
+    sc.complete(key, { output: { order: ["p-test-a", "p-test-b"], flippedSoftDeps: [{ patch: "p-test-b", needs: "p-test-a", kind: "soft", reason: "shares a helper", source: "agent" }], landable: ["p-test-a", "p-test-b"] } });
+    const [rewrite] = sc.settle();
+    assert.match(rewrite, /^rewrite-land:a:/);
+    sc.complete(rewrite, { output: { mapping: { [sha("f")]: sha("5"), [sha("e")]: sha("6") } } });
+    const [adapt] = sc.settle();
+    assert.equal(sc.plan(adapt).name, "adapt-soft-dep");
+    assert.deepEqual(sc.plan(adapt).agent?.vars, { patchA: sha("6"), patchB: sha("5"), reason: "shares a helper" });
+    sc.complete(adapt, { report: { state: "adapted", commits: [sha("5"), sha("4")], summary: "s", feedback: [] } });
+    const [refresh] = sc.settle();
+    sc.complete(refresh, { output: [{ ...imported(sha("5"), "Bug 999 - Fix a, r=smaug.", [], 999)[0], revision: 101 }, { ...imported(sha("4"), "Bug 22 - Fix test_b, r=smaug.", [], 22)[0], revision: 100 }] });
+    sc.settle();
+    assert.ok(sc.open().some((k) => k.startsWith("land:a:")));
+
+    sc.now += 3 * HOUR;
+    sc.settle();
+    sc.complete("poll:1", { output: polled("published") });
+    sc.settle();
+    const s = sc.state();
+    assert.equal(s.step, "done");
+    assert.equal(s.items["i-test-a"].state, "landed");
+    // Worktrees go, removed from the main checkout, never from inside themselves.
+    const removes = sc.view().jobs.filter((j) => j.purpose.what === "remove");
+    assert.deepEqual(removes.map((j) => j.purpose.key).sort(), [`remove:${ID}-a`, `remove:${ID}-i-test-a`, `remove:${ID}-i-test-b`].sort());
+    assert.ok(removes.every((j) => j.cwd === config.firefoxRepo));
+  });
+});
+
+describe("redo-step", () => {
+  it("on an item, starts it over with new keys", () => {
+    const sc = workList([group("ka", "a/test_a.js", "boom")]);
+    investigating(sc, "i-test-a");
+    sc.complete("author:i-test-a:initial", { report: { ...fixed([]), state: "left as-is" } });
+    sc.add({ type: "item-state", request: ID, item: "i-test-a", state: "not started", detail: "try again" });
+    assert.deepEqual(sc.settle(), ["prior-art:i-test-a@1"]);
+  });
+
+  it("on the request, plans the step again", () => {
+    const sc = stacked();
+    const planKey = sc.view().jobs.find((j) => j.purpose.what === "plan-pushes")!.purpose.key;
+    sc.complete(planKey, { report: { pushes: [], feedback: [] } });
+    sc.settle();
+    sc.add({ type: "step", request: ID, step: "verify on try" });
+    assert.deepEqual(sc.settle(), [`${planKey}@1`]);
+  });
+});
