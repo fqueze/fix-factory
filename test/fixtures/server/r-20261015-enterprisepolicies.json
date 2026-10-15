@@ -91,7 +91,26 @@
         "j-wt-jit",
         "j-inv-jit"
       ],
-      "detail": "Already fixed by bug 2078564 (172a3c6bab04): the leaker browser_policy_pageinfo_permissions.js no longer leaves a cookie DENY; no failure since that landed on Oct 9 across 1400 runs."
+      "detail": "Already fixed by bug 2078564 (172a3c6bab04): the leaker browser_policy_pageinfo_permissions.js no longer leaves a cookie DENY; no failure since that landed on Oct 9 across 1400 runs.",
+      "lastReport": {
+        "prompt": "investigate-and-fix",
+        "job": "j-inv-jit",
+        "report": {
+          "state": "left as-is",
+          "summary": "Already fixed by bug 2078564; the worker timeout itself is a product bug.",
+          "cause": "Workers spawned under a JIT-disabling site policy start slowly.",
+          "verification": "No failure in 1400 runs since bug 2078564 landed.",
+          "commits": [],
+          "bugDraft": {
+            "product": "Firefox",
+            "component": "Enterprise Policies",
+            "summary": "Workers start slowly when a site policy disables the JIT",
+            "description": "With a JIT-disabling site policy, a new worker takes several seconds to respond."
+          },
+          "landsAfter": [],
+          "feedback": []
+        }
+      }
     },
     "i-browser-policy-firefoxhome": {
       "id": "i-browser-policy-firefoxhome",

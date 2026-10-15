@@ -290,6 +290,15 @@ describe("a burndown with closed groups, running agents and a dropped patch", ()
     assert.match(h2, /<summary>4 closed<\/summary>/);
   });
 
+  it("shows the Bug to file link of a group whose report drafted a bug without a patch", () => {
+    const row = section('data-item="i-browser-policy-sitepolicies-jit"', "</tr>");
+    assert.match(row, /<a class="bug tofile" href="https:\/\/bugzilla\.mozilla\.org\/enter_bug\.cgi\?product=Firefox&amp;component=Enterprise\+Policies&amp;short_desc=Workers\+start\+slowly/);
+    assert.match(row, /<span class="sub">“Workers start slowly when a site policy disables the JIT”<\/span>/);
+    const r = structuredClone(get(ID));
+    r.patches["p-runif"].item = "i-browser-policy-sitepolicies-jit";
+    assert.doesNotMatch(renderRequest(r, ctx, true).value, /Workers start slowly/, "a patch's draft shows on the patch row");
+  });
+
   it("folds recent jobs, with job labels and test names", () => {
     const jobs = section('<details class="fold section" data-fold="jobs">', "</details>");
     assert.ok(jobs.length > 0);

@@ -1,4 +1,4 @@
-import type { ItemView, JobView, PatchView, PushView, RequestState, StackView } from "../../types.ts";
+import type { BugDraft, InvestigateReport, ItemView, JobView, PatchView, PushView, RequestState, StackView } from "../../types.ts";
 import { ITEM_STATES } from "../commands.ts";
 import { html, join, type Html } from "../html.ts";
 import { actionsSummary, approvePushControls, bugBox, commandDetails, copyButton, recoveryPlan, recoveryPlanFor, stackViewerLink, summaryId } from "./actions.ts";
@@ -334,6 +334,7 @@ function groupTable(r: RequestState, items: ItemView[], ctx: RenderContext): Htm
 
 function itemRow(r: RequestState, i: ItemView, ctx: RenderContext): Html {
   const job = runningJob(r, i);
+  const draft = itemBugDraft(r, i);
   const tests = i.group.tests;
   const cost = i.jobs.reduce((sum, j) => sum + (r.jobs[j].costUsd ?? 0), 0);
   const work = job
@@ -348,8 +349,17 @@ function itemRow(r: RequestState, i: ItemView, ctx: RenderContext): Html {
       i.detail
         ? html`<details class="clamp3" data-fold="detail-${i.id}" title="${i.state}: ${i.detail}"><summary>${state}</summary></details>`
         : state
-    }</td>
+    }${draft ? html`<div><a class="bug tofile" href="${enterBugUrl(draft)}" target="_blank" rel="noopener" title="Opens a prefilled enter_bug.cgi">Bug to file</a> <span class="sub">“${draft.summary}”</span></div>` : null}</td>
   </tr>`;
+}
+
+// A bug the investigation asks to file without a patch to carry it (e.g. a product bug behind a
+// group left as-is); a patch's draft shows on its patch row instead.
+function itemBugDraft(r: RequestState, i: ItemView): BugDraft | undefined {
+  if (i.lastReport?.prompt !== "investigate-and-fix" || Object.values(r.patches).some((p) => p.item === i.id)) {
+    return undefined;
+  }
+  return (i.lastReport.report as InvestigateReport).bugDraft;
 }
 
 function pushRow(p: PushView): Html {
