@@ -34,9 +34,12 @@ Factory runtime (long-running, not CLIs):
 
 ## Prompts
 
-### `parse-request.md` (Sonnet) [A2]
-> Turn this request into the JSON config defined by the schema. Kind: {kind}. Text: {text}. Only include
-> constraints the text states, and leave fields empty rather than guessing. List anything ambiguous in `questions`.
+### `route-request.md` (Sonnet) [A1, A2]
+> You wrote this in the factory's main box: {text}. The active requests, one per line with id and summary, are in
+> {requestsFile}. If the text is about one of them, return its id. Otherwise it's a new request: return its kind
+> (burning down a folder's flakiness, or fixing a try push's failures), the folder or revision, and the config
+> (scope, platforms, constraints) the text states, leaving out anything it doesn't say. List anything ambiguous in
+> `questions`.
 
 ### `merge-clusters.md` (Haiku) [A4]
 > The failure clusters in {clustersFile} were grouped by exact message. Merge clusters whose messages are the same

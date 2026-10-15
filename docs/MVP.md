@@ -29,8 +29,8 @@ can read them.
 ### 1. Request
 | Step | Who | How |
 |---|---|---|
-| Enter a request: a folder to burn down, or a try push to fix, plus free text | 👤 | |
-| Turn the free text into a config (scope, platforms, constraints), shown to you | So | `parse-request.md` |
+| Type it in plain text in the main "Tell the factory…" box, e.g. "burn down dom/base/test, skip Android" | 👤 | |
+| Route it: about an existing request → `recover.md` on that request; otherwise a new request with its kind, folder or revision, and config, shown to you | So | `route-request.md` |
 
 ### 2. First signal (burndown only; a try-push request starts at step 3 with its push)
 | Step | Who | How |
