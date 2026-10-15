@@ -1,0 +1,37 @@
+{
+ "meta": {},
+ "results": [
+  {
+   "id": 2070472,
+   "revision": "06f6b0af13c73946adf9a8b186b4c701f1bd6530",
+   "author": "wptsync-try@mozilla.bugs",
+   "branch": null,
+   "revisions": [
+    {
+     "result_set_id": 2070472,
+     "repository_id": 4,
+     "revision": "06f6b0af13c73946adf9a8b186b4c701f1bd6530",
+     "author": "moz-wptsync-bot <wptsync@mozilla.com>",
+     "comments": "Fuzzy query=web-platform-tests !macosx !shippable !asan !tsan&paths=testing/web-platform/tests/webcodecs/videoFrame-alpha-discard.any.js:testing/web-platform/tests/webcodecs/videoFrame-alpha-discard.window.js:testing/web-platform/tests/webcodecs/videoFrame-copyTo-rgbx.any.js:testing/web-platform/tests/webcodecs/videoFrame-drawImage-rgbx.any.js:testing/web-platform/tests/webcodecs/videoFrame-rgbx-imageBitmap.any.js:testing/web-platform/tests/webcodecs/videoFrame-rgbx-webgl.window.js"
+    },
+    {
+     "result_set_id": 2070472,
+     "repository_id": 4,
+     "revision": "3fd278cc82986fa11f533d310e7a151451c47afe",
+     "author": "moz-wptsync-bot <wptsync@mozilla.com>",
+     "comments": "Bug 2080984 [wpt PR 63572] - Drawing a BGRX VideoFrame should disregard the alpha component, a=testonly\n\nSKIP_BMO_CHECK\n\nRGBX and BGRX VideoFrames must be rendered as if they were opaque:.\nThe fourth byte of a pixel is padding, not alpha.\nIt was handled as alpha, so a padding byte of 0 made the frame transparent when drawn.\n\nVideoFrame gets a virtual shouldIgnoreAlpha(), false by default.\n- VideoFrameCV stores the flag and sets it in createRGBX/createBGRX and when\n  alpha: 'discard' is used. VideoFrame::updateShouldIgnoreAlpha makes a cheap\n  clone sharing the pixel buffer, so an RGBX frame made from an RGBA one is\n  not deep copied. The pixel data is left untouched.\n- VideoFrameCV::create takes a mandatory VideoFrameCV::ShouldIgnoreAlpha when\n  given a color space. The overload computing the color space from the buffer\n  has no flag; resize and asVideoFrameCV set it with updateShouldIgnoreAlpha.\n- The flag is preserved by clone, rotation, resize, SharedVideoFrame and\n  RemoteVideoFrameProxy properties.\n- VideoFrameGStreamer needs no flag since it creates RGBx/BGRx frames.\n\nWhen creating a VideoFrame from a HTMLVideoElement or HTMLImageElement, we are now using ShouldClone::Yes.\nThis is fixing an existing bug where if we create two WebCodecsVideoFrame from the same HTMLVideoElement synchronously,\nwe would use the same underlying VideoFrame, which is ok except if we are discarding alpha/changing timestamp in one but not the other.\nBy using ShouldClone::Yes, when updating, we will clone the VideoFrame around the same underlying resource.\n\nConsumers use the flag as follows:\n- VideoFrame::copyNativeImage creates images without alpha (kCGImageAlphaNoneSkipFirst).\n- copyTo sets the X byte to 255 for RGBX/BGRX, and the RGBA/BGRA row copies\n  now use vImage channel permutations instead of per byte loops.\n- For WebGL texImage, the CG image extractor sets the skipped byte to 255 in\n  a copy of the pixels when the upload format has an alpha component.\n- Encoders convert RGB frames to YUV, which already drops alpha.\n\nWe update ImageTransferSessionVT::createPixelBuffer from a CGImageRef so that it preserves alpha.\nWe add a flag to allow this preservation.\nWe implement it by drawing on premultiplied alpha as CGBitmapContextCreate with kCGImageAlphaFirst does not work..\n\nWe add several tests to cover all consumers and alpha discard code paths.\n\nWebKit-Bug: https://bugs.webkit.org/show_bug.cgi?id=327231\n\nwpt-commit: 5302e0bdc2c50436408be58b585039d9c0ad5230\nwpt-pr: 63572"
+    },
+    {
+     "result_set_id": 2070472,
+     "repository_id": 4,
+     "revision": "a2b7127a496821e9052a4d76a0ff4e458dd3025d",
+     "author": "moz-wptsync-bot <wptsync@mozilla.com>",
+     "comments": "copyTo for a BGRX/RGBX VideoFrame should succeed (#63566)\n\nWe add support for copyTo by reusing the same code path for BGRX as BGRA and RGBX/RGBA.\nThe WPT test is not fully complete as it should check the copyT X component.\nThis will be added when the spec is clear about what should be done.\n\nWebKit-Bug: https://bugs.webkit.org/show_bug.cgi?id=327236\n\nwpt-commit: 1230960cbe40b7f78d762f3ade4c118ec2bbfa83\nwpt-type: dependency"
+    }
+   ],
+   "revision_count": 3,
+   "push_timestamp": 1792084956,
+   "repository_id": 4
+  }
+ ]
+}

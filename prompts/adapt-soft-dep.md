@@ -1,0 +1,1 @@
+Patches {patchA} and {patchB} swapped order, and the soft dependency between them says: {reason}. Adjust both patches so each is correct in the new order and the end result after both is unchanged, the way you'd resolve a rebase conflict. Change nothing else.

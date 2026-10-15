@@ -1,0 +1,1 @@
+Facts about existing bugs and revisions for {test}: {facts}. Decide whether someone is actively working on it (activity in the last 30 days, or a revision in review), whether there's an open bug we should reuse, or neither. Quote the fact your verdict rests on.

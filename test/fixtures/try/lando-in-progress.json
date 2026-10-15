@@ -1,0 +1,55 @@
+{
+ "commit_id": "",
+ "created_at": "2026-10-15T17:22:33.654Z",
+ "error": "",
+ "id": 105668,
+ "requester": "jteow@mozilla.com",
+ "status": "IN_PROGRESS",
+ "updated_at": "2026-10-15T17:23:05.808Z",
+ "repository": "try",
+ "revisions": [
+  {
+   "author_email": "jteow@mozilla.com",
+   "author_name": "James Teow",
+   "commit_message": "Bug 2081924 - Allow Suggest features to show results in the zero prefix view through UrlbarProviderQuickSuggest. r?adw!\n\nDifferential Revision: https://phabricator.services.mozilla.com/D333927",
+   "url": "https://lando.moz.tools/landings/105668#r306654"
+  },
+  {
+   "author_email": "jteow@mozilla.com",
+   "author_name": "James Teow",
+   "commit_message": "Bug 2082460 - Give UrlbarProviderQuickSuggest the same priority as UrlbarProviderTopSites in the zero prefix view. r?adw",
+   "url": "https://lando.moz.tools/landings/105668#r306655"
+  },
+  {
+   "author_email": "jteow@mozilla.com",
+   "author_name": "James Teow",
+   "commit_message": "Bug 2080528 - Add prefs for temporal search suggestions. r?#urlbar-reviewers\n\nNothing reads them yet. Nimbus variables come in a later bug.\n\nDifferential Revision: https://phabricator.services.mozilla.com/D332878",
+   "url": "https://lando.moz.tools/landings/105668#r306656"
+  },
+  {
+   "author_email": "jteow@mozilla.com",
+   "author_name": "James Teow",
+   "commit_message": "Bug 2080523 - Add the TemporalSuggestions Suggest feature with record validation, eligibility and selection. r?#urlbar-reviewers\n\nDifferential Revision: https://phabricator.services.mozilla.com/D332879",
+   "url": "https://lando.moz.tools/landings/105668#r306657"
+  },
+  {
+   "author_email": "jteow@mozilla.com",
+   "author_name": "James Teow",
+   "commit_message": "WIP - Bug 2080532 - Show a \"Recommended searches\" row label above temporal search suggestions. r?#urlbar-reviewers\n\nUnlike other search suggestion labels, it shows even when nothing precedes the\nrows.\n\nDifferential Revision: https://phabricator.services.mozilla.com/D332882",
+   "url": "https://lando.moz.tools/landings/105668#r306658"
+  },
+  {
+   "author_email": "jteow@mozilla.com",
+   "author_name": "James Teow",
+   "commit_message": "WIP - Bug 2080535 - Add a \"Don't show\" result menu command to temporal search suggestions. r?#urlbar-reviewers\n\nThe strings are placeholders until UX provides copy. They're in the en-US-only\nenUS-searchFeatures.ftl, so they aren't localized.\n\nDifferential Revision: https://phabricator.services.mozilla.com/D332883",
+   "url": "https://lando.moz.tools/landings/105668#r306659"
+  },
+  {
+   "author_email": "jteow@mozilla.com",
+   "author_name": "James Teow",
+   "commit_message": "Fuzzy (preset: urlbar) query='browser-chrome !spi !asan !tsan !msix !a11y !swr | 'linux&query='mochitest-chrome !spi !asan !tsan !swr !gpu&query='xpcshell !spi !asan !tsan !msix !nofis !condprof !android&query='test-verify !asan !tsan !android&paths=browser/components/urlbar\n\nmach try command: `./mach try --preset urlbar --no-artifact`\n\nPushed via `mach try fuzzy`",
+   "url": "https://lando.moz.tools/landings/105668#r306660"
+  }
+ ],
+ "url": "https://lando.moz.tools/landings/105668"
+}

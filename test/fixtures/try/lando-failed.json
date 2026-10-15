@@ -1,0 +1,103 @@
+{
+ "commit_id": "",
+ "created_at": "2026-10-12T15:38:54.070Z",
+ "error": "Aborting, could not apply patch buffer for None.\nhg error in cmd: hg import -s 95 --no-commit /tmp/tmpcgbpd29tdiff: applying /tmp/tmpcgbpd29tdiff\n\nabort: /tmp/tmpcgbpd29tdiff: no diffs found",
+ "id": 103529,
+ "requester": "wptsync-try@mozilla.bugs",
+ "status": "FAILED",
+ "updated_at": "2026-10-12T18:59:11.511Z",
+ "repository": "try",
+ "revisions": [
+  {
+   "author_email": "wptsync@mozilla.com",
+   "author_name": "moz-wptsync-bot",
+   "commit_message": "Bug 2046782 [wpt PR 60555] - Un-tentative positional HTML setting methods, a=testonly\n\nSKIP_BMO_CHECK\n\nSee https://github.com/whatwg/html/pull/12528\n\nwpt-commit: a84d85a5387667295ccf5fbb43ff0045147b06e7\nwpt-pr: 60555",
+   "url": "https://lando.moz.tools/landings/103529#r298799"
+  },
+  {
+   "author_email": "wptsync@mozilla.com",
+   "author_name": "moz-wptsync-bot",
+   "commit_message": "Bug 2046782 [wpt PR 60555] - Additional file, a=testonly\n\nSKIP_BMO_CHECK\n\nwpt-commit: ef9b538a8bd5bdbb4a5db227f9fd92dd6a155fa1\nwpt-pr: 60555",
+   "url": "https://lando.moz.tools/landings/103529#r298800"
+  },
+  {
+   "author_email": "wptsync@mozilla.com",
+   "author_name": "moz-wptsync-bot",
+   "commit_message": "Bug 2046782 [wpt PR 60555] - Move slow.js links, a=testonly\n\nSKIP_BMO_CHECK\n\nwpt-commit: 64f288b778c90fa7966e5c8fc3dbaca2263c17ab\nwpt-pr: 60555",
+   "url": "https://lando.moz.tools/landings/103529#r298801"
+  },
+  {
+   "author_email": "wptsync@mozilla.com",
+   "author_name": "moz-wptsync-bot",
+   "commit_message": "Bug 2046782 [wpt PR 60555] - Added test for silent failure when inserting into script, a=testonly\n\nSKIP_BMO_CHECK\n\nwpt-commit: 20e3f45a96d66e85df6a80157d9d2d8224560eb2\nwpt-pr: 60555",
+   "url": "https://lando.moz.tools/landings/103529#r298802"
+  },
+  {
+   "author_email": "wptsync@mozilla.com",
+   "author_name": "moz-wptsync-bot",
+   "commit_message": "Bug 2046782 [wpt PR 60555] - Refine tests, a=testonly\n\nSKIP_BMO_CHECK\n\nwpt-commit: 31ee5bec9d2a97a52554689d4736904f79fec9ff\nwpt-pr: 60555",
+   "url": "https://lando.moz.tools/landings/103529#r298803"
+  },
+  {
+   "author_email": "wptsync@mozilla.com",
+   "author_name": "moz-wptsync-bot",
+   "commit_message": "Bug 2046782 [wpt PR 60555] - Add WEBFEATURES.yml, a=testonly\n\nSKIP_BMO_CHECK\n\nwpt-commit: 8eefc09c0ca73f4abc463776e979624e4d4a8e83\nwpt-pr: 60555",
+   "url": "https://lando.moz.tools/landings/103529#r298804"
+  },
+  {
+   "author_email": "wptsync@mozilla.com",
+   "author_name": "moz-wptsync-bot",
+   "commit_message": "Bug 2046782 [wpt PR 60555] - Rebase and apply positional methods to more tests, a=testonly\n\nSKIP_BMO_CHECK\n\nwpt-commit: 050544e8984fef80b04eff079519b8aa5b0d1652\nwpt-pr: 60555",
+   "url": "https://lando.moz.tools/landings/103529#r298805"
+  },
+  {
+   "author_email": "wptsync@mozilla.com",
+   "author_name": "moz-wptsync-bot",
+   "commit_message": "Bug 2046782 [wpt PR 60555] - review nits, a=testonly\n\nSKIP_BMO_CHECK\n\nwpt-commit: 624d97b80b3f1d3b2cb3d4872315cd598be9fa4a\nwpt-pr: 60555",
+   "url": "https://lando.moz.tools/landings/103529#r298806"
+  },
+  {
+   "author_email": "wptsync@mozilla.com",
+   "author_name": "moz-wptsync-bot",
+   "commit_message": "Bug 2046782 [wpt PR 60555] - Move stream test back to tentative, a=testonly\n\nSKIP_BMO_CHECK\n\nwpt-commit: 174b7f9dc2937010c0af01bbfcfded597d24e0fe\nwpt-pr: 60555",
+   "url": "https://lando.moz.tools/landings/103529#r298807"
+  },
+  {
+   "author_email": "wptsync@mozilla.com",
+   "author_name": "moz-wptsync-bot",
+   "commit_message": "Bug 2046782 [wpt PR 60555] - Fix help links, a=testonly\n\nSKIP_BMO_CHECK\n\nwpt-commit: 3690bb88cd2bfa672f76d33468252997ec8d90fd\nwpt-pr: 60555",
+   "url": "https://lando.moz.tools/landings/103529#r298808"
+  },
+  {
+   "author_email": "wptsync@mozilla.com",
+   "author_name": "moz-wptsync-bot",
+   "commit_message": "Bug 2046782 [wpt PR 60555] - Throw on modifying <html> + nits, a=testonly\n\nSKIP_BMO_CHECK\n\nwpt-commit: 95aeded0326e2ca171a1f375fc838db132efddbb\nwpt-pr: 60555",
+   "url": "https://lando.moz.tools/landings/103529#r298809"
+  },
+  {
+   "author_email": "wptsync@mozilla.com",
+   "author_name": "moz-wptsync-bot",
+   "commit_message": "Bug 2046782 [wpt PR 60555] - Use an inert document for html-parent/Document-parent TT positional tests, a=testonly\n\nSKIP_BMO_CHECK\n\nA non-conforming implementation that doesn't throw would otherwise add a\nsecond head/body to the test page. Trusted Types enforcement still applies\nsince the inert document shares the global.\n\nwpt-commit: d71765b500dca37233ca198d602ee3788ab8e7b1\nwpt-pr: 60555",
+   "url": "https://lando.moz.tools/landings/103529#r298810"
+  },
+  {
+   "author_email": "wptsync@mozilla.com",
+   "author_name": "moz-wptsync-bot",
+   "commit_message": "Bug 2046782 [wpt PR 60555] - Remove duplicate expected_sink_name() and redundant !safe check, a=testonly\n\nSKIP_BMO_CHECK\n\nwpt-commit: e42daf81fd602c1fb91d3f4ce85cf69e88f6ca0d\nwpt-pr: 60555",
+   "url": "https://lando.moz.tools/landings/103529#r298811"
+  },
+  {
+   "author_email": "wptsync@mozilla.com",
+   "author_name": "moz-wptsync-bot",
+   "commit_message": "Bug 2046782 [wpt PR 60555] - Update wpt metadata, a=testonly\n\nwpt-pr: 60555\nwpt-type: metadata",
+   "url": "https://lando.moz.tools/landings/103529#r298812"
+  },
+  {
+   "author_email": "wptsync@mozilla.com",
+   "author_name": "moz-wptsync-bot",
+   "commit_message": "Fuzzy query=web-platform-tests !macosx !shippable !asan !tsan&paths=testing/web-platform/tests/domparsing/positional-html-into-script-safe.html:testing/web-platform/tests/domparsing/positional-methods-with-parser-options.html:testing/web-platform/tests/domparsing/positional-methods-with-trusted-types-no-createParserOptions.html:testing/web-platform/tests/domparsing/positional-methods-with-trusted-types.html:testing/web-platform/tests/domparsing/positional-methods.html:testing/web-platform/tests/domparsing/positional-template-child.html:testing/web-platform/tests/domparsing/tentative/stream-html-with-trusted-types-createParserOptions-order.html:testing/web-platform/tests/domparsing/tentative/stream-positional-template-child.html:testing/web-platform/tests/sanitizer-api/sanitizer-base-immutable.html:testing/web-platform/tests/sanitizer-api/sethtml-with-trustedhtml-createParserOptions.html:testing/web-platform/tests/sanitizer-api/sethtml-with-trustedtypes-createParserOptions-report-only.html:testing/web-platform/tests/sanitizer-api/sethtml-with-trustedtypes-createParserOptions.html:testing/web-platform/tests/sanitizer-api/sethtml-with-trustedtypes-immutable.html:testing/web-platform/tests/sanitizer-api/sethtml-with-trustedtypes.html:testing/web-platform/tests/sanitizer-api/sethtml-xml-document-sanitizer-report-only.html:testing/web-platform/tests/sanitizer-api/sethtml-xml-document-sanitizer.html:testing/web-platform/tests/sanitizer-api/trustedhtml-unvetted-parser-options-default-createHTML.html:testing/web-platform/tests/sanitizer-api/trustedhtml-unvetted-parser-options-default-createParserOptions.html:testing/web-platform/tests/sanitizer-api/trustedhtml-unvetted-parser-options-no-enforcement.html:testing/web-platform/tests/sanitizer-api/trustedhtml-unvetted-parser-options-report-only.html:testing/web-platform/tests/sanitizer-api/trustedhtml-unvetted-parser-options.html",
+   "url": "https://lando.moz.tools/landings/103529#r298813"
+  }
+ ],
+ "url": "https://lando.moz.tools/landings/103529"
+}
