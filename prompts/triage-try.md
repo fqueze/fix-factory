@@ -1,0 +1,1 @@
+Results of try push {rev} (goal: {goal}): {table}. Logs of jobs fx-tests couldn't parse: {logExcerpts}. For each failing or not-run cell, classify it as fixed, still failing, broken by patch X, unrelated pre-existing, or infra, and cite the log line it rests on.
