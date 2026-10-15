@@ -175,6 +175,13 @@ Examples:
 3. Agents stop running `mach`: the scripts run repro and verification (`run-tests.ts`, repro recipes, `--compare`).
 4. Scheduler with a cores/RAM model instead of fixed caps.
 5. A configurable Claude config directory (`CLAUDE_CONFIG_DIR`) for agents, with the factory finding transcripts there.
+6. "Stopped failing" check before investigating, to save Opus runs on failures that are already fixed (4 of 7 in the
+   first burndown).
+   - **Decide (script):** take `fx-tests` history: the last failure on central, and *n* runs since. With the old rate *p*,
+     (1−p)ⁿ < 1% → close the group as "stopped failing on <date>, n runs since".
+   - **Name the fix (script + Haiku):** list the commits landed shortly before the last failure that touch the test's
+     folder or mention the test; Haiku picks the likely one and its bug.
+   - Fixes elsewhere (e.g. a leaker in another test) show as "cause not identified".
 
 ## Updating the factory without stopping it
 
