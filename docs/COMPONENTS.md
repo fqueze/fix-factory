@@ -101,10 +101,25 @@ Factory runtime (long-running, not CLIs):
 > Write the commit message for {sha} following the commit-message skill. Bug: {bug or XXXXXXX}, reviewer:
 > {reviewer}. Use the diff, this handoff ({handoff}) and this repro summary ({repro}). Return only the message.
 
-### `review-patch.md` (Opus, fresh) [D6] — needs the **review-patch** skill
-> Review commit {sha}, both diff and message, following the review-patch skill. The handoff and test results
-> are the author's testimony: check them against the code instead of trusting them. Report each finding as
-> must-fix or nit, or return `ok`.
+### `review-patch.md` (Opus, fresh) [D6]
+Longer than 5 sentences on purpose, so the MVP doesn't need a new skill. The checklist comes from the critical
+review in `orchestrate-parallel-fixes`.
+> Review commit {sha} in {worktree}, diff and message together, as a demanding Firefox reviewer would. The author's
+> report ({report}) is testimony, not evidence: spot-check its claims about the code and the test results yourself,
+> and don't quote it. Check the message against the commit-message skill.
+>
+> Look for:
+> - dead code, leftover instrumentation or debug logging;
+> - comments in the code that add nothing, and padding in the commit message;
+> - a message claiming a mechanism the evidence doesn't show, or not saying why an apparently healthy file is
+>   edited;
+> - a guard on the victim's side where the leaker should have been fixed, or a test change that hides a product bug;
+> - a follow-up bug filed for the root cause where the direct fix wasn't attempted. "Different component", "shared
+>   helper", "needs UX input" and "design question" are not reasons on their own;
+> - a fix not verified by the checks it claims;
+> - several citations for one claim that all trace back to the same source.
+>
+> Report each finding as must-fix or nit, with file and line, or return `ok`.
 
 ### `estimate-review-effort.md` (Haiku) [E2]
 > Rate the effort of reviewing this patch from 1 (short, test-only, obvious) to 5 (subtle product change).
@@ -163,8 +178,8 @@ Each prompt stayed at 5 sentences or fewer by pointing at a skill for the long p
 - **investigate-race** (new): merge `debug-a-test-failure` and `diagnose-failures-from-profiles`, plus what to
   read in a profile, how to widen a race with a DEBUG edit, and the repro request format. Drop everything about
   worktrees, builds and running tests, since the factory now does those.
-- **review-patch** (new): the checklist from `orchestrate-parallel-fixes`' critical review (wallpaper fixes,
-  unverified mechanisms, padding, follow-up bugs used as an excuse, citations that trace back to one source).
+- **review-patch**: not for the MVP. The checklist is inlined in `review-patch.md`. Later it can become a skill if the
+  checklist grows.
 - **commit-message** and **bug-filing**: existing, used as they are.
 
 `orchestrate-parallel-fixes`, `burn-down-flakiness` and `push-to-try` become code (`orchestrator.ts`,
