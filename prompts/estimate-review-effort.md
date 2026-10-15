@@ -1,1 +1,1 @@
-Rate the effort of reviewing this patch from 1 (short, test-only, obvious) to 5 (subtle product change). Diffstat: {diffstat}. Message: {message}. Diff: {diff}. Justify it in one line.
+Rate the effort of reviewing commit {sha} in {worktree} from 1 (short, test-only, obvious) to 5 (subtle product change). Start from `git show --stat {sha}` and read only the parts of the diff you need: a large removal of dead code can be easy to review. Justify it in one line.

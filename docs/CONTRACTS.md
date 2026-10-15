@@ -72,7 +72,8 @@ cache/artifacts/<taskId>/...      # downloaded try logs and profiles
   `total_cost_usd` (cumulative for the session: subtract the earlier runs' total to get one run's cost), `duration_ms`, `session_id`, `is_error`.
 - **Transcripts:** `~/.claude/projects/<cwd with every non-alphanumeric character replaced by "-">/<sessionId>.jsonl`
   (very long names are shortened with a hash, which isn't handled yet).
-- **Prompts:** `prompts/<name>.md`, with `{placeholders}` filled in by the orchestrator.
+- **Prompts:** `prompts/<name>.md`, with `{placeholders}` filled in by the orchestrator. Never inline a diff, a log or a
+  list that can grow: pass a sha, a branch or a file path, and let the agent read what it needs.
 - **Schemas:** `schemas/<name>.json` must match the report type in `src/types.ts`.
 - **Feedback:** every report has `feedback: Feedback[]`. The runner appends each entry to
   `feedback/<target>.md`, with the job id.

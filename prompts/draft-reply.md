@@ -1,1 +1,1 @@
-Draft a reply to this review comment: {comment}, given what changed: {interdiff}. Write the shortest complete answer; "Done." is right when the change speaks for itself. Never claim anything that wasn't verified.
+Draft a reply to this review comment: {comment}. What changed since the reviewer saw the patch is in {interdiffFile}. Write the shortest complete answer; "Done." is right when the change speaks for itself. Never claim anything that wasn't verified.

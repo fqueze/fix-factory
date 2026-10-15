@@ -39,7 +39,7 @@ Factory runtime (long-running, not CLIs):
 > constraints the text states, and leave fields empty rather than guessing. List anything ambiguous in `questions`.
 
 ### `merge-clusters.md` (Haiku) [A4]
-> These failures were grouped by exact message: {clusters}. Merge clusters whose messages are the same
+> The failure clusters in {clustersFile} were grouped by exact message. Merge clusters whose messages are the same
 > specific failure with different numbers, names or paths. Split clusters that only look alike. A generic message
 > such as "Test timed out" is never a shared cause. Give a one-line reason for each change.
 
@@ -80,11 +80,11 @@ need that file.
 > Change nothing else.
 
 ### `plan-try-pushes.md` (Sonnet) [B2, F1, MVP]
-> Plan the try pushes for: {goal}. Inputs: the failures to cover with their per-config rates ({failures}), the
-> stack's patches with their diffstats ({patches}), and the earlier un-skip push's command and results
-> ({initialPush}). Follow the push-to-try skill. Keep the configs and paths comparable with the un-skip push,
-> and add a separate push when a patch changes product code that those jobs don't cover. Give each push its
-> `mach try` command, rebuild count, and one-line purpose.
+> Plan the try pushes for: {goal}. Inputs are files: the failures to cover with their per-config rates
+> ({failuresFile}), and the earlier un-skip push's command and results ({initialPushFile}); the stack is the
+> branch {branch} in {worktree} (start from `git log --stat {base}..{branch}`). Follow the push-to-try skill. Keep
+> the configs and paths comparable with the un-skip push, and add a separate push when a patch changes product
+> code that those jobs don't cover. Give each push its `mach try` command, rebuild count, and one-line purpose.
 
 ### `investigate-failure.md` (Opus) [C2] — needs the **investigate-race** skill
 > Find the cause of {failureSummary} in {test}, following the investigate-race skill. Evidence: profiles and
@@ -133,14 +133,16 @@ review in `orchestrate-parallel-fixes`.
 > Report each finding as must-fix or nit, with file and line, or return `ok`.
 
 ### `estimate-review-effort.md` (Haiku) [E2]
-> Rate the effort of reviewing this patch from 1 (short, test-only, obvious) to 5 (subtle product change).
-> Diffstat: {diffstat}. Message: {message}. Diff: {diff}. Justify it in one line.
+> Rate the effort of reviewing commit {sha} in {worktree} from 1 (short, test-only, obvious) to 5 (subtle product
+> change). Start from `git show --stat {sha}` and read only the parts of the diff you need: a large removal of dead
+> code can be easy to review. Justify it in one line.
 
 ### `review-stack.md` (Opus) [E4]
-> Here is an assembled stack: commit messages, diffstats and dependencies, in order: {stack}. Look for two
-> patches solving the same problem differently, a shared helper changed under another patch, a root cause
-> deferred that another patch was in a position to fix, and missing or wrong dependencies. Return findings per
-> patch, plus dependency additions and removals with a reason.
+> Review the assembled stack {base}..{branch} in {worktree} (start from `git log --stat`), with its dependencies
+> in {depsFile}. Look for two patches solving the same problem differently, a shared helper changed under another
+> patch, a root cause deferred that another patch was in a position to fix, and missing or wrong dependencies.
+> Read diffs only where you need them. Return findings per patch, plus dependency additions and removals with a
+> reason.
 
 ### `adapt-soft-dep.md` (Haiku, Sonnet if not trivial) [E3b]
 > Patches {patchA} and {patchB} swapped order, and the soft dependency between them says: {reason}. Adjust both
@@ -152,9 +154,10 @@ review in `orchestrate-parallel-fixes`.
 > is semantic (the patch's approach no longer fits the new base), stop and explain instead.
 
 ### `triage-try.md` (Haiku, Sonnet if unclear) [F5]
-> Results of try push {rev} (goal: {goal}): {table}. Logs of jobs fx-tests couldn't parse: {logExcerpts}. For each
-> failing or not-run cell, classify it as fixed, still failing, broken by patch X, unrelated pre-existing, or infra,
-> and cite the log line it rests on.
+> The result table of try push {rev} (goal: {goal}) is in {tableFile}, and the logs of the jobs fx-tests couldn't
+> parse are in {logsDir}. For each failing or not-run cell, classify it as fixed, still failing, broken by patch
+> X, unrelated pre-existing, or infra, and cite the log line it rests on. Read only the parts of the logs you
+> need.
 
 ### `draft-bug.md` (Sonnet) [G2] — uses the **bug-filing** skill
 > Draft a bug for this cause: {handoff}, in {product}::{component}, following the bug-filing skill. The
@@ -173,8 +176,9 @@ review in `orchestrate-parallel-fixes`.
 > and draft an answer for each question. Keep the `Differential Revision:` trailer.
 
 ### `draft-reply.md` (Sonnet) [I5]
-> Draft a reply to this review comment: {comment}, given what changed: {interdiff}. Write the shortest
-> complete answer; "Done." is right when the change speaks for itself. Never claim anything that wasn't verified.
+> Draft a reply to this review comment: {comment}. What changed since the reviewer saw the patch is in
+> {interdiffFile}. Write the shortest complete answer; "Done." is right when the change speaks for itself. Never
+> claim anything that wasn't verified.
 
 ### `recover.md` (Opus) [Recovery]
 > The user says: {text}. The state of request {id} is in {stateDir}: read `events.jsonl`, job outputs and

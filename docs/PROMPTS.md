@@ -51,26 +51,26 @@ Here are the skip-ifs of {folder}, each classified as scoping or flakiness: {ann
 
 ## plan-try-pushes
 
-sonnet · 2. First signal, 6. Verify on try · inputs: `goal`, `failures`, `patches`, `initialPush`
+sonnet · 2. First signal, 6. Verify on try · inputs: `goal`, `failuresFile`, `initialPushFile`, `branch`, `worktree`, `base`
 
 ```
-Plan the try pushes for: {goal}. Inputs: the failures to cover with their per-config rates ({failures}), the stack's patches with their diffstats ({patches}), and the earlier un-skip push's command and results ({initialPush}). Follow the push-to-try skill. Keep the configs and paths comparable with the un-skip push, and add a separate push when a patch changes product code that those jobs don't cover. Give each push its `mach try` command, rebuild count, and one-line purpose.
+Plan the try pushes for: {goal}. Inputs are files: the failures to cover with their per-config rates ({failuresFile}), and the earlier un-skip push's command and results ({initialPushFile}); the stack is the branch {branch} in {worktree} (start from `git log --stat {base}..{branch}`). Follow the push-to-try skill. Keep the configs and paths comparable with the un-skip push, and add a separate push when a patch changes product code that those jobs don't cover. Give each push its `mach try` command, rebuild count, and one-line purpose.
 ```
 
 ## triage-try
 
-haiku · 3. Work list, 6. Verify on try · inputs: `rev`, `goal`, `table`, `logExcerpts`
+haiku · 3. Work list, 6. Verify on try · inputs: `rev`, `goal`, `tableFile`, `logsDir`
 
 ```
-Results of try push {rev} (goal: {goal}): {table}. Logs of jobs fx-tests couldn't parse: {logExcerpts}. For each failing or not-run cell, classify it as fixed, still failing, broken by patch X, unrelated pre-existing, or infra, and cite the log line it rests on.
+The result table of try push {rev} (goal: {goal}) is in {tableFile}, and the logs of the jobs fx-tests couldn't parse are in {logsDir}. For each failing or not-run cell, classify it as fixed, still failing, broken by patch X, unrelated pre-existing, or infra, and cite the log line it rests on. Read only the parts of the logs you need.
 ```
 
 ## merge-clusters
 
-haiku · 3. Work list · inputs: `clusters`
+haiku · 3. Work list · inputs: `clustersFile`
 
 ```
-These failures were grouped by exact message: {clusters}. Merge clusters whose messages are the same specific failure with different numbers, names or paths. Split clusters that only look alike. A generic message such as "Test timed out" is never a shared cause. Give a one-line reason for each change.
+The failure clusters in {clustersFile} were grouped by exact message. Merge clusters whose messages are the same specific failure with different numbers, names or paths. Split clusters that only look alike. A generic message such as "Test timed out" is never a shared cause. Give a one-line reason for each change.
 ```
 
 ## prior-art-verdict
@@ -134,18 +134,18 @@ Rebasing {sha} onto {base} conflicts in {files}. Resolve it, keeping the intent 
 
 ## estimate-review-effort
 
-haiku · 5. Stack · inputs: `diffstat`, `message`, `diff`
+haiku · 5. Stack · inputs: `sha`, `worktree`
 
 ```
-Rate the effort of reviewing this patch from 1 (short, test-only, obvious) to 5 (subtle product change). Diffstat: {diffstat}. Message: {message}. Diff: {diff}. Justify it in one line.
+Rate the effort of reviewing commit {sha} in {worktree} from 1 (short, test-only, obvious) to 5 (subtle product change). Start from `git show --stat {sha}` and read only the parts of the diff you need: a large removal of dead code can be easy to review. Justify it in one line.
 ```
 
 ## review-stack
 
-opus · 5. Stack · inputs: `stack`
+opus · 5. Stack · inputs: `base`, `branch`, `worktree`, `depsFile`
 
 ```
-Here is an assembled stack: commit messages, diffstats and dependencies, in order: {stack}. Look for two patches solving the same problem differently, a shared helper changed under another patch, a root cause deferred that another patch was in a position to fix, and missing or wrong dependencies. Return findings per patch, plus dependency additions and removals with a reason.
+Review the assembled stack {base}..{branch} in {worktree} (start from `git log --stat`), with its dependencies in {depsFile}. Look for two patches solving the same problem differently, a shared helper changed under another patch, a root cause deferred that another patch was in a position to fix, and missing or wrong dependencies. Read diffs only where you need them. Return findings per patch, plus dependency additions and removals with a reason.
 ```
 
 ## classify-review-comments
@@ -166,10 +166,10 @@ The reviewer left these comments on your patch: {comments}. Make the requested c
 
 ## draft-reply
 
-sonnet · 9. Review comments · inputs: `comment`, `interdiff`
+sonnet · 9. Review comments · inputs: `comment`, `interdiffFile`
 
 ```
-Draft a reply to this review comment: {comment}, given what changed: {interdiff}. Write the shortest complete answer; "Done." is right when the change speaks for itself. Never claim anything that wasn't verified.
+Draft a reply to this review comment: {comment}. What changed since the reviewer saw the patch is in {interdiffFile}. Write the shortest complete answer; "Done." is right when the change speaks for itself. Never claim anything that wasn't verified.
 ```
 
 ## adapt-soft-dep
