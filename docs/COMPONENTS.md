@@ -20,14 +20,14 @@ Ten CLIs, each with subcommands. One file per tool, with modules inside it as ne
 | `run-tests.ts` | `run <request>` [C3] · `--recipe R --clean --measure` [C4] · `--recipe R --compare <fix>` [D2] | One runner. Results come from the mozlog raw log. `--measure` gives the repro rate. `--compare` runs without and with the fix, `ln(0.01)/ln(1−p)` times each, plus a plain `--verify` without the DEBUG commits. Says "use try" when the needed run count is too high |
 | `lint-text.ts` | `--kind commit\|bug\|reply` [D5, G2, I5] | Format, length, banned patterns (`file:line`, try links, hedging) |
 | `stack.ts` | `import` (MVP) · `assemble` [E1] · `deps` [E1b] · `order [--landable]` [E3, J1, J2] · `rewrite` [E3, G5, I3, J2] · `interdiff` [I6] · `check` [H2] · `summary` [E5] | Every git stack operation. `rewrite` takes an order plus edits (message edits such as bug numbers, suggested edits from reviewers), keeps trailers, and reports which revisions changed |
-| `try.ts` | `merge` (MVP) · `select` [B2, F1] · `push` [B4, F3] · `watch` [B4, F3] | `select` turns a goal + failures + diff into a command and a dry-run task list, and refuses duplicates. `watch` emits an event per finished job, so work starts on the first failures. `merge` unions the agents' proposed try commands (MVP) |
+| `try.ts` | `dry-run` · `push` [B4, F3] · `watch` [B4, F3] · `select` [B2, F1] (later) | `dry-run` gives the task list of a planned push and refuses a duplicate of a pending one. `watch` emits an event per finished job, so work starts on the first failures. `select` (later) computes the selection without an agent |
 | `phab.ts` | `poll` [I1] · `reviewers` [H1] · `run-moz-phab` [H4, I7, J3] | `poll` gets per-reviewer status, inline comment ids and suggested-edit text (from `phab-suggestions.py`). `run-moz-phab` runs only on your click, in a PTY streamed to the page |
 
 Factory runtime (long-running, not CLIs):
 
 | Module | Role |
 |---|---|
-| `orchestrator.ts` | State machine choosing the next job for each work item. Pure functions over the DB |
+| `orchestrator.ts` | State machine choosing the next job for each work item. Pure functions over the folded `events.jsonl` state |
 | `scheduler.ts` | Admits jobs by cores, RAM (agents and `profiler-cli` included) and exclusive resources. Review comments come first. Also runs the health checks and pauses job types whose service is down |
 | `agent-run.ts` | Runs `claude -p` with prompt, schema, model, budget and session id. Validates the output, records cost and duration, appends `feedback` entries to each target's file, and resumes sessions |
 | `server.ts` | Web UI, SSE updates, stack-viewer pages served same-origin, request profiles built from the job rows |
@@ -60,8 +60,21 @@ Factory runtime (long-running, not CLIs):
 
 ### `investigate-and-fix.md` (Opus, MVP only) [C2–D1 as done today]
 > Fix {test} in {worktree}, following debug-a-test-failure and subagent-brief.md. The failure: {failure summary}.
-> When you want a try push, write the command to `artifacts/try-request.sh` and stop. Keep the state line of
-> `artifacts/sessionlog.md` current, and list any patch yours must land after.
+> Keep the state line of `artifacts/sessionlog.md` current, and set it to "fix verified locally" when done. If the
+> fix needs its own bug, draft it in `artifacts/bug-draft.md` with the bug-filing skill. List any patch yours must land after.
+
+### `write-annotation-patches.md` (Sonnet) [B1, MVP]
+> Here are the skip-ifs of {folder}, each classified as scoping or flakiness: {annotations}. Write two commits.
+> The first turns each scoping skip into the equivalent `run-if`. The second is
+> `DEBUG - Remove flakiness skip-if annotations in {folder} to reproduce on try. DO NOT LAND.` and removes every flakiness skip.
+> Change nothing else.
+
+### `plan-try-pushes.md` (Sonnet) [B2, F1, MVP]
+> Plan the try pushes for: {goal}. Inputs: the failures to cover with their per-config rates ({failures}), the
+> stack's patches with their diffstats ({patches}), and the earlier un-skip push's command and results
+> ({initial push}). Follow the push-to-try skill. Keep the configs and paths comparable with the un-skip push,
+> and add a separate push when a patch changes product code that those jobs don't cover. Give each push its
+> `mach try` command, rebuild count, and one-line purpose.
 
 ### `investigate-failure.md` (Opus) [C2] — needs the **investigate-race** skill
 > Find the cause of {failure summary} in {test}, following the investigate-race skill. Evidence: profiles and

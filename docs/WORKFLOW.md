@@ -7,7 +7,7 @@ logs, `git diff`, status `.md` files.
 
 ## Principles
 
-1. **No parent agent.** The Node orchestrator is the parent. All state lives in SQLite.
+1. **No parent agent.** The Node orchestrator is the parent. All state lives in append-only JSON lines files (one `events.jsonl` per request).
 2. **Short agent sessions with JSON output** (`claude -p --json-schema --session-id --max-budget-usd`).
    When an agent needs a build, a test run or a try push, it *returns a request*. The script
    runs it and resumes the session with the result.
@@ -199,7 +199,7 @@ Mockup: `mockup.html`.
   header strip with today's numbers and machine load.
 - On a phone it's the same single column.
 
-Node 24 + TypeScript, nothing else: `node:sqlite`, `node:http`, server-sent events, `node:test`.
+Node 24 + TypeScript, nothing else: `node:http`, JSON lines files, server-sent events, `node:test`.
 Pages are rendered by pure functions to HTML strings (tested without a browser), plus a small
 client script for live updates. Dependencies: `typescript` and `claude-profiler`.
 
