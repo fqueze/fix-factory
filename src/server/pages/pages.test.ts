@@ -258,6 +258,7 @@ describe("a burndown with closed groups, running agents and a dropped patch", ()
     assert.doesNotMatch(h, /data-patch=/);
     assert.match(h, /<details class="fold" data-fold="dropped-loose"><summary>Dropped \(1\)<\/summary><div class="sub"><span class="bug none">no bug yet<\/span> Convert scoping skip-if/);
     assert.match(h, /<span class="rsum">7 failure groups: 1 not started, 2 investigating, 4 left as-is<\/span>/);
+    assert.doesNotMatch(h, /<h3>Patches<\/h3>/, "no heading over dropped patches alone");
   });
 
   it("names tests relative to the request's folder, with the full path and message in tooltips", () => {
@@ -269,15 +270,15 @@ describe("a burndown with closed groups, running agents and a dropped patch", ()
   it("shows running work in the group rows, with the group's cost so far", () => {
     assert.match(h, /investigating<\/span><span class="sub"> · Opus · <span data-since="2026-10-15T08:53:00.000Z">7 min<\/span> · <span title="Agent cost of this group so far">\$0\.40<\/span><\/span>/);
     assert.match(h, /investigating<\/span><span class="sub"> · Opus · <span data-since="2026-10-15T08:54:00.000Z">6 min<\/span><\/span>/);
-    assert.match(h, /not started<\/span><span class="sub"> · build worktree · <span data-since/);
+    assert.match(h, /<span class="st run">preparing<\/span><span class="sub"> · build worktree · <span data-since/);
   });
 
   it("puts the running groups first, then the others, and folds the closed ones with their full reasons", () => {
     const at = (item: string) => h.indexOf(`data-item="${item}"`);
-    const fold = h.indexOf('<details class="fold" data-fold="closed-groups"><summary>4 left as-is</summary>');
+    const fold = h.indexOf('<details class="fold" data-fold="closed-groups"><summary>3 left as-is</summary>');
     assert.ok(fold > 0);
     assert.ok(at("i-browser-policy-trackingprotection") < fold);
-    for (const closed of ["i-annotations", "i-browser-policy-sitepolicies-jit", "i-browser-policy-firefoxhome", "i-browser-policy-firefoxhome-2"]) {
+    for (const closed of ["i-annotations", "i-browser-policy-firefoxhome", "i-browser-policy-firefoxhome-2"]) {
       assert.ok(at(closed) > fold, closed);
     }
     assert.match(h, /<details class="clamp3" data-fold="detail-i-annotations" title="left as-is: Dropped the run-if commit per review;[^"]*nothing left to convert and the DEBUG un-skip push showed no failures to fix\."><summary><span class="st closed">left as-is<\/span><span class="detail">: Dropped/);
@@ -287,7 +288,7 @@ describe("a burndown with closed groups, running agents and a dropped patch", ()
     r.items["i-browser-policy-firefoxhome"].state = "handed back";
     const h2 = renderRequest(r, ctx, true).value;
     assert.ok(h2.indexOf('data-item="i-browser-policy-trackingprotection"') < h2.indexOf('data-item="i-browser-policy-sitepolicies-serviceworke-2"'), "not started after running");
-    assert.match(h2, /<summary>4 closed<\/summary>/);
+    assert.match(h2, /<summary>3 closed<\/summary>/);
   });
 
   it("shows the Bug to file link of a group whose report drafted a bug without a patch", () => {
@@ -297,6 +298,19 @@ describe("a burndown with closed groups, running agents and a dropped patch", ()
     const r = structuredClone(get(ID));
     r.patches["p-runif"].item = "i-browser-policy-sitepolicies-jit";
     assert.doesNotMatch(renderRequest(r, ctx, true).value, /Workers start slowly/, "a patch's draft shows on the patch row");
+  });
+
+  it("keeps a closed group with a bug to file out of the fold, without asking you for it", () => {
+    assert.ok(h.indexOf('data-item="i-browser-policy-sitepolicies-jit"') < h.indexOf('data-fold="closed-groups"'));
+    assert.doesNotMatch(h, /to file<\/span>|bug to file/);
+    assert.doesNotMatch(h, /class="action"/);
+  });
+
+  it("lists the file names of a small group, and the item id of a job whose item is unknown", () => {
+    assert.match(h, /">browser_policy_managedbookmarks\.js, browser_policy_search_engine\.js<\/span>/);
+    const r = structuredClone(get(ID));
+    r.jobs["j-inv-tp"].item = "i-gone";
+    assert.match(renderRequest(r, ctx, true).value, /<span class="sub" title="i-gone">i-gone<\/span>/);
   });
 
   it("folds recent jobs, with job labels and test names", () => {

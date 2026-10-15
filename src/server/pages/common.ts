@@ -274,15 +274,15 @@ export function requestCost(r: RequestState): number {
 }
 
 // Test paths are long and share the request's folder: show what follows it.
-export function relativePath(path: string, folder: string | undefined): string {
+function relativePath(path: string, folder: string | undefined): string {
   return folder && path.startsWith(`${folder}/`) ? path.slice(folder.length + 1) : path;
 }
 
-// "browser_foo.js", "sub/browser_foo.js", or the subfolder and test count of a group of several.
+// "browser_foo.js", "sub/browser_foo.js, browser_bar.js", or the subfolder and test count of a larger group.
 export function groupLabel(r: RequestState, i: ItemView): string {
   const tests = i.group.tests;
-  if (tests.length === 1) {
-    return relativePath(tests[0], r.folder);
+  if (tests.length <= 3) {
+    return tests.map((t) => relativePath(t, r.folder)).join(", ");
   }
   const folder = i.folder === r.folder ? "" : relativePath(i.folder, r.folder);
   return `${folder ? `${folder}, ` : ""}${tests.length} tests`;
@@ -341,7 +341,6 @@ export function jobLabel(name: string): string {
   return JOB_LABELS[name] ?? JOB_LABELS[name.split(" ").slice(0, 2).join(" ")] ?? name;
 }
 
-// "opus" → "Opus".
 export function modelLabel(model: string): string {
   return model.charAt(0).toUpperCase() + model.slice(1);
 }

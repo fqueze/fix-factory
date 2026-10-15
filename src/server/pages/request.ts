@@ -99,7 +99,7 @@ export function renderRequestBody(r: RequestState, ctx: RenderContext): Html {
     ${configLine(r)}
     ${r.metaBug ? metaBugLine(r, back) : null}
     ${stacks.map((s) => stackSection(r, s, ctx))}
-    ${loose.length ? html`<h3>Patches</h3>${patchTable(r, loose, ctx, "loose")}` : null}
+    ${loose.length ? html`${loose.some((p) => !isDropped(r, p)) ? html`<h3>Patches</h3>` : null}${patchTable(r, loose, ctx, "loose")}` : null}
     ${items.length ? html`<h3>${stacks.length ? "Other groups" : "Failure groups"}</h3>${groupTable(r, items, ctx)}` : null}
     ${planned.length ? html`<h3>Try plan <span class="sub">· waiting for your approval</span></h3><table><tbody>${planned.map((p) => html`<tr><td class="res plan">push ${p.id}</td><td>${p.purpose}${p.taskCount === undefined ? null : html` · ${p.taskCount} tasks`}</td><td>${commandDetails(p)}</td></tr>`)}</tbody></table><div style="margin-top:6px">${approvePushControls(r, planned, back)}</div>` : null}
     ${sent.length ? html`<h3>Try pushes</h3><table><tbody>${sent.map(pushRow)}</tbody></table>` : null}
@@ -194,7 +194,7 @@ function patchTable(r: RequestState, patches: PatchView[], ctx: RenderContext, f
       columns.value ? html`<th class="num hide-sm" title="Failures per week fixed">Value</th>` : null
     }${columns.reviewers ? html`<th>Reviewers</th>` : null}</tr></thead>
     <tbody>${rest.map((p) => patchRow(r, p, columns, ctx))}${
-      folded.length ? html`<tr><td colspan="${span}" class="sub"><details><summary>${folded.length} landed ▸</summary>${folded.map((p) => patchLine(p))}</details></td></tr>` : null
+      folded.length ? html`<tr><td colspan="${span}" class="sub"><details data-fold="landed-${fold}"><summary>${folded.length} landed ▸</summary>${folded.map((p) => patchLine(p))}</details></td></tr>` : null
     }</tbody>
   </table></div>`
       : null
@@ -321,11 +321,14 @@ function groupTable(r: RequestState, items: ItemView[], ctx: RenderContext): Htm
   const busy = (i: ItemView) => runningJob(r, i) !== undefined || stateClass(i.state) === "run" || r.needsUser.some((n) => n.item === i.id);
   const notStarted = (i: ItemView) => i.state === "not started";
   const sorted = [...open.filter(busy), ...open.filter((i) => !busy(i) && !notStarted(i)), ...open.filter((i) => !busy(i) && notStarted(i))];
-  const states = new Set(closed.map((i) => i.state));
-  const closedLabel = `${closed.length} ${states.size === 1 ? closed[0].state : "closed"}`;
-  return html`<table class="groups"><tbody>${sorted.map((i) => itemRow(r, i, ctx))}${
-    closed.length
-      ? html`<tr><td colspan="2" class="foldrow"><details class="fold" data-fold="closed-groups"><summary>${closedLabel}</summary><table class="groups"><tbody>${closed.map((i) =>
+  // A bug to file stays in sight, even for a closed group.
+  const withDraft = closed.filter((i) => itemBugDraft(r, i));
+  const folded = closed.filter((i) => !itemBugDraft(r, i));
+  const states = new Set(folded.map((i) => i.state));
+  const closedLabel = `${folded.length} ${states.size === 1 ? folded[0].state : "closed"}`;
+  return html`<table class="groups"><tbody>${[...sorted, ...withDraft].map((i) => itemRow(r, i, ctx))}${
+    folded.length
+      ? html`<tr><td colspan="2" class="foldrow"><details class="fold" data-fold="closed-groups"><summary>${closedLabel}</summary><table class="groups"><tbody>${folded.map((i) =>
           itemRow(r, i, ctx),
         )}</tbody></table></details></td></tr>`
       : null
@@ -342,7 +345,9 @@ function itemRow(r: RequestState, i: ItemView, ctx: RenderContext): Html {
         cost > 0 ? html` · <span title="Agent cost of this group so far">${formatCost(cost)}</span>` : null
       }</span>`
     : null;
-  const state = html`<span class="st ${stateClass(i.state)}">${i.state}</span>${work}${i.detail ? html`<span class="detail">: ${i.detail}</span>` : null}`;
+  // A job running for a group not started yet (its worktree build) means it has started.
+  const preparing = job !== undefined && i.state === "not started";
+  const state = html`<span class="st ${preparing ? "run" : stateClass(i.state)}">${preparing ? "preparing" : i.state}</span>${work}${i.detail ? html`<span class="detail">: ${i.detail}</span>` : null}`;
   return html`<tr data-item="${i.id}">
     <td class="gname"><span title="${[...tests, i.group.configs.join(", ")].join("\n")}">${groupLabel(r, i)}</span><div class="sub clamp2" title="${i.group.message}">${i.group.message}</div></td>
     <td>${
@@ -377,7 +382,8 @@ function recentJobs(r: RequestState, ctx: RenderContext): Html | null {
   return html`<details class="fold section" data-fold="jobs"><summary>Recent jobs</summary><div class="scroll"><table><tbody>${jobs.map(
     (j) =>
       html`<tr${j.error ? html` title="${j.error}"` : null}><td><span title="${j.name}">${jobLabel(j.name)}</span> ${
-        j.item === undefined ? null : html`<span class="sub" title="${j.item}">${groupLabel(r, r.items[j.item])}</span>`
+        // The folded state keeps jobs whose item it doesn't know.
+        j.item === undefined ? null : html`<span class="sub" title="${j.item}">${j.item in r.items ? groupLabel(r, r.items[j.item]) : j.item}</span>`
       }</td><td class="sub">${j.kind}${j.model ? ` · ${modelLabel(j.model)}` : ""}</td><td class="res ${
         j.endedAt === undefined ? "run" : j.exitCode === 0 ? "ok" : "bad"
       }">${j.endedAt === undefined ? html`running ${elapsed(j.startedAt, ctx)}` : `${formatDuration(j.durationMs ?? Date.parse(j.endedAt) - Date.parse(j.startedAt))}${j.exitCode ? `, exit ${j.exitCode}` : ""}`}</td><td class="num sub">${
