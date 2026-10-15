@@ -33,7 +33,7 @@ export function renderStrip(requests: RequestState[], ctx: RenderContext): Html 
   const jobs = requests.flatMap((r) => Object.values(r.jobs)).filter((j) => j.endedAt === undefined);
   const agents = jobs.filter((j) => j.kind === "agent").length;
   const builds = jobs.filter((j) => j.kind === "build").length;
-  const needs = requests.filter((r) => r.step !== "done" && r.needsUser.length > 0).length;
+  const needs = requests.filter((r) => r.needsUser.length > 0).length;
   return html`<div class="strip" id="strip">
     <span>agents <b>${agents}${ctx.maxAgents ? `/${ctx.maxAgents}` : ""}</b></span>
     <span>builds <b>${builds}${ctx.maxBuilds ? `/${ctx.maxBuilds}` : ""}</b></span>

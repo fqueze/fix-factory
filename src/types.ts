@@ -122,6 +122,7 @@ export type Event =
   | (EventBase & { type: "request-created"; kind: RequestKind; text: string; folder?: string; rev?: string; command?: string })
   | (EventBase & { type: "request-routed"; kind: Exclude<RequestKind, "unrouted">; folder?: string; rev?: string })
   | (EventBase & { type: "request-forwarded"; to: RequestId })
+  | (EventBase & { type: "request-superseded"; by: RequestId })
   | (EventBase & { type: "config-set"; config: Record<string, unknown> })
   | (EventBase & { type: "step"; step: RequestStep })
   | (EventBase & { type: "item-created"; item: ItemId; folder: string; group: FailureGroup })
@@ -337,6 +338,7 @@ export interface RequestState {
   rev?: string;
   fromCommand?: string; // the tell-factory command that created it
   forwardedTo?: RequestId; // route-request said its text is about that request
+  supersededBy?: RequestId; // route-request failed, and you rephrased it in the main box as that request
   createdAt: Iso;
   updatedAt: Iso;
   step: RequestStep;

@@ -314,9 +314,8 @@ class Planner {
       return;
     }
     if (last.purpose.what === "route") {
-      // Nothing to retry by hand: the text is all there is.
+      // Nothing to retry by hand: the text is all there is. The next text from the main box supersedes it (commands.ts).
       this.raise(`failed:${last.job}`, { action: "The factory couldn't tell what this is: rephrase it in the main box", detail, job: last.job });
-      this.setStep("done");
       return;
     }
     const action = NO_RETRY.has(last.purpose.what) ? `${last.name} failed (not retried: it may have happened)` : `${last.name} failed twice`;

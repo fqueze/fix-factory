@@ -117,6 +117,27 @@ describe("Orchestrator", () => {
     }
   });
 
+  it("keeps text it couldn't route open with its ⚑, until the next text from the main box supersedes it", async () => {
+    const { config, o, root } = setup();
+    try {
+      add(config.stateDir, { type: "request-created", request: "r-hmm", kind: "unrouted", text: "hmm" });
+      add(config.stateDir, { type: "needs-user", request: "r-hmm", key: "failed:j-1", action: "The factory couldn't tell what this is: rephrase it in the main box", detail: "d", job: "j-1" });
+      // Another request with a ⚑ that isn't about routing stays as it is.
+      add(config.stateDir, { type: "request-created", request: "r-b", kind: "try-push", text: "", rev: "abcdef123456" });
+      add(config.stateDir, { type: "needs-user", request: "r-b", key: "failed:j-2", action: "x failed twice", detail: "d", job: "j-2" });
+      await o.startup();
+      const told = appendCommand(config.stateDir, { cmd: "tell-factory", text: "burn down dom/base/test" });
+      await o.tick();
+      const id = `r-${told.t.slice(0, 10).replace(/-/g, "")}-burn-down-dom-base-test`;
+      const s = foldEvents(readEvents(config.stateDir, "r-hmm"));
+      assert.deepEqual([s.step, s.supersededBy, s.needsUser, s.notes.map((n) => n.text)], ["done", id, [], [`Superseded by ${id}.`]]);
+      assert.equal(foldEvents(readEvents(config.stateDir, "r-b")).needsUser.length, 1);
+      assert.equal(foldEvents(readEvents(config.stateDir, id)).kind, "unrouted");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("executes the global box's text once when its commands are read again", async () => {
     const { root, config, o } = setup({ maxAgents: 2 });
     try {

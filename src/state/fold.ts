@@ -56,6 +56,9 @@ export function foldEvents(events: readonly Event[]): RequestState {
       case "request-forwarded":
         s.forwardedTo = e.to;
         break;
+      case "request-superseded":
+        s.supersededBy = e.by;
+        break;
       case "request-routed":
         s.kind = e.kind;
         s.folder = e.folder;

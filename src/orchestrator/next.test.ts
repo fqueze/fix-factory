@@ -123,7 +123,7 @@ describe("1. request", () => {
     for (const rev of ["abc", "main", "g".repeat(12), "a".repeat(41)]) assert.throws(() => sc.complete("route", { report: routed({ kind: "try-push", rev }) }), /revision/, rev);
   });
 
-  it("when route-request fails twice, asks you to rephrase it in the main box and closes the request", () => {
+  it("when route-request fails twice, asks you to rephrase it in the main box, and the request stays open", () => {
     const sc = new Scenario("unrouted", { text: "hmm" });
     sc.step();
     sc.complete("route", { error: "no result line" });
@@ -131,8 +131,9 @@ describe("1. request", () => {
     const job = sc.complete("route", { error: "no result line" });
     sc.step();
     const s = sc.state();
-    assert.equal(s.step, "done");
+    assert.equal(s.step, "request");
     assert.deepEqual(s.needsUser.map((n) => [n.key, n.action]), [[`failed:${job}`, "The factory couldn't tell what this is: rephrase it in the main box"]]);
+    assert.deepEqual(sc.step(), []);
   });
 });
 

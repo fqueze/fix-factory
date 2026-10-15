@@ -176,10 +176,13 @@ export class Orchestrator {
       return;
     }
     const request = c.request;
-    if (c.cmd === "tell-factory" && request === undefined && this.requests().some((id) => this.load(id).s.fromCommand === c.id)) return; // already executed
+    const global = c.cmd === "tell-factory" && request === undefined;
+    const all = global ? this.requests().map((id) => this.load(id).s) : [];
+    if (all.some((s) => s.fromCommand === c.id)) return; // already executed
     const loaded = request !== undefined && this.requests().includes(request) ? this.load(request) : undefined;
     if (loaded?.view.executed.has(c.id)) return;
     const effects = commandEffects(c, {
+      unroutable: all.filter((s) => s.kind === "unrouted" && s.step !== "done" && s.needsUser.some((n) => n.key.startsWith("failed:"))),
       config: this.config,
       state: loaded?.s,
       view: loaded?.view,

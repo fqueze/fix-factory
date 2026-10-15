@@ -22,6 +22,7 @@ export interface CommandContext {
   view?: View;
   exists: (request: RequestId) => boolean;
   plan: (job: JobId) => JobPlan | undefined; // jobs/<job>/plan.json, what the runner started
+  unroutable?: RequestState[]; // for a global tell-factory: open requests whose route-request failed twice
 }
 
 // r-20261015-<slug>, from the first words of the text.
@@ -55,7 +56,15 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
     case "tell-factory":
       if (c.request === undefined) {
         // The global box: a request of its own, which route-request makes a new one or forwards.
-        effects.push({ type: "event", event: { type: "request-created", request: newRequestId(c, ctx.exists), kind: "unrouted", text: c.text, command: c.id } });
+        const request = newRequestId(c, ctx.exists);
+        effects.push({ type: "event", event: { type: "request-created", request, kind: "unrouted", text: c.text, command: c.id } });
+        // Text route-request couldn't make sense of asks you to rephrase it: this is the rephrasing.
+        for (const old of ctx.unroutable ?? []) {
+          const at = (e: RequestEvent): Effect => ({ type: "event", event: { ...e, request: old.id } as EventInput });
+          effects.push(at({ type: "request-superseded", by: request }), at({ type: "note", text: `Superseded by ${request}.` }));
+          for (const n of old.needsUser) effects.push(at({ type: "user-done", key: n.key }));
+          effects.push(at({ type: "step", step: "done" }));
+        }
         return effects;
       }
       if (!s) return effects;
