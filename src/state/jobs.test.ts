@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterEach, beforeEach, test } from "node:test";
-import { cancelJob, groupMembers, isAlive, jobDir, jobStatus, readExit, readPidStartTime, reconcile, startJob, type JobSpec, type JobStatus } from "./jobs.ts";
+import { cancelJob, groupMembers, isAlive, jobDir, jobStatus, newJobId, readExit, readPidStartTime, reconcile, startJob, type JobSpec, type JobStatus } from "./jobs.ts";
 
 let dir: string;
 beforeEach(() => {
@@ -68,6 +68,14 @@ test("stdin comes from stdinFile, or /dev/null without it", async () => {
   await waitFor(without.job);
   assert.equal(log(withFile.job, "out.log").trim(), "200001");
   assert.equal(log(without.job, "out.log").trim(), "0");
+});
+
+test("files are written into the job directory before the command starts", async () => {
+  const job = newJobId();
+  const started = startJob(dir, spec(["cat"], { stdinFile: join(dir, "jobs", job, "prompt.md") }), { job, files: { "prompt.md": "the prompt\n" } });
+  await waitFor(started.job);
+  assert.equal(log(job, "out.log"), "the prompt\n");
+  assert.throws(() => startJob(dir, spec(["true"]), { files: { "../x": "" } }), /invalid job file name/);
 });
 
 test("a failing command and a missing command", async () => {

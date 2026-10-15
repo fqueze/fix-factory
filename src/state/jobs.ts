@@ -50,7 +50,9 @@ export function newJobId(): JobId {
   return `j-${t}-${randomBytes(3).toString("hex")}`;
 }
 
-export function startJob(stateDir: string, spec: JobSpec, opts: { job?: JobId } = {}): StartedJob {
+// files: written into the job directory before the command starts, by name (e.g. a prompt.md the
+// spec's stdinFile points at, which can't exist before the directory does).
+export function startJob(stateDir: string, spec: JobSpec, opts: { job?: JobId; files?: Record<string, string> } = {}): StartedJob {
   if (spec.cmd.length === 0) {
     throw new Error("startJob: empty cmd");
   }
@@ -58,6 +60,10 @@ export function startJob(stateDir: string, spec: JobSpec, opts: { job?: JobId } 
   const dir = jobDir(stateDir, job);
   mkdirSync(join(stateDir, "jobs"), { recursive: true });
   mkdirSync(dir); // fails if the job id was already used
+  for (const [name, content] of Object.entries(opts.files ?? {})) {
+    checkId(name, "job file name");
+    writeFileSync(join(dir, name), content);
+  }
   writeFileSync(join(dir, "spec.json"), JSON.stringify(spec, null, 2) + "\n");
   const child = spawn(process.execPath, [WRAPPER, dir], { detached: true, stdio: "ignore", cwd: dir });
   child.on("error", () => {

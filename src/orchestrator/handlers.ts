@@ -29,7 +29,7 @@ import type {
   ReviseBugDraftReport,
   TriageTryReport,
   WriteAnnotationPatchesReport,
-} from "./reports.ts";
+} from "../types.ts";
 import { succeeded, type JobRecord, type View } from "./view.ts";
 
 export interface HandlerInput {

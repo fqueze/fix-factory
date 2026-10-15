@@ -4,28 +4,7 @@
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import type { EventInput } from "../state/events.ts";
-import type { FactoryConfig, ItemId, JobId, JobKind, PatchId, PushId, RequestId } from "../types.ts";
-
-// Why a job runs. Stored as an extra `purpose` field of its job-started event, so the
-// orchestrator can tell after a restart what each job was for.
-export interface Purpose {
-  key: string; // one job (plus its retry) per key: next() never starts a key that has a job
-  what: string;
-  item?: ItemId;
-  patch?: PatchId;
-  push?: PushId;
-  stack?: string;
-  index?: number;
-  sha?: string;
-  args?: string[]; // mach try arguments of a dry-run, reused by the push
-  cwd?: string; // the worktree a dry-run ran in, reused by the push
-  purpose?: string; // a planned push's one-line purpose
-  edits?: Record<PatchId, number>; // bug numbers a rewrite puts in commit messages
-  patches?: Record<string, PatchId>; // 12-character sha prefix → patch, for the shas a stack.ts job gets
-  comments?: number[]; // review comment ids an address-review run handles
-  reason?: string; // why an author is resumed: "lint", "review", "try", "comment", ...; what you told recover
-  replyTo?: JobId; // the recover run a reply-recovery answers
-}
+import type { FactoryConfig, ItemId, JobId, JobKind, JobPurpose, RequestId } from "../types.ts";
 
 // The job's name is the prompt: its model (prompts/index.json) and its schema (schemas/<name>.json).
 // A resumed author keeps the name of its first run, so its report keeps the same schema.
@@ -37,7 +16,7 @@ export interface AgentPlan {
 }
 
 export interface JobPlan {
-  purpose: Purpose;
+  purpose: JobPurpose;
   kind: JobKind;
   name: string;
   item?: ItemId;

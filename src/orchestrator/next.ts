@@ -1,6 +1,6 @@
 // The pipeline of docs/MVP.md as a pure function: (request state, context) → actions.
 //
-// Every job has a key (Purpose.key). next() never starts a key that already has a job, so it can
+// Every job has a key (JobPurpose.key). next() never starts a key that already has a job, so it can
 // run as often as needed: it re-derives where each request stands from the events and the job
 // outputs, and asks for what's missing. A failed job is retried once under the same key (an agent
 // is resumed with what went wrong), then raises `failed:<job>` for you.
@@ -26,6 +26,7 @@ import type {
   ItemId,
   ItemState,
   ItemView,
+  JobPurpose,
   JobId,
   NeedsUser,
   PatchId,
@@ -46,7 +47,7 @@ import {
   shortHash,
   slug,
   type JobPlan,
-  type Purpose,
+
 } from "./plan.ts";
 import type {
   ClassifyAnnotationReport,
@@ -58,7 +59,7 @@ import type {
   ReviewStackReport,
   TriageTryReport,
   WriteAnnotationPatchesReport,
-} from "./reports.ts";
+} from "../types.ts";
 import { succeeded, type JobRecord, type View } from "./view.ts";
 
 export interface Ctx {
@@ -319,13 +320,13 @@ class Planner {
   // -------------------------------------------------------------------------
   // Plan builders
 
-  cli(what: string, tool: string, args: string[], opts: Partial<Omit<JobPlan, "purpose" | "cli">> & { purpose?: Partial<Purpose> } = {}): JobPlan {
+  cli(what: string, tool: string, args: string[], opts: Partial<Omit<JobPlan, "purpose" | "cli">> & { purpose?: Partial<JobPurpose> } = {}): JobPlan {
     const { purpose, ...rest } = opts;
     const name = `${tool} ${args.find((a) => !a.startsWith("-")) ?? ""}`.trim();
     return { kind: "script", name, cwd: requestDir(this.config, this.s.id), ...rest, purpose: { key: "", what, ...purpose }, cli: { tool, args } };
   }
 
-  agent(what: string, prompt: string, vars: Record<string, string | number>, opts: Partial<Omit<JobPlan, "purpose" | "agent">> & { purpose?: Partial<Purpose>; key: string }): JobPlan {
+  agent(what: string, prompt: string, vars: Record<string, string | number>, opts: Partial<Omit<JobPlan, "purpose" | "agent">> & { purpose?: Partial<JobPurpose>; key: string }): JobPlan {
     const { purpose, key, ...rest } = opts;
     return {
       kind: "agent",
@@ -338,11 +339,11 @@ class Planner {
   }
 
   // A fresh agent, keyed: the session id derives from the key.
-  wantAgent(key: string, what: string, prompt: string, vars: Record<string, string | number>, opts: Partial<Omit<JobPlan, "purpose" | "agent">> & { purpose?: Partial<Purpose> } = {}): JobRecord | undefined {
+  wantAgent(key: string, what: string, prompt: string, vars: Record<string, string | number>, opts: Partial<Omit<JobPlan, "purpose" | "agent">> & { purpose?: Partial<JobPurpose> } = {}): JobRecord | undefined {
     return this.want(key, () => this.agent(what, prompt, vars, { ...opts, key }));
   }
 
-  worktree(name: string, purpose: Partial<Purpose> = {}): JobPlan {
+  worktree(name: string, purpose: Partial<JobPurpose> = {}): JobPlan {
     return this.cli("worktree", "worktree.ts", ["create", name, "--base", this.config.baseRef, "--build", "artifact"], {
       kind: "build",
       cwd: this.config.firefoxRepo,

@@ -9,7 +9,8 @@ import { foldEvents } from "../state/fold.ts";
 import type { Event, FactoryConfig, JobId, RequestKind, RequestState } from "../types.ts";
 import { handleFinished } from "./handlers.ts";
 import { next, type Action } from "./next.ts";
-import type { JobPlan, Purpose } from "./plan.ts";
+import type { JobPlan } from "./plan.ts";
+import type { JobPurpose } from "../types.ts";
 import { buildView, type View } from "./view.ts";
 
 export const ID = "r-20261015-test";
@@ -148,7 +149,7 @@ export class Scenario {
     return p;
   }
 
-  purpose(key: string): Purpose {
+  purpose(key: string): JobPurpose {
     return this.plan(key).purpose;
   }
 

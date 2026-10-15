@@ -2,11 +2,11 @@
 // each job's purpose and outcome, every needs-user key ever raised or done, and the try job
 // failures. Pure.
 import type { Event, ItemId, JobId, JobKind, PushId, RequestStep } from "../types.ts";
-import type { Purpose } from "./plan.ts";
+import type { JobPurpose } from "../types.ts";
 
 export interface JobRecord {
   job: JobId;
-  purpose: Purpose;
+  purpose: JobPurpose;
   kind: JobKind;
   name: string;
   item?: ItemId;
@@ -42,7 +42,7 @@ export function buildView(events: readonly Event[]): View {
   for (const e of events) {
     switch (e.type) {
       case "job-started": {
-        const purpose = (e as { purpose?: Purpose }).purpose ?? { key: `job:${e.job}`, what: "unknown" };
+        const purpose = (e as { purpose?: JobPurpose }).purpose ?? { key: `job:${e.job}`, what: "unknown" };
         const r: JobRecord = { job: e.job, purpose, kind: e.kind, name: e.name, item: e.item, cwd: e.cwd, sessionId: e.sessionId, startedAt: Date.parse(e.t) };
         v.jobs.push(r);
         byJob.set(e.job, r);

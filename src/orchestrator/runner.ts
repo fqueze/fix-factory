@@ -1,14 +1,15 @@
 // Starts planned jobs and records finished ones. The side-effecting half of the orchestrator:
 // writes the plan's files, renders prompts, starts the detached job, and turns its output into
 // events (src/orchestrator/handlers.ts says what they mean).
-import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { appendFeedback, buildAgentCommand, parseStreamJson, promptVersion, renderPrompt, validateReport, type JsonSchema } from "../agents/run.ts";
-import { appendEvent, type EventInput } from "../state/events.ts";
+import type { EventInput } from "../state/events.ts";
+import { appendEventSafe } from "./event-data.ts";
 import { jobDir, newJobId, startJob, type ExitInfo } from "../state/jobs.ts";
 import type { FactoryConfig, Feedback, JobId, RequestState } from "../types.ts";
 import { handleFinished, handleWatchLines } from "./handlers.ts";
-import { reportPath, requestDir, type JobPlan } from "./plan.ts";
+import { reportPath, type JobPlan } from "./plan.ts";
 import type { JobRecord, View } from "./view.ts";
 
 export interface RunnerDeps {
@@ -52,6 +53,8 @@ export function startPlan(deps: RunnerDeps, request: string, plan: JobPlan): Job
   writeFiles(plan.files ?? []);
   let cmd: string[];
   let stdinFile: string | undefined;
+  // plan.json: what retry-job runs again, through the same path (dry run included).
+  const jobFiles: Record<string, string> = { "plan.json": JSON.stringify(plan, null, 2) + "\n" };
   let model: string | undefined;
   let version: string | undefined;
   if (plan.agent) {
@@ -60,10 +63,8 @@ export function startPlan(deps: RunnerDeps, request: string, plan: JobPlan): Job
     const promptFile = join(deps.factoryRoot, "prompts", `${plan.name}.md`);
     version = promptVersion(promptFile);
     const text = plan.agent.vars ? renderPrompt(readFileSync(promptFile, "utf8"), plan.agent.vars) : plan.agent.message!;
-    // jobs/<job>/ can't exist before startJob creates it, so the prompt waits in the request's
-    // directory and is copied to jobs/<job>/prompt.md once the job exists.
-    stdinFile = join(requestDir(config, request), "prompts", `${job}.md`);
-    writeFiles([{ path: stdinFile, content: text }]);
+    jobFiles["prompt.md"] = text;
+    stdinFile = join(jobDir(config.stateDir, job), "prompt.md");
     const schema = readFileSync(join(deps.factoryRoot, "schemas", `${plan.name}.json`), "utf8");
     cmd = buildAgentCommand(config, plan.agent.resume ? { model, schema, resume: plan.agent.sessionId } : { model, schema, sessionId: plan.agent.sessionId });
   } else if (plan.cli) {
@@ -74,10 +75,9 @@ export function startPlan(deps: RunnerDeps, request: string, plan: JobPlan): Job
   const started = startJob(
     config.stateDir,
     { cmd, cwd: plan.cwd, env: { FACTORY_CONFIG: deps.configPath }, ...(stdinFile ? { stdinFile } : {}), kind: plan.kind, name: plan.name, request, ...(plan.item ? { item: plan.item } : {}) },
-    { job },
+    { job, files: jobFiles },
   );
-  if (stdinFile) copyFileSync(stdinFile, join(jobDir(config.stateDir, job), "prompt.md"));
-  appendEvent(config.stateDir, {
+  appendEventSafe(config.stateDir, {
     type: "job-started",
     request,
     job,
@@ -90,10 +90,9 @@ export function startPlan(deps: RunnerDeps, request: string, plan: JobPlan): Job
     cwd: plan.cwd,
     codeVersion: deps.codeVersion,
     ...(model ? { model, sessionId: plan.agent!.sessionId, promptVersion: version } : {}),
-    // Not in src/types.ts yet: what the job is for, so a restarted orchestrator knows.
     purpose: plan.purpose,
-  } as EventInput);
-  for (const e of plan.startEvents ?? []) appendEvent(config.stateDir, e);
+  });
+  for (const e of plan.startEvents ?? []) appendEventSafe(config.stateDir, e);
   return job;
 }
 
@@ -109,8 +108,10 @@ export function readOut(config: Pick<FactoryConfig, "stateDir">, job: JobId): st
 function errTail(config: FactoryConfig, job: JobId): string {
   try {
     return readFileSync(join(jobDir(config.stateDir, job), "err.log"), "utf8").trim().split("\n").slice(-3).join(" / ").slice(-500);
-  } catch {
-    return "";
+  } catch (e) {
+    // A lost job may have died before the wrapper opened its logs.
+    if ((e as NodeJS.ErrnoException).code === "ENOENT") return "";
+    throw e;
   }
 }
 
@@ -124,13 +125,18 @@ export function finishJob(deps: RunnerDeps, s: RequestState, view: View, rec: Jo
   const { config } = deps;
   const out = readOut(config, rec.job);
   const durationMs = Math.max(0, Date.parse(exit.endedAt) - rec.startedAt);
-  const append = (events: EventInput[]) => events.forEach((e) => appendEvent(config.stateDir, e));
+  const append = (events: EventInput[]) => events.forEach((e) => appendEventSafe(config.stateDir, e));
   let error = "error" in exit ? exit.error : undefined;
   let costUsd: number | undefined;
   const handle = (report?: unknown) => {
-    const r = handleFinished({ state: s, view, config, job: rec, output: out, report, reportOf: (job) => readReport(config, s.id, job) });
-    writeFiles(r.files ?? []);
-    append(r.events);
+    try {
+      const r = handleFinished({ state: s, view, config, job: rec, output: out, report, reportOf: (job) => readReport(config, s.id, job) });
+      writeFiles(r.files ?? []);
+      append(r.events);
+    } catch (e) {
+      // An output we can't make sense of fails this job, not the loop.
+      error = `recording the result failed: ${e instanceof Error ? e.message : String(e)}`.slice(0, 1500);
+    }
   };
 
   if (error === undefined && rec.kind === "agent") {
@@ -149,8 +155,7 @@ export function finishJob(deps: RunnerDeps, s: RequestState, view: View, rec: Jo
       const report = summary.report as { feedback: Feedback[] };
       const path = reportPath(config, s.id, rec.job);
       writeFiles([{ path, content: JSON.stringify(report, null, 2) + "\n" }]);
-      const inline = JSON.stringify(report).length < 2500;
-      append([{ type: "agent-report", request: s.id, job: rec.job, ...(rec.item ? { item: rec.item } : {}), prompt: rec.name, report: inline ? report : { reportFile: path.slice(config.stateDir.length + 1) } }]);
+      append([{ type: "agent-report", request: s.id, job: rec.job, ...(rec.item ? { item: rec.item } : {}), prompt: rec.name, report }]);
       appendFeedback(config.stateDir, rec.job, report.feedback);
       handle(report);
     }
@@ -170,7 +175,7 @@ export function finishJob(deps: RunnerDeps, s: RequestState, view: View, rec: Jo
       if (error === undefined) handle();
     }
   }
-  appendEvent(config.stateDir, {
+  appendEventSafe(config.stateDir, {
     type: "job-finished",
     request: s.id,
     job: rec.job,

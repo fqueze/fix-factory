@@ -137,6 +137,7 @@ export type Event =
       model?: string;
       sessionId?: string;
       promptVersion?: string; // git blob sha of the prompt file
+      purpose?: JobPurpose;
     })
   | (EventBase & { type: "job-finished"; job: JobId; exitCode: number; durationMs: number; output?: unknown; costUsd?: number; error?: string })
   | (EventBase & { type: "agent-report"; job: JobId; item?: ItemId; prompt: string; report: unknown })
@@ -352,5 +353,112 @@ export interface AddressReviewReport {
   summary: string;
   commits: string[]; // the amended commit(s), oldest first
   replies: { commentId: number; text: string }[]; // only where the code doesn't speak for itself
+  feedback: Feedback[];
+}
+
+// ---------------------------------------------------------------------------
+// Jobs the orchestrator starts
+
+// Why the orchestrator started a job, in its job-started event: after a restart, this is how it
+// knows what each job was for. Fields other than key and what depend on the job.
+export interface JobPurpose {
+  key: string; // one job (plus its retry) per key: next() never starts a key that has a job
+  what: string;
+  item?: ItemId;
+  patch?: PatchId;
+  push?: PushId;
+  stack?: string;
+  index?: number;
+  sha?: string;
+  args?: string[]; // mach try arguments of a dry-run, reused by the push
+  cwd?: string; // the worktree a dry-run ran in, reused by the push
+  purpose?: string; // a planned push's one-line purpose
+  edits?: Record<PatchId, number>; // bug numbers a rewrite puts in commit messages
+  patches?: Record<string, PatchId>; // 12-character sha prefix → patch, for the shas a stack.ts job gets
+  comments?: number[]; // review comment ids an address-review run handles
+  reason?: string; // why an author is resumed: "lint", "review", "try", "comment", ...; what you told recover
+  replyTo?: JobId; // the recover run a reply-recovery answers
+}
+
+// ---------------------------------------------------------------------------
+// Reports of the other prompts
+
+export interface ParseRequestReport {
+  config: { folders: string[]; tests: string[]; platforms: string[]; constraints: string[] };
+  questions: string[];
+  feedback: Feedback[];
+}
+
+export interface ClassifyAnnotationReport {
+  kind: "scoping" | "flakiness" | "unclear";
+  reason: string;
+  feedback: Feedback[];
+}
+
+export interface WriteAnnotationPatchesReport {
+  runIf?: string; // sha of the run-if commit, absent when no skip was scoping
+  debug?: string; // sha of the DEBUG un-skip commit, absent when no skip was flakiness
+  summary: string;
+  feedback: Feedback[];
+}
+
+export interface PlanTryPushesReport {
+  pushes: { purpose: string; tryArgs: string[]; rebuild: number }[];
+  feedback: Feedback[];
+}
+
+export type TriageVerdict = "fixed" | "still failing" | "broken by patch" | "pre-existing" | "infra";
+
+export interface TriageTryReport {
+  cells: { test?: string; config?: string; taskId?: string; verdict: TriageVerdict; patch?: string; evidence: string }[];
+  feedback: Feedback[];
+}
+
+export interface MergeClustersReport {
+  groups: { message: string; tests: string[]; configs: string[]; from: string[]; reason: string }[];
+  feedback: Feedback[];
+}
+
+export interface PriorArtVerdictReport {
+  verdict: "active" | "reuse" | "none";
+  bug?: number;
+  quote: string;
+  feedback: Feedback[];
+}
+
+export interface ReviseBugDraftReport {
+  draft: BugDraft;
+  feedback: Feedback[];
+}
+
+export interface ResolveConflictReport {
+  state: "resolved" | "semantic";
+  commit?: string; // the resolved commit's sha, when resolved
+  explanation: string;
+  feedback: Feedback[];
+}
+
+export interface EstimateReviewEffortReport {
+  effort: number;
+  reason: string;
+  feedback: Feedback[];
+}
+
+export interface ReviewStackReport {
+  findings: { patch: string; severity: "must-fix" | "nit"; text: string }[]; // patch: a commit sha of the stack
+  addDeps: { patch: string; needs: string; kind: Dep["kind"]; reason: string }[];
+  removeDeps: { patch: string; needs: string; reason: string }[];
+  feedback: Feedback[];
+}
+
+export interface ClassifyReviewCommentsReport {
+  comments: { id: number; kind: NonNullable<InlineComment["kind"]>; impliesChange: boolean }[];
+  feedback: Feedback[];
+}
+
+export interface AdaptSoftDepReport {
+  state: "adapted" | "not trivial";
+  commits: string[];
+  summary: string;
   feedback: Feedback[];
 }

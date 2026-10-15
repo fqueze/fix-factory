@@ -1,7 +1,8 @@
 // What each command does, as effects the loop carries out. Pure. Jobs a command starts skip the
 // caps: you asked for them. Recovery commands come from an approved plan and run exactly as written.
+import { isDeepStrictEqual } from "node:util";
 import type { EventInput } from "../state/events.ts";
-import type { Command, FactoryConfig, ItemId, JobId, RequestId, RequestState } from "../types.ts";
+import type { Command, FactoryConfig, ItemId, JobId, PlannedCommand, RequestId, RequestState } from "../types.ts";
 import { ANNOTATIONS_ITEM, authorJobsOf, CANCELLED, itemEpochOf, resumeAuthorPlan } from "./next.ts";
 import { requestDir, sessionIdFor, slug, type JobPlan } from "./plan.ts";
 import type { View } from "./view.ts";
@@ -20,7 +21,7 @@ export interface CommandContext {
   state?: RequestState; // the command's request
   view?: View;
   exists: (request: RequestId) => boolean;
-  spec: (job: JobId) => { cmd: string[]; cwd: string } | undefined; // jobs/<job>/spec.json
+  plan: (job: JobId) => JobPlan | undefined; // jobs/<job>/plan.json, what the runner started
 }
 
 // r-20261015-<slug>, from the folder, the text or the revision.
@@ -72,6 +73,18 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
       return effects;
   }
   if (!s || !view) return effects;
+
+  // A command from a recovery plan answers that plan's ⚑.
+  if (PLANNED.has(c.cmd)) {
+    const fields = Object.fromEntries(Object.entries(c).filter(([k]) => !["v", "id", "t", "request"].includes(k)));
+    for (const p of s.recoveryPlans) {
+      if (p.plan.some((entry) => isDeepStrictEqual(entry, fields)) && s.needsUser.some((n) => n.key === `recovery:${p.job}`)) ev({ type: "user-done", key: `recovery:${p.job}` });
+    }
+  }
+  // Changing an item's state by hand answers its failed:<job> ⚑.
+  if ((c.cmd === "set-state" || c.cmd === "redo-step") && c.item) {
+    for (const n of s.needsUser.filter((x) => x.key.startsWith("failed:") && x.item === c.item)) ev({ type: "user-done", key: n.key });
+  }
 
   switch (c.cmd) {
     case "approve-push":
@@ -158,15 +171,20 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
       break;
     case "retry-job": {
       const job = view.jobs.find((j) => j.job === c.job);
-      const spec = ctx.spec(c.job);
-      if (!job || !spec) {
+      const saved = ctx.plan(c.job);
+      if (!job || !saved) {
         done(false, `unknown job ${c.job}`);
         break;
       }
+      if (job.sessionId && view.jobs.some((j) => j.sessionId === job.sessionId && !j.end)) {
+        done(false, `the session of ${c.job} is running: retry it once it's done`);
+        break;
+      }
+      // The same plan through the same path, so a dry run still adds --dry-run (or refuses).
       const plan: JobPlan =
         job.kind === "agent" && job.sessionId
           ? { purpose: { ...job.purpose }, kind: "agent", name: job.name, item: job.item, cwd: job.cwd, agent: { sessionId: job.sessionId, resume: true, message: "Try again: continue where you stopped, then end with the JSON report." } }
-          : { purpose: { ...job.purpose }, kind: job.kind, name: job.name, item: job.item, cwd: spec.cwd, cmd: spec.cmd };
+          : { ...saved, purpose: { ...job.purpose } };
       effects.push({ type: "start", plan });
       ev({ type: "user-done", key: `failed:${c.job}` });
       done(true, c.reason);
@@ -225,6 +243,8 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
   }
   return effects;
 }
+
+const PLANNED = new Set<string>(["retry-job", "cancel-job", "resume-agent", "start-agent", "set-state", "redo-step", "edit-config", "shell"] satisfies PlannedCommand["cmd"][]);
 
 function startVars(tests: string[], worktree: string): Record<string, string> {
   return { test: tests.length > 1 ? `${tests[0]} (and ${tests.length - 1} other tests)` : tests[0], worktree };

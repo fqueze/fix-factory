@@ -13,11 +13,12 @@ import { parseArgs } from "node:util";
 import { loadConfig } from "../config.ts";
 import { execOk } from "../lib/exec.ts";
 import { processNewCommands, readCommands } from "../state/commands.ts";
-import { appendEvent, listRequests, readEvents } from "../state/events.ts";
+import { listRequests } from "../state/events.ts";
 import { foldEvents } from "../state/fold.ts";
 import { cancelJob, jobDir, jobStatus, reconcile, type ExitInfo } from "../state/jobs.ts";
 import type { Command, FactoryConfig, JobId, RequestId, RequestState } from "../types.ts";
 import { commandEffects } from "./commands.ts";
+import { appendEventSafe, readFullEvents } from "./event-data.ts";
 import { handleWatchLines } from "./handlers.ts";
 import { CANCELLED, next, type Action, type Ctx } from "./next.ts";
 import { DEFAULT_PRIORITY, type JobPlan } from "./plan.ts";
@@ -70,7 +71,7 @@ export class Orchestrator {
   }
 
   private load(id: RequestId): Loaded {
-    const events = readEvents(this.config.stateDir, id);
+    const events = readFullEvents(this.config.stateDir, id);
     return { s: foldEvents(events), view: buildView(events) };
   }
 
@@ -173,18 +174,15 @@ export class Orchestrator {
       state: loaded?.s,
       view: loaded?.view,
       exists: (id) => existsSync(join(this.config.stateDir, "requests", id)),
-      spec: (job) => {
-        try {
-          return JSON.parse(readFileSync(join(jobDir(this.config.stateDir, job), "spec.json"), "utf8"));
-        } catch {
-          return undefined;
-        }
+      plan: (job) => {
+        const path = join(jobDir(this.config.stateDir, job), "plan.json");
+        return existsSync(path) ? (JSON.parse(readFileSync(path, "utf8")) as JobPlan) : undefined;
       },
     });
     for (const e of effects) {
       switch (e.type) {
         case "event":
-          appendEvent(this.config.stateDir, e.event.type === "request-created" ? { ...e.event, t: c.t } : e.event);
+          appendEventSafe(this.config.stateDir, e.event.type === "request-created" ? { ...e.event, t: c.t } : e.event);
           break;
         case "start":
           this.start(loaded!.s.id, e.plan);
@@ -217,7 +215,12 @@ export class Orchestrator {
         if (status.state === "finished") {
           this.watchOffsets.delete(j.job);
           const fresh = this.load(id);
-          finishJob(this.deps, fresh.s, fresh.view, rec, status satisfies ExitInfo);
+          try {
+            finishJob(this.deps, fresh.s, fresh.view, rec, status satisfies ExitInfo);
+          } catch (e) {
+            // This job fails; the loop and the other jobs go on.
+            appendEventSafe(this.config.stateDir, { type: "job-finished", request: id, job: j.job, exitCode: status.exitCode, durationMs: 0, error: `recording the job failed: ${e instanceof Error ? e.message : String(e)}`.slice(0, 1500) });
+          }
         } else if (status.state === "lost") {
           this.fail(id, j.job, "lost: no process and no exit.json");
         } else if (status.state === "orphaned") {
@@ -233,15 +236,17 @@ export class Orchestrator {
     const { lines, next: offset } = jsonLines(text, this.watchOffsets.get(rec.job) ?? 0);
     this.watchOffsets.set(rec.job, offset);
     if (lines.length === 0) return;
-    for (const e of handleWatchLines(s, view, rec.purpose.push!, lines)) appendEvent(this.config.stateDir, e);
+    for (const e of handleWatchLines(s, view, rec.purpose.push!, lines)) appendEventSafe(this.config.stateDir, e);
   }
 
   // -------------------------------------------------------------------------
   // Planning
 
   private start(request: RequestId, plan: JobPlan): void {
-    if (this.dryRun && plan.agent) {
-      appendEvent(this.config.stateDir, { type: "note", request, text: `Dry run: ${plan.name} not started (${plan.purpose.key}).` });
+    // A dry run starts no agent, and no raw command: those can't be given --dry-run.
+    if (this.dryRun && (plan.agent || plan.cmd)) {
+      const text = `Dry run: ${plan.name} not started (${plan.purpose.key}).`;
+      if (!this.load(request).s.notes.some((n) => n.text === text)) appendEventSafe(this.config.stateDir, { type: "note", request, text });
       return;
     }
     startPlan(this.deps, request, this.dryRun ? withDryRun(plan) : plan);
@@ -255,15 +260,20 @@ export class Orchestrator {
       starts = [];
       let wrote = false;
       for (const id of only ? [only] : this.requests()) {
-        const { s, view } = this.load(id);
-        const actions: Action[] = next(s, this.ctx(s, view));
-        for (const a of actions) {
-          if (a.type === "event") {
-            appendEvent(this.config.stateDir, a.event);
-            wrote = true;
-          } else {
-            starts.push({ request: id, plan: a.plan });
+        try {
+          const { s, view } = this.load(id);
+          const actions: Action[] = next(s, this.ctx(s, view));
+          for (const a of actions) {
+            if (a.type === "event") {
+              appendEventSafe(this.config.stateDir, a.event);
+              wrote = true;
+            } else {
+              starts.push({ request: id, plan: a.plan });
+            }
           }
+        } catch (e) {
+          // One request's trouble doesn't stop the others.
+          process.stderr.write(`planning ${id} failed: ${e instanceof Error ? e.stack : String(e)}\n`);
         }
       }
       if (!wrote) break;
@@ -275,9 +285,8 @@ export class Orchestrator {
     for (const { request, plan } of starts) {
       if (!only && plan.kind === "agent" && agents >= this.config.maxAgents) continue;
       if (!only && plan.kind === "build" && builds >= this.config.maxBuilds) {
-        if (plan.item) {
-          const item = this.load(request).s.items[plan.item];
-          if (item && item.state !== "waiting for a build slot") appendEvent(this.config.stateDir, { type: "item-state", request, item: plan.item, state: "waiting for a build slot" });
+        if (plan.item && this.load(request).s.items[plan.item].state !== "waiting for a build slot") {
+          appendEventSafe(this.config.stateDir, { type: "item-state", request, item: plan.item, state: "waiting for a build slot" });
         }
         continue;
       }

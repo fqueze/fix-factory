@@ -7,7 +7,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { validateReport, type JsonSchema } from "../agents/run.ts";
 import type { AddressReviewReport } from "../types.ts";
-import type * as R from "./reports.ts";
+import type * as R from "../types.ts";
 
 const load = (name: string): JsonSchema => JSON.parse(readFileSync(fileURLToPath(new URL(`../../schemas/${name}.json`, import.meta.url)), "utf8"));
 const prompts = (): string[] => Object.keys(JSON.parse(readFileSync(fileURLToPath(new URL("../../prompts/index.json", import.meta.url)), "utf8")));

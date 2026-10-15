@@ -7,8 +7,8 @@ import { config, ID, Scenario, sha } from "./testkit.ts";
 let n = 0;
 const cmd = (c: Record<string, unknown>): Command => ({ v: 1, id: `c-${++n}`, t: "2026-10-15T09:00:00.000Z", request: ID, ...c }) as Command;
 
-function run(sc: Scenario, c: Command, spec?: { cmd: string[]; cwd: string }): Effect[] {
-  const effects = commandEffects(c, { config, state: sc.state(), view: sc.view(), exists: () => false, spec: () => spec });
+function run(sc: Scenario, c: Command): Effect[] {
+  const effects = commandEffects(c, { config, state: sc.state(), view: sc.view(), exists: () => false, plan: (job) => sc.plans.get(job) });
   for (const e of effects) {
     if (e.type === "event") sc.add(e.event);
     if (e.type === "start") sc.startJob(e.plan);
@@ -34,7 +34,7 @@ describe("commands", () => {
     assert.equal(newRequestId(c({ folder: "browser/components/sessionstore/test" }), () => false), "r-20261015-sessionstore-test");
     assert.equal(newRequestId(c({ text: "Fix the xpcshell cwd failures", kind: "try-push", rev: "abc" }), () => false), "r-20261015-fix-the-xpcshell-cwd");
     assert.equal(newRequestId(c({ folder: "a/b" }), (id) => id === "r-20261015-a-b"), "r-20261015-a-b-2");
-    const [e] = commandEffects(c({ folder: "a/b" }), { config, exists: () => false, spec: () => undefined });
+    const [e] = commandEffects(c({ folder: "a/b" }), { config, exists: () => false, plan: () => undefined });
     assert.deepEqual(e, { type: "event", event: { type: "request-created", request: "r-20261015-a-b", kind: "burndown", text: "", folder: "a/b" } });
   });
 
@@ -108,18 +108,33 @@ describe("commands", () => {
     assert.deepEqual(sc.open(), [`recovery:${second}`]);
   });
 
+  it("running a command of a recovery plan answers that plan; set-state answers the item's failed job", () => {
+    const sc = withPatch();
+    const c = cmd({ cmd: "tell-factory", text: "it's fixed on central" });
+    run(sc, c);
+    const planned: PlannedCommand = { cmd: "set-state", item: "i-a", state: "left as-is", reason: "fixed on central" };
+    const job = sc.complete(`recover:${c.id}`, { report: { plan: [planned], cannotDo: [], questions: [], feedback: [] } });
+    sc.add({ type: "needs-user", request: ID, key: "failed:j-9", action: "failed", detail: "d", job: "j-9", item: "i-a" });
+    assert.deepEqual(sc.open(), [`recovery:${job}`, "failed:j-9"]);
+    run(sc, cmd({ ...planned }));
+    assert.deepEqual(sc.open(), []);
+  });
+
   it("retry-job runs a script again as written and an agent by resuming it; cancel-job cancels", () => {
     const sc = withPatch();
     sc.startJob({ purpose: { key: "prior-art:i-a", what: "prior-art", item: "i-a" }, kind: "script", name: "bugzilla.ts prior-art", item: "i-a", cwd: "/r", cli: { tool: "bugzilla.ts", args: ["prior-art", "a/test_a.js"] } });
     const job = sc.complete("prior-art:i-a", { exitCode: 1, error: "down" });
     sc.add({ type: "needs-user", request: ID, key: `failed:${job}`, action: "failed", detail: "down", job });
-    run(sc, cmd({ cmd: "retry-job", job, reason: "Bugzilla is back" }), { cmd: ["node", "bugzilla.ts", "prior-art", "a/test_a.js"], cwd: "/r" });
-    assert.deepEqual(sc.plan("prior-art:i-a").cmd, ["node", "bugzilla.ts", "prior-art", "a/test_a.js"]);
+    run(sc, cmd({ cmd: "retry-job", job, reason: "Bugzilla is back" }));
+    assert.deepEqual(sc.plan("prior-art:i-a").cli, { tool: "bugzilla.ts", args: ["prior-art", "a/test_a.js"] });
     assert.deepEqual(sc.open(), []);
 
     const author = sc.view().byKey.get("author:i-a:initial")![0].job;
-    run(sc, cmd({ cmd: "retry-job", job: author, reason: "r" }), { cmd: ["claude"], cwd: "/wt/a" });
+    run(sc, cmd({ cmd: "retry-job", job: author, reason: "r" }));
     assert.equal(sc.plan("author:i-a:initial").agent?.resume, true);
+    // Its session is now running: a second retry waits.
+    run(sc, cmd({ cmd: "retry-job", job: author, reason: "r" }));
+    assert.equal(executed(sc).at(-1)?.ok, false);
     assert.deepEqual(run(sc, cmd({ cmd: "cancel-job", job: author, reason: "stuck" }))[0], { type: "cancel", job: author, request: ID, detail: "cancelled by you" });
   });
 
