@@ -42,7 +42,9 @@ Who: **S** = script · **H** = Haiku · **So** = Sonnet · **O** = Opus · **�
 | Step | Who | How |
 |---|---|---|
 | Worktree + build (capped at M concurrent builds) | S | `worktree.ts create` |
-| Investigate, fix, write the commit message. Also draft a bug if one is needed, list the patches this one must land after, and keep the `sessionlog.md` state line current | O | `investigate-and-fix.md` |
+| Investigate, fix, write the commit message. The run ends with a JSON report: state, cause, how it was verified, a bug draft if one is needed, the patches this one must land after, and feedback. The script records it in `events.jsonl`, and the reviewer gets it | O | `investigate-and-fix.md` |
+| A bug draft shows up right away as a **"Bug to file"** link on the patch's row (prefilled `enter_bug.cgi`), checked first | S | `lint-text.ts --kind bug`, `bugzilla.ts enter-url` |
+| File it and paste the number, or comment on the draft, in the same box. A number replaces `Bug XXXXXXX` in the commit message. Comments → So `revise-bug-draft.md` | 👤 | `stack.ts rewrite` |
 | Check the commit message's format and length | S | `lint-text.ts` |
 | **Critical review** of diff + message, started by the script as soon as the author reports "fix verified locally" | O (fresh) | `review-patch.md` |
 | Findings → the author is resumed, then re-reviewed until `ok` | S → O | |
@@ -67,13 +69,12 @@ Who: **S** = script · **H** = Haiku · **So** = Sonnet · **O** = Opus · **�
 | Route each failure to the author whose patch touches that test or its folder | S | |
 | Look at unparsed jobs and failures matching no patch | H | `triage-try.md` → 👤 |
 
-### 7. Bugs (before submission: patches need numbers)
+### 7. Meta bug (before submission: every patch needs a number)
 | Step | Who | How |
 |---|---|---|
-| Check the authors' bug drafts and the meta-bug draft (from the summary) | S | `lint-text.ts --kind bug` |
-| "Bug to file" links to a prefilled `enter_bug.cgi` | S | `bugzilla.ts enter-url` |
-| File it, or comment on the draft | 👤 | comments → So `revise-bug-draft.md` |
-| On return to the tab, find the new bug, then replace `Bug XXXXXXX` in the commit messages | S | `bugzilla.ts find-filed`, `stack.ts rewrite` |
+| Meta-bug draft from the stack summary, shown as "Bug to file" on the request | S | `stack.ts summary`, `bugzilla.ts enter-url` |
+| File it and paste the number. It replaces the placeholder in every test-only patch | 👤 | `stack.ts rewrite` |
+| Pre-submit checks block submission while any `Bug XXXXXXX` is left | S | `stack.ts check` |
 
 ### 8. Submit
 | Step | Who | How |
@@ -88,8 +89,7 @@ Who: **S** = script · **H** = Haiku · **So** = Sonnet · **O** = Opus · **�
 |---|---|---|
 | Poll: per-reviewer status, inline comments, suggested edits | S | `phab.ts poll` |
 | Classify each comment | H | `classify-review-comments.md` |
-| Apply suggested edits as written | S | `stack.ts rewrite` |
-| Address change requests (author resumed), then lint + critical review again | O | `address-review.md`, `review-patch.md` |
+| Address the comments, suggested edits included (author resumed), then lint + critical review again | O | `address-review.md`, `review-patch.md` |
 | Interdiff | S | `stack.ts interdiff` |
 | Draft replies | So | `draft-reply.md` + `lint-text.ts` |
 | Copy reply, open the inline comment, click resubmit (changed revisions only) | 👤 | |
@@ -101,13 +101,19 @@ Who: **S** = script · **H** = Haiku · **So** = Sonnet · **O** = Opus · **�
 | Click `moz-phab submit` for the changed revisions, then land | 👤 | |
 
 ### Throughout
-- **Status page:** requests (one line each, ⚑ when you're needed), stacks, try pushes with purpose and result,
-  cost and profile link of every agent run.
+- **Status page:** requests (one line each, ⚑ when you're needed), stacks, try pushes with purpose and result.
+- **Request profile** (from the start, to see whether the orchestration did what it should): a Firefox Profiler
+  profile built from `events.jsonl`, with a marker for every step: script runs, builds, agent runs, try pushes,
+  time waiting for you.
 - **Tool feedback, as in today's skills:** every agent's JSON output has a `feedback` list for problems with
   `fx-tests`, `profiler-cli` or a factory script, and for anything missing from what we gave it. A script appends
   each entry, with a link to the agent run, to one file per tool.
 - **"Tell the factory…"** free text → O `recover.md` proposes a plan, 👤 approves.
 - **Caps:** N agents and M builds at once.
+- **Agent launch command** in `factory.config.json`, e.g. `"claudeCommand": ["mozsb", "claude"]` (sandbox,
+  permission prompts disabled). The factory appends `-p --output-format stream-json --session-id … --model …`.
+  To check before building: `mozsb` passes those arguments through and lets us read stdout, and where the transcripts
+  end up when the sandbox sets its own `CLAUDE_CONFIG_DIR`.
 
 ## Build order
 
@@ -117,17 +123,17 @@ Who: **S** = script · **H** = Haiku · **So** = Sonnet · **O** = Opus · **�
    `stack.ts import` adopts the stacks already in review, so steps 9–10 can be used on them right away.
 
 ## Later
-1. Investigation split from fixing: Opus writes a handoff, Sonnet implements (`implement-fix.md`).
-2. Agents stop running `mach`: the scripts run repro and verification (`run-tests.ts`, repro recipes, `--compare`).
-3. Scheduler with a cores/RAM model instead of fixed caps.
-4. Request profile with a marker for every step.
+1. Cost and claude-profiler link for every agent run.
+2. Investigation split from fixing: Opus writes a handoff, Sonnet implements (`implement-fix.md`).
+3. Agents stop running `mach`: the scripts run repro and verification (`run-tests.ts`, repro recipes, `--compare`).
+4. Scheduler with a cores/RAM model instead of fixed caps.
 
 ## Updating the factory without stopping it
 
 Every process can be restarted on its own without losing anything.
 
 **State is append-only JSON lines files, not a database.** The volume is small: hundreds of patches and
-thousands of jobs. A request's `events.jsonl` holds every state change, job start/end, cost and decision. The
+thousands of jobs. A request's `events.jsonl` holds every state change, job start/end, agent report and decision. The
 orchestrator folds it into the current state at startup. The web server reads the same files and tails them for
 live updates. Your clicks go to `commands.jsonl`. The files can be grepped, and agents can read them.
 

@@ -15,7 +15,7 @@ Ten CLIs, each with subcommands. One file per tool, with modules inside it as ne
 | `failures.ts` | `collect <rev\|folder>` [A3] · `history <test>` [A3, D2] · `cluster` [A4] · `try-table <rev>` [F4] | Everything built on `fx-tests --json`. `cluster` strips numbers, paths, timings and pids, and never groups generic messages. `try-table` uses `--all-jobs`, marks cells pass / fail / **not run**, and lists the jobs fx-tests couldn't parse |
 | `artifacts.ts` | `fetch <taskId>` [B4, F4] | Logs, errorsummary, per-test and resource-usage profiles into the cache. Checks the `artifact` markers so nothing is missed |
 | `annotations.ts` | `list <folder>` [A6] · `write --run-if --debug-unskip` [B1] | Skip-ifs with the bug that added each one (`git log -S`) and whether the condition is dead. `write` makes the run-if and DEBUG un-skip commits |
-| `bugzilla.ts` | `prior-art <test>` [A5] · `enter-url <draft>` [G3] · `find-filed <draft>` [G5] | Facts only, no verdict. `find-filed` runs once, when the page is visible again after a "Bug to file" click |
+| `bugzilla.ts` | `prior-art <test>` [A5] · `enter-url <draft>` [G3] · `find-filed <draft>` [G5] (later) | Facts only, no verdict. `find-filed` runs once, when the page is visible again after a "Bug to file" click |
 | `worktree.ts` | `create --build artifact\|debug\|full` [C1] · `lint` [D3] · `remove` [J4] | Every `mach` call except tests. Worktrees go outside the checkout. `remove` also kills the worktree's processes |
 | `run-tests.ts` | `run <request>` [C3] · `--recipe R --clean --measure` [C4] · `--recipe R --compare <fix>` [D2] | One runner. Results come from the mozlog raw log. `--measure` gives the repro rate. `--compare` runs without and with the fix, `ln(0.01)/ln(1−p)` times each, plus a plain `--verify` without the DEBUG commits. Says "use try" when the needed run count is too high |
 | `lint-text.ts` | `--kind commit\|bug\|reply` [D5, G2, I5] | Format, length, banned patterns (`file:line`, try links, hedging) |
@@ -60,8 +60,9 @@ Factory runtime (long-running, not CLIs):
 
 ### `investigate-and-fix.md` (Opus, MVP only) [C2–D1 as done today]
 > Fix {test} in {worktree}, following debug-a-test-failure and subagent-brief.md. The failure: {failure summary}.
-> Keep the state line of `artifacts/sessionlog.md` current, and set it to "fix verified locally" when done. If the
-> fix needs its own bug, draft it in `artifacts/bug-draft.md` with the bug-filing skill. List any patch yours must land after.
+> Commit the fix with a message following the commit-message skill, using `Bug XXXXXXX` if the fix needs a bug
+> of its own. End with the JSON report: state, cause, how you verified it, a bug draft (bug-filing skill) if one is
+> needed, and any patch yours must land after.
 
 ### `write-annotation-patches.md` (Sonnet) [B1, MVP]
 > Here are the skip-ifs of {folder}, each classified as scoping or flakiness: {annotations}. Write two commits.
