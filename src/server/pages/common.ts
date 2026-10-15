@@ -1,4 +1,4 @@
-import type { BugDraft, ItemState, ItemView, NeedsUser, PatchView, PushView, RequestState, StackView } from "../../types.ts";
+import type { BugDraft, Command, ItemState, ItemView, NeedsUser, PatchView, PushView, RefusedCommand, RequestState, StackView } from "../../types.ts";
 import { REQUEST_STEPS } from "../commands.ts";
 import { html, type Html } from "../html.ts";
 
@@ -107,6 +107,15 @@ export function isDropped(r: RequestState, p: PatchView): boolean {
   return item !== undefined && stateClass(item.state) === "closed";
 }
 
+const REVIEWED_OR_LATER: ItemState[] = ["reviewed", "in stack", "in try", "waiting for review", "addressing review comments", "fixed", "landed"];
+
+// An author commit whose critical review hasn't passed (its item still in progress, or blocked):
+// it shows on its group row only, without a bug to file.
+export function isDraft(r: RequestState, p: PatchView): boolean {
+  const item = itemOf(r, p);
+  return item !== undefined && stateClass(item.state) !== "closed" && !REVIEWED_OR_LATER.includes(item.state);
+}
+
 export function isLanded(r: RequestState, p: PatchView): boolean {
   return itemOf(r, p)?.state === "landed";
 }
@@ -165,8 +174,45 @@ export function stackOfPatch(r: RequestState, patch: string | undefined): StackV
   return patch === undefined ? undefined : Object.values(r.stacks).find((s) => s.order.includes(patch));
 }
 
-export type ActionKind = "approve-push" | "take-it" | "file-bug" | "meta-bug" | "submit" | "resubmit" | "land" | "recovery" | "other";
-const ACTION_KINDS: ActionKind[] = ["approve-push", "take-it", "file-bug", "meta-bug", "submit", "resubmit", "land", "recovery"];
+// Folded states saved before refused existed don't have it.
+export function refusedOf(r: RequestState): RefusedCommand[] {
+  return r.refused ?? [];
+}
+
+export function needsYou(r: RequestState): boolean {
+  return r.needsUser.length > 0 || refusedOf(r).length > 0;
+}
+
+// Refused commands name theirs in plain words.
+export const COMMAND_LABELS: Record<Command["cmd"], string> = {
+  "approve-push": "try push approval",
+  presence: "presence",
+  "set-bug": "bug number",
+  "comment-bug-draft": "comment on the bug draft",
+  "stack-comments": "stack-viewer comments",
+  "take-it": "take it",
+  "hand-back": "hand back",
+  "comment-fix": "comment on the fix",
+  "tell-factory": "message to the factory",
+  "reply-recovery": "reply to the recovery plan",
+  "start-now": "start now",
+  "retry-job": "retry",
+  "cancel-job": "stop",
+  "resume-agent": "message to the author",
+  "start-agent": "restart of the investigation",
+  "set-state": "state change",
+  "redo-step": "redo step",
+  "edit-config": "config change",
+  shell: "shell command",
+  "accept-review": "accept as reviewed",
+  continue: "continue",
+  retry: "retry",
+  stop: "stop",
+  dismiss: "dismiss",
+};
+
+export type ActionKind = "approve-push" | "take-it" | "file-bug" | "meta-bug" | "submit" | "resubmit" | "land" | "recovery" | "failed" | "stopped" | "other";
+const ACTION_KINDS: ActionKind[] = ["approve-push", "take-it", "file-bug", "meta-bug", "submit", "resubmit", "land", "recovery", "failed", "stopped"];
 
 // The key's "<kind>:" prefix names the buttons of a needs-user entry, and the ids
 // it carries (push, item, patch, stack, job) say what they act on. Entries with

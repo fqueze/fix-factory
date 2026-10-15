@@ -179,4 +179,72 @@ describe("commands", () => {
     run(sc, cmd({ cmd: "start-agent", item: "i-nope", prompt: "x", reason: "r" }));
     assert.equal(executed(sc).at(-1)?.ok, false, "an item without an earlier run can't be started again");
   });
+
+  it("command-executed names its cmd, so the page can say what was refused", () => {
+    const sc = withPatch();
+    run(sc, cmd({ cmd: "start-agent", item: "i-nope", prompt: "x", reason: "r" }));
+    const refused = sc.state().refused!;
+    assert.equal(refused.length, 1);
+    assert.equal(refused[0].cmd, "start-agent");
+    assert.match(refused[0].detail!, /only starts a new investigate-and-fix/);
+    run(sc, cmd({ cmd: "dismiss", key: refused[0].key }));
+    assert.deepEqual(sc.state().refused, []);
+  });
+
+  it("accept-review makes the item reviewed and answers its ⚑", () => {
+    const sc = withPatch();
+    sc.add({ type: "item-state", request: ID, item: "i-a", state: "blocked", detail: "critical review" });
+    sc.add({ type: "needs-user", request: ID, key: "failed:j-rev", action: "No ok after 3 critical review rounds", detail: "d", job: "j-rev", item: "i-a" });
+    run(sc, cmd({ cmd: "accept-review", item: "i-a" }));
+    assert.equal(sc.state().items["i-a"].state, "reviewed");
+    assert.deepEqual(sc.open(), []);
+  });
+
+  it("continue resumes the item's author with your message and answers its ⚑s; refused while it runs", () => {
+    const sc = withPatch();
+    sc.add({ type: "item-state", request: ID, item: "i-a", state: "left as-is" });
+    sc.add({ type: "needs-user", request: ID, key: "failed:j-rev", action: "No ok", detail: "d", job: "j-rev", item: "i-a" });
+    const c = cmd({ cmd: "continue", item: "i-a", text: "The wait is fine here, keep it and answer the reviewer." });
+    run(sc, c);
+    const plan = sc.plan(`author:i-a:continue:${c.id}`);
+    assert.equal(plan.agent?.sessionId, "s-1");
+    assert.equal(plan.agent?.resume, true);
+    assert.match(String(plan.agent?.message), /keep it and answer the reviewer/);
+    assert.equal(sc.state().items["i-a"].state, "investigating", "a closed item reopens");
+    assert.deepEqual(sc.open(), []);
+    run(sc, cmd({ cmd: "continue", item: "i-a", text: "more" }));
+    assert.match(executed(sc).at(-1)!.detail!, /is running/);
+  });
+
+  it("retry is retry-job without a reason, never for a try push", () => {
+    const sc = withPatch();
+    sc.startJob({ purpose: { key: "prior-art:i-a", what: "prior-art", item: "i-a" }, kind: "script", name: "bugzilla.ts prior-art", item: "i-a", cwd: "/r", cli: { tool: "bugzilla.ts", args: ["prior-art"] } });
+    const job = sc.complete("prior-art:i-a", { exitCode: 1, error: "down" });
+    sc.add({ type: "needs-user", request: ID, key: `failed:${job}`, action: "failed", detail: "down", job, item: "i-a" });
+    run(sc, cmd({ cmd: "retry", job }));
+    assert.ok(sc.running("prior-art:i-a"));
+    assert.deepEqual(sc.open(), []);
+    sc.startJob({ purpose: { key: "push:A", what: "push", push: "A" }, kind: "script", name: "try.ts push", cwd: "/r", cli: { tool: "try.ts", args: ["push"] } });
+    const push = sc.complete("push:A", { exitCode: 1, error: "lando" });
+    const effects = run(sc, cmd({ cmd: "retry", job: push }));
+    assert.ok(!effects.some((e) => e.type === "start"));
+    assert.match(executed(sc).at(-1)!.detail!, /try push isn't retried/);
+  });
+
+  it("stop cancels a running job, blocks its item and raises a ⚑ that continue answers", () => {
+    const sc = withPatch();
+    const resume = cmd({ cmd: "comment-fix", patch: "p-a", text: "x" });
+    run(sc, resume);
+    const job = sc.running(`author:i-a:comment:${resume.id}`);
+    const effects = run(sc, cmd({ cmd: "stop", job }));
+    assert.deepEqual(effects[0], { type: "cancel", job, request: ID, detail: "cancelled by you" });
+    assert.equal(sc.state().items["i-a"].state, "blocked");
+    assert.equal(sc.state().items["i-a"].detail, "stopped by you");
+    assert.deepEqual(sc.open(), [`stopped:${job}`]);
+    sc.complete(`author:i-a:comment:${resume.id}`, { exitCode: -1, error: "cancelled by you" });
+    run(sc, cmd({ cmd: "continue", item: "i-a", text: "go on" }));
+    assert.deepEqual(sc.open(), []);
+    run(sc, cmd({ cmd: "stop", job }));
+    assert.match(executed(sc).at(-1)!.detail!, /isn't running/);
+  });
 });

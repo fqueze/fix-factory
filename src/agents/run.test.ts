@@ -10,6 +10,7 @@ import {
   parseStreamJson,
   promptVersion,
   renderPrompt,
+  streamSteps,
   transcriptPath,
   validateReport,
   type JsonSchema,
@@ -182,4 +183,18 @@ test("promptVersion is the git blob sha", () => {
   } finally {
     rmSync(dir, { recursive: true });
   }
+});
+
+test("streamSteps lists tool calls in short form and text messages in order, subagent steps marked", () => {
+  assert.deepEqual(streamSteps(fixture("stream-json-tools.jsonl")), [
+    { kind: "text", text: "I'll start by reading the test." },
+    { kind: "tool", tool: "Read", text: "/build/worktrees/spinner/browser/base/content/test/tabs/browser_tabSpinner.js" },
+    { kind: "tool", tool: "Grep", text: "waitForCondition\\(" },
+    { kind: "tool", tool: "Bash", text: "./mach test browser/base/content/test/tabs/browser_tabSpinner.js --repeat 20" },
+    { kind: "tool", tool: "Agent", text: "Find who resets the spinner" },
+    { kind: "tool", tool: "Glob", text: "browser/**/tabbrowser*.js", subagent: true },
+    { kind: "tool", tool: "Edit", text: "/build/worktrees/spinner/browser/base/content/test/tabs/browser_tabSpinner.js" },
+    { kind: "text", text: "The spinner waits on a paint that never comes in headless mode." },
+  ]);
+  assert.deepEqual(streamSteps(fixture("stream-json-haiku.jsonl")), [{ kind: "tool", tool: "StructuredOutput", text: "the report" }]);
 });

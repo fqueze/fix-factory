@@ -10,7 +10,9 @@
 //   Events for unknown items are ignored, as are unknown event types.
 // - pushes keep creation order as long as push ids aren't integer-like strings
 //   (JavaScript orders those keys first).
-import type { Dep, Event, ItemView, PatchView, PushView, RequestState } from "../types.ts";
+import type { Dep, Event, ItemView, PatchView, PushView, RefusedCommand, RequestState } from "../types.ts";
+
+const MAX_REFUSED = 5;
 
 type Review = NonNullable<PatchView["review"]>;
 
@@ -39,6 +41,7 @@ export function foldEvents(events: readonly Event[]): RequestState {
   const deps = new Map<string, Dep[]>();
   const reviews = new Map<string, Review>();
   const replies = new Map<string, Map<number, string>>();
+  let refused: RefusedCommand[] = [];
 
   const push = (id: string): PushView => (s.pushes[id] ??= { id, purpose: "", command: [] });
 
@@ -104,6 +107,7 @@ export function foldEvents(events: readonly Event[]): RequestState {
           startedAt: e.t,
           model: e.model,
           sessionId: e.sessionId,
+          purpose: e.purpose,
         };
         const item = e.item === undefined ? undefined : s.items[e.item];
         if (item && !item.jobs.includes(e.job)) {
@@ -218,8 +222,14 @@ export function foldEvents(events: readonly Event[]): RequestState {
         break;
       case "user-done":
         s.needsUser = s.needsUser.filter((n) => n.key !== e.key);
+        refused = refused.filter((x) => x.key !== e.key);
         break;
       case "command-executed":
+        if (e.ok) {
+          refused = refused.filter((x) => e.cmd === undefined || x.cmd !== e.cmd);
+        } else {
+          refused = [...refused, { key: `refused:${e.command}`, command: e.command, cmd: e.cmd, detail: e.detail, t: e.t }].slice(-MAX_REFUSED);
+        }
         break;
       case "recovery-plan":
         s.recoveryPlans.push({ job: e.job, text: e.text, plan: e.plan, cannotDo: e.cannotDo, questions: e.questions, t: e.t });
@@ -241,6 +251,7 @@ export function foldEvents(events: readonly Event[]): RequestState {
     }
     p.replyDrafts = [...(replies.get(p.id) ?? [])].map(([commentId, text]) => ({ commentId, text }));
   }
+  s.refused = refused;
   return stripUndefined(s);
 }
 

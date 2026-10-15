@@ -2,6 +2,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { InvalidReport } from "./handlers.ts";
+import { resumeAuthorPlan } from "./next.ts";
 import { config, HOUR, ID, Scenario, sha } from "./testkit.ts";
 
 const none = { verdict: "none", quote: "no bug", feedback: [] };
@@ -522,6 +523,45 @@ describe("4. investigate and fix", () => {
         assert.equal(sc.state().needsUser[0].action, "No ok after 3 critical review rounds");
       }
     }
+    // What accept-review does (commands.ts): it stays reviewed.
+    const flag = sc.open()[0];
+    sc.add({ type: "item-state", request: ID, item: "i-test-a", state: "reviewed", detail: "accepted by you" });
+    sc.add({ type: "user-done", request: ID, key: flag });
+    sc.settle();
+    assert.equal(sc.state().items["i-test-a"].state, "reviewed");
+    assert.deepEqual(sc.open(), []);
+  });
+
+  it("after the review limit, your continue starts a new count of review rounds", () => {
+    const sc = workList([group("ka", "a/test_a.js", "boom")]);
+    investigating(sc, "i-test-a");
+    let author = "author:i-test-a:initial";
+    const round = (n: number) => {
+      const commit = sha(String(n));
+      sc.complete(author, { report: fixed([commit]) });
+      sc.settle();
+      const job = sc.view().byKey.get(author)!.at(-1)!.job;
+      sc.complete(`import:${job}`, { output: imported(commit, "Bug 1 - Fix", ["a/test_a.js"], 1) });
+      sc.settle();
+      sc.complete(`msg:p-test-a:${commit}`, { output: "m" });
+      sc.settle();
+      sc.complete(`lint:p-test-a:${commit}`, { output: lintOk });
+      sc.settle();
+      sc.complete(`review:p-test-a:${job}`, { report: { verdict: "findings", findings: [{ severity: "must-fix", text: "racy" }], feedback: [] } });
+      return { job, started: sc.settle() };
+    };
+    for (let n = 1; n <= 4; n++) {
+      const { job } = round(n);
+      author = `author:i-test-a:review:${job}`;
+    }
+    assert.equal(sc.state().items["i-test-a"].state, "blocked");
+    // What continue does (commands.ts): the author resumed with reason "continue".
+    const plan = resumeAuthorPlan(ID, sc.view(), "i-test-a", "continue", { message: "keep the wait" }, "investigating");
+    assert.ok(plan && plan !== "busy");
+    plan.purpose.key = author = "author:i-test-a:continue:c-1";
+    sc.startJob(plan);
+    const { job, started } = round(5);
+    assert.deepEqual(started, [`author:i-test-a:review:${job}`]);
   });
 
   // The author's commit through import and a clean lint; returns the author job.

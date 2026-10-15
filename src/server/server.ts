@@ -1,9 +1,14 @@
 import { readFileSync, realpathSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import { isAbsolute, join, relative, resolve } from "node:path";
-import type { FactoryConfig, PatchView } from "../types.ts";
+import { createRequire } from "node:module";
+import { homedir } from "node:os";
+import { delimiter, isAbsolute, join, relative, resolve } from "node:path";
+import { parseStreamJson, streamSteps, transcriptPath } from "../agents/run.ts";
+import { jobDir } from "../state/jobs.ts";
+import type { FactoryConfig, JobView, PatchView } from "../types.ts";
 import { HostCheck } from "./host-check.ts";
 import { commandsFromForm, validateCommand } from "./commands.ts";
+import { jobUrl, renderActivity, type Activity } from "./pages/activity.ts";
 import type { RenderContext } from "./pages/common.ts";
 import { renderMain, renderOverview, renderStrip } from "./pages/overview.ts";
 import { renderRequest } from "./pages/request.ts";
@@ -18,6 +23,26 @@ export interface ServerOptions {
   sink: CommandSink;
   now?: () => number;
   machineName?: string; // os.hostname() by default
+  homeDir?: string; // where agent transcripts are, under .claude/projects; os.homedir() by default
+  claudeProfiler?: string | null; // its main module, null when not installed; looked up on PATH by default
+}
+
+// The part of claude-profiler's library API the agent profile uses (see docs/research/tools.md).
+interface Profiler {
+  readJsonlFile(path: string): unknown[];
+  createFirefoxProfile(entries: unknown[]): unknown;
+}
+
+// claude-profiler is an optional tool, not a dependency: its command on PATH is a link to its main module.
+function findClaudeProfiler(): string | null {
+  for (const dir of (process.env.PATH ?? "").split(delimiter)) {
+    try {
+      return realpathSync(join(dir, "claude-profiler"));
+    } catch {
+      // not in this directory
+    }
+  }
+  return null;
 }
 
 export type FactoryServer = Server & { sseClientCount(): number };
@@ -41,6 +66,7 @@ class HttpError extends Error {
 
 export function createFactoryServer(opts: ServerOptions): FactoryServer {
   const now = opts.now ?? Date.now;
+  const homeDir = opts.homeDir ?? homedir();
   const hosts = new HostCheck(opts.config.allowedHosts ?? [], opts.machineName);
   void hosts.addFqdn(opts.machineName);
   const sseClients = new Set<ServerResponse>();
@@ -98,6 +124,48 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
     } catch {
       return undefined;
     }
+  }
+
+  // The agent's out.log (stream-json) as steps, with links to its transcript and profile.
+  function activity(request: string, job: JobView, req: IncomingMessage): Activity | undefined {
+    let log: string;
+    try {
+      log = readFileSync(join(jobDir(opts.config.stateDir, job.job), "out.log"), "utf8");
+    } catch {
+      return undefined; // not started writing yet
+    }
+    const transcript = transcriptOf(job) !== undefined;
+    const api = `http://${req.headers.host ?? `localhost:${opts.config.port}`}${jobUrl(request, job.job, "profile")}`;
+    return {
+      steps: streamSteps(log),
+      summary: parseStreamJson(log),
+      transcript,
+      profileUrl: transcript && loadProfiler() ? `${opts.config.profilerOrigin}/from-url/${encodeURIComponent(api)}?thread=0` : undefined,
+    };
+  }
+
+  // Inside ~/.claude/projects only: the cwd and session id come from the state.
+  function transcriptOf(job: JobView): string | undefined {
+    if (job.sessionId === undefined) {
+      return undefined;
+    }
+    try {
+      const root = realpathSync(join(homeDir, ".claude", "projects"));
+      const file = realpathSync(transcriptPath(homeDir, job.cwd, job.sessionId));
+      const rel = relative(root, file);
+      return rel.startsWith("..") || isAbsolute(rel) ? undefined : file;
+    } catch {
+      return undefined;
+    }
+  }
+
+  let profiler: Profiler | null | undefined;
+  function loadProfiler(): Profiler | null {
+    if (profiler === undefined) {
+      const main = opts.claudeProfiler === undefined ? findClaudeProfiler() : opts.claudeProfiler;
+      profiler = main === null ? null : (createRequire(main)(main) as Profiler);
+    }
+    return profiler;
   }
 
   function ctx(req: IncomingMessage, open?: string): RenderContext {
@@ -184,6 +252,32 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
         "Content-Length": body.length,
         "Access-Control-Allow-Origin": opts.config.profilerOrigin,
       });
+      res.end(method === "HEAD" ? undefined : body);
+      return;
+    }
+    if ((m = path.match(/^\/api\/requests\/([^/]+)\/jobs\/([^/]+)\/(activity|transcript|profile)$/))) {
+      const r = getRequest(decodeURIComponent(m[1]));
+      const id = decodeURIComponent(m[2]);
+      if (!Object.hasOwn(r.jobs, id)) {
+        throw new HttpError(404, `unknown job: ${id}`);
+      }
+      const job = r.jobs[id];
+      if (m[3] === "activity") {
+        return send(res, 200, "text/html; charset=utf-8", renderActivity(r.id, job, activity(r.id, job, req), ctx(req)).value);
+      }
+      const transcript = transcriptOf(job);
+      if (transcript === undefined) {
+        throw new HttpError(404, `no transcript for ${id}`);
+      }
+      if (m[3] === "transcript") {
+        return send(res, 200, "text/plain; charset=utf-8", readFileSync(transcript));
+      }
+      const profiler = loadProfiler();
+      if (!profiler) {
+        throw new HttpError(404, "claude-profiler isn't installed");
+      }
+      const body = Buffer.from(JSON.stringify(profiler.createFirefoxProfile(profiler.readJsonlFile(transcript))), "utf8");
+      res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Content-Length": body.length, "Access-Control-Allow-Origin": opts.config.profilerOrigin });
       res.end(method === "HEAD" ? undefined : body);
       return;
     }

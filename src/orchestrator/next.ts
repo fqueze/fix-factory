@@ -696,11 +696,11 @@ class Planner {
     return ok && { job: ok, commits: commitsOf(ok.name, this.rep(ok)) };
   }
 
-  // Round limits count from the author's latest fresh start or address-review run: review comments
-  // begin a new conversation with the critical reviewer.
+  // Round limits count from the author's latest fresh start, address-review run or continue from you:
+  // review comments and your message begin a new conversation with the critical reviewer.
   private roundsSinceStart(item: ItemId, reason: string): number {
     const jobs = this.authorJobs(item);
-    const start = jobs.findLastIndex((j) => j.purpose.reason === "initial" || j.purpose.reason === "start" || j.name === "address-review");
+    const start = jobs.findLastIndex((j) => j.purpose.reason === "initial" || j.purpose.reason === "start" || j.purpose.reason === "continue" || j.name === "address-review");
     return jobs.slice(start + 1).filter((j) => j.purpose.reason === reason).length;
   }
 
@@ -870,6 +870,10 @@ class Planner {
     const rounds = this.roundsSinceStart(item.id, "review");
     if (rounds >= REVIEW_ROUNDS && !this.view.byKey.has(key)) {
       const last = mustFix[0].job.job;
+      // You answered its ⚑ (accept-review, or a recovery plan's set-state): your call stands.
+      if (this.view.done.has(`failed:${last}`)) {
+        return;
+      }
       this.raise(`failed:${last}`, { action: `No ok after ${REVIEW_ROUNDS} critical review rounds`, detail: mustFix.map((f) => f.text).join("; ").slice(0, 500), job: last, item: item.id });
       this.setItem(item.id, "blocked", "critical review");
       return;

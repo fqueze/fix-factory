@@ -165,7 +165,7 @@ export class Orchestrator {
       const detail = `failed: ${e instanceof Error ? e.message : String(e)}`.slice(0, 500);
       process.stderr.write(`command ${c.id} (${c.cmd}) ${detail}\n`);
       if (c.request !== undefined && this.requests().includes(c.request)) {
-        appendEventSafe(this.config.stateDir, { type: "command-executed", request: c.request, command: c.id, ok: false, detail });
+        appendEventSafe(this.config.stateDir, { type: "command-executed", request: c.request, command: c.id, cmd: c.cmd, ok: false, detail });
       }
     }
   }

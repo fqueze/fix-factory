@@ -40,7 +40,7 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
   const s = ctx.state;
   const view = ctx.view;
   const ev = (event: RequestEvent) => effects.push({ type: "event", event: { ...event, request: s!.id } as EventInput });
-  const done = (ok: boolean, detail?: string) => ev({ type: "command-executed", command: c.id, ok, ...(detail ? { detail: detail.slice(0, 500) } : {}) });
+  const done = (ok: boolean, detail?: string) => ev({ type: "command-executed", command: c.id, cmd: c.cmd, ok, ...(detail ? { detail: detail.slice(0, 500) } : {}) });
   const resume = (item: ItemId, reason: string, message: string): string | undefined => {
     const plan = resumeAuthorPlan(s!.id, view!, item, reason, { message }, "investigating");
     if (plan === undefined) return `${item} has no author session to resume`;
@@ -48,6 +48,10 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
     plan.purpose.key = `author:${item}${itemEpochOf(view!, item)}:${reason.replace(/\s+/g, "-")}:${c.id}`;
     effects.push({ type: "start", plan });
     return undefined;
+  };
+  // The ⚑s that wait on an item's way forward.
+  const clearItemFlags = (item: ItemId) => {
+    for (const n of s!.needsUser.filter((x) => x.item === item && (x.key.startsWith("failed:") || x.key.startsWith("stopped:")))) ev({ type: "user-done", key: n.key });
   };
 
   switch (c.cmd) {
@@ -178,11 +182,17 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
       effects.push({ type: "start-now", request: s.id });
       done(true);
       break;
+    case "retry":
     case "retry-job": {
       const job = view.jobs.find((j) => j.job === c.job);
       const saved = ctx.plan(c.job);
       if (!job || !saved) {
         done(false, `unknown job ${c.job}`);
+        break;
+      }
+      // Like next(), never again on its own: the push may have happened. A recovery plan can still ask for it.
+      if (c.cmd === "retry" && job.purpose.what === "push") {
+        done(false, "a try push isn't retried from its ⚑ (it may have been made): ask the factory to plan it again");
         break;
       }
       if (job.sessionId && view.jobs.some((j) => j.sessionId === job.sessionId && !j.end)) {
@@ -196,9 +206,39 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
           : { ...saved, purpose: { ...job.purpose } };
       effects.push({ type: "start", plan });
       ev({ type: "user-done", key: `failed:${c.job}` });
-      done(true, c.reason);
+      done(true, c.cmd === "retry-job" ? c.reason : undefined);
       break;
     }
+    case "stop": {
+      const job = s.jobs[c.job];
+      if (!job || job.endedAt !== undefined) {
+        done(false, `${c.job} isn't running`);
+        break;
+      }
+      effects.push({ type: "cancel", job: c.job, request: s.id, detail: CANCELLED });
+      // Cancelled jobs aren't retried: the item waits for your Continue.
+      if (job.item !== undefined && s.items[job.item]) {
+        ev({ type: "item-state", item: job.item, state: "blocked", detail: STOPPED });
+        ev({ type: "needs-user", key: `stopped:${c.job}`, action: `${job.name} ${STOPPED}`, detail: "Continue tells its author what to do instead.", job: c.job, item: job.item });
+      }
+      done(true);
+      break;
+    }
+    case "accept-review":
+      ev({ type: "item-state", item: c.item, state: "reviewed", detail: "accepted by you" });
+      clearItemFlags(c.item);
+      done(true);
+      break;
+    case "continue": {
+      const error = resume(c.item, "continue", `A message from the user:\n${c.text}\n\nDo what it says, amending your commit if your fix changes, then end with the JSON report again.`);
+      if (!error) clearItemFlags(c.item);
+      done(!error, error);
+      break;
+    }
+    case "dismiss":
+      ev({ type: "user-done", key: c.key });
+      done(true);
+      break;
     case "cancel-job":
       effects.push({ type: "cancel", job: c.job, request: s.id, detail: CANCELLED });
       done(true, c.reason);
@@ -254,6 +294,8 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
 }
 
 const PLANNED = new Set<string>(["retry-job", "cancel-job", "resume-agent", "start-agent", "set-state", "redo-step", "edit-config", "shell"] satisfies PlannedCommand["cmd"][]);
+
+export const STOPPED = "stopped by you";
 
 function startVars(tests: string[], worktree: string): Record<string, string> {
   return { test: tests.length > 1 ? `${tests[0]} (and ${tests.length - 1} other tests)` : tests[0], worktree };

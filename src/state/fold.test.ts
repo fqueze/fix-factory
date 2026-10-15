@@ -284,3 +284,27 @@ test("meta bug, stack base, interdiff and needs-user stack/job fields", () => {
   assert.equal(s.needsUser[0].stack, "st");
   assert.equal(s.needsUser[0].job, "j1");
 });
+
+test("a job keeps its purpose", () => {
+  const purpose = { key: "recover:c-1", what: "recover", reason: "restart the serviceworkers item" };
+  const s = fold(ev({ type: "job-started", job: "j1", kind: "agent", name: "recover", pid: 1, pidStartTime: 1, cmd: ["claude"], cwd: "/", codeVersion: "sha", purpose }));
+  assert.deepEqual(s.jobs.j1.purpose, purpose);
+});
+
+test("refused commands: the last 5, until dismissed or a later command with the same cmd succeeds", () => {
+  const refused = (n: number, cmd: "start-agent" | "retry" = "start-agent") => ev({ type: "command-executed", command: `c-${n}`, cmd, ok: false, detail: `no ${n}` });
+  const s = fold(refused(1), refused(2), refused(3, "retry"), refused(4), refused(5), refused(6), ev({ type: "command-executed", command: "c-7", ok: false }));
+  assert.deepEqual(
+    s.refused?.map((x) => [x.key, x.cmd, x.detail]),
+    [
+      ["refused:c-3", "retry", "no 3"],
+      ["refused:c-4", "start-agent", "no 4"],
+      ["refused:c-5", "start-agent", "no 5"],
+      ["refused:c-6", "start-agent", "no 6"],
+      ["refused:c-7", undefined, undefined],
+    ],
+  );
+  const later = fold(refused(1), refused(2, "retry"), ev({ type: "command-executed", command: "c-3", cmd: "start-agent", ok: true }), ev({ type: "user-done", key: "refused:c-2" }));
+  assert.deepEqual(later.refused, []);
+  assert.deepEqual(fold(refused(1), ev({ type: "command-executed", command: "c-2", ok: true })).refused?.length, 1, "a success without its cmd clears nothing");
+});

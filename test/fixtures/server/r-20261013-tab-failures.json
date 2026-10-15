@@ -171,7 +171,12 @@
       "pidStartTime": 1,
       "startedAt": "2026-10-15T08:59:00.000Z",
       "model": "opus",
-      "sessionId": "7d2a"
+      "sessionId": "7d2a",
+      "purpose": {
+        "key": "recover:c-41",
+        "what": "recover",
+        "reason": "restart the browser_pinnedTabs.js item, it has been waiting for a build slot since this morning"
+      }
     }
   },
   "needsUser": [
@@ -198,7 +203,7 @@
         {
           "cmd": "start-agent",
           "item": "i-pin",
-          "prompt": "investigate-and-fix",
+          "prompt": "Start over from the worktree as it is; the profile of task Zx3 is gone.",
           "reason": "The first run died when the build slot was taken away; nothing was lost but its session."
         },
         {

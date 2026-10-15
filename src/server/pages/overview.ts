@@ -1,6 +1,6 @@
 import type { RequestState } from "../../types.ts";
 import { html, type Html } from "../html.ts";
-import { commandFields, formatDate, isDropped, plural, profileUrl, pushResultClass, pushStatus, pushUrl, requestName, requestUrl, routeOutcome, sectionOf, shortName, type RenderContext } from "./common.ts";
+import { commandFields, formatDate, isDraft, isDropped, needsYou, plural, profileUrl, pushResultClass, pushStatus, pushUrl, requestName, requestUrl, routeOutcome, sectionOf, shortName, type RenderContext } from "./common.ts";
 import { renderRequest } from "./request.ts";
 
 const PHAB_SYMBOL = html`<svg style="display:none"><symbol id="phab" viewBox="0 0 16 16"><path d="M1 8s2.6-5 7-5 7 5 7 5-2.6 5-7 5-7-5-7-5z" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="8" cy="8" r="2.3" fill="currentColor"/></symbol></svg>`;
@@ -33,7 +33,7 @@ export function renderStrip(requests: RequestState[], ctx: RenderContext): Html 
   const jobs = requests.flatMap((r) => Object.values(r.jobs)).filter((j) => j.endedAt === undefined);
   const agents = jobs.filter((j) => j.kind === "agent").length;
   const builds = jobs.filter((j) => j.kind === "build").length;
-  const needs = requests.filter((r) => r.needsUser.length > 0).length;
+  const needs = requests.filter((r) => needsYou(r)).length;
   return html`<div class="strip" id="strip">
     <span>agents <b>${agents}${ctx.maxAgents ? `/${ctx.maxAgents}` : ""}</b></span>
     <span>builds <b>${builds}${ctx.maxBuilds ? `/${ctx.maxBuilds}` : ""}</b></span>
@@ -46,7 +46,7 @@ export function renderStrip(requests: RequestState[], ctx: RenderContext): Html 
 export function renderMain(requests: RequestState[], ctx: RenderContext): Html {
   const byUpdate = [...requests].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   // Requests that need you first, the rest by latest activity.
-  const active = byUpdate.filter((r) => sectionOf(r) === "active").sort((a, b) => Number(b.needsUser.length > 0) - Number(a.needsUser.length > 0));
+  const active = byUpdate.filter((r) => sectionOf(r) === "active").sort((a, b) => Number(needsYou(b)) - Number(needsYou(a)));
   const queued = byUpdate.filter((r) => sectionOf(r) === "queued").reverse();
   const finished = byUpdate.filter((r) => sectionOf(r) === "finished");
   return html`<form class="ask cmd" method="post" action="/api/commands">${commandFields([{ cmd: "tell-factory" }], "/")}<input type="text" name="text" required placeholder="Tell the factory… (e.g. “burn down dom/base/test”, or “Lando was down this morning, re-push what failed”)"><button class="btn">Send</button></form>
@@ -70,7 +70,7 @@ export function renderMain(requests: RequestState[], ctx: RenderContext): Html {
     <summary>▸ ${plural(finished.length, "request")}</summary>
     <div class="simple" id="section-finished">${finished.map(
       (r) =>
-        html`<div class="row" data-request="${r.id}" data-section="finished"><span class="grow"><b>${requestName(r)}</b> <span class="sub">· ${r.kind === "unrouted" ? routeOutcome(r) : `${plural(Object.values(r.patches).filter((p) => !isDropped(r, p)).length, "patch", "patches")}, done ${formatDate(r.updatedAt)}`}</span></span><a class="btn small" href="${profileUrl(ctx, r.id)}" target="_blank" rel="noopener">Profile</a></div>`,
+        html`<div class="row" data-request="${r.id}" data-section="finished"><span class="grow"><b>${requestName(r)}</b> <span class="sub">· ${r.kind === "unrouted" ? routeOutcome(r) : `${plural(Object.values(r.patches).filter((p) => !isDropped(r, p) && !isDraft(r, p)).length, "patch", "patches")}, done ${formatDate(r.updatedAt)}`}</span></span><a class="btn small" href="${profileUrl(ctx, r.id)}" target="_blank" rel="noopener">Profile</a></div>`,
     )}</div>
   </details>` : null}`;
 }

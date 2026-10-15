@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { request } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -229,6 +229,69 @@ describe("GET /api/requests/:id/profile", () => {
     assert.equal(pre.status, 204);
     assert.equal(pre.headers.get("access-control-allow-origin"), "http://localhost:4242");
     assert.equal((await fetch(`${base}/api/requests/r-nope/profile`)).status, 404);
+  });
+});
+
+describe("agent activity, transcript and profile", () => {
+  const home = mkdtempSync(join(tmpdir(), "ff-home-"));
+  const projects = join(home, ".claude", "projects", "-build-fix-factory-state");
+  const profiler = join(home, "fake-profiler.js");
+  const R = "/api/requests/r-20261013-tab-failures/jobs";
+  const make = (claudeProfiler: string | null) =>
+    createFactoryServer({
+      config: { port: 0, profilerOrigin: "http://localhost:4242", stackViewerCommand: [], stateDir, maxAgents: 10, maxBuilds: 3 },
+      state,
+      sink,
+      now: () => Date.parse("2026-10-15T09:00:00Z"),
+      homeDir: home,
+      claudeProfiler,
+    });
+  const servers = [make(profiler), make(null)];
+  const bases: string[] = [];
+
+  before(async () => {
+    mkdirSync(join(stateDir, "jobs", "j-inv-spinner"), { recursive: true });
+    writeFileSync(join(stateDir, "jobs", "j-inv-spinner", "out.log"), readFileSync(join(FIXTURES, "../agents/stream-json-tools.jsonl")));
+    mkdirSync(projects, { recursive: true });
+    writeFileSync(join(projects, "3c1e.jsonl"), '{"type":"user"}\n{"type":"assistant"}\n');
+    writeFileSync(join(home, "secret.jsonl"), "secret\n");
+    symlinkSync(join(home, "secret.jsonl"), join(projects, "7d2a.jsonl"));
+    writeFileSync(profiler, 'module.exports = { readJsonlFile: (p) => require("fs").readFileSync(p, "utf8").trim().split("\\n").map((l) => JSON.parse(l)), createFirefoxProfile: (e) => ({ entries: e.length }) };\n');
+    for (const s of servers) {
+      await new Promise<void>((done) => s.listen(0, "127.0.0.1", done));
+      bases.push(`http://127.0.0.1:${(s.address() as AddressInfo).port}`);
+    }
+  });
+  after(() => {
+    for (const s of servers) {
+      s.closeAllConnections();
+      s.close();
+    }
+    rmSync(home, { recursive: true, force: true });
+  });
+
+  it("shows an agent's last steps, its latest message, and links to its transcript and profile", async () => {
+    const h = await (await fetch(`${bases[0]}${R}/j-inv-spinner/activity`)).text();
+    assert.match(h, /running for <span data-since="2026-10-15T03:00:00.000Z">6 h<\/span> · 6 tool calls/);
+    assert.match(h, /<li><b>Bash<\/b> <span class="mono">\.\/mach test browser\/base\/content\/test\/tabs\/browser_tabSpinner\.js --repeat 20<\/span><\/li>/);
+    assert.match(h, /<li class="subagent" title="in a subagent"><b>Glob<\/b>/);
+    assert.match(h, /<div class="said-last">The spinner waits on a paint that never comes in headless mode\.<\/div>/);
+    assert.ok(h.includes(`href="${R}/j-inv-spinner/transcript"`));
+    const api = encodeURIComponent(`${bases[0]}${R}/j-inv-spinner/profile`);
+    assert.ok(h.includes(`href="http://localhost:4242/from-url/${api}?thread=0"`));
+    assert.doesNotMatch(await (await fetch(`${bases[1]}${R}/j-inv-spinner/activity`)).text(), /Profile/, "no claude-profiler, no link");
+    assert.match(await (await fetch(`${bases[0]}${R}/j-recover/activity`)).text(), /No output yet/);
+    assert.equal((await fetch(`${bases[0]}${R}/j-nope/activity`)).status, 404);
+  });
+
+  it("serves the transcript and its profile from ~/.claude/projects only", async () => {
+    assert.equal(await (await fetch(`${bases[0]}${R}/j-inv-spinner/transcript`)).text(), '{"type":"user"}\n{"type":"assistant"}\n');
+    const profile = await fetch(`${bases[0]}${R}/j-inv-spinner/profile`);
+    assert.equal(profile.headers.get("access-control-allow-origin"), "http://localhost:4242");
+    assert.deepEqual(await profile.json(), { entries: 2 });
+    assert.equal((await fetch(`${bases[1]}${R}/j-inv-spinner/profile`)).status, 404);
+    assert.equal((await fetch(`${bases[0]}${R}/j-recover-2/transcript`)).status, 404, "a link out of the projects directory");
+    assert.equal((await fetch(`${bases[0]}${R}/j-artifacts/transcript`)).status, 404, "a script has no session");
   });
 });
 

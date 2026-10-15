@@ -1,7 +1,8 @@
 import type { BugDraft, InvestigateReport, ItemView, JobView, PatchView, PushView, RequestState, StackView } from "../../types.ts";
 import { ITEM_STATES } from "../commands.ts";
 import { html, join, type Html } from "../html.ts";
-import { actionsSummary, approvePushControls, bugBox, commandDetails, copyButton, recoveryPlan, recoveryPlanFor, stackViewerLink, summaryId, youSaid } from "./actions.ts";
+import { actionsSummary, approvePushControls, bugBox, commandDetails, continueBox, copyButton, recoveryPlan, recoveryPlanFor, stackViewerLink, stopButton, summaryId, youSaid } from "./actions.ts";
+import { watchDetails } from "./activity.ts";
 import {
   bugUrl,
   commandFields,
@@ -12,12 +13,14 @@ import {
   formatDuration,
   groupLabel,
   hasBug,
+  isDraft,
   isDropped,
   isLandable,
   isLanded,
   itemOf,
   jobLabel,
   modelLabel,
+  needsYou,
   patchesOutsideStacks,
   patchTitle,
   phabUrl,
@@ -41,13 +44,13 @@ import {
 
 // One line per request; the body only when expanded, so the overview stays small.
 export function renderRequest(r: RequestState, ctx: RenderContext, open = ctx.open === r.id): Html {
-  const needs = r.needsUser.length > 0;
+  const needs = needsYou(r);
   const cost = requestCost(r);
   return html`<details class="req${needs ? " needs" : ""}" id="req-${r.id}" data-request="${r.id}" data-section="${sectionOf(r)}"${open ? html` open` : null}>
     <summary>
       <span class="rname">${requestName(r)}</span>
       <span class="rsum">${requestSummary(r)}</span>
-      ${requestWork(r, ctx)}
+      ${requestWork(r, ctx, true)}
       <span class="rright">${cost > 0 ? html`<span class="hide-sm" title="Agent cost so far">${formatCost(cost)}</span>` : null}<span class="step">${stepLabel(r)}</span><a class="btn small" href="${profileUrl(ctx, r.id)}" target="_blank" rel="noopener">Profile</a></span>
       ${actionsSummary(r)}
     </summary>
@@ -68,7 +71,7 @@ export function requestSummary(r: RequestState): string {
     const byState = ITEM_STATES.map((s) => [s, items.filter((i) => i.state === s).length] as const).filter(([, n]) => n > 0);
     parts.push(`${plural(items.length, "failure group")}: ${byState.map(([s, n]) => `${n} ${s}`).join(", ")}`);
   }
-  const patches = Object.values(r.patches).filter((p) => !isDropped(r, p));
+  const patches = Object.values(r.patches).filter((p) => !isDropped(r, p) && !isDraft(r, p));
   if (patches.length) {
     const accepted = patches.filter((p) => p.review?.status === "accepted" || (p.review && p.review.reviewers.length > 0 && p.review.reviewers.every((x) => x.status === "accepted"))).length;
     const toFile = patches.filter((p) => !hasBug(p) && p.bugDraft).length;
@@ -86,20 +89,30 @@ export function requestSummary(r: RequestState): string {
 
 // Jobs without an item (recover, route-request, plan-try-pushes, try watch…) have no group row
 // to show them while they run.
-function requestWork(r: RequestState, ctx: RenderContext): Html | null {
+function requestWork(r: RequestState, ctx: RenderContext, inSummary = false): Html | null {
   const running = Object.values(r.jobs).filter((j) => j.item === undefined && j.endedAt === undefined);
   if (!running.length) {
     return null;
   }
+  const back = requestUrl(r.id);
   return html`<div class="rwork">${running.map(
-    (j) => html`<div title="${j.name}"><span class="st run">${jobLabel(j.name)}</span>${j.model ? ` · ${modelLabel(j.model)}` : null} · ${elapsed(j.startedAt, ctx)}</div>`,
+    (j) =>
+      html`<div title="${j.name}"><span class="st run">${workLabel(j)}</span>${j.model ? ` · ${modelLabel(j.model)}` : null} · ${elapsed(j.startedAt, ctx)} ${stopButton(r.id, j.job, back)}${
+        j.kind === "agent" && !inSummary ? watchDetails(r.id, j.job) : null
+      }</div>`,
   )}</div>`;
+}
+
+// A recover run started by what you typed says so; its purpose keeps the text.
+function workLabel(j: JobView): Html {
+  const said = j.name === "recover" ? j.purpose?.reason : undefined;
+  return said ? html`working on <span class="said" title="${said}">“${said.split("\n")[0]}”</span>` : html`${jobLabel(j.name)}`;
 }
 
 export function renderRequestBody(r: RequestState, ctx: RenderContext): Html {
   const back = requestUrl(r.id);
   const stacks = Object.values(r.stacks);
-  const loose = patchesOutsideStacks(r);
+  const loose = patchesOutsideStacks(r).filter((p) => !isDraft(r, p));
   const stackedItems = new Set(stacks.flatMap((s) => stackPatches(r, s).map((p) => p.item)));
   const items = Object.values(r.items).filter((i) => !stackedItems.has(i.id));
   const pushes = Object.values(r.pushes);
@@ -368,8 +381,21 @@ function itemRow(r: RequestState, i: ItemView, ctx: RenderContext): Html {
       i.detail
         ? html`<details class="clamp3" data-fold="detail-${i.id}" title="${i.state}: ${i.detail}"><summary>${state}</summary></details>`
         : state
-    }${draft ? html`<div><a class="bug tofile" href="${enterBugUrl(draft)}" target="_blank" rel="noopener" title="Opens a prefilled enter_bug.cgi">Bug to file</a> <span class="sub">“${draft.summary}”</span></div>` : null}</td>
+    }${Object.values(r.patches)
+      .filter((p) => p.item === i.id && isDraft(r, p))
+      .map((p) => html`<div class="sub">draft · ${i.state} · “${patchTitle(p)}”</div>`)}${draft ? html`<div><a class="bug tofile" href="${enterBugUrl(draft)}" target="_blank" rel="noopener" title="Opens a prefilled enter_bug.cgi">Bug to file</a> <span class="sub">“${draft.summary}”</span></div>` : null}${itemControls(r, i, job)}</td>
   </tr>`;
+}
+
+// Stop what runs, watch the latest agent, and reopen a closed group by talking to its author.
+function itemControls(r: RequestState, i: ItemView, running: JobView | undefined): Html | null {
+  const back = requestUrl(r.id);
+  const agent = i.jobs.map((j) => r.jobs[j]).findLast((j) => j.kind === "agent");
+  const reopen = stateClass(i.state) === "closed" && agent !== undefined;
+  if (!running && !agent) {
+    return null;
+  }
+  return html`<div class="jobctl">${running ? stopButton(r.id, running.job, back) : null}${agent ? watchDetails(r.id, agent.job) : null}${reopen ? continueBox(r.id, i.id, back) : null}</div>`;
 }
 
 // A bug the investigation asks to file without a patch to carry it (e.g. a product bug behind a
@@ -402,6 +428,6 @@ function recentJobs(r: RequestState, ctx: RenderContext): Html | null {
         j.endedAt === undefined ? "run" : j.exitCode === 0 ? "ok" : "bad"
       }">${j.endedAt === undefined ? html`running ${elapsed(j.startedAt, ctx)}` : `${formatDuration(j.durationMs ?? Date.parse(j.endedAt) - Date.parse(j.startedAt))}${j.exitCode ? `, exit ${j.exitCode}` : ""}`}</td><td class="num sub">${
         j.costUsd === undefined ? "" : formatCost(j.costUsd)
-      }</td></tr>`,
+      }</td><td>${j.endedAt === undefined ? stopButton(r.id, j.job, requestUrl(r.id)) : null}${j.kind === "agent" ? watchDetails(r.id, j.job) : null}</td></tr>`,
   )}</tbody></table></div></details>`;
 }

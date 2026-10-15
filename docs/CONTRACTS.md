@@ -45,7 +45,15 @@ cache/artifacts/<taskId>/...      # downloaded try logs and profiles
   `readEventsFrom` in `src/state/events.ts` does it.
 - Files a job needs before it starts (an agent's `prompt.md`) are written into its directory by `startJob`.
 - `job-started` events of the orchestrator's jobs carry `purpose` (`JobPurpose`): what the job is for, so a
-  restarted orchestrator knows.
+  restarted orchestrator knows. The folded `JobView` keeps it (the page shows what you told a recover run).
+- `command-executed` carries the command's `cmd`. The fold keeps the last 5 refused commands (`ok: false`) in
+  `RequestState.refused`, until a `user-done` with their key (`refused:<command id>`) or a later command with the
+  same `cmd` succeeds; the page shows them as ⚑s.
+- Every ⚑ has a way out from the page: `accept-review` (the item is reviewed despite its critical review findings),
+  `continue` (resumes the item's author session with your text, which also reopens a closed item), `retry` (what
+  `retry-job` does, never for a try push), `stop` (cancels a running job; its item is blocked with a `stopped:<job>` ⚑
+  until you `continue`) and `dismiss` (a `user-done` for any open key). Unlike recovery commands, they don't have to
+  come from a recovery plan.
 - `events.jsonl` is written only by the orchestrator. `commands.jsonl` is written by the web server and by the
   orchestrator (when it executes an approved recovery plan, it appends that plan's commands; when route-request says
   text from the main box is about an existing request, it appends a `tell-factory` for that request). Readers must ignore

@@ -1,6 +1,6 @@
-import type { NeedsUser, PlannedCommand, PushView, RequestState, StackView } from "../../types.ts";
+import type { JobView, NeedsUser, PlannedCommand, PushView, RefusedCommand, RequestState, StackView } from "../../types.ts";
 import { html, join, type Html } from "../html.ts";
-import { actionKind, commandFields, enterBugUrl, jobLabel, requestUrl, stackOfPatch, submitChecks } from "./common.ts";
+import { actionKind, COMMAND_LABELS, commandFields, enterBugUrl, jobLabel, refusedOf, requestUrl, stackOfPatch, submitChecks } from "./common.ts";
 
 // The ⚑ area of one open needs-user entry: what you're asked, why, and the buttons.
 export function renderAction(r: RequestState, n: NeedsUser): Html {
@@ -47,14 +47,60 @@ export function renderAction(r: RequestState, n: NeedsUser): Html {
     }
     case "recovery": {
       const plan = recoveryPlanFor(r, n);
-      return plan
-        ? html`<div class="action" data-key="${n.key}"><span class="flag">${n.action}</span> ${youSaid(n.detail || `You said: “${plan.text}”`)}${recoveryPlan(r, plan, back)}</div>`
-        : html`<div class="action" data-key="${n.key}"><span class="flag">${n.action}</span> <span class="why">${n.detail}</span></div>`;
+      if (plan) {
+        return html`<div class="action" data-key="${n.key}"><span class="flag">${n.action}</span> ${youSaid(n.detail || `You said: “${plan.text}”`)}${recoveryPlan(r, plan, back)}</div>`;
+      }
+      break;
     }
+    case "failed": {
+      const job = n.job === undefined ? undefined : r.jobs[n.job];
+      const item = n.item ?? job?.item;
+      // A critical review that never said ok: the work is there, you judge it.
+      const accept = job?.name === "review-patch" && item !== undefined;
+      controls = join(
+        [
+          accept ? commandButton(r.id, { cmd: "accept-review", item }, "Accept as reviewed", back, true) : null,
+          job && !accept && !isPushJob(job) ? commandButton(r.id, { cmd: "retry", job: job.job }, "Retry", back, true) : null,
+          item === undefined ? null : continueBox(r.id, item, back),
+        ].filter((x) => x !== null),
+        "",
+      );
+      break;
+    }
+    case "stopped":
+      controls = n.item === undefined ? null : continueBox(r.id, n.item, back);
+      break;
     case "other":
       break;
   }
-  return html`<div class="action" data-key="${n.key}"><span class="flag">${n.action}</span> <span class="why">${n.detail}</span>${controls}</div>`;
+  return html`<div class="action" data-key="${n.key}"><span class="flag">${n.action}</span> <span class="why">${n.detail}</span>${controls?.value ? controls : dismissButton(r.id, n.key, back)}</div>`;
+}
+
+// A command the orchestrator refused, until you dismiss it or the same kind of command succeeds.
+export function renderRefused(r: RequestState, x: RefusedCommand): Html {
+  return html`<div class="action" data-key="${x.key}"><span class="flag">Your ${x.cmd ? COMMAND_LABELS[x.cmd] : "command"} was refused</span> <span class="why">${x.detail ?? ""}</span>${dismissButton(r.id, x.key, requestUrl(r.id))}</div>`;
+}
+
+// Try pushes aren't retried: one may have been made.
+export function isPushJob(job: JobView): boolean {
+  return job.purpose?.what === "push" || job.name === "try.ts push";
+}
+
+function commandButton(request: string, c: object, label: string, back: string, primary = false): Html {
+  return html`<form class="inline cmd" method="post" action="/api/commands">${commandFields([{ ...c, request }], back)}<button class="btn small${primary ? " primary" : ""}">${label}</button></form>`;
+}
+
+function dismissButton(request: string, key: string, back: string): Html {
+  return commandButton(request, { cmd: "dismiss", key }, "Dismiss", back);
+}
+
+export function stopButton(request: string, job: string, back: string): Html {
+  return commandButton(request, { cmd: "stop", job }, "Stop", back);
+}
+
+// Resumes the item's author with what you type.
+export function continueBox(request: string, item: string, back: string): Html {
+  return html`<form class="inline cmd" method="post" action="/api/commands">${commandFields([{ cmd: "continue", request, item }], back)}<input type="text" name="text" required placeholder="Tell its author what to do…"><button class="btn small">Continue</button></form>`;
 }
 
 // The plan a recovery entry asks about: its job's latest plan, or the latest plan
@@ -136,7 +182,7 @@ function plannedText(c: PlannedCommand, r: RequestState): string {
     case "resume-agent":
       return `tell ${itemLabel(r, c.item)}’s author: “${c.message}”`;
     case "start-agent":
-      return c.prompt === "investigate-and-fix" ? `restart the investigation of ${itemLabel(r, c.item)}` : `start ${jobLabel(c.prompt)} again for ${itemLabel(r, c.item)}`;
+      return `restart the investigation of ${itemLabel(r, c.item)}: “${c.prompt}”`;
     case "set-state":
       return `mark ${itemLabel(r, c.item)} as ${c.state}`;
     case "redo-step":
@@ -194,5 +240,5 @@ export function recoveryPlan(r: RequestState, plan: RequestState["recoveryPlans"
 }
 
 export function actionsSummary(r: RequestState): Html {
-  return join(r.needsUser.map((n) => renderAction(r, n)), "");
+  return join([...r.needsUser.map((n) => renderAction(r, n)), ...refusedOf(r).map((x) => renderRefused(r, x))], "");
 }

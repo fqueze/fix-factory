@@ -131,7 +131,7 @@ describe("one fixture per step of docs/MVP.md", () => {
       labels.map(([title]) => title),
       [
         "tell browser_tabSpinner.js’s author: “Stop and report what you have.”",
-        "restart the investigation of browser_pinnedTabs.js",
+        "restart the investigation of browser_pinnedTabs.js: “Start over from the worktree as it is; the profile of task Zx3 is gone.”",
         "mark browser_mute.js as left as-is",
         "retry fetch test artifacts of browser_tab_drag_drop.js",
         "stop the investigation of browser_tabSpinner.js",
@@ -150,13 +150,105 @@ describe("one fixture per step of docs/MVP.md", () => {
 
   it("4. investigate and fix: a running request-level job shows in the summary line and at the top of the body", () => {
     const h = expanded("r-20261013-tab-failures");
-    const work = /<div class="rwork"><div title="recover"><span class="st run">recovery plan<\/span> · Opus · <span data-since="2026-10-15T08:59:00.000Z">1 min<\/span><\/div><\/div>/g;
+    const said = "restart the browser_pinnedTabs.js item, it has been waiting for a build slot since this morning";
+    const work = new RegExp(
+      `<div class="rwork"><div title="recover"><span class="st run">working on <span class="said" title="${said}">“${said}”</span></span> · Opus · <span data-since="2026-10-15T08:59:00.000Z">1 min</span> <form[^>]*><input type="hidden" name="command" value="${cmd({ cmd: "stop", job: "j-recover-2", request: "r-20261013-tab-failures" })}">`,
+      "g",
+    );
     const summary = h.indexOf("</summary>");
     const found = [...h.matchAll(work)].map((m) => m.index);
     assert.equal(found.length, 2);
     assert.ok(found[0] < summary && found[1] > h.indexOf('<div class="rbody">'));
+    assert.ok(h.indexOf('data-watch="/api/requests/r-20261013-tab-failures/jobs/j-recover-2/activity"') > h.indexOf('<div class="rbody">'), "Watch only in the body");
     const collapsed = renderRequest(get("r-20261015-sessionstore"), ctx, false).value;
     assert.match(collapsed, /<div title="route-request"><span class="st run">route request<\/span> · Sonnet · <span data-since/);
+    const old = structuredClone(get("r-20261013-tab-failures"));
+    delete old.jobs["j-recover-2"].purpose;
+    assert.match(renderRequest(old, ctx).value, /<span class="st run">recovery plan<\/span> · Opus/, "without a purpose");
+  });
+
+  it("4. investigate and fix: Stop on running jobs, Watch on agents, Continue on closed groups", () => {
+    const h = expanded("r-20261013-tab-failures");
+    const row = (item: string) => h.slice(h.indexOf(`<tr data-item="${item}">`), h.indexOf("</tr>", h.indexOf(`<tr data-item="${item}">`)));
+    assert.ok(row("i-spinner").includes(cmd({ cmd: "stop", job: "j-inv-spinner", request: "r-20261013-tab-failures" })));
+    assert.match(row("i-spinner"), /data-watch="\/api\/requests\/r-20261013-tab-failures\/jobs\/j-inv-spinner\/activity"/);
+    assert.doesNotMatch(row("i-close"), /cmd&quot;:&quot;(stop|continue)/);
+    const closed = structuredClone(get("r-20261013-tab-failures"));
+    closed.items["i-spinner"].state = "left as-is";
+    delete closed.jobs["j-inv-spinner"].endedAt;
+    closed.jobs["j-inv-spinner"].endedAt = "2026-10-15T08:00:00.000Z";
+    const c = renderRequest(closed, ctx, true).value;
+    assert.ok(c.includes(cmd({ cmd: "continue", request: "r-20261013-tab-failures", item: "i-spinner" })));
+    assert.ok(!c.includes(cmd({ cmd: "continue", request: "r-20261013-tab-failures", item: "i-mute" })), "no author session to talk to");
+    const jobs = h.slice(h.indexOf('data-fold="jobs"'));
+    assert.ok(jobs.includes(cmd({ cmd: "stop", job: "j-recover-2", request: "r-20261013-tab-failures" })));
+    assert.ok(!jobs.includes(cmd({ cmd: "stop", job: "j-recover", request: "r-20261013-tab-failures" })), "finished jobs can't be stopped");
+  });
+
+  it("every ⚑ has a way out: accept or continue after the review limit, retry or continue a failed job, dismiss the rest", () => {
+    const r = structuredClone(get("r-20261013-tab-failures"));
+    const base = { kind: "agent" as const, cmd: ["node"], cwd: "/x", pid: 1, pidStartTime: 1, startedAt: "2026-10-15T08:00:00.000Z", endedAt: "2026-10-15T08:10:00.000Z", exitCode: 0 };
+    r.jobs["j-review"] = { ...base, job: "j-review", name: "review-patch", item: "i-drag" };
+    r.jobs["j-push"] = { ...base, kind: "script", job: "j-push", name: "try.ts push", purpose: { key: "push:A", what: "push", push: "A" }, exitCode: 1 };
+    r.needsUser = [
+      { key: "failed:j-review", action: "No ok after 3 critical review rounds", detail: "still racy", job: "j-review", item: "i-drag", since: r.createdAt },
+      { key: "failed:j-artifacts", action: "artifacts.ts fetch failed twice", detail: "503", job: "j-artifacts", item: "i-drag", since: r.createdAt },
+      { key: "failed:j-push", action: "try.ts push failed (not retried: it may have happened)", detail: "lando", job: "j-push", since: r.createdAt },
+      { key: "stopped:j-inv-spinner", action: "investigate-and-fix stopped by you", detail: "", job: "j-inv-spinner", item: "i-spinner", since: r.createdAt },
+      { key: "note:x", action: "Something to know", detail: "", since: r.createdAt },
+    ];
+    const h = renderRequest(r, ctx).value;
+    const flag = (key: string) => h.slice(h.indexOf(`data-key="${key}"`), h.indexOf("</div>", h.indexOf(`data-key="${key}"`)));
+    const R = "r-20261013-tab-failures";
+    assert.ok(flag("failed:j-review").includes(cmd({ cmd: "accept-review", item: "i-drag", request: R })));
+    assert.match(flag("failed:j-review"), />Accept as reviewed</);
+    assert.ok(flag("failed:j-review").includes(cmd({ cmd: "continue", request: R, item: "i-drag" })));
+    assert.doesNotMatch(flag("failed:j-review"), />Retry</);
+    assert.ok(flag("failed:j-artifacts").includes(cmd({ cmd: "retry", job: "j-artifacts", request: R })));
+    assert.ok(flag("failed:j-artifacts").includes(cmd({ cmd: "continue", request: R, item: "i-drag" })));
+    assert.doesNotMatch(flag("failed:j-push"), />Retry</, "try pushes aren't retried");
+    assert.ok(flag("failed:j-push").includes(cmd({ cmd: "dismiss", key: "failed:j-push", request: R })));
+    assert.ok(flag("stopped:j-inv-spinner").includes(cmd({ cmd: "continue", request: R, item: "i-spinner" })));
+    assert.ok(flag("note:x").includes(cmd({ cmd: "dismiss", key: "note:x", request: R })));
+  });
+
+  it("a patch whose critical review hasn't passed is a draft on its group row, without a bug to file", () => {
+    const r = structuredClone(get("r-20261013-tab-failures"));
+    r.patches["p-drag"] = {
+      id: "p-drag",
+      item: "i-drag",
+      sha: "d".repeat(40),
+      worktree: "/build/worktrees/drag",
+      title: "Bug XXXXXXX - Close the drag session on failure, r=dao.",
+      bug: null,
+      bugDraft: { product: "Firefox", component: "Tabbed Browser", summary: "Drag session left open", description: "d" },
+      deps: [],
+      replyDrafts: [],
+    };
+    const h = renderRequest(r, ctx, true).value;
+    assert.doesNotMatch(h, /data-patch="p-drag"/);
+    assert.match(h, /data-patch="p-close"/, "reviewed patches stay in the Patches section");
+    const row = h.slice(h.indexOf('<tr data-item="i-drag">'), h.indexOf("</tr>", h.indexOf('<tr data-item="i-drag">')));
+    assert.match(row, /<div class="sub">draft · review findings · “Close the drag session on failure, r=dao\.”<\/div>/);
+    assert.doesNotMatch(h, /Drag\+session\+left\+open/, "no Bug to file link");
+    assert.match(h, /<span class="rsum">[^<]*· 1 patch<\/span>/);
+    r.items["i-drag"].state = "blocked";
+    assert.doesNotMatch(renderRequest(r, ctx, true).value, /data-patch="p-drag"/, "blocked after the review limit: still a draft");
+    r.items["i-drag"].state = "reviewed";
+    const reviewed = renderRequest(r, ctx, true).value;
+    assert.match(reviewed, /data-patch="p-drag"/);
+    assert.match(reviewed, /Drag\+session\+left\+open/);
+    assert.match(reviewed, /<span class="rsum">[^<]*· 2 patches, 1 bug to file<\/span>/);
+  });
+
+  it("shows a refused command as a ⚑ you can dismiss", () => {
+    const r = structuredClone(get("r-20261013-tab-failures"));
+    r.needsUser = [];
+    r.refused = [{ key: "refused:c-7", command: "c-7", cmd: "start-agent", detail: "start-agent only starts a new investigate-and-fix on an item that already had one", t: r.createdAt }];
+    const h = renderRequest(r, ctx).value;
+    assert.match(h, /<details class="req needs"/);
+    assert.match(h, /<span class="flag">Your restart of the investigation was refused<\/span> <span class="why">start-agent only starts a new investigate-and-fix on an item that already had one<\/span>/);
+    assert.ok(h.includes(cmd({ cmd: "dismiss", key: "refused:c-7", request: "r-20261013-tab-failures" })));
   });
 
   it("4. investigate and fix: Bug to file link and the paste-number/comment box", () => {

@@ -172,7 +172,7 @@ export type Event =
   | (EventBase & { type: "reply-draft"; patch: PatchId; commentId: number; text: string })
   | (EventBase & { type: "needs-user"; key: string; action: string; detail: string; item?: ItemId; patch?: PatchId; push?: PushId; stack?: string; job?: JobId })
   | (EventBase & { type: "user-done"; key: string }) // clears a needs-user with the same key
-  | (EventBase & { type: "command-executed"; command: string; ok: boolean; detail?: string })
+  | (EventBase & { type: "command-executed"; command: string; ok: boolean; detail?: string; cmd?: Command["cmd"] })
   | (EventBase & { type: "recovery-plan"; job: JobId; text: string; plan: PlannedCommand[]; cannotDo: string[]; questions: string[] })
   | (EventBase & { type: "note"; text: string });
 
@@ -200,6 +200,12 @@ export type Command =
   | (CommandBase & { cmd: "reply-recovery"; job: JobId; text: string })
   | (CommandBase & { cmd: "start-now" })
   | (CommandBase & { cmd: "presence"; visible: boolean }) // sent by a visible page, see docs/ORCHESTRATOR.md
+  // The ways out of a ⚑, from its buttons.
+  | (CommandBase & { cmd: "accept-review"; item: ItemId }) // the item is reviewed despite its critical review findings
+  | (CommandBase & { cmd: "continue"; item: ItemId; text: string }) // resumes the item's author session with your message
+  | (CommandBase & { cmd: "retry"; job: JobId }) // what retry-job does, except for try pushes
+  | (CommandBase & { cmd: "stop"; job: JobId }) // cancels a running job; its item waits for a continue
+  | (CommandBase & { cmd: "dismiss"; key: string }) // clears a ⚑: a needs-user key, or a refused command's key
   // Recovery commands: proposed by recover.md, executed after your approval.
   | (CommandBase & PlannedCommand);
 
@@ -267,6 +273,7 @@ export interface JobView {
   model?: string;
   sessionId?: string;
   error?: string;
+  purpose?: JobPurpose; // absent for jobs whose job-started has none
 }
 
 export interface ItemView {
@@ -330,6 +337,14 @@ export interface NeedsUser {
   since: Iso;
 }
 
+export interface RefusedCommand {
+  key: string; // "refused:<command id>", what dismiss names
+  command: string; // its id
+  cmd?: Command["cmd"]; // absent when the orchestrator failed before knowing it
+  detail?: string;
+  t: Iso;
+}
+
 export interface RequestState {
   id: RequestId;
   kind: RequestKind;
@@ -351,6 +366,9 @@ export interface RequestState {
   needsUser: NeedsUser[]; // open ones only
   metaBug?: { bug: number | null; draft?: BugDraft };
   recoveryPlans: { job: JobId; text: string; plan: PlannedCommand[]; cannotDo: string[]; questions: string[]; t: Iso }[];
+  // The latest commands the orchestrator refused, until dismissed or a later command with the same cmd succeeds.
+  // Optional: folded states saved before it existed don't have it.
+  refused?: RefusedCommand[];
   notes: { t: Iso; text: string }[];
 }
 

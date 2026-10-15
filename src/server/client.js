@@ -119,6 +119,29 @@
     true
   );
 
+  // An agent's activity: loaded when its Watch opens, then reloaded while it stays open.
+  function loadActivity(d) {
+    fetch(d.dataset.watch)
+      .then(function (r) {
+        return r.text();
+      })
+      .then(function (text) {
+        d.querySelector(".activity").innerHTML = text;
+      })
+      .catch(function () {});
+  }
+  document.addEventListener(
+    "toggle",
+    function (event) {
+      var d = event.target;
+      if (d.matches && d.matches("details[data-watch]") && d.open) loadActivity(d);
+    },
+    true
+  );
+  setInterval(function () {
+    if (document.visibilityState === "visible") document.querySelectorAll("details[data-watch][open]").forEach(loadActivity);
+  }, 3000);
+
   // Clicks in a ⚑ area that aren't on a control mustn't fold the request.
   document.addEventListener("click", function (event) {
     var t = event.target;

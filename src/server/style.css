@@ -144,3 +144,17 @@ details.fold.section > div { padding: 0; }
 [data-expand].open { white-space: normal; overflow-wrap: anywhere; }
 ul.plan li > label { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 ul.plan .reason { color: var(--text-muted); font-size: 12px; padding-left: 20px; }
+/* Stop, Watch and Continue on running jobs and closed groups; the activity of an agent. */
+.said { display: inline-block; max-width: 40em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
+.rwork form.inline .btn, .jobctl .btn { font-size: 11px; padding: 0 6px; }
+.jobctl { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 4px; }
+.jobctl input[type=text], .rwork input[type=text] { font: inherit; font-size: 12px; padding: 1px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-1); color: var(--text-primary); min-width: 0; flex: 1 1 160px; }
+details.watch { display: inline-block; vertical-align: top; }
+details.watch > summary { list-style: none; font-size: 11px; padding: 0 6px; }
+details.watch > summary::-webkit-details-marker { display: none; }
+details.watch[open] { display: block; flex-basis: 100%; }
+.activity { background: var(--bg); border-radius: 6px; padding: 6px 8px; margin-top: 4px; }
+ol.steps { margin: 4px 0; padding-left: 22px; font-size: 12px; }
+ol.steps li { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+ol.steps li.subagent { color: var(--text-muted); }
+.said-last { white-space: pre-wrap; font-size: 12px; color: var(--text-secondary); border-left: 3px solid var(--border); padding-left: 8px; max-height: 12em; overflow: auto; }

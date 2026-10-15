@@ -74,10 +74,30 @@ const SPECS: Record<Command["cmd"], Record<string, Field>> = {
   "redo-step": { item: "string?", step: { oneOf: REQUEST_STEPS }, reason: "string" },
   "edit-config": { config: "object", reason: "string" },
   shell: { cwd: "string", command: "string", reason: "string" },
+  "accept-review": { item: "string" },
+  continue: { item: "string", text: "string" },
+  retry: { job: "string" },
+  stop: { job: "string" },
+  dismiss: { key: "string" },
 };
 
 // Commands that only make sense about a request.
-const NEEDS_REQUEST = new Set<string>(["approve-push", "set-bug", "comment-bug-draft", "stack-comments", "take-it", "hand-back", "comment-fix", "reply-recovery", "start-now"]);
+const NEEDS_REQUEST = new Set<string>([
+  "approve-push",
+  "set-bug",
+  "comment-bug-draft",
+  "stack-comments",
+  "take-it",
+  "hand-back",
+  "comment-fix",
+  "reply-recovery",
+  "start-now",
+  "accept-review",
+  "continue",
+  "retry",
+  "stop",
+  "dismiss",
+]);
 
 function isObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
@@ -184,6 +204,15 @@ function checkIds(c: Record<string, unknown>, state: RequestState): string | nul
   }
   if (typeof c.stack === "string" && !Object.hasOwn(state.stacks, c.stack)) {
     return `unknown stack ${c.stack}`;
+  }
+  if (c.cmd === "dismiss" && !state.needsUser.some((n) => n.key === c.key) && !(state.refused ?? []).some((x) => x.key === c.key)) {
+    return `nothing to dismiss for ${String(c.key)}`;
+  }
+  if (c.cmd === "stop" && state.jobs[c.job as string].endedAt !== undefined) {
+    return `${String(c.job)} isn't running`;
+  }
+  if (c.cmd === "retry" && state.jobs[c.job as string].purpose?.what === "push") {
+    return "a try push isn't retried (it may have been made): ask the factory to plan it again";
   }
   if (Array.isArray(c.comments)) {
     const bad = (c.comments as { patch: string }[]).find((x) => !patchOk(x.patch));

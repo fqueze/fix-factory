@@ -22,12 +22,39 @@ describe("validateCommand", () => {
       { cmd: "tell-factory", text: "Lando was down" },
       { cmd: "reply-recovery", request: "r-20261013-tab-failures", job: "j-recover", text: "no" },
       { cmd: "start-now", request: "r-20261016-popups" },
+      { cmd: "accept-review", request: R, item: "i-update" },
+      { cmd: "continue", request: R, item: "i-update", text: "keep the wait, answer the reviewer" },
+      { cmd: "retry", request: "r-20261013-tab-failures", job: "j-artifacts" },
+      { cmd: "stop", request: "r-20261013-tab-failures", job: "j-recover-2" },
+      { cmd: "dismiss", request: "r-20261013-tab-failures", key: "recovery:j-recover" },
     ];
     for (const c of ok) {
       const v = validateCommand(c, get);
       assert.ok(v.ok, `${c.cmd}: ${v.ok ? "" : v.error}`);
       assert.deepEqual(v.command, c);
     }
+  });
+
+  it("refuses a way out that doesn't apply: a ⚑ that isn't open, a job not running, a try push to retry", () => {
+    const T = "r-20261013-tab-failures";
+    const state = structuredClone(source.getRequest(T)!);
+    state.jobs["j-push"] = { ...state.jobs["j-artifacts"], job: "j-push", name: "try.ts push", purpose: { key: "push:A", what: "push", push: "A" } };
+    state.refused = [{ key: "refused:c-1", command: "c-1", cmd: "start-agent", t: state.createdAt }];
+    const getT = (id: string) => (id === T ? state : get(id));
+    const bad: [object, RegExp][] = [
+      [{ cmd: "dismiss", request: T, key: "failed:nope" }, /nothing to dismiss/],
+      [{ cmd: "stop", request: T, job: "j-recover" }, /isn't running/],
+      [{ cmd: "retry", request: T, job: "j-push" }, /try push isn't retried/],
+      [{ cmd: "continue", request: T, item: "i-nope", text: "x" }, /unknown item/],
+      [{ cmd: "continue", request: T, item: "i-pin", text: " " }, /text must be a non-empty string/],
+      [{ cmd: "accept-review", item: "i-pin" }, /needs a request/],
+    ];
+    for (const [c, error] of bad) {
+      const v = validateCommand(c, getT);
+      assert.equal(v.ok, false, JSON.stringify(c));
+      assert.match((v as { error: string }).error, error);
+    }
+    assert.ok(validateCommand({ cmd: "dismiss", request: T, key: "refused:c-1" }, getT).ok, "a refused command is dismissed by its key");
   });
 
   describe("recovery commands", () => {

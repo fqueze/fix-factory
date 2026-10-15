@@ -121,6 +121,68 @@ export function parseStreamJson(text: string): StreamSummary {
   return out;
 }
 
+// What an agent did, in order: its tool calls in short form and its text messages. Steps of its
+// subagents are marked, as they run beside the main conversation.
+export interface StreamStep {
+  kind: "tool" | "text";
+  tool?: string; // the tool's name, for tool steps
+  text: string; // the tool call in short form, or the message
+  subagent?: boolean;
+}
+
+export function streamSteps(text: string): StreamStep[] {
+  const steps: StreamStep[] = [];
+  for (const line of text.split("\n")) {
+    if (!line.trim()) continue;
+    let msg: Record<string, any>;
+    try {
+      msg = JSON.parse(line);
+    } catch {
+      continue; // a line still being written
+    }
+    if (msg?.type !== "assistant" || !Array.isArray(msg.message?.content)) continue;
+    const subagent = typeof msg.parent_tool_use_id === "string" ? { subagent: true } : {};
+    for (const block of msg.message.content as (ContentBlock & { input?: Record<string, unknown> })[]) {
+      if (block.type === "tool_use" && typeof block.name === "string") {
+        steps.push({ kind: "tool", tool: block.name, text: toolCallText(block.name, block.input ?? {}), ...subagent });
+      } else if (block.type === "text" && typeof block.text === "string" && block.text.trim()) {
+        steps.push({ kind: "text", text: block.text.trim(), ...subagent });
+      }
+    }
+  }
+  return steps;
+}
+
+// Bash: the command's first line; file tools: the path; Grep and Glob: the pattern; Agent: its description.
+function toolCallText(name: string, input: Record<string, unknown>): string {
+  const str = (k: string) => (typeof input[k] === "string" ? (input[k] as string) : undefined);
+  switch (name) {
+    case "Bash":
+      return str("command")?.split("\n")[0] ?? "";
+    case "Read":
+    case "Edit":
+    case "MultiEdit":
+    case "Write":
+      return str("file_path") ?? "";
+    case "NotebookEdit":
+      return str("notebook_path") ?? "";
+    case "Grep":
+    case "Glob":
+      return str("pattern") ?? "";
+    case "Agent":
+    case "Task":
+      return str("description") ?? "";
+    case "WebFetch":
+      return str("url") ?? "";
+    case "WebSearch":
+      return str("query") ?? "";
+    case "StructuredOutput":
+      return "the report";
+    default:
+      return "";
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Report validation: the subset of JSON Schema that schemas/*.json use.
 
