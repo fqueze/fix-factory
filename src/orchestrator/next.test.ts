@@ -298,6 +298,31 @@ describe("3. work list", () => {
     assert.deepEqual(Object.keys(sc.state().items).sort(), ["i-test-a", "i-test-b", "i-test-c"]);
   });
 
+  it("adds no item for a single that an earlier version's merge report folded into a group", () => {
+    const sc = tryPushFinished();
+    sc.step();
+    sc.complete("try-table:initial:final", { output: table() });
+    sc.complete("collect:initial:final", { output: [failure("a/test_a.js", "boom"), failure("b/test_b.js", "bang"), failure("c/browser_c.js", "Test timed out")] });
+    sc.step();
+    sc.complete("cluster:initial:final", { output: { groups: [group("ka", "a/test_a.js", "boom"), group("kb", "b/test_b.js", "bang")], singles: [group("kc", "c/browser_c.js", "Test timed out")] } });
+    sc.step();
+    // Recorded by an earlier version, which sent the singles too: no check of its tests.
+    const job = sc.running("merge:initial:final");
+    const report = {
+      groups: [
+        { message: "boom", tests: ["a/test_a.js", "c/browser_c.js"], configs: [], from: ["ka", "kc"], reason: "same" },
+        { message: "bang", tests: ["b/test_b.js"], configs: [], from: ["kb"], reason: "unchanged" },
+      ],
+      feedback: [],
+    };
+    sc.reports.set(job, report);
+    sc.add({ type: "agent-report", request: ID, job, prompt: "merge-clusters", report });
+    sc.add({ type: "job-finished", request: ID, job, exitCode: 0, durationMs: 1 });
+    sc.settle();
+    assert.deepEqual(Object.keys(sc.state().items), ["i-test-a", "i-test-b"]);
+    assert.deepEqual(sc.state().items["i-test-a"].group.tests, ["a/test_a.js", "c/browser_c.js"]);
+  });
+
   it("rejects a merge-clusters report that drops or adds a test: one retry with the error, then it comes to you", () => {
     const sc = tryPushFinished();
     sc.step();
@@ -310,6 +335,7 @@ describe("3. work list", () => {
     assert.throws(() => sc.complete("merge:initial:final", { report: dropped }), (e: Error) => e instanceof InvalidReport && /missing from your groups: b\/test_b\.js/.test(e.message));
     const added = { groups: [{ message: "boom", tests: ["a/test_a.js", "b/test_b.js", "z/test_z.js"], configs: [], from: ["ka", "kb"], reason: "same" }], feedback: [] };
     assert.throws(() => sc.complete("merge:initial:final", { report: added }), /weren't in the input groups: z\/test_z\.js/);
+    assert.deepEqual(sc.of("agent-report"), []);
     // What the runner records for it.
     sc.complete("merge:initial:final", { error: "invalid report: tests missing from your groups: b/test_b.js" });
     assert.deepEqual(sc.step(), ["merge:initial:final"]);
@@ -803,6 +829,27 @@ describe("file-bug raised before step 7 by an earlier version", () => {
     sc.step();
     assert.deepEqual(sc.of("user-done").map((e) => e.key), ["file-bug:p-test-a"]);
     assert.deepEqual(sc.open(), []);
+  });
+
+  it("is cleared at step 7, leaving one ⚑ for the patch", () => {
+    const sc = verified({ bugDraft: { product: "Core", component: "XPCOM", summary: "s", description: "d" } });
+    sc.add({ type: "needs-user", request: ID, key: "file-bug:p-test-a", action: "File the bug", detail: "", patch: "p-test-a", item: "i-test-a" });
+    sc.settle();
+    assert.deepEqual(sc.open().sort(), ["file-bug:p-test-a:meta-bug-step", "meta-bug:a"]);
+  });
+});
+
+describe("file-bug at a redone step 7", () => {
+  it("is cleared when the step is redone, and asked again when step 7 comes back", () => {
+    const sc = verified({ bugDraft: { product: "Core", component: "XPCOM", summary: "s", description: "d" } });
+    assert.ok(sc.open().includes("file-bug:p-test-a:meta-bug-step"));
+    sc.add({ type: "step", request: ID, step: "verify on try" });
+    sc.settle();
+    assert.ok(!sc.open().some((k) => k.startsWith("file-bug:")));
+    // As if the new pushes were green.
+    sc.add({ type: "step", request: ID, step: "meta bug" });
+    sc.settle();
+    assert.ok(sc.open().includes("file-bug:p-test-a:meta-bug-step@1"));
   });
 });
 

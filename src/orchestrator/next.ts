@@ -113,9 +113,10 @@ export function patchId(item: ItemId, index: number): PatchId {
   return index === 0 ? base : `${base}-${index + 1}`;
 }
 
-// Not file-bug:<patch>, which earlier versions raised too early: a needs-user key is raised once.
-export function fileBugKey(patch: PatchId): string {
-  return `file-bug:${patch}:meta-bug-step`;
+// Not file-bug:<patch>, which earlier versions raised too early, and with the step's epoch: a
+// needs-user key is raised once, and a redone step 7 asks again.
+export function fileBugKey(patch: PatchId, epoch: string): string {
+  return `file-bug:${patch}:meta-bug-step${epoch}`;
 }
 
 export function stackId(folder: string): string {
@@ -220,7 +221,7 @@ class Planner {
       return;
     }
     this.computeStacks();
-    this.earlyFileBugs();
+    this.staleFileBugs();
     this.request();
     this.firstSignal();
     this.pushes();
@@ -617,7 +618,13 @@ class Planner {
     if (!cluster) return undefined;
     const { groups, singles } = this.out<{ groups: ClusterGroup[]; singles: ClusterGroup[] }>(cluster);
     const strip = ({ key: _, ...g }: ClusterGroup): FailureGroup => g;
-    if (groups.length <= 1) return [...groups, ...singles].map(strip);
+    // A single's test that already has an item or is in a group is investigated there. Earlier
+    // versions also sent singles to merge-clusters, which folded some into groups.
+    const withSingles = (gs: FailureGroup[]) => {
+      const covered = new Set([...this.knownTests(), ...gs.flatMap((g) => g.tests)]);
+      return [...gs, ...singles.filter((g) => !g.tests.some((t) => covered.has(t))).map(strip)];
+    };
+    if (groups.length <= 1) return withSingles(groups.map(strip));
     const clustersFile = dataPath(this.config, this.s.id, `clusters-${scope}-${run}.json`);
     const merge = this.wantAgent(`merge:${scope}:${run}`, "merge", "merge-clusters", { clustersFile }, { files: [{ path: clustersFile, content: JSON.stringify({ groups }, null, 2) + "\n" }] });
     if (!merge) return undefined;
@@ -634,7 +641,7 @@ class Planner {
         ...(taskIds.length ? { taskIds } : {}),
       };
     });
-    return [...merged, ...singles.map(strip)];
+    return withSingles(merged);
   }
 
   private knownTests(): Set<string> {
@@ -853,7 +860,7 @@ class Planner {
       this.setItem(item.id, "blocked", "critical review");
       return;
     }
-    const list = findings.map((f) => `- [${f.severity}]${f.file ? ` ${f.file}${f.line ? `:${f.line}` : ""}` : ""} ${f.text}`).join("\n");
+    const list = mustFix.map((f) => `- [${f.severity}]${f.file ? ` ${f.file}${f.line ? `:${f.line}` : ""}` : ""} ${f.text}`).join("\n");
     this.resumeAuthor(item.id, key, "review", `A critical reviewer found these problems in your patch:\n${list}\n\nAddress them by amending your commit, then end with the JSON report again. Where you disagree with a finding, say why in the report's summary.`, "review findings");
   }
 
@@ -1223,10 +1230,14 @@ class Planner {
   // 7. Meta bug
 
   // A patch's bug draft is only a link on its row until step 7: filing is asked once try is green.
-  // Earlier versions asked right after the lint; this takes their ⚑ down.
-  private earlyFileBugs(): void {
-    if (at(this.s.step) >= at("meta bug")) return;
-    for (const n of this.s.needsUser) if (n.key.startsWith("file-bug:")) this.clear(n.key);
+  // This takes down any other file-bug ⚑: those earlier versions raised right after the lint, and
+  // those of a step 7 that was redone.
+  private staleFileBugs(): void {
+    const epoch = this.stepEpoch("meta bug");
+    for (const n of this.s.needsUser) {
+      if (!n.key.startsWith("file-bug:")) continue;
+      if (this.s.step !== "meta bug" || n.key !== fileBugKey(n.patch!, epoch)) this.clear(n.key);
+    }
   }
 
   private metaBug(): void {
@@ -1247,7 +1258,7 @@ class Planner {
     for (const st of stacks) this.raise(`meta-bug:${st.id}`, { action: "File the meta bug, then review and submit", detail: "the meta-bug comment lists the stack in review order, with effort, value and repro", stack: st.id });
     for (const p of stacks.flatMap((st) => st.order).map((pid) => this.s.patches[pid])) {
       if (!p.bugDraft) continue;
-      const key = fileBugKey(p.id);
+      const key = fileBugKey(p.id, this.stepEpoch("meta bug"));
       if (p.bug !== null) this.clear(key);
       else this.raise(key, { action: `File the bug for ${p.title.replace(/^Bug X+\s*-\s*/i, "")}`, detail: `${p.bugDraft.product}::${p.bugDraft.component}, checked by lint-text.ts`, patch: p.id, ...(p.item ? { item: p.item } : {}) });
     }

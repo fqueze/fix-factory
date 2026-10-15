@@ -129,11 +129,12 @@ export function finishJob(deps: RunnerDeps, s: RequestState, view: View, rec: Jo
   const append = (events: EventInput[]) => events.forEach((e) => appendEventSafe(config.stateDir, e));
   let error = "error" in exit ? exit.error : undefined;
   let costUsd: number | undefined;
-  const handle = (report?: unknown) => {
+  // first: events recorded only when the handler accepts the result (an agent's report).
+  const handle = (report?: unknown, first: EventInput[] = []) => {
     try {
       const r = handleFinished({ state: s, view, config, job: rec, output: out, report, reportOf: (job) => readReport(config, s.id, job), outputOf: (job) => readOut(config, job) });
       writeFiles(r.files ?? []);
-      append(r.events);
+      append([...first, ...r.events]);
       // Their ids derive from the job, so a replay after a crash executes them once.
       for (const c of r.commands ?? []) appendCommand(config.stateDir, c);
     } catch (e) {
@@ -158,9 +159,8 @@ export function finishJob(deps: RunnerDeps, s: RequestState, view: View, rec: Jo
       const report = summary.report as { feedback: Feedback[] };
       const path = reportPath(config, s.id, rec.job);
       writeFiles([{ path, content: JSON.stringify(report, null, 2) + "\n" }]);
-      append([{ type: "agent-report", request: s.id, job: rec.job, ...(rec.item ? { item: rec.item } : {}), prompt: rec.name, report }]);
       appendFeedback(config.stateDir, rec.job, report.feedback);
-      handle(report);
+      handle(report, [{ type: "agent-report", request: s.id, job: rec.job, ...(rec.item ? { item: rec.item } : {}), prompt: rec.name, report }]);
     }
   } else if (error === undefined) {
     if (rec.kind === "try-watch") append(handleWatchLines(s, view, rec.purpose.push!, jsonLines(out).lines));
