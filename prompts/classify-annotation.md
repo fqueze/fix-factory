@@ -1,0 +1,1 @@
+The annotation `{annotation}` in {manifest} was added in bug {bug} ("{summary}"), whose first comment is: {comment}. Is it **scoping** (the test can't work in that config, so it should become `run-if`) or **flakiness** (it fails intermittently there)? Answer `unclear` with one sentence if neither fits.

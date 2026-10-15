@@ -59,7 +59,7 @@ Factory runtime (long-running, not CLIs):
 > and whether the rebuild counts match the failure rates. Approve only if there's nothing to report.
 
 ### `investigate-and-fix.md` (Opus, MVP only) [C2–D1 as done today]
-> Fix {test} in {worktree}, following debug-a-test-failure and subagent-brief.md. The failure: {failure summary}.
+> Fix {test} in {worktree}, following debug-a-test-failure and subagent-brief.md. The failure: {failureSummary}.
 > Commit the fix with a message following the commit-message skill, using `Bug XXXXXXX` if the fix needs a bug
 > of its own. End with the JSON report: state, cause, how you verified it, a bug draft (bug-filing skill) if one is
 > needed, and any patch yours must land after.
@@ -73,12 +73,12 @@ Factory runtime (long-running, not CLIs):
 ### `plan-try-pushes.md` (Sonnet) [B2, F1, MVP]
 > Plan the try pushes for: {goal}. Inputs: the failures to cover with their per-config rates ({failures}), the
 > stack's patches with their diffstats ({patches}), and the earlier un-skip push's command and results
-> ({initial push}). Follow the push-to-try skill. Keep the configs and paths comparable with the un-skip push,
+> ({initialPush}). Follow the push-to-try skill. Keep the configs and paths comparable with the un-skip push,
 > and add a separate push when a patch changes product code that those jobs don't cover. Give each push its
 > `mach try` command, rebuild count, and one-line purpose.
 
 ### `investigate-failure.md` (Opus) [C2] — needs the **investigate-race** skill
-> Find the cause of {failure summary} in {test}, following the investigate-race skill. Evidence: profiles and
+> Find the cause of {failureSummary} in {test}, following the investigate-race skill. Evidence: profiles and
 > logs in {evidence dir}, history in {history table}. Don't run anything: when you need a run, return a repro
 > request, optionally with a DEBUG commit that widens the race. Stop when a recipe reproduces the failure.
 
@@ -132,7 +132,7 @@ review in `orchestrate-parallel-fixes`.
 > patch, plus dependency additions and removals with a reason.
 
 ### `adapt-soft-dep.md` (Haiku, Sonnet if not trivial) [E3b]
-> Patches {A} and {B} swapped order, and the soft dependency between them says: {reason}. Adjust both
+> Patches {patchA} and {patchB} swapped order, and the soft dependency between them says: {reason}. Adjust both
 > patches so each is correct in the new order and the end result after both is unchanged, the way you'd
 > resolve a rebase conflict. Change nothing else.
 
@@ -141,7 +141,7 @@ review in `orchestrate-parallel-fixes`.
 > is semantic (the patch's approach no longer fits the new base), stop and explain instead.
 
 ### `triage-try.md` (Haiku, Sonnet if unclear) [F5]
-> Results of try push {rev} (goal: {goal}): {table}. Logs of jobs fx-tests couldn't parse: {log excerpts}. For each
+> Results of try push {rev} (goal: {goal}): {table}. Logs of jobs fx-tests couldn't parse: {logExcerpts}. For each
 > failing or not-run cell, classify it as fixed, still failing, broken by patch X, unrelated pre-existing, or infra,
 > and cite the log line it rests on.
 
@@ -166,9 +166,9 @@ review in `orchestrate-parallel-fixes`.
 > complete answer; "Done." is right when the change speaks for itself. Never claim anything that wasn't verified.
 
 ### `recover.md` (Opus) [Recovery]
-> The user says: {text}. The state of request {id} is in {state dir}: read `events.jsonl`, job outputs and
+> The user says: {text}. The state of request {id} is in {stateDir}: read `events.jsonl`, job outputs and
 > transcripts there before deciding anything. Return a plan made only of the factory commands in the schema, with
-> one sentence per command saying why. Put what can't be done with those commands in `cannot_do`, and ask
+> one sentence per command saying why. Put what can't be done with those commands in `cannotDo`, and ask
 > the user anything the files don't tell you.
 
 ## Skills these prompts depend on

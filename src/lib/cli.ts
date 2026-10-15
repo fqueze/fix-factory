@@ -2,6 +2,9 @@ import { parseArgs, type ParseArgsConfig } from "node:util";
 
 // Common entry point for the CLIs in src/cli/: one JSON document on stdout,
 // logs on stderr, exit code 1 with {"error": "..."} on failure.
+// Thrown for bad arguments: exit code 2 instead of 1.
+export class UsageError extends Error {}
+
 export type Subcommand = (positionals: string[], values: Record<string, string | boolean | string[] | undefined>) => Promise<unknown>;
 
 export async function runCli(subcommands: Record<string, Subcommand>, options: ParseArgsConfig["options"] = {}): Promise<void> {
@@ -24,7 +27,7 @@ export async function runCli(subcommands: Record<string, Subcommand>, options: P
     }
   } catch (e) {
     process.stdout.write(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }) + "\n");
-    process.exitCode = 1;
+    process.exitCode = e instanceof UsageError ? 2 : 1;
   }
 }
 

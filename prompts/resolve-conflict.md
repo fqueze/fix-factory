@@ -1,0 +1,1 @@
+Rebasing {sha} onto {base} conflicts in {files}. Resolve it, keeping the intent of both sides. If the conflict is semantic (the patch's approach no longer fits the new base), stop and explain instead.

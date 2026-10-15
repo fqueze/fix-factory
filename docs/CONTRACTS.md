@@ -19,10 +19,13 @@ conventions around it. For compatibility, **only add** fields, event types or co
 
 ```
 commands.jsonl                    # every command, append-only
+commands-data/<id>.<n>.txt        # long command strings; commands.jsonl holds {"textFile": ...} in their place
+commands.cursor.json              # last command executed by the orchestrator
 requests/<requestId>/events.jsonl # everything that happened to a request, append-only
-jobs/<jobId>/spec.json            # {cmd, cwd, env, kind, name, request, item}
+jobs/<jobId>/spec.json            # {cmd, cwd, env, stdinFile?, kind, name, request, item}
 jobs/<jobId>/out.log              # stdout (a CLI's JSON, or claude's stream-json)
 jobs/<jobId>/err.log
+jobs/<jobId>/pid.json             # {pid, pidStartTime}, written when the job starts
 jobs/<jobId>/exit.json            # {exitCode, endedAt}, written by the wrapper when the job ends
 feedback/<target>.md              # agent feedback, one file per Feedback.target
 cache/artifacts/<taskId>/...      # downloaded try logs and profiles
@@ -43,6 +46,8 @@ cache/artifacts/<taskId>/...      # downloaded try logs and profiles
 - The wrapper runs `cmd`, redirects stdout and stderr to the logs, and writes `exit.json` when the command ends.
 - Restarting the orchestrator doesn't touch running jobs. On startup it re-attaches to them: pid plus
   `pidStartTime` from `/proc/<pid>/stat` decide whether a job is still alive.
+- Job status is running, finished, lost (no process, no `exit.json`) or **orphaned** (the wrapper died but the command
+  is still running). An orphaned job is cancelled before any retry, so two agents never share a worktree.
 
 ## CLIs (`src/cli/<tool>.ts`)
 
@@ -59,12 +64,14 @@ cache/artifacts/<taskId>/...      # downloaded try logs and profiles
 
 ## Agents
 
-- `src/agents/run.ts` builds the command `config.claudeCommand + ["-p", prompt, "--output-format", "stream-json",
-  "--verbose", "--session-id", id, "--model", model, "--json-schema", schema]` with stdin from `/dev/null`, and runs
-  it as a job in the item's worktree. A follow-up uses `--resume <id>` in place of `--session-id`.
+- `src/agents/run.ts` builds the command `config.claudeCommand + ["-p", "--output-format", "stream-json",
+  "--verbose", "--session-id", id, "--model", model, "--json-schema", schema]` and runs it as a job in the item's
+  worktree. The rendered prompt is written to `jobs/<jobId>/prompt.md` and passed as stdin (job spec `stdinFile`),
+  because Linux limits one argument to 128 KiB. A follow-up uses `--resume <id>` in place of `--session-id`.
 - **Result:** the last stream-json line, `type: "result"`, carries `structured_output` (the report),
-  `total_cost_usd` (for this run only), `duration_ms`, `session_id`, `is_error`.
-- **Transcripts:** `~/.claude/projects/<cwd with "/" replaced by "-">/<sessionId>.jsonl`.
+  `total_cost_usd` (cumulative for the session: subtract the earlier runs' total to get one run's cost), `duration_ms`, `session_id`, `is_error`.
+- **Transcripts:** `~/.claude/projects/<cwd with every non-alphanumeric character replaced by "-">/<sessionId>.jsonl`
+  (very long names are shortened with a hash, which isn't handled yet).
 - **Prompts:** `prompts/<name>.md`, with `{placeholders}` filled in by the orchestrator.
 - **Schemas:** `schemas/<name>.json` must match the report type in `src/types.ts`.
 - **Feedback:** every report has `feedback: Feedback[]`. The runner appends each entry to
