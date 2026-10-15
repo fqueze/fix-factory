@@ -13,8 +13,7 @@
   "estimate-review-effort": { "model": "haiku", "step": "5. Stack", "purpose": "Rate a patch's review effort from 1 to 5." },
   "review-stack": { "model": "opus", "step": "5. Stack", "purpose": "Review the assembled stack as a whole." },
   "classify-review-comments": { "model": "haiku", "step": "9. Review comments", "purpose": "Classify each inline review comment." },
-  "address-review": { "model": "opus", "step": "9. Review comments", "purpose": "Resume the author to address review comments." },
-  "draft-reply": { "model": "sonnet", "step": "9. Review comments", "purpose": "Draft a reply to one review comment." },
+  "address-review": { "model": "opus", "step": "9. Review comments", "purpose": "Resume the author to address review comments, returning replies only where code doesn't speak for itself." },
   "adapt-soft-dep": { "model": "haiku", "step": "10. Landing", "purpose": "Adjust two patches whose soft dependency was flipped by a reorder (Sonnet if not trivial)." },
   "recover": { "model": "opus", "step": "Recovery", "purpose": "Turn your free text into a plan of factory commands." }
 }

@@ -277,7 +277,7 @@ footer { max-width: 1100px; margin: 0 auto; padding: 8px 12px 24px; font-size: 1
       <span class="rname">Flakiness burndown: browser/extensions/newtab/test/browser</span>
       <span class="rsum">9 in review: 2 accepted, 1 changes requested, 2 comments addressed · 30 landed</span>
       <span class="rright"><span class="step">9 · review comments</span><a class="btn small" href="#">Profile</a></span>
-      <div class="action"><span class="flag">Post 2 replies, then resubmit D327101, D327084</span><span class="why">comments addressed and re-reviewed (Opus) · interdiffs below</span><button class="btn small primary">moz-phab submit (2 revisions)</button></div>
+      <div class="action"><span class="flag">Post 1 reply, then resubmit D327101, D327084</span><span class="why">comments addressed and re-reviewed (Opus) · interdiffs below</span><button class="btn small primary">moz-phab submit (2 revisions)</button></div>
     </summary>
     <div class="rbody">
       <h3>Patches</h3>
@@ -299,16 +299,15 @@ footer { max-width: 1100px; margin: 0 auto; padding: 8px 12px 24px; font-size: 1
 <span class="a">+  let sponsored = row.querySelectorAll(".top-site-outer.sponsored");</span>
 <span class="a">+  is(sponsored.length, 2, "two sponsored tiles");</span></pre>
                 <div class="comment"><b>mconley</b>: Could we select the sponsored tiles directly instead of subtracting?</div>
-                <h4>Draft reply</h4>
-                <textarea rows="1">Done.</textarea>
-                <div class="row"><button class="btn small primary">Copy reply</button><a class="btn small" href="#" title="D327101#inline-1873402">Open comment ↗</a><input placeholder="Comment on the fix…"></div>
+                <div class="sub">Handled in code, no reply needed.</div>
+                <div class="row"><input placeholder="Comment on the fix…"></div>
               </div>
             </td>
             <td><span class="rv ok">mconley</span><div class="sub">accepted with comments</div></td>
           </tr>
           <tr>
             <td><a class="phab" href="#" title="D327084"><svg><use href="#phab"/></svg></a><a class="bug" href="#">Bug 2025752</a> Exclude the add-shortcut tile from the menu test selectors, r=mconley.
-              <div class="sub">“factor into a helper”: done · draft reply ready ▸</div>
+              <div class="sub">“factor into a helper”: done in code, no reply needed ▸</div>
               <div class="dep">🔗 soft: the skip-if removal for browser_topsites_section.js is here because this lands after D327083</div></td>
             <td><span class="rv ok">mconley</span><div class="sub">accepted with comments</div></td>
           </tr>
@@ -318,7 +317,13 @@ footer { max-width: 1100px; margin: 0 auto; padding: 8px 12px 24px; font-size: 1
             <td><span class="rv block">mconley</span></td>
           </tr>
           <tr>
-            <td><a class="phab" href="#" title="D327088"><svg><use href="#phab"/></svg></a><a class="bug" href="#">Bug 1780305</a> Wait for ExperimentManager.onStartup() before enrolling in NimbusTestUtils, r=beth.</td>
+            <td><a class="phab" href="#" title="D327088"><svg><use href="#phab"/></svg></a><a class="bug" href="#">Bug 1780305</a> Wait for ExperimentManager.onStartup() before enrolling in NimbusTestUtils, r=beth.
+              <div class="box">
+                <div class="comment"><b>beth</b>: Why not await this in NimbusTestUtils.init() instead?</div>
+                <h4>Reply from the author</h4>
+                <textarea rows="2">init() runs before the test's pref changes are applied, so enrolling there would use the defaults. Waiting at enrollment keeps the prefs the test set.</textarea>
+                <div class="row"><button class="btn small primary">Copy reply</button><a class="btn small" href="#" title="D327088#inline-1874110">Open comment ↗</a></div>
+              </div></td>
             <td><span class="rv pend">beth</span></td>
           </tr>
           <tr><td colspan="2" class="sub">+ 4 more in review · 30 landed ▸</td></tr>

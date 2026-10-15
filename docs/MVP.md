@@ -104,9 +104,8 @@ can read them.
 |---|---|---|
 | Poll: per-reviewer status, inline comments, suggested edits | S | `phab.ts poll` |
 | Classify each comment | H | `classify-review-comments.md` |
-| Address the comments, suggested edits included (author resumed), then lint + critical review again | O | `address-review.md`, `review-patch.md` |
+| Address the comments, suggested edits included (author resumed). The author also returns replies, only where the code doesn't speak for itself (answers, disagreements, a different approach), never "Done.". Then lint (replies included) + critical review again | O | `address-review.md`, `lint-text.ts`, `review-patch.md` |
 | Interdiff | S | `stack.ts interdiff` |
-| Draft replies | So | `draft-reply.md` + `lint-text.ts` |
 | Copy reply, open the inline comment, click resubmit (changed revisions only) | 👤 | |
 
 ### 10. Landing

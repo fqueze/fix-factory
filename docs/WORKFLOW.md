@@ -109,7 +109,7 @@ For try-push requests, B4 starts directly on the existing push.
 | I2 | Classify each comment: suggested edit / nit / question / change request | H | |
 | I3 | Apply suggested edits as written | S | |
 | I4 | Change request → resume the author; S re-runs D2–D6 with the stored recipe, and F if behaviour changed | So/O | |
-| I5 | Draft replies | So | S lints length |
+| I5 | Replies come from I4's author, only where the code doesn't speak for itself | O | S lints length |
 | I6 | Interdiff: old vs new commit on the same parent | S | |
 | I7 | **Copy reply** button + link to Phabricator scrolled to the inline comment (`D…#inline-N`); resubmit with `--single` for the changed revisions only | 👤 | |
 

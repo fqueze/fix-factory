@@ -343,3 +343,11 @@ export interface RequestState {
   recoveryPlans: { job: JobId; text: string; plan: PlannedCommand[]; cannotDo: string[]; questions: string[]; t: Iso }[];
   notes: { t: Iso; text: string }[];
 }
+
+export interface AddressReviewReport {
+  state: "addressed" | "blocked";
+  summary: string;
+  commits: string[]; // the amended commit(s), oldest first
+  replies: { commentId: number; text: string }[]; // only where the code doesn't speak for itself
+  feedback: Feedback[];
+}

@@ -171,14 +171,12 @@ review in `orchestrate-parallel-fixes`.
 > Classify each inline comment on {revision} as suggested edit, nit, question, or change request. For a
 > question, say whether it implies a code change.
 
-### `address-review.md` (resumes the author) [I4]
-> The reviewer left these comments on your patch: {comments}. Make the requested changes and nits in code,
-> and draft an answer for each question. Keep the `Differential Revision:` trailer.
-
-### `draft-reply.md` (Sonnet) [I5]
-> Draft a reply to this review comment: {comment}. What changed since the reviewer saw the patch is in
-> {interdiffFile}. Write the shortest complete answer; "Done." is right when the change speaks for itself. Never
-> claim anything that wasn't verified.
+### `address-review.md` (resumes the author) [I4, I5]
+> The reviewer left comments on your patch {revision}; they are in {commentsFile}. Make the requested changes,
+> nits and suggested edits in code, keeping the `Differential Revision:` trailer. Reply only where the code
+> doesn't speak for itself: answer questions, and explain, with the reason, where you did something other than
+> what was asked or disagree. A comment fully handled in code gets no reply, never "Done.". Return the replies
+> with their comment ids.
 
 ### `recover.md` (Opus) [Recovery]
 > The user says: {text}. The state of request {id} is in {stateDir}: read `events.jsonl`, job outputs and
