@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterEach, beforeEach, test } from "node:test";
-import { cancelJob, isAlive, jobDir, jobStatus, readExit, readPidStartTime, reconcile, startJob, type JobSpec, type JobStatus } from "./jobs.ts";
+import { cancelJob, groupMembers, isAlive, jobDir, jobStatus, readExit, readPidStartTime, reconcile, startJob, type JobSpec, type JobStatus } from "./jobs.ts";
 
 let dir: string;
 beforeEach(() => {
@@ -28,6 +28,16 @@ async function waitFor(jobId: string, timeoutMs = 10_000): Promise<JobStatus> {
 }
 
 const log = (jobId: string, name: string) => readFileSync(join(jobDir(dir, jobId), name), "utf8");
+
+// Signal tests must wait for the command itself: under load the wrapper can take
+// seconds to start, and a signal sent before then tests something else.
+async function waitForReady(jobId: string): Promise<void> {
+  const deadline = Date.now() + 30_000;
+  while (!existsSync(join(jobDir(dir, jobId), "out.log")) || !log(jobId, "out.log").includes("ready")) {
+    if (Date.now() > deadline) throw new Error(`job ${jobId} never got ready`);
+    await new Promise((r) => setTimeout(r, 20));
+  }
+}
 
 test("readPidStartTime and isAlive", () => {
   const start = readPidStartTime(process.pid);
@@ -88,19 +98,47 @@ test("the wrapper leads its own process group", async () => {
 });
 
 test("cancelJob kills the process group and exit.json records the signal", async () => {
-  const { job, pid, pidStartTime } = startJob(dir, spec(["sh", "-c", "sleep 30 & wait"]));
-  await new Promise((r) => setTimeout(r, 200));
+  const { job, pid, pidStartTime } = startJob(dir, spec(["sh", "-c", "sleep 30 & echo ready; wait"]));
+  await waitForReady(job);
   const s = await cancelJob(dir, job, { graceMs: 3000 });
   assert.equal(s.state, "finished");
   assert.equal(s.state === "finished" && s.exitCode, 128 + 15);
   assert.equal(isAlive(pid, pidStartTime), false);
-  // The grandchild (sleep) was in the same group, so it's gone too: no process left in the group.
-  assert.throws(() => process.kill(-pid, 0), /ESRCH/);
+  // The grandchild (sleep) was in the same group, so it's gone too.
+  assert.deepEqual(groupMembers(pid, pidStartTime), []);
+});
+
+test("SIGTERM to the wrapper alone is forwarded, and exit.json is still written", async () => {
+  const { job, pid } = startJob(dir, spec(["sh", "-c", "echo ready; exec sleep 30"]));
+  await waitForReady(job);
+  process.kill(pid, "SIGTERM");
+  const s = await waitFor(job);
+  assert.equal(s.state === "finished" && s.exitCode, 128 + 15);
+  assert.equal(s.state === "finished" && s.signal, "SIGTERM");
+});
+
+test("an orphaned command (wrapper SIGKILLed alone) is reported and cancelJob kills it", async () => {
+  const { job, pid, pidStartTime } = startJob(dir, spec(["sh", "-c", "echo ready; exec sleep 30"]));
+  await waitForReady(job);
+  process.kill(pid, "SIGKILL");
+  while (isAlive(pid, pidStartTime)) await new Promise((r) => setTimeout(r, 20));
+  assert.equal(jobStatus(dir, job).state, "orphaned");
+  assert.equal(reconcile(dir, [{ job, pid, pidStartTime }])[0].status.state, "orphaned");
+  const s = await cancelJob(dir, job, { graceMs: 2000 });
+  assert.equal(s.state === "finished" && s.exitCode, 128 + 15);
+  assert.deepEqual(groupMembers(pid, pidStartTime), []);
+});
+
+test("a missing stdinFile fails the job with a message", async () => {
+  const { job } = startJob(dir, spec(["cat"], { stdinFile: join(dir, "nope.txt") }));
+  const s = await waitFor(job);
+  assert.equal(s.state === "finished" && s.exitCode, 1);
+  assert.match(log(job, "err.log"), /job-wrapper: .*ENOENT.*nope\.txt/);
 });
 
 test("cancelJob escalates to SIGKILL and still writes exit.json", async () => {
-  const { job } = startJob(dir, spec(["sh", "-c", "trap '' TERM; sleep 30 & wait; sleep 30"]));
-  await new Promise((r) => setTimeout(r, 200));
+  const { job } = startJob(dir, spec(["sh", "-c", "trap '' TERM; sleep 30 & echo ready; wait; sleep 30"]));
+  await waitForReady(job);
   const s = await cancelJob(dir, job, { graceMs: 300 });
   assert.equal(s.state, "finished");
   assert.equal(s.state === "finished" && s.exitCode, 137);

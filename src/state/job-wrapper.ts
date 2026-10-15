@@ -7,7 +7,7 @@
 // exitCode 128 + its number, like a shell does.
 // SIGTERM, SIGINT and SIGHUP sent to the wrapper are forwarded to the command, and
 // exit.json is still written once it ends.
-import { spawn } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
 import { appendFileSync, openSync, readFileSync } from "node:fs";
 import { constants } from "node:os";
 import { join } from "node:path";
@@ -31,12 +31,22 @@ function finish(exitCode: number, signal?: string): never {
   process.exit(exitCode);
 }
 
+// Installed before spawning: the command can start (and a canceller see its output)
+// before spawn() returns, and a SIGTERM arriving then would kill the wrapper outright.
+// Handlers run from the event loop, so after the synchronous spawn below.
+let child: ChildProcess | undefined;
+for (const sig of ["SIGTERM", "SIGINT", "SIGHUP"] as const) {
+  process.on(sig, () => {
+    child?.kill(sig);
+  });
+}
+
 try {
   const spec = JSON.parse(readFileSync(join(jobDir, "spec.json"), "utf8")) as JobSpec;
   const stdin = spec.stdinFile ? openSync(spec.stdinFile, "r") : "ignore";
   const out = openSync(join(jobDir, "out.log"), "a");
   const err = openSync(errPath, "a");
-  const child = spawn(spec.cmd[0], spec.cmd.slice(1), {
+  child = spawn(spec.cmd[0], spec.cmd.slice(1), {
     cwd: spec.cwd,
     env: { ...process.env, ...spec.env },
     stdio: [stdin, out, err],
@@ -47,15 +57,10 @@ try {
   });
   child.on("exit", (code, signal) => {
     if (signal) {
-      finish(128 + (constants.signals[signal] ?? 0), signal);
+      finish(128 + constants.signals[signal], signal);
     }
     finish(code ?? 1);
   });
-  for (const sig of ["SIGTERM", "SIGINT", "SIGHUP"] as const) {
-    process.on(sig, () => {
-      child.kill(sig);
-    });
-  }
 } catch (e) {
   appendFileSync(errPath, `job-wrapper: ${e instanceof Error ? e.message : String(e)}\n`);
   finish(1);

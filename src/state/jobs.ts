@@ -5,7 +5,8 @@
 // {pid, pidStartTime} of the wrapper, which is the process group leader.
 import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { constants } from "node:os";
 import { join } from "node:path";
 import type { ItemId, Iso, JobId, JobKind, RequestId } from "../types.ts";
 import { checkId, writeFileAtomic } from "./jsonl.ts";
@@ -31,10 +32,11 @@ export interface ExitInfo {
   exitCode: number;
   endedAt: Iso;
   signal?: string;
-  cancelled?: boolean;
 }
 
-export type JobStatus = { state: "running" } | ({ state: "finished" } & ExitInfo) | { state: "lost" };
+// orphaned: the wrapper died without writing exit.json but the command (or its children)
+// still runs. Cancel it before retrying, or two copies would share the worktree.
+export type JobStatus = { state: "running" } | ({ state: "finished" } & ExitInfo) | { state: "orphaned" } | { state: "lost" };
 
 const WRAPPER = join(import.meta.dirname, "job-wrapper.ts");
 
@@ -80,7 +82,7 @@ export function readPidStartTime(pid: number): number | null {
   return readStat(pid)?.startTime ?? null;
 }
 
-function readStat(pid: number): { state: string; startTime: number } | null {
+function readStat(pid: number): { state: string; pgrp: number; startTime: number } | null {
   let stat: string;
   try {
     stat = readFileSync(`/proc/${pid}/stat`, "utf8");
@@ -89,13 +91,32 @@ function readStat(pid: number): { state: string; startTime: number } | null {
   }
   // The command name (field 2) is in parentheses and may contain spaces or ")".
   const fields = stat.slice(stat.lastIndexOf(")") + 2).split(" ");
-  return { state: fields[0], startTime: Number(fields[19]) };
+  return { state: fields[0], pgrp: Number(fields[2]), startTime: Number(fields[19]) };
 }
 
 // Same pid and same start time, so not a reused pid. A zombie is not alive: it has exited.
 export function isAlive(pid: number, pidStartTime: number): boolean {
   const s = readStat(pid);
-  return s !== null && s.state !== "Z" && s.state !== "X" && s.startTime === pidStartTime;
+  return s !== null && s.state !== "Z" && s.startTime === pidStartTime;
+}
+
+// Live (non-zombie) processes still in the process group the wrapper led. The command
+// and its children stay in that group after the wrapper dies (OOM, kill -9). Zombies
+// are skipped because kill(-pgid, 0) would still count them.
+export function groupMembers(pid: number, pidStartTime: number): number[] {
+  const leader = readStat(pid);
+  if (leader && leader.startTime !== pidStartTime) {
+    // Linux doesn't reuse a pid while it's still a process group id, so a new process
+    // with this pid means the old group is empty.
+    return [];
+  }
+  const members: number[] = [];
+  for (const name of readdirSync("/proc")) {
+    if (!/^\d+$/.test(name)) continue;
+    const st = readStat(Number(name));
+    if (st && st.pgrp === pid && st.state !== "Z") members.push(Number(name));
+  }
+  return members;
 }
 
 export function readExit(stateDir: string, jobId: JobId): ExitInfo | null {
@@ -128,29 +149,40 @@ export function jobStatus(stateDir: string, jobId: JobId, proc?: { pid: number; 
   }
   // The wrapper may have written exit.json between the two checks.
   const late = readExit(stateDir, jobId);
-  return late ? { state: "finished", ...late } : { state: "lost" };
+  if (late) {
+    return { state: "finished", ...late };
+  }
+  return p && groupMembers(p.pid, p.pidStartTime).length > 0 ? { state: "orphaned" } : { state: "lost" };
 }
 
-// SIGTERM to the job's process group; SIGKILL after graceMs if it's still there. A
-// SIGKILL also kills the wrapper, so exit.json is written here in that case.
+// SIGTERM to the job's process group, SIGKILL after graceMs if anything in it is left,
+// and returns once the group is empty. This also cleans up an orphaned job. When the
+// wrapper couldn't write exit.json (it was killed), it's written here with the last
+// signal sent.
 export async function cancelJob(stateDir: string, jobId: JobId, opts: { graceMs?: number } = {}): Promise<JobStatus> {
   const p = readPidFile(stateDir, jobId);
-  if (!p || !isAlive(p.pid, p.pidStartTime)) {
+  if (!p) {
     return jobStatus(stateDir, jobId);
   }
-  killGroup(p.pid, "SIGTERM");
+  const groupAlive = () => groupMembers(p.pid, p.pidStartTime).length > 0;
+  if (!groupAlive()) {
+    return jobStatus(stateDir, jobId);
+  }
+  let signal: NodeJS.Signals = "SIGTERM";
+  killGroup(p.pid, signal);
   const deadline = Date.now() + (opts.graceMs ?? 5000);
-  while (isAlive(p.pid, p.pidStartTime) && Date.now() < deadline) {
+  while (groupAlive() && Date.now() < deadline) {
     await sleep(50);
   }
-  if (isAlive(p.pid, p.pidStartTime)) {
-    killGroup(p.pid, "SIGKILL");
-    while (isAlive(p.pid, p.pidStartTime)) {
+  if (groupAlive()) {
+    signal = "SIGKILL";
+    killGroup(p.pid, signal);
+    while (groupAlive()) {
       await sleep(20);
     }
   }
   if (!readExit(stateDir, jobId)) {
-    const exit: ExitInfo = { exitCode: 137, endedAt: new Date().toISOString(), signal: "SIGKILL", cancelled: true };
+    const exit: ExitInfo = { exitCode: 128 + constants.signals[signal], endedAt: new Date().toISOString(), signal };
     writeFileAtomic(join(jobDir(stateDir, jobId), "exit.json"), JSON.stringify(exit) + "\n");
   }
   return jobStatus(stateDir, jobId);
@@ -170,7 +202,7 @@ function sleep(ms: number): Promise<void> {
 
 // For orchestrator startup: the status of every job the folded state says is running
 // (job-started without job-finished). Finished ones need a job-finished event, lost
-// ones a decision (usually retry).
+// ones a decision (usually retry), orphaned ones a cancelJob before anything else.
 export function reconcile(
   stateDir: string,
   runningJobs: readonly { job: JobId; pid: number; pidStartTime: number }[],
