@@ -120,3 +120,18 @@ details.cmdline pre { margin: 4px 0; white-space: pre-wrap; word-break: break-al
 .box .desc { white-space: pre-wrap; font-size: 12px; margin: 4px 0; }
 .flash { color: var(--good); font-size: 12px; }
 .error { color: var(--critical); font-size: 12px; }
+/* Failure groups: messages and state details clamped (open a detail to read it all), closed groups and history folded. */
+table.groups td.gname { width: 38%; overflow-wrap: anywhere; }
+.clamp2 { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
+details.clamp3 > summary { list-style: none; cursor: pointer; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; overflow-wrap: anywhere; }
+details.clamp3 > summary::-webkit-details-marker { display: none; }
+details.clamp3[open] > summary { display: block; }
+td.foldrow { padding: 0; }
+details.fold > summary { list-style: none; cursor: pointer; color: var(--text-secondary); font-size: 12px; padding: 6px; }
+details.fold > summary::-webkit-details-marker { display: none; }
+details.fold > summary::after { content: " ▸"; color: var(--text-muted); }
+details.fold[open] > summary::after { content: " ▾"; }
+details.fold > div { padding: 0 6px 4px; }
+details.fold table.groups tr:last-child td { border-bottom: 0; }
+details.fold.section > summary { font-weight: 600; margin: 14px 0 4px; padding: 0; }
+details.fold.section > div { padding: 0; }
