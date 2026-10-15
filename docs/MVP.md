@@ -124,6 +124,8 @@ can read them.
   `fx-tests`, `profiler-cli` or a factory script, and for anything missing from what we gave it. A script appends
   each entry, with a link to the agent run, to one file per tool.
 - **"Tell the factory…"**: see Recovery below.
+- **Web server** always on the same port, `"port": 4300` in `factory.config.json`, listening on all interfaces so the page
+  can be opened from another machine.
 - **Caps:** N agents and M builds at once.
 - **Agent launch command** in `factory.config.json`, e.g. `"claudeCommand": ["mozsb", "claude"]` (sandbox,
   permission prompts disabled). The factory appends `-p --output-format stream-json --session-id … --model …`.
