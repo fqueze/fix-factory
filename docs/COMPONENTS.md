@@ -168,7 +168,7 @@ review in `orchestrate-parallel-fixes`.
 ### `recover.md` (Opus) [Recovery]
 > The user says: {text}. The state of request {id} is in {stateDir}: read `events.jsonl`, job outputs and
 > transcripts there before deciding anything. Return a plan made only of the factory commands in the schema, with
-> one sentence per command saying why. Put what can't be done with those commands in `cannot_do`, and ask
+> one sentence per command saying why. Put what can't be done with those commands in `cannotDo`, and ask
 > the user anything the files don't tell you.
 
 ## Skills these prompts depend on

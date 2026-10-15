@@ -63,8 +63,9 @@ cache/artifacts/<taskId>/...      # downloaded try logs and profiles
   "--verbose", "--session-id", id, "--model", model, "--json-schema", schema]` with stdin from `/dev/null`, and runs
   it as a job in the item's worktree. A follow-up uses `--resume <id>` in place of `--session-id`.
 - **Result:** the last stream-json line, `type: "result"`, carries `structured_output` (the report),
-  `total_cost_usd` (for this run only), `duration_ms`, `session_id`, `is_error`.
-- **Transcripts:** `~/.claude/projects/<cwd with "/" replaced by "-">/<sessionId>.jsonl`.
+  `total_cost_usd` (cumulative for the session: subtract the earlier runs' total to get one run's cost), `duration_ms`, `session_id`, `is_error`.
+- **Transcripts:** `~/.claude/projects/<cwd with every non-alphanumeric character replaced by "-">/<sessionId>.jsonl`
+  (very long names are shortened with a hash, which isn't handled yet).
 - **Prompts:** `prompts/<name>.md`, with `{placeholders}` filled in by the orchestrator.
 - **Schemas:** `schemas/<name>.json` must match the report type in `src/types.ts`.
 - **Feedback:** every report has `feedback: Feedback[]`. The runner appends each entry to
