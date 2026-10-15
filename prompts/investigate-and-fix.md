@@ -1,0 +1,1 @@
+Fix {test} in {worktree}, following debug-a-test-failure and subagent-brief.md. The failure: {failureSummary}. Commit the fix with a message following the commit-message skill, using `Bug XXXXXXX` if the fix needs a bug of its own. End with the JSON report: state, cause, how you verified it, a bug draft (bug-filing skill) if one is needed, and any patch yours must land after.

@@ -6,6 +6,8 @@ Design docs, read in this order:
 - [docs/MVP.md](docs/MVP.md): what gets built first, and how the factory updates without stopping
 - [docs/WORKFLOW.md](docs/WORKFLOW.md): the full target workflow
 - [docs/COMPONENTS.md](docs/COMPONENTS.md): scripts and prompts
+- [docs/PROMPTS.md](docs/PROMPTS.md): every prompt in full (generated, `node src/tools/prompts-doc.ts`)
+- [docs/CONTRACTS.md](docs/CONTRACTS.md): conventions between the pieces
 - [docs/mockup-mvp.html](docs/mockup-mvp.html): status page mockup for the first version
 - [docs/mockup.html](docs/mockup.html): status page mockup for the full design
 - [docs/initial-prompt.md](docs/initial-prompt.md): the original request
