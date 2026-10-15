@@ -6,17 +6,22 @@
 // non-idempotent commands can guard against this by checking, before acting, for a
 // command-executed event whose `command` field holds this Command.id.
 //
-// Lines must stay under 4 KB, so any string over 2 KB in a command (a long comment or
-// instruction) is stored in commands-data/<id>.txt (<id>.<json path>.txt when it isn't
-// the top-level text field) and replaced in the line by {"textFile": <path relative to
+// Lines must stay under 4 KB, so every string over 2 KB in a command (a long comment or
+// instruction), then more strings, largest first, until the line fits, are stored in
+// commands-data/<id>.<n>.txt and replaced in the line by {"textFile": <path relative to
 // the state directory>}. readCommands puts the text back, so callers never see it.
 import { randomBytes } from "node:crypto";
 import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Command, Iso } from "../types.ts";
-import { appendJsonLine, checkId, readJsonLinesFrom, writeFileAtomic } from "./jsonl.ts";
+import { appendJsonLine, checkId, MAX_LINE_BYTES, readJsonLinesFrom, writeFileAtomic } from "./jsonl.ts";
 
 const MAX_INLINE_TEXT_BYTES = 2048;
+// Smaller strings would hardly shrink the line: the {"textFile": …} reference that
+// replaces them is about this long.
+const MIN_MOVED_BYTES = 64;
+// Kept inline so the raw file stays greppable and routable.
+const ENVELOPE_KEYS = new Set(["v", "id", "t", "cmd", "request"]);
 
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
 
@@ -39,27 +44,47 @@ export function appendCommand(stateDir: string, command: CommandInput): Command 
   const t = command.t ?? new Date().toISOString();
   const full = { ...command, v: command.v ?? 1, t, id: command.id ?? newCommandId(t) } as Command;
   checkId(full.id, "command id");
-  appendJsonLine(commandsPath(stateDir), externalizeTexts(stateDir, full.id, full, []), `${full.cmd} command`);
+  appendJsonLine(commandsPath(stateDir), externalizeTexts(stateDir, full), `${full.cmd} command`);
   return full;
 }
 
-function externalizeTexts(stateDir: string, id: string, value: unknown, path: (string | number)[]): unknown {
-  if (typeof value === "string") {
-    if (Buffer.byteLength(value) <= MAX_INLINE_TEXT_BYTES) return value;
-    const name = path.length === 1 && path[0] === "text" ? `${id}.txt` : `${id}.${path.join(".")}.txt`;
-    const textFile = join("commands-data", name);
+// Moves strings to files, largest first: every string over 2 KB, then more until the
+// line fits. File names use a counter, never command keys, which can come from an agent.
+function externalizeTexts(stateDir: string, command: Command): unknown {
+  const copy = structuredClone(command) as unknown;
+  const strings: { holder: Record<string | number, unknown>; key: string | number; bytes: number }[] = [];
+  const collect = (value: unknown) => {
+    if (value === null || typeof value !== "object") return;
+    const holder = value as Record<string | number, unknown>;
+    for (const key of Object.keys(holder)) {
+      const v = holder[key];
+      if (typeof v === "string") {
+        if (holder === copy && ENVELOPE_KEYS.has(key)) continue;
+        if (Buffer.byteLength(v) < MIN_MOVED_BYTES) continue;
+        strings.push({ holder, key, bytes: Buffer.byteLength(v) });
+      } else {
+        collect(v);
+      }
+    }
+  };
+  collect(copy);
+  strings.sort((a, b) => b.bytes - a.bytes);
+  const lineBytes = () => Buffer.byteLength(JSON.stringify(copy)) + 1;
+  const files: { textFile: string; text: string }[] = [];
+  for (const s of strings) {
+    if (s.bytes <= MAX_INLINE_TEXT_BYTES && lineBytes() <= MAX_LINE_BYTES) break;
+    const textFile = join("commands-data", `${command.id}.${files.length + 1}.txt`);
+    files.push({ textFile, text: s.holder[s.key] as string });
+    s.holder[s.key] = { textFile };
+  }
+  if (files.length > 0) {
     mkdirSync(join(stateDir, "commands-data"), { recursive: true });
-    // Written before the command line, so a reader never finds a reference to a missing file.
-    writeFileAtomic(join(stateDir, textFile), value);
-    return { textFile };
   }
-  if (Array.isArray(value)) {
-    return value.map((v, i) => externalizeTexts(stateDir, id, v, [...path, i]));
+  // Written before the command line, so a reader never finds a reference to a missing file.
+  for (const f of files) {
+    writeFileAtomic(join(stateDir, f.textFile), f.text);
   }
-  if (value !== null && typeof value === "object") {
-    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, externalizeTexts(stateDir, id, v, [...path, k])]));
-  }
-  return value;
+  return copy;
 }
 
 function internalizeTexts(stateDir: string, value: unknown): unknown {
@@ -69,6 +94,9 @@ function internalizeTexts(stateDir: string, value: unknown): unknown {
   if (value !== null && typeof value === "object") {
     const textFile = (value as { textFile?: unknown }).textFile;
     if (typeof textFile === "string" && Object.keys(value).length === 1) {
+      if (!/^commands-data\/[A-Za-z0-9][A-Za-z0-9._-]*\.txt$/.test(textFile)) {
+        throw new Error(`command text file outside commands-data: ${JSON.stringify(textFile)}`);
+      }
       return readFileSync(join(stateDir, textFile), "utf8");
     }
     return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, internalizeTexts(stateDir, v)]));

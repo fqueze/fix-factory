@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { appendFileSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { appendFileSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, test } from "node:test";
@@ -30,10 +30,32 @@ test("texts over 2 KB go to commands-data and come back on read", () => {
   const b = appendCommand(dir, { cmd: "stack-comments", stack: "s1", id: "c2", comments: [{ patch: "p1", text: "short" }, { patch: "p2", text: long }] });
   const raw = readFileSync(commandsPath(dir), "utf8");
   assert.ok(raw.length < 1000);
-  assert.match(raw, /"text":\{"textFile":"commands-data\/c1\.txt"\}/);
-  assert.equal(readFileSync(join(dir, "commands-data", "c1.txt"), "utf8"), long);
-  assert.equal(readFileSync(join(dir, "commands-data", "c2.comments.1.text.txt"), "utf8"), long);
+  assert.match(raw, /"text":\{"textFile":"commands-data\/c1\.1\.txt"\}/);
+  assert.equal(readFileSync(join(dir, "commands-data", "c1.1.txt"), "utf8"), long);
+  assert.equal(readFileSync(join(dir, "commands-data", "c2.1.txt"), "utf8"), long);
   assert.deepEqual(readCommands(dir, 0).commands, [a, b]);
+});
+
+test("strings under 2 KB are moved too, largest first, until the line fits", () => {
+  const comments = [1900, 2000, 1950].map((n, i) => ({ patch: `p${i}`, text: String(i).repeat(n) }));
+  const c = appendCommand(dir, { cmd: "stack-comments", stack: "s1", id: "c1", comments });
+  assert.ok(readFileSync(commandsPath(dir)).length <= 4096);
+  // Moving the 2000 byte text is enough.
+  assert.deepEqual(readdirSync(join(dir, "commands-data")), ["c1.1.txt"]);
+  assert.equal(readFileSync(join(dir, "commands-data", "c1.1.txt"), "utf8"), comments[1].text);
+  assert.match(readFileSync(commandsPath(dir), "utf8"), /"text":"0{1900}".*"text":"2{1950}"/);
+  assert.deepEqual(readCommands(dir, 0).commands, [c]);
+});
+
+test("command keys never end up in file names", () => {
+  const c = appendCommand(dir, { cmd: "edit-config", id: "c1", reason: "r", config: { "/../../../escaped": "x".repeat(3000) } });
+  assert.deepEqual(readdirSync(join(dir, "commands-data")), ["c1.1.txt"]);
+  assert.deepEqual(readCommands(dir, 0).commands, [c]);
+});
+
+test("a textFile reference outside commands-data is refused", () => {
+  appendFileSync(commandsPath(dir), JSON.stringify({ v: 1, id: "c1", t: "x", cmd: "tell-factory", text: { textFile: "../secret.txt" } }) + "\n");
+  assert.throws(() => readCommands(dir, 0), /outside commands-data/);
 });
 
 test("appendCommand still rejects lines over 4 KB made of short strings", () => {
