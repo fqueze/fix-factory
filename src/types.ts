@@ -13,6 +13,7 @@ export type PushId = string;
 
 export interface FactoryConfig {
   port: number; // web server, listens on all interfaces
+  allowedHosts?: string[]; // extra Host header values accepted besides IPs, localhost and this machine's name
   stateDir: string; // commands.jsonl, requests/, jobs/, feedback/, cache/
   firefoxRepo: string; // main checkout; worktrees are created next to it, never inside
   worktreesDir: string;
