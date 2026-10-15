@@ -13,7 +13,7 @@ import type { RenderContext } from "./pages/common.ts";
 import { renderMain, renderOverview, renderStrip } from "./pages/overview.ts";
 import { renderRequest } from "./pages/request.ts";
 import { buildRequestProfile } from "./request-profile.ts";
-import { buildStackReview, findStack, isRevName } from "./stack-review.ts";
+import { buildPatchView, buildStackReview, findStack, isRevName } from "./stack-review.ts";
 import type { CommandInput } from "../state/commands.ts";
 import type { CommandSink, StateSource } from "./state-source.ts";
 
@@ -301,6 +301,20 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
           stack: found.stack,
           base,
         });
+      } catch (e) {
+        throw new HttpError(502, errorMessage(e));
+      }
+      return send(res, 200, "text/html; charset=utf-8", page);
+    }
+    if ((m = path.match(/^\/requests\/([^/]+)\/patches\/([^/]+)\/view$/))) {
+      const request = opts.state.getRequest(decodeURIComponent(m[1]));
+      const patch = request?.patches[decodeURIComponent(m[2])];
+      if (!request || !patch) {
+        throw new HttpError(404, "unknown patch");
+      }
+      let page: string;
+      try {
+        page = await buildPatchView({ command: opts.config.stackViewerCommand, request, patch });
       } catch (e) {
         throw new HttpError(502, errorMessage(e));
       }

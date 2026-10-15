@@ -51,7 +51,7 @@ export function renderRequest(r: RequestState, ctx: RenderContext, open = ctx.op
     <summary>
       <span class="rname">${requestName(r)}</span>
       <span class="rsum"><span class="rprog">${progressLine(requestProgress(r), ctx)}</span>${requestSummary(r) ? ` · ${requestSummary(r)}` : null}</span>
-      <span class="rright">${cost > 0 ? html`<span class="hide-sm" title="Agent cost so far">${formatCost(cost)}</span>` : null}<span class="step">${stepLabel(r)}</span><a class="btn small" href="${profileUrl(ctx, r.id)}" target="_blank" rel="noopener">Profile</a></span>
+      <span class="rright">${cost > 0 ? html`<span class="hide-sm" title="What the agents of this request cost so far">${formatCost(cost)} spent</span>` : null}<a class="btn small" href="${profileUrl(ctx, r.id)}" target="_blank" rel="noopener">Profile</a></span>
       ${actionsSummary(r)}
     </summary>
     ${open ? renderRequestBody(r, ctx) : html`<div class="rbody" data-lazy><a href="${requestUrl(r.id)}">Open this request</a></div>`}
@@ -73,7 +73,7 @@ export function requestSummary(r: RequestState): string {
   const patches = Object.values(r.patches).filter((p) => !isDropped(r, p) && !isDraft(r, p));
   if (patches.length) {
     const accepted = patches.filter((p) => p.review?.status === "accepted" || (p.review && p.review.reviewers.length > 0 && p.review.reviewers.every((x) => x.status === "accepted"))).length;
-    const toFile = patches.filter((p) => !hasBug(p) && p.bugDraft).length;
+    const toFile = FILING_STEPS.has(r.step) ? patches.filter((p) => !hasBug(p) && p.bugDraft).length : 0;
     parts.push(
       [plural(patches.length, "patch", "patches"), accepted ? `${accepted} accepted` : "", toFile ? `${plural(toFile, "bug")} to file` : ""].filter(Boolean).join(", "),
     );
@@ -105,7 +105,9 @@ function requestWork(r: RequestState, ctx: RenderContext): Html | null {
 export function renderRequestBody(r: RequestState, ctx: RenderContext): Html {
   const back = requestUrl(r.id);
   const stacks = Object.values(r.stacks);
-  const loose = patchesOutsideStacks(r).filter((p) => !isDraft(r, p));
+  const config = configLine(r);
+  // Patches belong in their group's row; only those without a group get a table.
+  const loose = patchesOutsideStacks(r).filter((p) => !isDraft(r, p) && itemOf(r, p) === undefined);
   const stackedItems = new Set(stacks.flatMap((s) => stackPatches(r, s).map((p) => p.item)));
   const items = Object.values(r.items).filter((i) => !stackedItems.has(i.id));
   const pushes = Object.values(r.pushes);
@@ -116,11 +118,11 @@ export function renderRequestBody(r: RequestState, ctx: RenderContext): Html {
 
   return html`<div class="rbody">
     ${requestWork(r, ctx)}
-    ${configLine(r)}
+    ${config}
     ${r.metaBug ? metaBugLine(r, back) : null}
     ${stacks.map((s) => stackSection(r, s, ctx))}
     ${loose.length ? html`${loose.some((p) => !isDropped(r, p)) ? html`<h3>Patches</h3>` : null}${patchTable(r, loose, ctx, "loose")}` : null}
-    ${items.length ? html`<h3>${stacks.length ? "Other groups" : "Failure groups"}</h3>${groupTable(r, items, ctx)}` : null}
+    ${items.length ? html`<h3>${stacks.length ? "Other groups" : "Failure groups and their patches"}</h3>${groupTable(r, items, ctx)}` : null}
     ${planned.length ? html`<h3>Try plan <span class="sub">· waiting for your approval</span></h3><table><tbody>${planned.map((p) => html`<tr><td class="res plan">push ${p.id}</td><td>${p.purpose}${p.taskCount === undefined ? null : html` · ${p.taskCount} tasks`}</td><td>${commandDetails(p)}</td></tr>`)}</tbody></table><div style="margin-top:6px">${approvePushControls(r, planned, back)}</div>` : null}
     ${sent.length ? html`<h3>Try pushes</h3><table><tbody>${sent.map(pushRow)}</tbody></table>` : null}
     ${plans.length ? html`<details style="margin-top:10px"><summary class="sub">Earlier recovery plans (${plans.length})</summary>${plans.map((p) => html`<div class="action"><span class="flag">Recovery plan</span> ${youSaid(`You said: “${p.text}”`)}${recoveryPlan(r, p, back)}</div>`)}</details>` : null}
@@ -154,12 +156,13 @@ function inWords(v: unknown): string {
   return v === null || v === undefined ? "" : String(v);
 }
 
+// The folder is already in the request's title.
 function configLine(r: RequestState): Html | null {
-  const entries = configEntries(r);
+  const entries = configEntries(r).filter(([k, v]) => !(k === "folders" && v === r.folder));
   if (!entries.length) {
     return null;
   }
-  return html`<h3>Config <span class="sub">· from your request</span></h3><div class="sub">${join(
+  return html`<div class="sub" style="margin-top:6px">From your request: ${join(
     entries.map(([k, v]) => html`<b>${k}</b>: ${v}`),
     " · ",
   )}</div>`;
@@ -220,7 +223,9 @@ function patchTable(r: RequestState, patches: PatchView[], ctx: RenderContext, f
       : null
   }${
     dropped.length
-      ? html`<details class="fold" data-fold="dropped-${fold}"><summary>Dropped (${dropped.length})</summary>${dropped.map((p) => patchLine(p, IDLE[itemOf(r, p)!.state].text(itemOf(r, p)!, 0)))}</details>`
+      ? html`<details class="fold" data-fold="dropped-${fold}"><summary>Dropped (${dropped.length})</summary>${dropped.map(
+          (p) => html`<div class="sub">${patchTitle(p)} ${viewLink(r, p)}${itemOf(r, p)?.detail ? html`<div class="why-dropped">why: ${itemOf(r, p)!.detail}</div>` : null}</div>`,
+        )}</details>`
       : null
   }`;
 }
@@ -240,10 +245,10 @@ function patchRow(r: RequestState, p: PatchView, columns: PatchColumns, ctx: Ren
   const back = requestUrl(r.id);
   const item = itemOf(r, p);
   const rate = item?.group.ratePerWeek;
-  return html`<tr data-patch="${p.id}">
+  return html`<tr data-patch="${p.id}" id="patch-${p.id}">
     <td>${p.revision ? html`<a class="phab" href="${phabUrl(p.revision)}" title="D${p.revision}" target="_blank" rel="noopener">${PHAB_ICON}</a>` : null}${bugLabel(p)} ${patchTitle(p)}${
       !hasBug(p) && !p.bugDraft && p.testOnly ? html` <span class="sub">(meta bug)</span>` : null
-    }
+    } ${viewLink(r, p)}${item ? html`<div class="sub">fixes <a href="#item-${item.id}">${groupLabel(r, item)}</a>: ${item.group.message}</div>` : null}
       ${!hasBug(p) && p.bugDraft ? bugDraftBox(r.id, p, back) : null}
       ${p.deps.map((d) => depLine(r, d))}
       ${reviewBox(r, p, back, p.interdiffFile === undefined ? undefined : ctx.interdiff?.(p))}
@@ -253,6 +258,27 @@ function patchRow(r: RequestState, p: PatchView, columns: PatchColumns, ctx: Ren
     ${columns.value ? html`<td class="num hide-sm">${rate === undefined ? "" : `${rate}/wk`}</td>` : null}
     ${columns.reviewers ? html`<td>${reviewers(r, p)}</td>` : null}
   </tr>`;
+}
+
+// Bugs are filed once try is green (step 7): before that, a draft is only previewed.
+const FILING_STEPS = new Set(["meta bug", "submit", "review comments", "landing", "done"]);
+
+// A patch where its group's investigation line was: what it is, a link to view it, its bug, reviews.
+function patchBlock(r: RequestState, p: PatchView, ctx: RenderContext): Html {
+  const back = requestUrl(r.id);
+  const item = itemOf(r, p);
+  const filing = FILING_STEPS.has(r.step);
+  const rate = item?.group.ratePerWeek;
+  const meta = [reviewers(r, p), p.effort === undefined ? null : html`review effort ${p.effort}/5`, rate === undefined ? null : html`fixes ${rate} failures/week`].filter((x) => x !== null);
+  return html`<div class="patch" data-patch="${p.id}" id="patch-${p.id}">
+    <div>${p.revision ? html`<a class="phab" href="${phabUrl(p.revision)}" title="D${p.revision}" target="_blank" rel="noopener">${PHAB_ICON}</a>` : null}${
+      filing || hasBug(p) ? bugLabel(p) : html`<span class="bug none">no bug yet</span>`
+    } ${patchTitle(p)} ${viewLink(r, p)}</div>
+    ${meta.length ? html`<div class="sub">${join(meta, " · ")}</div>` : null}
+    ${filing && !hasBug(p) && p.bugDraft ? bugDraftBox(r.id, p, back) : null}
+    ${p.deps.map((d) => depLine(r, d))}
+    ${reviewBox(r, p, back, p.interdiffFile === undefined ? undefined : ctx.interdiff?.(p))}
+  </div>`;
 }
 
 function bugLabel(p: PatchView): Html {
@@ -366,14 +392,25 @@ function itemRow(r: RequestState, i: ItemView, ctx: RenderContext): Html {
   const state = html`<span class="st ${sentence.cls}">${sentence.text}</span>${cost > 0 ? html`<span class="sub"> · <span title="Agent cost of this group so far">${formatCost(cost)}</span></span>` : null}${
     detail ? html`<span class="detail">: ${detail}</span>` : null
   }`;
-  return html`<tr data-item="${i.id}">
+  const live = Object.values(r.patches).filter((p) => p.item === i.id && !isDraft(r, p) && !isDropped(r, p));
+  const dropped = Object.values(r.patches).filter((p) => p.item === i.id && isDropped(r, p));
+  // Once the investigation produced patches and nothing runs or asks you, the patches replace its line.
+  const quiet = live.length > 0 && !job && !r.needsUser.some((n) => n.item === i.id);
+  return html`<tr data-item="${i.id}" id="item-${i.id}">
     <td class="gname"><span title="${[...tests, i.group.configs.join(", ")].join("\n")}">${groupLabel(r, i)}</span><div class="sub clamp2" title="${i.group.message}">${i.group.message}</div></td>
-    <td>${detail ? html`<details class="clamp3" data-fold="detail-${i.id}" title="${detail}"><summary>${state}</summary></details>` : state}${
+    <td>${live.map((p) => patchBlock(r, p, ctx))}${quiet ? html`<div class="sub">${sentence.text}</div>` : detail ? html`<details class="clamp3" data-fold="detail-${i.id}" title="${detail}"><summary>${state}</summary></details>` : state}${dropped.map(
+      (p) => html`<div class="sub">dropped patch: “${patchTitle(p)}” ${viewLink(r, p)}</div>`,
+    )}${
       sentence.controls ? html`<div class="jobctl">${sentence.controls}</div>` : null
     }${Object.values(r.patches)
       .filter((p) => p.item === i.id && isDraft(r, p))
-      .map((p) => html`<div class="sub">draft, its critical review hasn't passed · “${patchTitle(p)}”</div>`)}${draft ? html`<div><a class="bug tofile" href="${enterBugUrl(draft)}" target="_blank" rel="noopener" title="Opens a prefilled enter_bug.cgi">Bug to file</a> <span class="sub">“${draft.summary}”</span></div>` : null}${itemControls(r, i, job)}</td>
+      .map((p) => html`<div class="sub">draft patch, not reviewed yet: “${patchTitle(p)}” ${viewLink(r, p)}</div>`)}${draft ? html`<div class="sub">bug draft: “${draft.summary}” <a href="${enterBugUrl(draft)}" target="_blank" rel="noopener" title="Preview it as a prefilled Bugzilla form; you'll be asked to file it once try is green">preview ↗</a></div>` : null}${itemControls(r, i, job)}</td>
   </tr>`;
+}
+
+// The patch in stack-viewer, where comments go back to its author.
+function viewLink(r: RequestState, p: PatchView): Html {
+  return html`<a href="/requests/${encodeURIComponent(r.id)}/patches/${encodeURIComponent(p.id)}/view" target="_blank" rel="noopener" title="Opens the patch in stack-viewer; your comments there go to its author">view</a>`;
 }
 
 // Stop what runs, watch the latest agent, and reopen a closed group by talking to its author.

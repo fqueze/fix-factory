@@ -50,9 +50,10 @@ describe("overview", () => {
     assert.ok(page.includes(cmd({ cmd: "start-now", request: "r-20261016-popups" })));
   });
 
-  it("shows one line per active request with its step and Profile button", () => {
+  it("shows one line per active request with its cost and Profile button", () => {
     assert.equal((page.match(/<details class="req/g) ?? []).length, 11);
-    assert.match(page, /<span class="step">6 · verify on try<\/span>/);
+    assert.doesNotMatch(page, /class="step"/, "no internal step names");
+    assert.match(page, /\$[\d.]+ spent/);
     const url = encodeURIComponent("http://factory:4300/api/requests/r-20261005-newtab/profile");
     assert.ok(page.includes(`href="http://localhost:4242/from-url/${url}?thread=0"`));
   });
@@ -85,7 +86,6 @@ describe("overview", () => {
 describe("one fixture per step of docs/MVP.md", () => {
   it("1. request: text from the main box, titled by its text, while route-request runs", () => {
     const h = expanded("r-20261015-sessionstore");
-    assert.match(h, /1 · request/);
     assert.match(h, /<span class="rname">Burn down browser\/components\/sessionstore\/test, skip the mac pools for now<\/span>/);
     assert.match(h, /not routed yet/);
     assert.match(h, /route-request/);
@@ -93,7 +93,7 @@ describe("one fixture per step of docs/MVP.md", () => {
 
   it("2. first signal: approve the un-skip push, with its command and tasks", () => {
     const h = expanded("r-20261014-extensions-xpcshell");
-    assert.match(h, /<b>platforms<\/b>: linux, windows/);
+    assert.match(h, /From your request: .*<b>platforms<\/b>: linux, windows/);
     assert.match(h, /<span class="flag">Approve the un-skip push<\/span>/);
     assert.ok(h.includes(cmd({ cmd: "approve-push", request: "r-20261014-extensions-xpcshell", push: "unskip" })));
     assert.match(h, /Command \+ tasks/);
@@ -174,7 +174,7 @@ describe("one fixture per step of docs/MVP.md", () => {
 
   it("4. investigate and fix: Stop on running jobs, Watch on agents, Continue on closed groups", () => {
     const h = expanded("r-20261013-tab-failures");
-    const row = (item: string) => h.slice(h.indexOf(`<tr data-item="${item}">`), h.indexOf("</tr>", h.indexOf(`<tr data-item="${item}">`)));
+    const row = (item: string) => h.slice(h.indexOf(`<tr data-item="${item}"`), h.indexOf("</tr>", h.indexOf(`<tr data-item="${item}"`)));
     assert.ok(row("i-spinner").includes(cmd({ cmd: "stop", job: "j-inv-spinner", request: "r-20261013-tab-failures" })));
     assert.match(row("i-spinner"), /data-watch="\/api\/requests\/r-20261013-tab-failures\/jobs\/j-inv-spinner\/activity"/);
     assert.doesNotMatch(row("i-close"), /cmd&quot;:&quot;(stop|continue)/);
@@ -193,7 +193,15 @@ describe("one fixture per step of docs/MVP.md", () => {
   it("every ⚑ has a way out: accept after the review limit, retry a failed or stopped job, continue with its author, dismiss the rest", () => {
     const D = "r-20261015-downloads-stuck";
     const h = expanded(D);
-    const flag = (key: string) => h.slice(h.indexOf(`data-key="${key}"`), h.indexOf("</div>", h.indexOf(`data-key="${key}"`)));
+    // A group's ⚑ is a pointer in the header; its buttons are on the group's row.
+    const flag = (key: string) => {
+      const at = h.indexOf(`data-key="${key}"`);
+      const head = h.slice(at, h.indexOf("</div>", at));
+      const item = /#item-([^"]+)"/.exec(head)?.[1];
+      if (item === undefined) return head;
+      const row = h.indexOf(`id="item-${item}"`);
+      return head + h.slice(row, h.indexOf("</tr>", row));
+    };
     const has = (key: string, c: object) => flag(key).includes(cmd(c));
     assert.ok(has("failed:j-review-race", { cmd: "accept-review", item: "i-race", request: D }));
     assert.ok(has("failed:j-review-race", { cmd: "continue", request: D, item: "i-race" }));
@@ -201,9 +209,9 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.ok(has("failed:j-fetch", { cmd: "retry", job: "j-fetch", request: D }));
     assert.ok(has("failed:j-fetch", { cmd: "continue", request: D, item: "i-fetch" }));
     assert.doesNotMatch(flag("failed:j-fetch"), />(Accept as reviewed|Dismiss)</);
-    assert.match(flag("stopped:j-author-slow"), /<span class="flag">browser_download_slow\.js: the investigation stopped by you<\/span>/);
-    assert.match(flag("failed:j-fetch"), /<span class="flag">browser_download_fetch\.js: fetch test artifacts failed twice<\/span>/);
-    assert.match(flag("failed:j-review-race"), /<span class="flag">browser_download_race\.js: critical reviews didn&#39;t pass<\/span>/);
+    assert.match(flag("stopped:j-author-slow"), /class="flag"[^>]*>browser_download_slow\.js: the investigation stopped by you</);
+    assert.match(flag("failed:j-fetch"), /class="flag"[^>]*>browser_download_fetch\.js: fetch test artifacts failed twice</);
+    assert.match(flag("failed:j-review-race"), /class="flag"[^>]*>browser_download_race\.js: critical reviews didn&#39;t pass</);
     assert.match(flag("stopped:j-plan"), /<span class="flag">Plan try pushes stopped by you<\/span>/);
     assert.match(flag("failed:j-fetch"), /title="Runs fetch test artifacts again">Retry</);
     for (const c of [{ cmd: "retry", job: "j-author-slow", request: D }, { cmd: "continue", request: D, item: "i-slow" }, { cmd: "dismiss", key: "stopped:j-author-slow", request: D }]) {
@@ -233,7 +241,7 @@ describe("one fixture per step of docs/MVP.md", () => {
   it("each group row says in plain words what is happening, what is stuck and what has stalled", () => {
     const h = expanded("r-20261015-downloads-stuck");
     const row = (item: string) => {
-      const start = h.indexOf(`<tr data-item="${item}">`);
+      const start = h.indexOf(`<tr data-item="${item}"`);
       return h.slice(start, h.indexOf("</tr>", start));
     };
     assert.match(row("i-race"), /<span class="st find">stuck: critical reviews didn&#39;t pass — needs you<\/span><span class="detail">: the wait still races with the panel opening<\/span>/);
@@ -244,7 +252,7 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.match(row("i-idle"), /title="Resumes its author's session with your message; its patch then goes through lint and critical review again">Continue</);
     const r = structuredClone(get("r-20261015-downloads-stuck"));
     const atCap = renderRequest(r, { ...ctx, runningAgents: 10, maxAgents: 10 }, true).value;
-    assert.match(atCap, /<tr data-item="i-idle">[\s\S]*?<span class="st wait">waiting for an agent \(10\/10 running\)<\/span>/, "not stalled: waiting for a slot");
+    assert.match(atCap, /<tr data-item="i-idle"[\s\S]*?<span class="st wait">waiting for an agent \(10\/10 running\)<\/span>/, "not stalled: waiting for a slot");
     r.jobs["j-lint-idle"] = { ...r.jobs["j-fetch"], job: "j-lint-idle", item: "i-idle", name: "lint-text.ts commit", error: "cancelled by you", exitCode: -1 };
     r.items["i-idle"].jobs.push("j-lint-idle");
     const stopped = renderRequest(r, ctx, true).value;
@@ -289,9 +297,9 @@ describe("one fixture per step of docs/MVP.md", () => {
     };
     const h = renderRequest(r, ctx, true).value;
     assert.doesNotMatch(h, /data-patch="p-drag"/);
-    assert.match(h, /data-patch="p-close"/, "reviewed patches stay in the Patches section");
-    const row = h.slice(h.indexOf('<tr data-item="i-drag">'), h.indexOf("</tr>", h.indexOf('<tr data-item="i-drag">')));
-    assert.match(row, /<div class="sub">draft, its critical review hasn't passed · “Close the drag session on failure, r=dao\.”<\/div>/);
+    assert.match(h, /data-patch="p-close"/, "reviewed patches show in their group's row");
+    const row = h.slice(h.indexOf('<tr data-item="i-drag"'), h.indexOf("</tr>", h.indexOf('<tr data-item="i-drag"')));
+    assert.match(row, /<div class="sub">draft patch, not reviewed yet: “Close the drag session on failure, r=dao\.” <a href="\/requests\/[^"]+\/patches\/[^"]+\/view"/);
     assert.doesNotMatch(h, /Drag\+session\+left\+open/, "no Bug to file link");
     assert.match(h, /Done: 1<\/span> · 5 failure groups · 1 patch<\/span>/);
     r.items["i-drag"].state = "blocked";
@@ -299,8 +307,10 @@ describe("one fixture per step of docs/MVP.md", () => {
     r.items["i-drag"].state = "reviewed";
     const reviewed = renderRequest(r, ctx, true).value;
     assert.match(reviewed, /data-patch="p-drag"/);
-    assert.match(reviewed, /Drag\+session\+left\+open/);
-    assert.match(reviewed, /Done: 1<\/span> · 5 failure groups · 2 patches, 1 bug to file<\/span>/);
+    assert.doesNotMatch(reviewed, /Drag\+session\+left\+open/, "bugs are filed at step 7, once try is green");
+    assert.match(reviewed, /Done: 1<\/span> · 5 failure groups · 2 patches<\/span>/);
+    r.step = "meta bug";
+    assert.match(renderRequest(r, ctx, true).value, /Drag\+session\+left\+open/);
   });
 
   it("shows a refused command as a ⚑ you can dismiss", () => {
@@ -339,7 +349,7 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.match(h, /<td class="res plan">push A<\/td><td>Same configs and paths as the un-skip push/);
     assert.match(h, /Approve both/);
     assert.match(h, /<td class="res bad">291 failures, 12 groups<\/td>/);
-    assert.equal((h.match(/<div class="action"/g) ?? []).length, 3, "one ⚑ area per open needs-user entry");
+    assert.equal((h.match(/<div class="action/g) ?? []).length, 3, "one ⚑ line per open needs-user entry");
   });
 
   it("6. verify on try: a running push shows its progress", () => {
@@ -434,18 +444,19 @@ describe("a burndown with closed groups, running agents and a dropped patch", ()
   const h = expanded(ID);
   const section = (from: string, to: string) => h.slice(h.indexOf(from), h.indexOf(to, h.indexOf(from)));
 
-  it("shows only the config fields that have a value, in words, and no config block when none has", () => {
-    assert.match(h, /<b>folders<\/b>: browser\/components\/enterprisepolicies\/tests\/browser<\/div>/);
+  it("shows only the config fields that have a value, in words, and nothing when the title already says it all", () => {
+    assert.doesNotMatch(h, /From your request/, "the folder is already in the title");
     assert.doesNotMatch(h, /<b>tests<\/b>|\[\]/);
     const r = structuredClone(get(ID));
     r.config = { folders: [], tests: [], platforms: [], constraints: [] };
-    assert.doesNotMatch(renderRequest(r, ctx, true).value, /Config/);
+    assert.doesNotMatch(renderRequest(r, ctx, true).value, /From your request/);
   });
 
   it("lists the patch of a left-as-is group as dropped, without a bug number, and doesn't count it", () => {
     assert.doesNotMatch(h, /Bug 0/);
     assert.doesNotMatch(h, /data-patch=/);
-    assert.match(h, /<details class="fold" data-fold="dropped-loose"><summary>Dropped \(1\)<\/summary><div class="sub"><span class="bug none">no bug yet<\/span> Convert scoping skip-if/);
+    assert.match(h, /<div class="sub">dropped patch: “Convert scoping skip-if[^”]*” <a href="\/requests\/[^"]+\/patches\/p-runif\/view"/);
+    assert.match(h, /closed[^<]*<\/span>[^]*?Dropped the run-if commit/, "the reason is the group's own line");
     assert.match(h, /Done: 4<\/span> · 7 failure groups<\/span>/);
     assert.doesNotMatch(h, /<h3>Patches<\/h3>/, "no heading over dropped patches alone");
   });
@@ -480,10 +491,10 @@ describe("a burndown with closed groups, running agents and a dropped patch", ()
     assert.match(h2, /<summary>3 closed<\/summary>/);
   });
 
-  it("shows the Bug to file link of a group whose report drafted a bug without a patch", () => {
+  it("shows the bug draft of a group whose report drafted a bug without a patch, as a preview, not a request to file it", () => {
     const row = section('data-item="i-browser-policy-sitepolicies-jit"', "</tr>");
-    assert.match(row, /<a class="bug tofile" href="https:\/\/bugzilla\.mozilla\.org\/enter_bug\.cgi\?product=Firefox&amp;component=Enterprise\+Policies&amp;short_desc=Workers\+start\+slowly/);
-    assert.match(row, /<span class="sub">“Workers start slowly when a site policy disables the JIT”<\/span>/);
+    assert.match(row, /bug draft: “Workers start slowly when a site policy disables the JIT” <a href="https:\/\/bugzilla\.mozilla\.org\/enter_bug\.cgi\?product=Firefox&amp;component=Enterprise\+Policies&amp;short_desc=Workers\+start\+slowly[^"]*"[^>]*>preview ↗<\/a>/);
+    assert.doesNotMatch(row, /tofile/);
     const r = structuredClone(get(ID));
     r.patches["p-runif"].item = "i-browser-policy-sitepolicies-jit";
     assert.doesNotMatch(renderRequest(r, ctx, true).value, /Workers start slowly/, "a patch's draft shows on the patch row");
@@ -510,14 +521,16 @@ describe("a burndown with closed groups, running agents and a dropped patch", ()
     assert.doesNotMatch(jobs, />i-browser/);
   });
 
-  it("hides the Effort and Value columns while no patch has one", () => {
-    assert.match(expanded("r-20261013-tab-failures"), /<th class="hide-sm"[^>]*>Effort<\/th><th class="num hide-sm"[^>]*>Value<\/th>/);
+  it("shows a patch's review effort and value only when known", () => {
+    const h = expanded("r-20261013-tab-failures");
+    const patch = h.slice(h.indexOf('data-patch="p-close"'), h.indexOf("</div>\n", h.indexOf('data-patch="p-close"')) + 400);
+    assert.match(patch, /review effort \d\/5/);
+    assert.match(patch, /fixes [\d.]+ failures\/week/);
     const r = structuredClone(get("r-20261013-tab-failures"));
     delete r.patches["p-close"].effort;
     delete r.items["i-close"].group.ratePerWeek;
     const t = renderRequest(r, ctx, true).value;
-    assert.doesNotMatch(t, /Effort|Value/);
-    assert.match(t, /<th>Patch<\/th><th>State<\/th><\/tr>/);
+    assert.doesNotMatch(t, /review effort|failures\/week/);
   });
 
   it("labels jobs by what they do", () => {

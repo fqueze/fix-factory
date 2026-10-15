@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { exec } from "../lib/exec.ts";
-import type { RequestState, StackView } from "../types.ts";
+import type { PatchView, RequestState, StackView } from "../types.ts";
 
 export function findStack(requests: RequestState[], stackId: string): { request: RequestState; stack: StackView } | undefined {
   for (const request of requests) {
@@ -45,6 +45,26 @@ export async function buildStackReview(opts: { command: string[]; request: Reque
     }
     const shas = Object.fromEntries(stack.order.map((id) => [request.patches[id]?.sha, id]).filter(([sha]) => sha));
     return injectSendButton(readFileSync(file, "utf8"), { request: request.id, stack: stack.id, shas });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+// One patch (a commit in its author's worktree) in stack-viewer; comments go back to its author.
+export async function buildPatchView(opts: { command: string[]; request: RequestState; patch: PatchView }): Promise<string> {
+  const { request, patch } = opts;
+  if (!isRevName(patch.sha)) {
+    throw new Error(`not a revision name: ${patch.sha}`);
+  }
+  const dir = mkdtempSync(join(tmpdir(), "fix-factory-stack-viewer-"));
+  try {
+    const file = join(dir, "patch.html");
+    const cmd = [...opts.command, "--no-open", "-R", patch.worktree, "-o", file, `${patch.sha}^..${patch.sha}`];
+    const r = await exec(cmd);
+    if (r.code !== 0) {
+      throw new Error(`${cmd.join(" ")} exited with ${r.code}: ${r.stderr.trim().slice(-2000)}`);
+    }
+    return injectSendButton(readFileSync(file, "utf8"), { request: request.id, patch: patch.id, shas: { [patch.sha]: patch.id } });
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -96,7 +116,9 @@ const SEND_SCRIPT = `
     fetch("/api/commands", {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "application/json" },
-      body: JSON.stringify({ cmd: "stack-comments", request: cfg.request, stack: cfg.stack, comments: c.comments })
+      body: JSON.stringify(cfg.patch
+        ? { cmd: "comment-fix", request: cfg.request, patch: cfg.patch, text: c.comments.map(function (x) { return x.text; }).join("\\n\\n") }
+        : { cmd: "stack-comments", request: cfg.request, stack: cfg.stack, comments: c.comments })
     }).then(function (r) {
       return r.json().then(function (body) {
         if (!r.ok) throw new Error(body.error || r.statusText);
@@ -110,7 +132,7 @@ const SEND_SCRIPT = `
 })();
 `;
 
-export function injectSendButton(page: string, cfg: { request: string; stack: string; shas: Record<string, string> }): string {
+export function injectSendButton(page: string, cfg: { request: string; stack?: string; patch?: string; shas: Record<string, string> }): string {
   const snippet =
     `<button id="ff-send" type="button" style="position:fixed;right:12px;bottom:12px;z-index:1000;padding:6px 12px;border-radius:6px;border:1px solid #2a78d6;background:#2a78d6;color:#fff;font:13px system-ui,sans-serif;cursor:pointer">Send comments to the factory</button>` +
     `<script type="application/json" id="ff-review-config">${jsonForScript(cfg)}</script>` +

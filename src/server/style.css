@@ -166,3 +166,10 @@ details.reopen { display: inline-block; }
 details.reopen > summary { list-style: none; }
 details.reopen > summary::-webkit-details-marker { display: none; }
 details.reopen[open] > summary { display: none; }
+.action.pointer { background: transparent; padding: 2px 0; }
+.action.pointer a.flag { color: var(--text-primary); font-weight: 600; }
+.action.pointer a.flag::after { content: " ↓"; color: var(--text-muted); font-weight: normal; }
+td .clamp3 > summary .detail { color: var(--text-secondary); }
+.why-dropped { margin: 2px 0 6px 12px; }
+.patch { padding: 2px 0 6px; }
+.patch + .patch { border-top: 1px dashed var(--border); padding-top: 6px; }

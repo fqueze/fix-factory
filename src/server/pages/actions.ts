@@ -39,7 +39,7 @@ export function flagControls(r: RequestState, n: NeedsUser): Html | null {
   const back = requestUrl(r.id);
   const job = n.job === undefined ? undefined : r.jobs[n.job];
   const item = n.item ?? job?.item;
-  const retry = job && !isPushJob(job) ? commandButton(r.id, { cmd: "retry", job: job.job }, "Retry", back, true, `Runs ${jobNoun(job.name)} again`) : null;
+  const retry = job && !isPushJob(job) ? commandButton(r.id, { cmd: "retry", job: job.job }, "Retry", back, false, `Runs ${jobNoun(job.name)} again`) : null;
   const talk = item !== undefined && hasAuthorSession(r, item) ? continueBox(r.id, item, back) : null;
   let controls: Html | null = null;
   switch (actionKind(n, r)) {
@@ -83,11 +83,11 @@ export function flagControls(r: RequestState, n: NeedsUser): Html | null {
     case "failed": {
       // A critical review that ran but never said ok: the work is there, you judge it. A crashed one is retried.
       const accept = item !== undefined && reviewLimitFlag(r, item) === n;
-      controls = buttons(accept ? commandButton(r.id, { cmd: "accept-review", item }, "Accept as reviewed", back, true) : retry, talk);
+      controls = buttons(talk, accept ? commandButton(r.id, { cmd: "accept-review", item }, "Accept as reviewed", back, false, "Takes the patch as it is, without another critical review") : retry);
       break;
     }
     case "stopped":
-      return buttons(retry, talk, dismissButton(r.id, n.key, back));
+      return buttons(talk, retry, dismissButton(r.id, n.key, back));
     case "recovery":
     case "other":
       break;
@@ -130,7 +130,7 @@ export function stopButton(request: string, job: string, back: string): Html {
 
 // Resumes the item's author with what you type.
 export function continueBox(request: string, item: string, back: string): Html {
-  return html`<form class="inline cmd" method="post" action="/api/commands">${commandFields([{ cmd: "continue", request, item }], back)}<input type="text" name="text" required placeholder="Tell its author what to do…"><button class="btn small" title="Resumes its author's session with your message; its patch then goes through lint and critical review again">Continue</button></form>`;
+  return html`<form class="inline cmd" method="post" action="/api/commands">${commandFields([{ cmd: "continue", request, item }], back)}<input type="text" name="text" required placeholder="Tell its author what to do…"><button class="btn small primary" title="Resumes its author's session with your message; its patch then goes through lint and critical review again">Continue</button></form>`;
 }
 
 // The plan a recovery entry asks about: its job's latest plan, or the latest plan
@@ -269,6 +269,24 @@ export function recoveryPlan(r: RequestState, plan: RequestState["recoveryPlans"
   }<form class="inline cmd" method="post" action="/api/commands">${commandFields([{ cmd: "reply-recovery", request: r.id, job: plan.job }], back)}<input type="text" name="text" required placeholder="Reply…"><button class="btn small">Reply</button></form>`;
 }
 
+// A group's ⚑ is handled on its row: the request header only points at it. The request's own ⚑s
+// (try approvals, recovery plans, meta bug, submit…) are handled here.
 export function actionsSummary(r: RequestState): Html {
-  return join([...r.needsUser.map((n) => renderAction(r, n)), ...refusedOf(r).map((x) => renderRefused(r, x))], "");
+  return join(
+    [
+      ...r.needsUser.map((n) => {
+        const item = flagItem(r, n);
+        return item === undefined
+          ? renderAction(r, n)
+          : html`<div class="action pointer" data-key="${n.key}"><a class="flag" href="${requestUrl(r.id)}#item-${item}">${flagTitle(r, n)}</a></div>`;
+      }),
+      ...refusedOf(r).map((x) => renderRefused(r, x)),
+    ],
+    "",
+  );
+}
+
+function flagItem(r: RequestState, n: NeedsUser): string | undefined {
+  const item = n.item ?? (n.job === undefined ? undefined : r.jobs[n.job]?.item);
+  return item !== undefined && item in r.items ? item : undefined;
 }
