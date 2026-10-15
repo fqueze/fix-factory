@@ -1,0 +1,1 @@
+Turn this request into the JSON config defined by the schema. Kind: {kind}. Text: {text}. Only include constraints the text states, and leave fields empty rather than guessing. List anything ambiguous in `questions`.

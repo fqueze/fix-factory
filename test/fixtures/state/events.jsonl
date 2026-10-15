@@ -1,0 +1,20 @@
+{"v":1,"t":"2026-10-15T09:00:00.000Z","request":"r-20261015-xpcshell-cwd","type":"request-created","kind":"burndown","text":"burn down toolkit/foo","folder":"toolkit/foo"}
+{"v":1,"t":"2026-10-15T09:00:05.000Z","request":"r-20261015-xpcshell-cwd","type":"config-set","config":{"platforms":["linux","mac"]}}
+{"v":1,"t":"2026-10-15T09:01:00.000Z","request":"r-20261015-xpcshell-cwd","type":"step","step":"work list"}
+{"v":1,"t":"2026-10-15T09:02:00.000Z","request":"r-20261015-xpcshell-cwd","type":"item-created","item":"i1","folder":"toolkit/foo","group":{"message":"timed out","tests":["test_a.js"],"configs":["linux64/debug"]}}
+{"v":1,"t":"2026-10-15T09:03:00.000Z","request":"r-20261015-xpcshell-cwd","type":"job-started","job":"j1","item":"i1","kind":"agent","name":"investigate-and-fix","pid":1234,"pidStartTime":5678,"cmd":["claude","-p","..."],"cwd":"/wt/i1","codeVersion":"abc","model":"opus","sessionId":"s1"}
+{"v":1,"t":"2026-10-15T09:03:01.000Z","request":"r-20261015-xpcshell-cwd","type":"item-state","item":"i1","state":"investigating"}
+{"v":1,"t":"2026-10-15T09:30:00.000Z","request":"r-20261015-xpcshell-cwd","type":"agent-report","job":"j1","prompt":"investigate-and-fix","report":{"state":"fix verified locally","summary":"race in setup"}}
+{"v":1,"t":"2026-10-15T09:30:00.500Z","request":"r-20261015-xpcshell-cwd","type":"job-finished","job":"j1","exitCode":0,"durationMs":1620000,"costUsd":3.5}
+{"v":1,"t":"2026-10-15T09:30:01.000Z","request":"r-20261015-xpcshell-cwd","type":"patch","patch":"p1","item":"i1","sha":"aaa","worktree":"/wt/i1","title":"Bug XXXXXXX - Fix race","bug":null,"bugDraft":{"product":"Toolkit","component":"General","summary":"race","description":"..."}}
+{"v":1,"t":"2026-10-15T09:30:02.000Z","request":"r-20261015-xpcshell-cwd","type":"needs-user","key":"bug:p1","action":"file bug","detail":"Bug to file for p1","patch":"p1"}
+{"v":1,"t":"2026-10-15T09:31:00.000Z","request":"r-20261015-xpcshell-cwd","type":"some-future-event","whatever":true}
+{"v":1,"t":"2026-10-15T09:40:00.000Z","request":"r-20261015-xpcshell-cwd","type":"patch","patch":"p1","item":"i1","sha":"bbb","worktree":"/wt/i1","title":"Bug 2081216 - Fix race","bug":2081216}
+{"v":1,"t":"2026-10-15T09:40:01.000Z","request":"r-20261015-xpcshell-cwd","type":"user-done","key":"bug:p1"}
+{"v":1,"t":"2026-10-15T09:41:00.000Z","request":"r-20261015-xpcshell-cwd","type":"item-state","item":"i1","state":"reviewed"}
+{"v":1,"t":"2026-10-15T10:00:00.000Z","request":"r-20261015-xpcshell-cwd","type":"try-planned","push":"push-1","purpose":"verify the stack","command":["mach","try","fuzzy"],"taskCount":40}
+{"v":1,"t":"2026-10-15T10:05:00.000Z","request":"r-20261015-xpcshell-cwd","type":"try-pushed","push":"push-1","rev":"deadbeef","url":"https://treeherder.mozilla.org/jobs?repo=try&revision=deadbeef"}
+{"v":1,"t":"2026-10-15T11:00:00.000Z","request":"r-20261015-xpcshell-cwd","type":"try-progress","push":"push-1","done":40,"total":40,"failures":0}
+{"v":1,"t":"2026-10-15T11:00:01.000Z","request":"r-20261015-xpcshell-cwd","type":"try-finished","push":"push-1","result":"green","summary":"all green"}
+{"v":1,"t":"2026-10-15T11:01:00.000Z","request":"r-20261015-xpcshell-cwd","type":"note","text":"stack verified"}
+{"v":1,"t":"2026-10-15T11:02:00.000Z","request":"r-20261015-xpcshell-cwd","type":"item-state","item":"i1","sta
