@@ -20,7 +20,7 @@ conventions around it. For compatibility, **only add** fields, event types or co
 ```
 commands.jsonl                    # every command, append-only
 requests/<requestId>/events.jsonl # everything that happened to a request, append-only
-jobs/<jobId>/spec.json            # {cmd, cwd, env, kind, name, request, item}
+jobs/<jobId>/spec.json            # {cmd, cwd, env, stdinFile?, kind, name, request, item}
 jobs/<jobId>/out.log              # stdout (a CLI's JSON, or claude's stream-json)
 jobs/<jobId>/err.log
 jobs/<jobId>/exit.json            # {exitCode, endedAt}, written by the wrapper when the job ends
@@ -59,9 +59,10 @@ cache/artifacts/<taskId>/...      # downloaded try logs and profiles
 
 ## Agents
 
-- `src/agents/run.ts` builds the command `config.claudeCommand + ["-p", prompt, "--output-format", "stream-json",
-  "--verbose", "--session-id", id, "--model", model, "--json-schema", schema]` with stdin from `/dev/null`, and runs
-  it as a job in the item's worktree. A follow-up uses `--resume <id>` in place of `--session-id`.
+- `src/agents/run.ts` builds the command `config.claudeCommand + ["-p", "--output-format", "stream-json",
+  "--verbose", "--session-id", id, "--model", model, "--json-schema", schema]` and runs it as a job in the item's
+  worktree. The rendered prompt is written to `jobs/<jobId>/prompt.md` and passed as stdin (job spec `stdinFile`),
+  because Linux limits one argument to 128 KiB. A follow-up uses `--resume <id>` in place of `--session-id`.
 - **Result:** the last stream-json line, `type: "result"`, carries `structured_output` (the report),
   `total_cost_usd` (cumulative for the session: subtract the earlier runs' total to get one run's cost), `duration_ms`, `session_id`, `is_error`.
 - **Transcripts:** `~/.claude/projects/<cwd with every non-alphanumeric character replaced by "-">/<sessionId>.jsonl`

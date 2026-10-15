@@ -21,13 +21,13 @@ function tempDir(): string {
   return mkdtempSync(join(tmpdir(), "agents-run-test-"));
 }
 
-test("renderPrompt fills placeholders, including multi-line values and names with spaces", () => {
-  const out = renderPrompt("Fix {test} in {worktree}.\nThe failure: {failure summary}.\nJSON: {\"a\": 1}", {
+test("renderPrompt fills placeholders, including multi-line values, and leaves JSON and code alone", () => {
+  const out = renderPrompt("Fix {test} in {worktree}.\nThe failure: {failureSummary}.\nJSON: {\"a\": 1} {return x}", {
     test: "browser_foo.js",
     worktree: "/w/foo",
-    "failure summary": "line 1\nline 2 {not expanded}",
+    failureSummary: "line 1\nline 2 {not expanded}",
   });
-  assert.equal(out, "Fix browser_foo.js in /w/foo.\nThe failure: line 1\nline 2 {not expanded}.\nJSON: {\"a\": 1}");
+  assert.equal(out, "Fix browser_foo.js in /w/foo.\nThe failure: line 1\nline 2 {not expanded}.\nJSON: {\"a\": 1} {return x}");
 });
 
 test("renderPrompt fills a placeholder used twice", () => {
@@ -40,15 +40,15 @@ test("renderPrompt lists every missing variable", () => {
 
 test("buildAgentCommand with a new session", () => {
   const schema = { type: "object" };
-  assert.deepEqual(buildAgentCommand({ claudeCommand: ["mozsb", "claude"] }, { prompt: "do it", model: "opus", schema, sessionId: "s1" }), [
-    "mozsb", "claude", "-p", "do it", "--output-format", "stream-json", "--verbose",
+  assert.deepEqual(buildAgentCommand({ claudeCommand: ["mozsb", "claude"] }, { model: "opus", schema, sessionId: "s1" }), [
+    "mozsb", "claude", "-p", "--output-format", "stream-json", "--verbose",
     "--session-id", "s1", "--model", "opus", "--json-schema", '{"type":"object"}',
   ]);
 });
 
 test("buildAgentCommand resuming a session", () => {
-  const cmd = buildAgentCommand({ claudeCommand: ["claude"] }, { prompt: "go on", model: "haiku", schema: '{"type":"object"}', resume: "s1" });
-  assert.deepEqual(cmd.slice(5, 8), ["--verbose", "--resume", "s1"]);
+  const cmd = buildAgentCommand({ claudeCommand: ["claude"] }, { model: "haiku", schema: '{"type":"object"}', resume: "s1" });
+  assert.deepEqual(cmd.slice(4, 7), ["--verbose", "--resume", "s1"]);
   assert.ok(!cmd.includes("--session-id"));
   assert.equal(cmd.at(-1), '{"type":"object"}');
 });

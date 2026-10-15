@@ -9,9 +9,8 @@ import type { FactoryConfig, Feedback, JobId } from "../types.ts";
 // ---------------------------------------------------------------------------
 // Prompts
 
-// Names may contain spaces ("{failure summary}" in docs/COMPONENTS.md) but must start with a letter, so JSON
-// examples such as {"a": 1} in a prompt are left alone.
-const PLACEHOLDER = /\{([A-Za-z][A-Za-z0-9_ -]*)\}/g;
+// Identifiers only, so JSON examples such as {"a": 1} and code such as {return x} in a prompt are left alone.
+const PLACEHOLDER = /\{([A-Za-z][A-Za-z0-9_]*)\}/g;
 
 export function renderPrompt(template: string, vars: Record<string, string | number>): string {
   const missing = new Set<string>();
@@ -34,8 +33,8 @@ export function promptVersion(path: string): string {
 // ---------------------------------------------------------------------------
 // Command line
 
+// The prompt itself goes on stdin (job spec stdinFile), not in argv: Linux limits one argument to 128 KiB.
 export type AgentCommandOptions = {
-  prompt: string;
   model: string;
   schema: object | string; // a parsed schema, or its JSON text
 } & ({ sessionId: string; resume?: undefined } | { resume: string; sessionId?: undefined });
@@ -46,7 +45,6 @@ export function buildAgentCommand(config: Pick<FactoryConfig, "claudeCommand">, 
   return [
     ...config.claudeCommand,
     "-p",
-    opts.prompt,
     "--output-format",
     "stream-json",
     "--verbose",
@@ -105,7 +103,7 @@ export function parseStreamJson(text: string): StreamSummary {
         if (block.type === "tool_use" && typeof block.name === "string") {
           out.toolUses.count++;
           out.toolUses.byName[block.name] = (out.toolUses.byName[block.name] ?? 0) + 1;
-        } else if (block.type === "text" && block.text?.trim() && !msg.parent_tool_use_id) {
+        } else if (block.type === "text" && typeof block.text === "string" && block.text.trim() && !msg.parent_tool_use_id) {
           out.lastAssistantText = block.text;
         }
       }
@@ -208,9 +206,10 @@ function describe(value: unknown): string {
 export function appendFeedback(stateDir: string, jobId: JobId, feedback: Feedback[], now = new Date()): void {
   const dir = join(stateDir, "feedback");
   mkdirSync(dir, { recursive: true });
+  // The target becomes a file name and comes from an agent: check them all before writing anything.
+  const bad = feedback.find((f) => !/^[a-z0-9-]+$/.test(f.target));
+  if (bad) throw new Error(`invalid feedback target: ${JSON.stringify(bad.target)}`);
   for (const f of feedback) {
-    // The target becomes a file name and comes from an agent.
-    if (!/^[a-z0-9-]+$/.test(f.target)) throw new Error(`invalid feedback target: ${JSON.stringify(f.target)}`);
     appendFileSync(join(dir, `${f.target}.md`), `## ${now.toISOString()} — job ${jobId}\n\n${f.text.trim()}\n\n`);
   }
 }
