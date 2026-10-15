@@ -1,0 +1,30 @@
+{
+ "status": {
+  "taskId": "W8chfSVORciMO2kjORWUSA",
+  "provisionerId": "gecko-t",
+  "workerType": "t-linux-2204-wayland",
+  "taskQueueId": "gecko-t/t-linux-2204-wayland",
+  "schedulerId": "gecko-level-1",
+  "projectId": "none",
+  "taskGroupId": "M_cvKUU-S5mvTnjzY_6HTw",
+  "priority": "very-low",
+  "deadline": "2026-10-14T20:31:00.136Z",
+  "expires": "2026-11-10T20:31:00.136Z",
+  "retriesLeft": 5,
+  "state": "failed",
+  "runs": [
+   {
+    "runId": 0,
+    "state": "failed",
+    "reasonCreated": "scheduled",
+    "reasonResolved": "failed",
+    "workerGroup": "us-central1-c",
+    "workerId": "8923743082518879240",
+    "takenUntil": "2026-10-13T22:27:15.448Z",
+    "scheduled": "2026-10-13T21:20:06.214Z",
+    "started": "2026-10-13T21:33:15.229Z",
+    "resolved": "2026-10-13T22:18:19.970Z"
+   }
+  ]
+ }
+}

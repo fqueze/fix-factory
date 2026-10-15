@@ -1,0 +1,94 @@
+{
+ "artifacts": [
+  {
+   "storageType": "s3",
+   "name": "public/fetch/perfherder-data-fetch-content.json",
+   "expires": "2026-11-10T20:31:00.136Z",
+   "contentType": "application/json"
+  },
+  {
+   "storageType": "s3",
+   "name": "public/logs/live_backing.log",
+   "expires": "2026-11-10T20:31:00.136Z",
+   "contentType": "text/plain; charset=utf-8"
+  },
+  {
+   "storageType": "link",
+   "name": "public/logs/live.log",
+   "expires": "2026-11-10T20:31:00.136Z",
+   "contentType": "text/plain; charset=utf-8"
+  },
+  {
+   "storageType": "s3",
+   "name": "public/logs/localconfig.json",
+   "expires": "2026-11-10T20:31:00.136Z",
+   "contentType": "application/json"
+  },
+  {
+   "storageType": "s3",
+   "name": "public/test_info/manifests.list",
+   "expires": "2026-11-10T20:31:00.136Z",
+   "contentType": "application/octet-stream"
+  },
+  {
+   "storageType": "s3",
+   "name": "public/test_info/mochitest-browser-a11y_errorsummary.log",
+   "expires": "2026-11-10T20:31:00.136Z",
+   "contentType": "text/plain"
+  },
+  {
+   "storageType": "s3",
+   "name": "public/test_info/mochitest-browser-a11y_testsummary.jsonl",
+   "expires": "2026-11-10T20:31:00.136Z",
+   "contentType": "application/octet-stream"
+  },
+  {
+   "storageType": "s3",
+   "name": "public/test_info/modifiedPrefs.json",
+   "expires": "2026-11-10T20:31:00.136Z",
+   "contentType": "application/json"
+  },
+  {
+   "storageType": "s3",
+   "name": "public/test_info/mozilla-test-fail-screenshot_cww10k_o.png",
+   "expires": "2026-11-10T20:31:00.136Z",
+   "contentType": "image/png"
+  },
+  {
+   "storageType": "s3",
+   "name": "public/test_info/profile_browser_announcement-2.js.json.gz",
+   "expires": "2026-11-10T20:31:00.136Z",
+   "contentType": "application/gzip"
+  },
+  {
+   "storageType": "s3",
+   "name": "public/test_info/profile_browser_announcement.js.json.gz",
+   "expires": "2026-11-10T20:31:00.136Z",
+   "contentType": "application/gzip"
+  },
+  {
+   "storageType": "s3",
+   "name": "public/test_info/profile_browser_notification-2.js.json.gz",
+   "expires": "2026-11-10T20:31:00.136Z",
+   "contentType": "application/gzip"
+  },
+  {
+   "storageType": "s3",
+   "name": "public/test_info/profile_browser_notification.js.json.gz",
+   "expires": "2026-11-10T20:31:00.136Z",
+   "contentType": "application/gzip"
+  },
+  {
+   "storageType": "s3",
+   "name": "public/test_info/profile_resource-usage.json",
+   "expires": "2026-11-10T20:31:00.136Z",
+   "contentType": "application/json"
+  },
+  {
+   "storageType": "s3",
+   "name": "public/test_info/system-info.log",
+   "expires": "2026-11-10T20:31:00.136Z",
+   "contentType": "text/plain"
+  }
+ ]
+}
