@@ -384,7 +384,7 @@ function itemControls(r: RequestState, i: ItemView, running: JobView | undefined
   if (!running && !agent) {
     return null;
   }
-  return html`<div class="jobctl">${running && !isPushJob(running) ? stopButton(r.id, running.job, back) : null}${agent ? watchDetails(r.id, agent.job) : null}${reopen ? continueBox(r.id, i.id, back) : null}</div>`;
+  return html`<div class="jobctl">${running && !isPushJob(running) ? stopButton(r.id, running.job, back) : null}${agent ? watchDetails(r.id, agent.job) : null}${reopen ? html`<details class="reopen"><summary class="btn small">Reopen…</summary>${continueBox(r.id, i.id, back)}</details>` : null}</div>`;
 }
 
 // A bug the investigation asks to file without a patch to carry it (e.g. a product bug behind a

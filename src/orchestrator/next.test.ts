@@ -613,7 +613,7 @@ describe("4. investigate and fix", () => {
     const job = linted(sc, "author:i-test-a:initial", sha("1"));
     sc.settle();
     sc.complete(`review:p-test-a:${job}`, { report: { verdict: "findings", findings: [nit], feedback: [] } });
-    assert.equal(sc.of("note").at(-1)?.text, "Review nits for p-test-a: a.js:2: wordy comment");
+    assert.equal(sc.of("note").at(-1)?.text, "Review nits for test_a.js: a.js:2: wordy comment");
     const nits = `author:i-test-a:nits:${job}`;
     assert.deepEqual(sc.settle(), [nits]);
     assert.match(sc.plan(nits).agent?.message ?? "", /\[nit\] a.js:2 wordy comment[\s\S]*say in one line/);

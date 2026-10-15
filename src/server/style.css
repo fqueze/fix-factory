@@ -162,3 +162,7 @@ ol.steps li.subagent { color: var(--text-muted); }
 .rprog .busy { color: var(--accent); }
 .rprog .waiting, .progress .waiting { color: var(--serious); font-weight: 600; }
 .progress .busy { color: var(--text-primary); }
+details.reopen { display: inline-block; }
+details.reopen > summary { list-style: none; }
+details.reopen > summary::-webkit-details-marker { display: none; }
+details.reopen[open] > summary { display: none; }
