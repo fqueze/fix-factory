@@ -96,7 +96,8 @@ test("a try-push request goes from the request to a planned verification push", 
     const ends = new Map(of("job-finished").map((e) => [e.job, e.t]));
     assert.equal(builds.length, 3);
     assert.ok(builds.every((b, i) => i === 0 || b.t >= ends.get(builds[i - 1].job)!));
-    assert.ok(of("needs-user").some((e) => e.key === "file-bug:p-test-a" && e.patch === "p-test-a"));
+    // Its bug draft is a link on its row until step 7.
+    assert.ok(!of("needs-user").some((e) => e.key.startsWith("file-bug:")));
     assert.equal(s.patches["p-test-a"].bugDraft?.component, "DOM: Core & HTML");
     assert.equal(s.patches["p-test-b"].bug, 1234567);
     assert.ok(readFileSync(join(config.stateDir, "feedback", "fx-tests.md"), "utf8").includes("the failure list missed a config"));
@@ -120,8 +121,8 @@ test("a try-push request goes from the request to a planned verification push", 
     assert.equal(planned.length, 1);
     assert.equal(planned[0].taskCount, 12);
     assert.deepEqual(
-      s.needsUser.map((n) => n.key).sort(),
-      ["approve-push:" + planned[0].push, "file-bug:p-test-a"].sort(),
+      s.needsUser.map((n) => n.key),
+      ["approve-push:" + planned[0].push],
     );
 
     // Every agent run got a prompt rendered from its template, on stdin, and nothing failed.

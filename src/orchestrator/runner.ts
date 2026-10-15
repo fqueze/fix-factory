@@ -9,7 +9,7 @@ import type { EventInput } from "../state/events.ts";
 import { appendEventSafe } from "./event-data.ts";
 import { jobDir, newJobId, startJob, type ExitInfo } from "../state/jobs.ts";
 import type { FactoryConfig, Feedback, JobId, RequestState } from "../types.ts";
-import { handleFinished, handleWatchLines } from "./handlers.ts";
+import { handleFinished, handleWatchLines, InvalidReport } from "./handlers.ts";
 import { reportPath, type JobPlan } from "./plan.ts";
 import type { JobRecord, View } from "./view.ts";
 
@@ -131,14 +131,14 @@ export function finishJob(deps: RunnerDeps, s: RequestState, view: View, rec: Jo
   let costUsd: number | undefined;
   const handle = (report?: unknown) => {
     try {
-      const r = handleFinished({ state: s, view, config, job: rec, output: out, report, reportOf: (job) => readReport(config, s.id, job) });
+      const r = handleFinished({ state: s, view, config, job: rec, output: out, report, reportOf: (job) => readReport(config, s.id, job), outputOf: (job) => readOut(config, job) });
       writeFiles(r.files ?? []);
       append(r.events);
       // Their ids derive from the job, so a replay after a crash executes them once.
       for (const c of r.commands ?? []) appendCommand(config.stateDir, c);
     } catch (e) {
       // An output we can't make sense of fails this job, not the loop.
-      error = `recording the result failed: ${e instanceof Error ? e.message : String(e)}`.slice(0, 1500);
+      error = (e instanceof InvalidReport ? `invalid report: ${e.message}` : `recording the result failed: ${e instanceof Error ? e.message : String(e)}`).slice(0, 1500);
     }
   };
 

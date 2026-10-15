@@ -113,6 +113,11 @@ export function patchId(item: ItemId, index: number): PatchId {
   return index === 0 ? base : `${base}-${index + 1}`;
 }
 
+// Not file-bug:<patch>, which earlier versions raised too early: a needs-user key is raised once.
+export function fileBugKey(patch: PatchId): string {
+  return `file-bug:${patch}:meta-bug-step`;
+}
+
 export function stackId(folder: string): string {
   return slug(folder) || "root";
 }
@@ -215,6 +220,7 @@ class Planner {
       return;
     }
     this.computeStacks();
+    this.earlyFileBugs();
     this.request();
     this.firstSignal();
     this.pushes();
@@ -300,7 +306,7 @@ class Planner {
     if (last.kind === "agent" && last.sessionId) {
       const error = last.end?.error ?? `exit code ${last.end?.exitCode}`;
       const message = error.startsWith("invalid report")
-        ? `Your JSON report doesn't match the schema:\n${error}\n\nReturn the whole report again, fixed.`
+        ? `Your JSON report is invalid:\n${error}\n\nReturn the whole report again, fixed.`
         : `The run ended without a valid report (${error}). Continue where you stopped, then end with the JSON report.`;
       return { purpose: { ...last.purpose }, kind: "agent", name: last.name, item: last.item, cwd: last.cwd, agent: { sessionId: last.sessionId, resume: true, message } };
     }
@@ -600,7 +606,9 @@ class Planner {
     }
   }
 
-  // collect → cluster → merge-clusters (when there's anything to merge).
+  // collect → cluster → merge-clusters (when there's anything to merge). Singles are never merged
+  // (a generic message is no shared cause), so merge-clusters only sees the groups: an agent can't
+  // drop a single.
   private groups(scope: string, run: string, target: string): FailureGroup[] | undefined {
     const collect = this.want(`collect:${scope}:${run}`, () => this.cli("collect", "failures.ts", ["collect", target]));
     if (!collect) return undefined;
@@ -608,13 +616,13 @@ class Planner {
     const cluster = this.want(`cluster:${scope}:${run}`, () => this.cli("cluster", "failures.ts", ["cluster", outPath(this.config, collect.job)]));
     if (!cluster) return undefined;
     const { groups, singles } = this.out<{ groups: ClusterGroup[]; singles: ClusterGroup[] }>(cluster);
-    const all = [...groups, ...singles];
     const strip = ({ key: _, ...g }: ClusterGroup): FailureGroup => g;
-    if (all.length <= 1) return all.map(strip);
-    const merge = this.wantAgent(`merge:${scope}:${run}`, "merge", "merge-clusters", { clustersFile: outPath(this.config, cluster.job) });
+    if (groups.length <= 1) return [...groups, ...singles].map(strip);
+    const clustersFile = dataPath(this.config, this.s.id, `clusters-${scope}-${run}.json`);
+    const merge = this.wantAgent(`merge:${scope}:${run}`, "merge", "merge-clusters", { clustersFile }, { files: [{ path: clustersFile, content: JSON.stringify({ groups }, null, 2) + "\n" }] });
     if (!merge) return undefined;
-    const byKey = new Map(all.map((g) => [g.key, g]));
-    return this.rep<MergeClustersReport>(merge).groups.map((g) => {
+    const byKey = new Map(groups.map((g) => [g.key, g]));
+    const merged = this.rep<MergeClustersReport>(merge).groups.map((g) => {
       const sources = g.from.map((k) => byKey.get(k)).filter((x) => x !== undefined);
       const rates = sources.map((x) => x.ratePerWeek).filter((x) => x !== undefined);
       const taskIds = [...new Set(sources.flatMap((x) => x.taskIds ?? []))];
@@ -626,22 +634,23 @@ class Planner {
         ...(taskIds.length ? { taskIds } : {}),
       };
     });
-  }
-
-  private knownMessages(): Set<string> {
-    return new Set([...Object.values(this.s.items).map((i) => i.group.message), ...[...this.newItems.values()].map((g) => g.message)]);
+    return [...merged, ...singles.map(strip)];
   }
 
   private knownTests(): Set<string> {
     return new Set([...Object.values(this.s.items).flatMap((i) => i.group.tests), ...[...this.newItems.values()].flatMap((g) => g.tests)]);
   }
 
+  // A later run finds the groups of the earlier ones again, possibly with more tests: a group is
+  // known when one of its tests already has an item with its message. Not the message alone:
+  // singles of different tests share generic messages such as "Test timed out".
   private createItems(groups: FailureGroup[]): void {
-    const known = this.knownMessages();
+    const pair = (message: string, test: string) => `${message}\n${test}`;
+    const known = new Set([...Object.values(this.s.items).map((i) => i.group), ...this.newItems.values()].flatMap((g) => g.tests.map((t) => pair(g.message, t))));
     for (const group of groups) {
-      if (group.tests.length === 0 || known.has(group.message)) continue;
+      if (group.tests.length === 0 || group.tests.some((t) => known.has(pair(group.message, t)))) continue;
       this.createItem(group);
-      known.add(group.message);
+      for (const t of group.tests) known.add(pair(group.message, t));
     }
   }
 
@@ -815,9 +824,6 @@ class Planner {
       const list = violations.map((v) => `- ${v.what}, ${v.rule}${v.line ? ` (line ${v.line})` : ""}: ${v.text}`).join("\n");
       this.resumeAuthor(item.id, `author:${item.id}${e}:lint:${author.job}`, "lint", `lint-text.ts found these problems:\n${list}\n\nFix them, amending your commit (keep everything else), then end with the JSON report again.`);
       return;
-    }
-    if (draftPatch?.bugDraft) {
-      this.raise(`file-bug:${draftPatch.id}`, { action: `File the bug for ${draftPatch.title.replace(/^Bug X+\s*-\s*/i, "")}`, detail: `${draftPatch.bugDraft.product}::${draftPatch.bugDraft.component}, checked by lint-text.ts`, patch: draftPatch.id, item: item.id });
     }
     const reviews = patches.map((p) =>
       this.wantAgent(`review:${p.id}:${author.job}`, "review", "review-patch", { sha: p.sha, worktree: cwd, report: reportPath(this.config, this.s.id, author.job) }, {
@@ -1214,6 +1220,13 @@ class Planner {
   // -------------------------------------------------------------------------
   // 7. Meta bug
 
+  // A patch's bug draft is only a link on its row until step 7: filing is asked once try is green.
+  // Earlier versions asked right after the lint; this takes their ⚑ down.
+  private earlyFileBugs(): void {
+    if (at(this.s.step) >= at("meta bug")) return;
+    for (const n of this.s.needsUser) if (n.key.startsWith("file-bug:")) this.clear(n.key);
+  }
+
   private metaBug(): void {
     if (this.s.step !== "meta bug") return;
     const stacks = Object.values(this.s.stacks);
@@ -1230,6 +1243,12 @@ class Planner {
       this.event(this.ev("meta-bug", { bug: null, draft }));
     }
     for (const st of stacks) this.raise(`meta-bug:${st.id}`, { action: "File the meta bug, then review and submit", detail: "the meta-bug comment lists the stack in review order, with effort, value and repro", stack: st.id });
+    for (const p of stacks.flatMap((st) => st.order).map((pid) => this.s.patches[pid])) {
+      if (!p.bugDraft) continue;
+      const key = fileBugKey(p.id);
+      if (p.bug !== null) this.clear(key);
+      else this.raise(key, { action: `File the bug for ${p.title.replace(/^Bug X+\s*-\s*/i, "")}`, detail: `${p.bugDraft.product}::${p.bugDraft.component}, checked by lint-text.ts`, patch: p.id, ...(p.item ? { item: p.item } : {}) });
+    }
     if (!this.s.metaBug?.bug) return;
     for (const st of stacks) this.clear(`meta-bug:${st.id}`);
     const waiting = stacks.flatMap((st) => st.order).filter((pid) => /^Bug X+\b/i.test(this.s.patches[pid]?.title ?? ""));

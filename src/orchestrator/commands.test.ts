@@ -48,7 +48,7 @@ describe("commands", () => {
 
   it("set-bug sets a patch's bug, or the meta bug", () => {
     const sc = withPatch();
-    sc.add({ type: "needs-user", request: ID, key: "file-bug:p-a", action: "File", detail: "", patch: "p-a" });
+    sc.add({ type: "needs-user", request: ID, key: "file-bug:p-a:meta-bug-step", action: "File", detail: "", patch: "p-a" });
     sc.add({ type: "meta-bug", request: ID, bug: null, draft: { product: "Testing", component: "General", summary: "meta", description: "d" } });
     sc.add({ type: "needs-user", request: ID, key: "meta-bug:a", action: "File the meta bug", detail: "", stack: "a" });
     run(sc, cmd({ cmd: "set-bug", patch: "p-a", bug: 2081216 }));

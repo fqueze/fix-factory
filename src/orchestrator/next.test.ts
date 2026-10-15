@@ -1,6 +1,7 @@
 // One test per step transition of docs/MVP.md, plus the rules of docs/ORCHESTRATOR.md.
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { InvalidReport } from "./handlers.ts";
 import { config, HOUR, ID, Scenario, sha } from "./testkit.ts";
 
 const none = { verdict: "none", quote: "no bug", feedback: [] };
@@ -265,18 +266,60 @@ describe("3. work list", () => {
     sc.complete("collect:initial:final", { output: [failure("a/test_a.js", "boom"), failure("b/test_b.js", "bang")] });
     assert.deepEqual(sc.step(), ["cluster:initial:final"]);
     assert.deepEqual(sc.plan("cluster:initial:final").cli?.args, ["cluster", `/state/jobs/${sc.view().byKey.get("collect:initial:final")![0].job}/out.log`]);
-    sc.complete("cluster:initial:final", { output: { groups: [group("ka", "a/test_a.js", "boom", 2)], singles: [group("kb", "b/test_b.js", "Test timed out")] } });
+    sc.complete("cluster:initial:final", {
+      output: { groups: [group("ka", "a/test_a.js", "boom", 2), group("kb", "b/test_b.js", "boom 2")], singles: [group("kc", "c/browser_c.js", "Test timed out")] },
+    });
     assert.deepEqual(sc.step(), ["merge:initial:final"]);
+    // Singles are never merged: merge-clusters only sees the groups.
+    const merge = sc.plan("merge:initial:final");
+    assert.deepEqual(merge.files?.map((f) => f.path), [merge.agent?.vars?.clustersFile]);
+    assert.deepEqual(JSON.parse(merge.files![0].content).groups.map((g: { key: string }) => g.key), ["ka", "kb"]);
     sc.complete("merge:initial:final", {
       report: { groups: [{ message: "boom", tests: ["a/test_a.js", "b/test_b.js"], configs: ["c"], from: ["ka", "kb"], reason: "same crash" }], feedback: [] },
     });
     sc.step();
     const s = sc.state();
     assert.equal(s.step, "investigate and fix");
-    assert.deepEqual(Object.keys(s.items), ["i-test-a"]);
+    assert.deepEqual(Object.keys(s.items), ["i-test-a", "i-browser-c"]);
     assert.equal(s.items["i-test-a"].folder, "a");
     assert.equal(s.items["i-test-a"].group.ratePerWeek, 3);
     assert.deepEqual(s.items["i-test-a"].group.tests, ["a/test_a.js", "b/test_b.js"]);
+    assert.equal(s.items["i-browser-c"].group.message, "Test timed out");
+  });
+
+  it("makes items of one group and the singles without merge-clusters", () => {
+    const sc = tryPushFinished();
+    sc.step();
+    sc.complete("try-table:initial:final", { output: table() });
+    sc.complete("collect:initial:final", { output: [failure("a/test_a.js", "boom"), failure("b/test_b.js", "Test timed out"), failure("c/test_c.js", "Test timed out")] });
+    sc.step();
+    sc.complete("cluster:initial:final", { output: { groups: [group("ka", "a/test_a.js", "boom")], singles: [group("kt", "b/test_b.js", "Test timed out"), group("kt", "c/test_c.js", "Test timed out")] } });
+    assert.ok(!sc.settle().some((k) => k.startsWith("merge:")));
+    assert.deepEqual(Object.keys(sc.state().items).sort(), ["i-test-a", "i-test-b", "i-test-c"]);
+  });
+
+  it("rejects a merge-clusters report that drops or adds a test: one retry with the error, then it comes to you", () => {
+    const sc = tryPushFinished();
+    sc.step();
+    sc.complete("try-table:initial:final", { output: table() });
+    sc.complete("collect:initial:final", { output: [failure("a/test_a.js", "boom"), failure("b/test_b.js", "bang")] });
+    sc.step();
+    sc.complete("cluster:initial:final", { output: { groups: [group("ka", "a/test_a.js", "boom"), group("kb", "b/test_b.js", "bang")], singles: [] } });
+    sc.step();
+    const dropped = { groups: [{ message: "boom", tests: ["a/test_a.js"], configs: [], from: ["ka"], reason: "unchanged" }], feedback: [] };
+    assert.throws(() => sc.complete("merge:initial:final", { report: dropped }), (e: Error) => e instanceof InvalidReport && /missing from your groups: b\/test_b\.js/.test(e.message));
+    const added = { groups: [{ message: "boom", tests: ["a/test_a.js", "b/test_b.js", "z/test_z.js"], configs: [], from: ["ka", "kb"], reason: "same" }], feedback: [] };
+    assert.throws(() => sc.complete("merge:initial:final", { report: added }), /weren't in the input groups: z\/test_z\.js/);
+    // What the runner records for it.
+    sc.complete("merge:initial:final", { error: "invalid report: tests missing from your groups: b/test_b.js" });
+    assert.deepEqual(sc.step(), ["merge:initial:final"]);
+    const retry = sc.plan("merge:initial:final");
+    assert.equal(retry.agent?.resume, true);
+    assert.match(retry.agent?.message ?? "", /tests missing from your groups: b\/test_b\.js/);
+    sc.complete("merge:initial:final", { error: "invalid report: tests missing from your groups: b/test_b.js" });
+    sc.step();
+    assert.ok(sc.open()[0].startsWith("failed:"));
+    assert.deepEqual(Object.keys(sc.state().items), []);
   });
 
   it("runs at 2 h when the push hasn't finished, then again when it finishes, adding only new groups", () => {
@@ -356,7 +399,7 @@ describe("4. investigate and fix", () => {
     assert.deepEqual(wt.cli?.args, ["create", `${ID}-i-test-a`, "--base", "origin/main", "--build", "artifact"]);
   });
 
-  it("investigates in the worktree, imports the commits, lints, reviews; a bug draft asks you to file it", () => {
+  it("investigates in the worktree, imports the commits, lints, reviews; a bug draft doesn't ask you to file it yet", () => {
     const sc = workList([group("ka", "a/test_a.js", "boom", 2)]);
     investigating(sc, "i-test-a");
     const author = sc.plan("author:i-test-a:initial");
@@ -383,7 +426,7 @@ describe("4. investigate and fix", () => {
     sc.complete(`lint:p-test-a:${sha("1")}`, { output: lintOk });
     sc.complete(`lint-bug:${job}`, { output: lintOk });
     assert.deepEqual(sc.settle(), [`review:p-test-a:${job}`]);
-    assert.deepEqual(sc.open(), ["file-bug:p-test-a"]);
+    assert.deepEqual(sc.open(), []);
     const review = sc.plan(`review:p-test-a:${job}`);
     assert.deepEqual(review.agent?.vars, { sha: sha("1"), worktree: `/wt/${ID}-i-test-a`, report: `/state/requests/${ID}/reports/${job}.json` });
     assert.notEqual(review.agent?.sessionId, author.agent?.sessionId);
@@ -508,18 +551,18 @@ describe("failures", () => {
 });
 
 // Two reviewed items in one folder, ready for step 5.
-function twoReviewed(): Scenario {
+function twoReviewed(reportA?: object): Scenario {
   const sc = workList([group("ka", "a/test_a.js", "boom", 3), group("kb", "a/test_b.js", "bang", 1)]);
   investigating(sc, "i-test-a");
   investigating(sc, "i-test-b");
-  reviewed(sc, "i-test-a", sha("1"), "a/test_a.js");
+  reviewed(sc, "i-test-a", sha("1"), "a/test_a.js", reportA ? { report: reportA } : {});
   reviewed(sc, "i-test-b", sha("2"), "a/test_b.js", { title: "Bug 22 - Fix test_b, r=smaug.", bug: 22 });
   return sc;
 }
 
 // twoReviewed, assembled, ordered b then a, reviewed and summarized: step 6.
-function stacked(): Scenario {
-  const sc = twoReviewed();
+function stacked(reportA?: object): Scenario {
+  const sc = twoReviewed(reportA);
   sc.complete("wt:a", { output: { name: `${ID}-a`, path: `/wt/${ID}-a`, branch: `${ID}-a` } });
   sc.settle();
   const key = sc.view().jobs.find((j) => j.purpose.what === "assemble")!.purpose.key;
@@ -677,8 +720,8 @@ describe("6. verify on try", () => {
   });
 });
 
-function verified(): Scenario {
-  const sc = stacked();
+function verified(reportA?: object): Scenario {
+  const sc = stacked(reportA);
   const planKey = sc.view().jobs.find((j) => j.purpose.what === "plan-pushes")!.purpose.key;
   sc.complete(planKey, { report: { pushes: [{ purpose: "verify", tryArgs: ["fuzzy", "-q", "x"], rebuild: 5 }], feedback: [] } });
   const [dry] = sc.settle();
@@ -711,6 +754,36 @@ describe("7. meta bug", () => {
     assert.equal(sc.state().patches["p-test-a"].bug, 999);
     sc.settle();
     assert.equal(sc.state().step, "submit");
+  });
+
+  it("asks you to file each patch's drafted bug only now, with the meta bug", () => {
+    const draft = { product: "Core", component: "XPCOM", summary: "s", description: "d" };
+    const sc = verified({ bugDraft: draft });
+    assert.equal(sc.state().step, "meta bug");
+    const step7 = sc.events.findIndex((e) => e.type === "step" && e.step === "meta bug");
+    assert.deepEqual(sc.events.flatMap((e, i) => (e.type === "needs-user" && e.key.startsWith("file-bug:") ? [i > step7] : [])), [true]);
+    assert.deepEqual(sc.open().sort(), ["file-bug:p-test-a:meta-bug-step", "meta-bug:a"]);
+    const n = sc.state().needsUser.find((x) => x.key.startsWith("file-bug:"))!;
+    assert.equal(n.patch, "p-test-a");
+    assert.equal(n.item, "i-test-a");
+    // The bug number arrives some other way than set-bug (e.g. a rewrite): the ⚑ goes.
+    const { deps: _d, review: _r, replyDrafts: _rd, id, ...p } = sc.state().patches["p-test-a"];
+    sc.add({ type: "patch", request: ID, patch: id, ...p, bug: 555 });
+    sc.settle();
+    assert.deepEqual(sc.open(), ["meta-bug:a"]);
+  });
+});
+
+describe("file-bug raised before step 7 by an earlier version", () => {
+  it("is cleared when the orchestrator next plans the request", () => {
+    const draft = { product: "Core", component: "XPCOM", summary: "s", description: "d" };
+    const sc = twoReviewed({ bugDraft: draft });
+    // As the earlier version left it: the patch's bug to file, open during step 5.
+    sc.add({ type: "needs-user", request: ID, key: "file-bug:p-test-a", action: "File the bug", detail: "", patch: "p-test-a", item: "i-test-a" });
+    assert.equal(sc.state().step, "stack");
+    sc.step();
+    assert.deepEqual(sc.of("user-done").map((e) => e.key), ["file-bug:p-test-a"]);
+    assert.deepEqual(sc.open(), []);
   });
 });
 

@@ -2,6 +2,7 @@
 // agent reports, and appends what these functions return. Only successful jobs get here; failures
 // are next()'s business (retry, then failed:<job>).
 import { relative } from "node:path";
+import type { ClusterGroup } from "../cli/failures.ts";
 import type { PollResult } from "../cli/phab.ts";
 import type { ImportedCommit } from "../cli/stack/import.ts";
 import type { DryRunResult, WatchLine } from "../cli/try.ts";
@@ -24,6 +25,7 @@ import { dataPath } from "./plan.ts";
 import type {
   ClassifyReviewCommentsReport,
   EstimateReviewEffortReport,
+  MergeClustersReport,
   RouteRequestReport,
   ResolveConflictReport,
   ReviewStackReport,
@@ -41,7 +43,12 @@ export interface HandlerInput {
   output: string; // out.log
   report?: unknown; // validated, for agents
   reportOf: (job: JobId) => unknown; // reports of earlier agent jobs
+  outputOf: (job: JobId) => string; // out.log of earlier jobs
 }
+
+// A report that matches its schema but not what the agent was asked: the runner records it as an
+// invalid report, so the agent gets one retry with the error.
+export class InvalidReport extends Error {}
 
 export interface HandlerResult {
   events: EventInput[];
@@ -86,6 +93,20 @@ export function handleFinished(input: HandlerInput): HandlerResult {
       ev("request-routed", { kind: r.kind, ...(r.kind === "burndown" ? { folder: r.folder } : { rev: r.rev }) });
       const questions = r.questions ?? [];
       ev("config-set", { config: { ...r.config, ...(questions.length ? { questions } : {}) } });
+      break;
+    }
+    case "merge": {
+      // Merging and splitting moves tests between groups, never adds or drops one: a dropped test
+      // would never get an item.
+      const cluster = input.view.byKey.get(purpose.key.replace(/^merge:/, "cluster:"))!.findLast(succeeded)!;
+      const given = new Set((JSON.parse(input.outputOf(cluster.job)) as { groups: ClusterGroup[] }).groups.flatMap((g) => g.tests));
+      const got = new Set((input.report as MergeClustersReport).groups.flatMap((g) => g.tests));
+      const missing = [...given].filter((t) => !got.has(t));
+      const extra = [...got].filter((t) => !given.has(t));
+      if (missing.length || extra.length) {
+        const problems = [missing.length ? `tests missing from your groups: ${missing.join(", ")}` : "", extra.length ? `tests that weren't in the input groups: ${extra.join(", ")}` : ""];
+        throw new InvalidReport(`${problems.filter(Boolean).join("; ")}. Every test of the input groups must be in your groups, and only those.`);
+      }
       break;
     }
     case "author":
