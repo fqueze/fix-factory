@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fix factory</title>
+<style>
+:root {
+  color-scheme: light;
+  --bg: #f4f4f2; --surface-1: #fcfcfb; --border: #e2e1dc;
+  --text-primary: #0b0b0b; --text-secondary: #52514e; --text-muted: #7a7974;
+  --link: #1c5cab;
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; --s5: #e87ba4; --s6: #008300; --s7: #4a3aa7;
+  --good: #0ca30c; --warning: #fab219; --serious: #ec835a; --critical: #d03b3b;
+  --track: #ebeae6; --action-bg: #fff6e0;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --bg: #111110; --surface-1: #1a1a19; --border: #2e2e2b;
+    --text-primary: #ffffff; --text-secondary: #c3c2b7; --text-muted: #8e8d86;
+    --link: #86b6ef;
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #008300; --s7: #9085e9;
+    --track: #2a2a27; --action-bg: #2e2716;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; background: var(--bg); color: var(--text-primary); }
+a { color: var(--link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+.mockbanner { background: var(--warning); color: #000; text-align: center; font-size: 12px; padding: 2px; }
+header { background: var(--surface-1); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 2; }
+.hwrap { max-width: 1100px; margin: 0 auto; padding: 8px 12px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+header h1 { font-size: 16px; margin: 0; }
+.strip { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.strip b { color: var(--text-primary); }
+.spacer { flex: 1; }
+.btn { display: inline-block; border: 1px solid var(--border); background: var(--surface-1); color: var(--text-primary); border-radius: 6px; padding: 3px 9px; font: inherit; font-size: 13px; cursor: pointer; white-space: nowrap; }
+.btn.primary { background: var(--s1); border-color: var(--s1); color: #fff; }
+.btn.small { font-size: 12px; padding: 1px 7px; }
+main { max-width: 1100px; margin: 0 auto; padding: 12px; }
+.ask { display: flex; gap: 6px; margin-bottom: 10px; }
+.ask input { flex: 1; min-width: 0; font: inherit; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-1); color: var(--text-primary); }
+.infra { border: 1px solid var(--serious); background: var(--action-bg); border-radius: 8px; padding: 6px 10px; font-size: 13px; margin-bottom: 12px; }
+h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--text-secondary); margin: 18px 0 6px; font-weight: 600; }
+h2 .count { color: var(--text-muted); font-weight: normal; }
+details.req { background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 6px; }
+details.req.needs { border-left: 4px solid var(--warning); }
+details.req > summary { list-style: none; cursor: pointer; padding: 8px 12px; display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; align-items: center; }
+details.req > summary::-webkit-details-marker { display: none; }
+.rname { font-weight: 600; }
+.rname::before { content: "▸ "; color: var(--text-muted); }
+details[open] > summary .rname::before { content: "▾ "; }
+.rsum { font-size: 12px; color: var(--text-secondary); grid-column: 1; }
+.rright { grid-column: 2; grid-row: 1 / span 2; display: flex; gap: 10px; align-items: center; font-size: 12px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.pipe { display: flex; width: 120px; height: 8px; gap: 2px; }
+.pipe span { display: block; height: 100%; }
+.pipe span:first-child { border-radius: 4px 0 0 4px; }
+.pipe span:last-child { border-radius: 0 4px 4px 0; }
+.action { grid-column: 1 / -1; background: var(--action-bg); border-radius: 6px; padding: 5px 8px; margin-top: 4px; font-size: 13px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.action .flag { font-weight: 600; }
+.action .flag::before { content: "⚑ "; color: var(--serious); }
+.action .why { color: var(--text-secondary); font-size: 12px; flex: 1 1 260px; }
+.rbody { padding: 0 12px 12px; border-top: 1px solid var(--border); }
+.rbody h3 { font-size: 12px; color: var(--text-secondary); font-weight: 600; margin: 12px 0 4px; }
+.legend { display: flex; flex-wrap: wrap; gap: 2px 12px; font-size: 12px; color: var(--text-secondary); margin: 2px 0 8px; }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { text-align: left; font-weight: 500; color: var(--text-muted); font-size: 12px; padding: 4px 6px; border-bottom: 1px solid var(--border); }
+td { padding: 6px; border-bottom: 1px solid var(--border); vertical-align: top; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.scroll { overflow-x: auto; }
+.phab { display: inline-flex; vertical-align: -3px; color: var(--text-secondary); margin-right: 4px; }
+.phab svg { width: 16px; height: 16px; }
+.phab.none { visibility: hidden; }
+.bug { font-weight: 500; white-space: nowrap; margin-right: 4px; }
+.bug.tofile { color: var(--critical); }
+.bug.tofile::before { content: "⚑ "; }
+.sub { color: var(--text-muted); font-size: 12px; }
+.dep { font-size: 12px; margin-top: 2px; color: var(--text-secondary); }
+.dep.met { color: var(--text-muted); }
+.rv { display: inline-block; font-size: 12px; white-space: nowrap; margin: 0 6px 2px 0; }
+.rv.ok::before { content: "✓ "; color: var(--good); font-weight: 700; }
+.rv.block::before { content: "✗ "; color: var(--critical); font-weight: 700; }
+.rv.block { font-weight: 600; }
+.rv.pend::before { content: "… "; color: var(--text-muted); }
+.landable { font-size: 11px; color: var(--good); white-space: nowrap; display: block; }
+.expand { background: var(--bg); border-radius: 8px; padding: 8px; margin-top: 6px; }
+.expand h4 { margin: 0 0 4px; font-size: 12px; color: var(--text-secondary); font-weight: 500; }
+pre.diff { margin: 0 0 8px; font: 12px/1.45 ui-monospace, Menlo, monospace; overflow-x: auto; background: var(--surface-1); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; }
+pre.diff .a { color: var(--good); } pre.diff .r { color: var(--critical); } pre.diff .h { color: var(--text-muted); }
+.comment { border-left: 3px solid var(--border); padding: 2px 8px; margin: 4px 0; font-size: 12px; }
+textarea { width: 100%; font: inherit; font-size: 13px; border: 1px solid var(--border); border-radius: 6px; padding: 6px; background: var(--surface-1); color: var(--text-primary); }
+.res { white-space: nowrap; }
+.res.ok::before { content: "✓ "; color: var(--good); font-weight: 700; }
+.res.bad::before { content: "✗ "; color: var(--critical); font-weight: 700; }
+.res.run::before { content: "◔ "; color: var(--s1); }
+.mono { font-family: ui-monospace, Menlo, monospace; font-size: 12px; }
+.tier { font-size: 11px; padding: 0 5px; border-radius: 4px; border: 1px solid var(--border); color: var(--text-secondary); white-space: nowrap; }
+.simple { background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 4px 12px; }
+.simple .row { display: flex; gap: 10px; padding: 6px 0; border-top: 1px solid var(--border); align-items: baseline; flex-wrap: wrap; }
+.simple .row:first-child { border-top: 0; }
+.simple .row .grow { flex: 1 1 300px; }
+details.archive > summary { cursor: pointer; color: var(--text-secondary); font-size: 13px; padding: 6px 0; }
+@media (max-width: 700px) {
+  .hide-sm { display: none; }
+  details.req > summary { grid-template-columns: 1fr; }
+  .rright { grid-column: 1; grid-row: auto; }
+}
+</style>
+</head>
+<body>
+<svg style="display:none"><symbol id="phab" viewBox="0 0 16 16"><path d="M1 8s2.6-5 7-5 7 5 7 5-2.6 5-7 5-7-5-7-5z" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="8" cy="8" r="2.3" fill="currentColor"/></symbol></svg>
+<div class="mockbanner">Mockup. Sample data from the newtab, mouse-button, permissions and xpcshell-cwd stacks</div>
+<header><div class="hwrap">
+  <h1>🏭 Fix factory</h1>
+  <div class="strip">
+    <span><b>23</b> landed today</span>
+    <span><b>61</b> in flight</span>
+    <span><b>$10.40</b> today · <b>$0.45</b>/patch</span>
+    <span>CPU <b>51/64</b></span>
+    <span>RAM <b>88/124 GB</b></span>
+    <span><b>9</b> agents</span>
+  </div>
+  <div class="spacer"></div>
+  <button class="btn primary">+ New request</button>
+</div></header>
+
+<main>
+  <div class="ask">
+    <input placeholder="Tell the factory… (e.g. “Lando was down this morning, re-push what failed”)">
+    <button class="btn">Send</button>
+  </div>
+  <div class="infra">⚠ <b>Lando</b> unreachable since 11:42. 1 try push paused, retrying every 5 min. <a href="#">health</a></div>
+
+  <h2>Active <span class="count">5</span></h2>
+
+  <details class="req needs" open>
+    <summary>
+      <span class="rname">Flakiness burndown: browser/extensions/newtab/test/browser</span>
+      <span class="rsum">39 patches · 30 landed · 9 in review: 1 changes requested, 2 replies ready</span>
+      <span class="rright">
+        <span class="pipe" title="In review 9 · Landed 30"><span style="flex:9;background:var(--s6)"></span><span style="flex:30;background:var(--s7)"></span></span>
+        <span>$98</span>
+        <a class="btn small" href="#">Profile</a>
+      </span>
+      <div class="action"><span class="flag">Resubmit D327101, D327287</span><span class="why">comments addressed · interdiffs and replies ready below</span><button class="btn small primary">Run moz-phab</button></div>
+    </summary>
+    <div class="rbody">
+      <h3>Patches <span class="sub">· stack order: easy and valuable first, each after its hard deps</span></h3>
+      <div class="scroll">
+      <table>
+        <thead><tr><th>Patch</th><th>Reviewers</th><th class="hide-sm" title="Expected review effort, 1 = trivial">Effort</th><th class="num hide-sm" title="Failures per week fixed">Value</th><th class="num hide-sm">Cost</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><a class="phab" href="#" title="D327083"><svg><use href="#phab"/></svg></a><a class="bug" href="#">Bug 2025752</a> Wait on panel-list's shown/hidden events instead of its open attribute, r=#home-newtab-reviewers.</td>
+            <td><span class="rv ok">mconley</span><span class="landable">landable now</span></td>
+            <td class="hide-sm">1</td><td class="num hide-sm">38/wk</td><td class="num hide-sm"><a href="#">$0.30</a></td>
+          </tr>
+          <tr>
+            <td><a class="phab" href="#" title="D327101"><svg><use href="#phab"/></svg></a><a class="bug" href="#">Bug 2011958</a> Count the sponsored tiles rather than the whole row, r=mconley.
+              <div class="sub">1 comment addressed ▾</div>
+              <div class="expand">
+                <h4>Interdiff (same parent)</h4>
+<pre class="diff"><span class="h">@@ browser_topsites_sponsored.js</span>
+<span class="r">-  let tiles = row.querySelectorAll(".top-site-outer");</span>
+<span class="r">-  is(tiles.length - 1, 2, "two sponsored tiles");</span>
+<span class="a">+  let sponsored = row.querySelectorAll(".top-site-outer.sponsored");</span>
+<span class="a">+  is(sponsored.length, 2, "two sponsored tiles");</span></pre>
+                <div class="comment"><b>mconley</b>: Could we select the sponsored tiles directly instead of subtracting?</div>
+                <h4>Draft reply</h4>
+                <textarea rows="1">Done.</textarea>
+                <div style="margin-top:6px;display:flex;gap:4px;flex-wrap:wrap"><button class="btn small primary">Copy reply</button><a class="btn small" href="#" title="D327101#inline-1873402">Open comment ↗</a><button class="btn small">Comment on the fix…</button></div>
+              </div>
+            </td>
+            <td><span class="rv ok">mconley</span><div class="sub">accepted with comments</div></td>
+            <td class="hide-sm">1</td><td class="num hide-sm">21/wk</td><td class="num hide-sm"><a href="#">$0.20</a></td>
+          </tr>
+          <tr>
+            <td><a class="phab" href="#" title="D327084"><svg><use href="#phab"/></svg></a><a class="bug" href="#">Bug 2025752</a> Exclude the add-shortcut tile from the menu test selectors, r=mconley.
+              <div class="dep">🔗 soft: the skip-if removal for browser_topsites_section.js is here because this lands after D327083</div></td>
+            <td><span class="rv ok">mconley</span><div class="sub">"factor into a helper", fix drafted</div></td>
+            <td class="hide-sm">1</td><td class="num hide-sm">12/wk</td><td class="num hide-sm"><a href="#">$0.25</a></td>
+          </tr>
+          <tr>
+            <td><a class="phab" href="#" title="D327088"><svg><use href="#phab"/></svg></a><a class="bug" href="#">Bug 1780305</a> Wait for ExperimentManager.onStartup() before enrolling in NimbusTestUtils, r=beth.
+              <div class="sub">reviewer asked a question · draft reply ready</div></td>
+            <td><span class="rv pend">beth</span></td>
+            <td class="hide-sm">2</td><td class="num hide-sm">30/wk</td><td class="num hide-sm"><a href="#">$0.40</a></td>
+          </tr>
+          <tr>
+            <td><a class="phab" href="#" title="D327287"><svg><use href="#phab"/></svg></a><a class="bug" href="#">Bug 2073419</a> Only transition the customize panel's visibility on the way out, r=#home-newtab-reviewers.</td>
+            <td><span class="rv pend">#home-newtab-reviewers</span></td>
+            <td class="hide-sm">2</td><td class="num hide-sm">9/wk</td><td class="num hide-sm"><a href="#">$0.35</a></td>
+          </tr>
+          <tr>
+            <td><a class="phab" href="#" title="D327289"><svg><use href="#phab"/></svg></a><a class="bug" href="#">Bug 2073421</a> Stop TopSitesFeed dispatching a top sites row after uninit(), r=#home-newtab-reviewers.</td>
+            <td><span class="rv pend">#home-newtab-reviewers</span></td>
+            <td class="hide-sm">3</td><td class="num hide-sm">14/wk</td><td class="num hide-sm"><a href="#">$0.70</a></td>
+          </tr>
+          <tr>
+            <td><span class="phab none"><svg><use href="#phab"/></svg></span><a class="bug tofile" href="#" title="Opens a prefilled enter_bug.cgi">Bug to file</a> Wait for the about:home startup cache to be written before closing the window, r=#home-newtab-reviewers.
+              <div class="dep">⛔ hard: needs D327289 (the test only passes once TopSitesFeed stops dispatching after uninit) · in review</div>
+              <div class="sub">try push 17 green · not submitted</div></td>
+            <td><span class="rv pend">#home-newtab-reviewers</span></td>
+            <td class="hide-sm">3</td><td class="num hide-sm">3/wk</td><td class="num hide-sm"><a href="#">$0.60</a></td>
+          </tr>
+          <tr>
+            <td><a class="phab" href="#" title="D327095"><svg><use href="#phab"/></svg></a><a class="bug" href="#">Bug 2067207</a> Check version.txt before recording the train-hop Glean metric, r=mconley.
+              <div class="sub">rewritten after the review · in try push 17</div></td>
+            <td><span class="rv block">mconley</span></td>
+            <td class="hide-sm">3</td><td class="num hide-sm">7/wk</td><td class="num hide-sm"><a href="#">$0.85</a></td>
+          </tr>
+          <tr>
+            <td><a class="phab" href="#" title="D327114"><svg><use href="#phab"/></svg></a><a class="bug" href="#">Bug 2072921</a> Start the content-process shutdown leak collections one event-loop batch later, r=mccr8.
+              <div class="dep met">⛔ hard: needs D327094 (the harness runs teardown before the leak check) · landed ✓</div></td>
+            <td><span class="rv ok">mccr8</span><span class="landable">landable now</span></td>
+            <td class="hide-sm">4</td><td class="num hide-sm">95/wk</td><td class="num hide-sm"><a href="#">$0.90</a></td>
+          </tr>
+          <tr><td colspan="5" class="sub">+ 30 landed patches ▸</td></tr>
+        </tbody>
+      </table>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;align-items:center">
+        <button class="btn small">Open in stack-viewer ↗</button>
+        <label class="sub"><input type="checkbox"> Landable now (2)</label>
+        <button class="btn small">Reorder for landing</button>
+      </div>
+
+      <h3>Try pushes</h3>
+      <div class="scroll">
+      <table>
+        <tbody>
+          <tr><td class="mono"><a href="#">dbfcf15fdf1f</a></td><td>Push 17: verify the rewritten Glean patch and the startup cache fix, --rebuild 10</td><td class="res run">412/440 done, 0 failures</td></tr>
+          <tr><td class="mono"><a href="#">8c202d009b01</a></td><td>Push 16: verify the 9 review-round fixes</td><td class="res ok">green, mac included</td></tr>
+          <tr><td class="mono"><a href="#">a41f9e03c7d2</a></td><td>Push 1: all skips removed, to reproduce and collect profiles</td><td class="res bad">17 tests failed, 11 groups</td></tr>
+        </tbody>
+      </table>
+      </div>
+
+      <h3>Recent steps</h3>
+      <div class="scroll">
+      <table>
+        <tbody>
+          <tr><td>draft-reply</td><td>D327101</td><td><span class="tier">Sonnet</span></td><td class="num">0:09</td><td class="num">$0.01</td><td><a href="#">profile</a></td></tr>
+          <tr><td>interdiff</td><td>D327101</td><td><span class="tier">script</span></td><td class="num">0:02</td><td class="num">—</td><td><a href="#">diff</a></td></tr>
+          <tr><td>verify-fix</td><td>D327101 (recipe 41%, 9 runs each)</td><td><span class="tier">script</span></td><td class="num">3:40</td><td class="num">—</td><td>9/9 fail → 0/9</td></tr>
+          <tr><td>address-review</td><td>D327101</td><td><span class="tier">Sonnet</span></td><td class="num">1:12</td><td class="num">$0.06</td><td><a href="#">profile</a></td></tr>
+        </tbody>
+      </table>
+      </div>
+      <div class="ask" style="margin-top:10px"><input placeholder="Tell the factory about this request…"><button class="btn">Send</button></div>
+    </div>
+  </details>
+
+  <details class="req needs">
+    <summary>
+      <span class="rname">xpcshell tests writing to the test directory</span>
+      <span class="rsum">291 failures → 12 causes · 9 patches · 3 in review · storage/test/unit all fixed</span>
+      <span class="rright">
+        <span class="pipe" title="Investigating 2 · Fixing 1 · In try 6 · In review 3"><span style="flex:2;background:var(--s1)"></span><span style="flex:1;background:var(--s2)"></span><span style="flex:6;background:var(--s4)"></span><span style="flex:3;background:var(--s6)"></span></span>
+        <span>$31</span>
+        <a class="btn small" href="#">Profile</a>
+      </span>
+      <div class="action"><span class="flag">Approve try push: storage/test/unit</span><span class="why">312 tasks · --rebuild 5 · --no-artifact (touches xpcom/io) · Sonnet review: all failing configs covered, dropped 1 duplicate task</span><button class="btn small primary">Approve</button><button class="btn small">Task list</button></div>
+    </summary>
+  </details>
+
+  <details class="req needs">
+    <summary>
+      <span class="rname">Permissions left changed by browser-chrome tests</span>
+      <span class="rsum">16 patches · 1 landed · 13 in review (1 accepted) · 2 waiting for bugs</span>
+      <span class="rright">
+        <span class="pipe" title="Ready 2 · In review 13 · Landed 1"><span style="flex:2;background:var(--s5)"></span><span style="flex:13;background:var(--s6)"></span><span style="flex:1;background:var(--s7)"></span></span>
+        <span>$12</span>
+        <a class="btn small" href="#">Profile</a>
+      </span>
+      <div class="action"><span class="flag">File 2 bugs</span><span class="why">meta bug (comment lists the stack in review order) · product fix in nsPermissionManager</span><a class="btn small" href="#">Meta: Bug to file ↗</a><a class="btn small" href="#">Product: Bug to file ↗</a><button class="btn small">Comment on drafts</button></div>
+    </summary>
+  </details>
+
+  <details class="req needs">
+    <summary>
+      <span class="rname">Mouse button left pressed after synthetic clicks</span>
+      <span class="rsum">28 patches · 7 landed · 12 in review · 8 ready for your review · try push green</span>
+      <span class="rright">
+        <span class="pipe" title="Verifying 1 · Ready 8 · In review 12 · Landed 7"><span style="flex:1;background:var(--s3)"></span><span style="flex:8;background:var(--s5)"></span><span style="flex:12;background:var(--s6)"></span><span style="flex:7;background:var(--s7)"></span></span>
+        <span>$27</span>
+        <a class="btn small" href="#">Profile</a>
+      </span>
+      <div class="action"><span class="flag">Review 8 patches before submission</span><span class="why">pre-submit checks passed · Opus stack review: no findings</span><button class="btn small primary">Open in stack-viewer ↗</button></div>
+    </summary>
+  </details>
+
+  <details class="req">
+    <summary>
+      <span class="rname">Bug 2071579: crash at shutdown on debug builds</span>
+      <span class="rsum">repro 9/13 with a DEBUG delay in the observer · fix being written (Sonnet)</span>
+      <span class="rright">
+        <span class="pipe" title="Fixing 1"><span style="flex:1;background:var(--s2)"></span></span>
+        <span>$3.80</span>
+        <a class="btn small" href="#">Profile</a>
+      </span>
+    </summary>
+  </details>
+
+  <div class="legend" style="margin-top:6px">
+    <span><i style="background:var(--s1)"></i>Investigating</span>
+    <span><i style="background:var(--s2)"></i>Fixing</span>
+    <span><i style="background:var(--s3)"></i>Verifying</span>
+    <span><i style="background:var(--s4)"></i>In try</span>
+    <span><i style="background:var(--s5)"></i>Ready</span>
+    <span><i style="background:var(--s6)"></i>In review</span>
+    <span><i style="background:var(--s7)"></i>Landed</span>
+  </div>
+
+  <h2>Queued <span class="count">2</span></h2>
+  <div class="simple">
+    <div class="row"><span class="grow"><b>Flakiness burndown: toolkit/components/extensions/test/xpcshell</b> <span class="sub">· waiting for build capacity (~14:00)</span></span><button class="btn small">Start now</button></div>
+    <div class="row"><span class="grow"><b>Improve: give investigate-failure the resource-usage profile up front</b> <span class="sub">· from the backlog, 6 agents asked for it</span></span><button class="btn small">Start now</button></div>
+  </div>
+
+  <h2>Recent try pushes</h2>
+  <div class="simple scroll">
+    <table>
+      <tbody>
+        <tr><td class="mono"><a href="#">dbfcf15fdf1f</a></td><td class="hide-sm">newtab</td><td>Verify the rewritten Glean patch and the startup cache fix</td><td class="res run">412/440, 0 failures</td></tr>
+        <tr><td class="mono"><a href="#">27999ea83b92</a></td><td class="hide-sm">xpcshell-cwd</td><td>Make test dirs read-only to find every test writing to them</td><td class="res bad">291 failures, 12 groups</td></tr>
+        <tr><td class="mono"><a href="#">5be03d71aa90</a></td><td class="hide-sm">mouse-button</td><td>Verify the harness check with all 7 fixes, --rebuild 5</td><td class="res ok">green</td></tr>
+        <tr><td class="mono"><a href="#">c91e44d2b6f0</a></td><td class="hide-sm">permissions</td><td>Verify the webrtc and captive portal cleanups</td><td class="res bad">1 new failure → back to its author</td></tr>
+        <tr><td class="mono sub">paused</td><td class="hide-sm">xpcshell-cwd</td><td>Verify the migration tests fix</td><td class="sub">waiting for Lando</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>Feedback <span class="count">by target</span></h2>
+  <div class="simple">
+    <div class="row"><span class="tier">prompt</span><span class="grow"><b>investigate-failure</b> · 14 entries, 6 new · latest: “had to fetch the resource-usage profile myself”</span><a class="btn small" href="#">Read</a><button class="btn small">Make request</button></div>
+    <div class="row"><span class="tier">tool</span><span class="grow"><b>fx-tests</b> · 9 entries, 4 new · latest: “<code>--profiles</code> missed the <code>-2</code> retry profile”</span><a class="btn small" href="#">Read</a><button class="btn small">Hand to fix session</button></div>
+    <div class="row"><span class="tier">tool</span><span class="grow"><b>profiler-cli</b> · 5 entries, 3 new · latest: “no way to list one test's markers across threads”</span><a class="btn small" href="#">Read</a><button class="btn small">Hand to fix session</button></div>
+    <div class="row"><span class="tier">prompt</span><span class="grow"><b>implement-fix</b> · 7 entries · escalated to Opus 4/11 this week</span><a class="btn small" href="#">Read</a><button class="btn small">Make request</button></div>
+  </div>
+
+  <h2>Finished</h2>
+  <details class="archive">
+    <summary>▸ 6 requests, everything landed</summary>
+    <div class="simple">
+      <div class="row"><span class="grow"><b>Errorsummary crashes on retried tests</b> <span class="sub">· 1 patch, landed Oct 13 · $1.90</span></span><a class="btn small" href="#">Profile</a></div>
+      <div class="row"><span class="grow"><b>Flakiness burndown: browser/components/sessionstore/test</b> <span class="sub">· 12 patches, landed Oct 9 · $6.10</span></span><a class="btn small" href="#">Profile</a></div>
+    </div>
+  </details>
+</main>
+</body>
+</html>
