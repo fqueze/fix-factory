@@ -1,18 +1,20 @@
 // try.ts: plan, push and watch try pushes. Every subcommand that touches the
 // Firefox tree takes the worktree with --cwd.
 //
-// node src/cli/try.ts dry-run --cwd <worktree> [--pending <file>] -- <mach try args...>
-//   Runs `./mach try <args> --no-push` and prints
-//   {command: string[], taskCount: number, tasks: string[], rebuild: number,
+// node src/cli/try.ts dry-run --cwd <worktree> [--pending <file>] -- <selector> <mach try args...>
+//   Runs `./mach try <selector> --no-push <args>` and prints
+//   {command: string[], taskCount: number, tasks: string[], tryTaskConfig: {...},
 //    commits: string[], warnings: string[], duplicateOf?: string}
 //   command is the push command (without --no-push). tasks are the labels from
 //   try_task_config.json, possibly chunk patterns ending in "*" (see warnings).
-//   taskCount = tasks × rebuild. commits are the stack's shas, newest first.
-//   --pending is a JSON list of PendingPush ({push?, tasks, commits, taskCount?});
-//   duplicateOf is set (to `push`, or the list index) when one has the same task
-//   set and the same commits.
+//   taskCount counts --rebuild (a number, or a per-label dict). tryTaskConfig is
+//   the try_task_config of try_task_config.json. commits are the stack's shas,
+//   newest first.
+//   --pending is a JSON list of PendingPush ({push?, tryTaskConfig, commits}), e.g.
+//   the dry-run outputs of pending pushes with `push` added; duplicateOf is set (to
+//   `push`, or the list index) when one has the same try config and commits.
 //
-// node src/cli/try.ts push --cwd <worktree> [--lando-timeout <s>] -- <mach try args...>
+// node src/cli/try.ts push --cwd <worktree> [--lando-timeout <s>] -- <selector> <mach try args...>
 //   Under --dry-run, or when the config has dryRun, refuses and prints
 //   {dryRun: true, command, cwd}. Otherwise runs `./mach try <args>` and prints
 //   {landoJobId, landoUrl, treeherderUrl, rev?}. rev is missing when Lando hasn't
@@ -22,20 +24,24 @@
 //
 // node src/cli/try.ts watch <rev> | --lando <jobId> [--interval <s>] [--timeout <min>]
 //   Polls Lando (with --lando) until the job has landed, then Treeherder until the
-//   push exists and every job is complete. Prints JSON lines (WatchLine):
+//   push exists and every job has run. Prints JSON lines (WatchLine):
 //   {type: "lando", landoJobId, status}                       on each status change
 //   {type: "pushed", rev, pushId, url}                         once the push exists
 //   {type: "job-failed", taskId, retryId, jobId, jobName, platform, result, tier}
 //                                                              once per failed job, as it appears
 //   {type: "progress", done, total, failures}                 when a count changes
-//   {type: "finished", result: "green" | "failures", summary, rev, done, total, failures}
-//   A Lando job that failed or was cancelled ends with {"error": ...} and exit 1.
+//   {type: "finished", result: "green" | "failures", summary, rev, done, total, failures, notRun}
+//   "green" means no failed job, not no failed test: a test that failed then passed
+//   on retry inside a job is invisible here (fx-tests --all-jobs sees it). notRun
+//   lists the jobs left unscheduled because something they depend on failed.
+//   A Lando job that failed, was cancelled or isn't a try push ends with
+//   {"error": ...} and exit 1.
 
 import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { setTimeout as sleepMs } from "node:timers/promises";
 import { loadConfig } from "../config.ts";
-import { log, runCli } from "../lib/cli.ts";
+import { log, runCli, UsageError } from "../lib/cli.ts";
 import { exec, type ExecResult } from "../lib/exec.ts";
 
 export const TREEHERDER = "https://treeherder.mozilla.org";
@@ -56,6 +62,8 @@ const REJECTED_FLAGS: Record<string, string> = {
   "--edit-presets": "it edits presets instead of pushing",
   "--interactive": "nobody is there to answer",
   "-i": "nobody is there to answer",
+  // Its prompt would be answered by the "y" meant for the large push prompt.
+  "--pernosco": "it asks for confirmation, and nobody is there to answer",
 };
 
 // The others are interactive (chooser, perf), push more than once (compare) or
@@ -63,23 +71,39 @@ const REJECTED_FLAGS: Record<string, string> = {
 const SELECTORS = new Set(["fuzzy", "auto", "again", "empty"]);
 const FUZZY_QUERY_FLAGS = ["-q", "--query", "-x", "--and", "--preset"];
 
+function rejection(arg: string): string | undefined {
+  const flag = arg.split("=")[0];
+  if (flag in REJECTED_FLAGS) {
+    return flag;
+  }
+  // argparse accepts unambiguous abbreviations of long flags (--push-to, --stage).
+  if (flag.startsWith("--") && flag.length > 2) {
+    return Object.keys(REJECTED_FLAGS).find((f) => f.startsWith(flag));
+  }
+  return undefined;
+}
+
 export function checkTryArgs(args: string[]): void {
   if (args.length === 0) {
-    throw new Error("missing mach try arguments after --");
-  }
-  for (const arg of args) {
-    const flag = arg.split("=")[0];
-    if (flag in REJECTED_FLAGS) {
-      throw new Error(`${flag} is not allowed: ${REJECTED_FLAGS[flag]}`);
-    }
+    throw new UsageError("missing mach try arguments after --");
   }
   const selector = args[0];
-  if (!selector.startsWith("-") && !SELECTORS.has(selector)) {
-    throw new Error(`unsupported selector ${selector}; use one of ${[...SELECTORS].join(", ")}`);
+  if (!SELECTORS.has(selector)) {
+    throw new UsageError(`the first mach try argument must be a selector (${[...SELECTORS].join(", ")}), not ${selector}`);
+  }
+  for (const arg of args) {
+    // After a "--", argparse takes everything as paths, including our --no-push.
+    if (arg === "--") {
+      throw new UsageError('"--" is not allowed in mach try arguments');
+    }
+    const flag = rejection(arg);
+    if (flag) {
+      throw new UsageError(`${arg} is not allowed: ${REJECTED_FLAGS[flag]}`);
+    }
   }
   // Without a query, fuzzy opens fzf and waits for keystrokes forever.
   if (selector === "fuzzy" && !args.some((a) => FUZZY_QUERY_FLAGS.includes(a.split("=")[0]))) {
-    throw new Error("mach try fuzzy needs -q (or --preset): without it, it opens fzf interactively");
+    throw new UsageError("mach try fuzzy needs -q (or --preset): without it, it opens fzf interactively");
   }
 }
 
@@ -88,16 +112,15 @@ export function checkTryArgs(args: string[]): void {
 
 export interface PendingPush {
   push?: string;
-  tasks: string[];
+  tryTaskConfig: Record<string, unknown>;
   commits: string[];
-  taskCount?: number;
 }
 
 export interface DryRunResult {
   command: string[];
   taskCount: number;
   tasks: string[];
-  rebuild: number;
+  tryTaskConfig: Record<string, unknown>;
   commits: string[];
   warnings: string[];
   duplicateOf?: string;
@@ -105,7 +128,6 @@ export interface DryRunResult {
 
 export interface ParsedDryRun {
   tasks: string[];
-  rebuild: number;
   taskCount: number;
   tryTaskConfig: Record<string, unknown>;
   warnings: string[];
@@ -124,15 +146,8 @@ export function parseDryRunOutput(stdout: string): ParsedDryRun {
   const config = JSON.parse(stdout.slice(at + CONFIG_MARKER.length)) as { parameters?: { try_task_config?: Record<string, unknown> } };
   const tryTaskConfig = config.parameters?.try_task_config ?? {};
   const tasks = (tryTaskConfig.tasks as string[] | undefined) ?? [];
-  const rebuildValue = tryTaskConfig.rebuild as number | Record<string, number> | undefined;
-  let taskCount: number;
-  let rebuild = 1;
-  if (typeof rebuildValue === "object") {
-    taskCount = tasks.reduce((n, t) => n + (rebuildValue[t] ?? 1), 0);
-  } else {
-    rebuild = rebuildValue ?? 1;
-    taskCount = tasks.length * rebuild;
-  }
+  const rebuild = (tryTaskConfig.rebuild as number | Record<string, number> | undefined) ?? 1;
+  const taskCount = typeof rebuild === "object" ? tasks.reduce((n, t) => n + (rebuild[t] ?? 1), 0) : tasks.length * rebuild;
 
   const warnings: string[] = [];
   const patterns = tasks.filter((t) => t.includes("*"));
@@ -146,7 +161,11 @@ export function parseDryRunOutput(stdout: string): ParsedDryRun {
   if (large) {
     warnings.push(`Large push (at least ${large[1]} tasks): it will run at the lowest priority.`);
   }
-  return { tasks, rebuild, taskCount, tryTaskConfig, warnings };
+  // --chemspill-priority sets "low"; a large push gets "lowest".
+  if (tryTaskConfig.priority === "low") {
+    warnings.push("--chemspill-priority needs the user's permission, for this push only.");
+  }
+  return { tasks, taskCount, tryTaskConfig, warnings };
 }
 
 // Same as mach's base_ref: commits of HEAD that no remote has.
@@ -162,15 +181,20 @@ async function nativeFiles(cwd: string, run: typeof exec): Promise<string[]> {
   return [...new Set(out.split("\n").filter((f) => NATIVE_FILE.test(f)))];
 }
 
-export function findDuplicate(result: { tasks: string[]; commits: string[]; taskCount: number }, pending: PendingPush[]): string | undefined {
-  const tasks = [...result.tasks].sort().join("\n");
-  const commits = result.commits.join("\n");
-  const index = pending.findIndex(
-    (p) =>
-      [...p.tasks].sort().join("\n") === tasks &&
-      p.commits.join("\n") === commits &&
-      (p.taskCount === undefined || p.taskCount === result.taskCount),
+function canonicalJson(value: unknown): string {
+  return JSON.stringify(value, (_key, v: unknown) =>
+    v && typeof v === "object" && !Array.isArray(v)
+      ? Object.fromEntries(Object.entries(v as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
+      : v,
   );
+}
+
+// The whole try config counts, not only the labels: a push that differs in test
+// paths, env or artifact mode answers a different question.
+export function findDuplicate(result: { tryTaskConfig: Record<string, unknown>; commits: string[] }, pending: PendingPush[]): string | undefined {
+  const config = canonicalJson(result.tryTaskConfig);
+  const commits = result.commits.join("\n");
+  const index = pending.findIndex((p) => canonicalJson(p.tryTaskConfig) === config && p.commits.join("\n") === commits);
   return index === -1 ? undefined : (pending[index].push ?? String(index));
 }
 
@@ -178,8 +202,10 @@ export async function dryRun(cwd: string, args: string[], opts: { pending?: Pend
   checkTryArgs(args);
   const run = opts.exec ?? exec;
   const command = ["./mach", "try", ...args];
+  // Right after the selector, so nothing can turn it into a path or an option value.
+  const noPush = ["./mach", "try", args[0], "--no-push", ...args.slice(1)];
   // "y" answers the large push prompt, which otherwise crashes on EOF.
-  const r = await run([...command, "--no-push"], { cwd, input: "y\n" });
+  const r = await run(noPush, { cwd, input: "y\n" });
   if (r.code !== 0) {
     throw new Error(`mach try --no-push exited with ${r.code}: ${(r.stdout + r.stderr).trim().slice(-2000)}`);
   }
@@ -198,21 +224,18 @@ export async function dryRun(cwd: string, args: string[], opts: { pending?: Pend
       );
     }
   }
-  if (args.some((a) => a === "--chemspill" || a === "--chemspill-priority")) {
-    warnings.push("--chemspill-priority needs the user's permission, for this push only.");
-  }
   const result: DryRunResult = {
     command,
     taskCount: parsed.taskCount,
     tasks: parsed.tasks,
-    rebuild: parsed.rebuild,
+    tryTaskConfig: parsed.tryTaskConfig,
     commits,
     warnings,
   };
   const duplicateOf = opts.pending ? findDuplicate(result, opts.pending) : undefined;
   if (duplicateOf !== undefined) {
     result.duplicateOf = duplicateOf;
-    result.warnings.push(`Same tasks and commits as pending push ${duplicateOf}.`);
+    result.warnings.push(`Same try config and commits as pending push ${duplicateOf}.`);
   }
   return result;
 }
@@ -245,7 +268,7 @@ export interface ParsedPush {
 export function parsePushOutput(stdout: string): ParsedPush {
   const url = /https:\/\/treeherder\.mozilla\.org\/jobs\?\S*landoCommitID=(\d+)\S*/.exec(stdout);
   if (!url) {
-    throw new Error(`mach try printed no Lando job: ${stdout.trim().slice(-2000)}`);
+    throw new Error(`mach try exited 0 but printed no Lando job; the push may have been submitted, do not retry: ${stdout.trim().slice(-2000)}`);
   }
   return { landoJobId: Number(url[1]), treeherderUrl: url[0] };
 }
@@ -347,7 +370,6 @@ async function getJson<T>(deps: WatchDeps, url: string): Promise<T> {
 // GET /landing_jobs/<id>/ is public. status goes SUBMITTED → IN_PROGRESS → LANDED
 // (or DEFERRED, FAILED, CANCELLED); once LANDED, commit_id is the try revision.
 export interface LandoJob {
-  id: number;
   status: string;
   commit_id: string;
   error: string;
@@ -363,8 +385,6 @@ export function fetchLandoJob(deps: WatchDeps, id: number): Promise<LandoJob> {
 export interface TreeherderPush {
   id: number;
   revision: string;
-  author: string;
-  push_timestamp: number;
 }
 
 export async function fetchPush(deps: WatchDeps, rev: string): Promise<TreeherderPush | undefined> {
@@ -427,6 +447,7 @@ export interface WatchFinished {
   done: number;
   total: number;
   failures: number;
+  notRun: string[];
 }
 
 export interface WatchOptions {
@@ -444,31 +465,77 @@ export interface PushStatus {
   total: number;
   failures: number;
   failed: TreeherderJob[];
+  notRun: string[];
   complete: boolean;
+  // Complete only if the next poll agrees: see pushStatus.
+  confirm: boolean;
 }
 
-export function pushStatus(jobs: TreeherderJob[]): PushStatus {
+// How long a decision task that scheduled nothing waits before the push counts as
+// done, for Treeherder to ingest the tasks it might have scheduled.
+const INGESTION_DELAY_MS = 15 * 60_000;
+
+export function pushStatus(jobs: TreeherderJob[], now = Date.now()): PushStatus {
   const completed = jobs.filter((j) => j.state === "completed");
   const failed = completed.filter((j) => FAILED_RESULTS.has(j.result));
+  // Tasks whose dependencies failed stay unscheduled until their deadline, a day later.
+  const unscheduled = jobs.filter((j) => j.state === "unscheduled");
+  const allScheduledDone = completed.length + unscheduled.length === jobs.length;
+
+  const latest = new Map<string, TreeherderJob>();
+  for (const j of jobs) {
+    const seen = latest.get(j.task_id);
+    if (!seen || j.retry_id > seen.retry_id) {
+      latest.set(j.task_id, j);
+    }
+  }
+  // The replacement of a retried attempt can show up a poll later.
+  const retryPending = [...latest.values()].some((j) => j.result === "retry");
+
   const decision = jobs.filter((j) => j.job_type_name === DECISION_TASK);
   const decisionDone = decision.length > 0 && decision.every((j) => j.state === "completed");
   const decisionFailed = decision.some((j) => FAILED_RESULTS.has(j.result));
-  // Right after the decision task completes, Treeherder may not have ingested the
-  // tasks it scheduled yet: "all complete" with only the decision task isn't the end.
   const hasOtherJobs = jobs.some((j) => j.job_type_name !== DECISION_TASK);
+  // Right after the decision task completes, Treeherder may not have ingested the
+  // tasks it scheduled yet: only the decision task done isn't the end, for a while.
+  const scheduledNothing =
+    decisionDone && !hasOtherJobs && decision.every((j) => now - Date.parse(j.last_modified + "Z") >= INGESTION_DELAY_MS);
+
+  let complete = false;
+  let confirm = false;
+  if (decisionDone && allScheduledDone && !retryPending) {
+    if (decisionFailed || scheduledNothing) {
+      complete = true;
+    } else if (hasOtherJobs && unscheduled.length === 0) {
+      complete = true;
+    } else if (unscheduled.length > 0 && failed.length > 0) {
+      // Dependents of a job that just succeeded can also look unscheduled for a
+      // moment, so this needs a second poll to agree.
+      complete = true;
+      confirm = true;
+    }
+  }
   return {
     done: completed.length,
     total: jobs.length,
     failures: failed.length,
     failed,
-    complete: completed.length === jobs.length && decisionDone && (hasOtherJobs || decisionFailed),
+    notRun: unscheduled.map((j) => j.job_type_name),
+    complete,
+    confirm,
   };
 }
 
 export function summarize(jobs: TreeherderJob[], status = pushStatus(jobs)): string {
   const retried = jobs.filter((j) => j.result === "retry").length;
   const cancelled = jobs.filter((j) => j.result === "usercancel").length;
-  const extras = [retried && `${retried} retried`, cancelled && `${cancelled} cancelled`].filter(Boolean).join(", ");
+  const extras = [
+    retried && `${retried} retried`,
+    cancelled && `${cancelled} cancelled`,
+    status.notRun.length && `${status.notRun.length} not run`,
+  ]
+    .filter(Boolean)
+    .join(", ");
   const tail = extras ? ` (${extras})` : "";
   if (status.failures === 0) {
     return `${status.total} jobs, all green${tail}.`;
@@ -578,10 +645,11 @@ export async function watch(target: { rev: string } | { landoJobId: number }, de
 
   const reported = new Set<number>();
   let lastProgress = "";
+  let toConfirm = "";
   for (;;) {
     const jobs = await poller.attempt(() => fetchJobs(deps, push.id, opts.pageSize));
     if (jobs) {
-      const status = pushStatus(jobs);
+      const status = pushStatus(jobs, deps.now());
       for (const j of status.failed) {
         if (!reported.has(j.id)) {
           reported.add(j.id);
@@ -602,7 +670,10 @@ export async function watch(target: { rev: string } | { landoJobId: number }, de
         lastProgress = progress;
         deps.emit({ type: "progress", done: status.done, total: status.total, failures: status.failures });
       }
-      if (status.complete) {
+      const signature = `${progress}/${status.notRun.length}`;
+      const confirmed = !status.confirm || toConfirm === signature;
+      toConfirm = status.complete && status.confirm ? signature : "";
+      if (status.complete && confirmed) {
         const finished: WatchFinished = {
           type: "finished",
           result: status.failures === 0 ? "green" : "failures",
@@ -611,6 +682,7 @@ export async function watch(target: { rev: string } | { landoJobId: number }, de
           done: status.done,
           total: status.total,
           failures: status.failures,
+          notRun: status.notRun,
         };
         deps.emit(finished);
         return finished;
@@ -625,7 +697,7 @@ export async function watch(target: { rev: string } | { landoJobId: number }, de
 
 function requireCwd(values: Record<string, unknown>): string {
   if (typeof values.cwd !== "string") {
-    throw new Error("--cwd <firefox worktree> is required");
+    throw new UsageError("--cwd <firefox worktree> is required");
   }
   return values.cwd;
 }
@@ -636,7 +708,7 @@ function positiveNumber(value: unknown, name: string, fallback: number): number 
   }
   const n = Number(value);
   if (!(n > 0)) {
-    throw new Error(`${name} must be a positive number`);
+    throw new UsageError(`${name} must be a positive number`);
   }
   return n;
 }
@@ -665,7 +737,7 @@ async function main(): Promise<void> {
         } else if (args[0] && /^[0-9a-f]{12,40}$/.test(args[0])) {
           target = { rev: args[0] };
         } else {
-          throw new Error("usage: watch <rev> | --lando <jobId>");
+          throw new UsageError("usage: watch <rev> | --lando <jobId>");
         }
         await watch(target, defaultDeps(), { intervalMs, timeoutMs });
         // The JSON lines were the output.

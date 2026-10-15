@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { test } from "node:test";
+import { UsageError } from "../lib/cli.ts";
 import type { ExecResult } from "../lib/exec.ts";
 import {
   checkTryArgs,
@@ -60,11 +65,18 @@ test("checkTryArgs rejects flags and selectors that can't work unattended", () =
   assert.throws(() => checkTryArgs(["fuzzy", "-q", "'xpcshell", "--no-push"]), /--no-push/);
   assert.throws(() => checkTryArgs(["fuzzy", "-q", "'xpcshell", "--push-to-vcs"]), /--push-to-vcs/);
   assert.throws(() => checkTryArgs(["fuzzy", "--stage-changes", "-q", "x"]), /--stage-changes/);
+  assert.throws(() => checkTryArgs(["fuzzy", "-q", "x", "--pernosco"]), /--pernosco/);
+  assert.throws(() => checkTryArgs(["fuzzy", "-q", "x", "--push-to"]), /--push-to is not allowed/, "argparse abbreviation");
+  assert.throws(() => checkTryArgs(["fuzzy", "-q", "x", "--stage"]), /--stage is not allowed/);
+  assert.throws(() => checkTryArgs(["fuzzy", "-q", "x", "--no-p=1"]), /--no-p=1 is not allowed/);
+  assert.throws(() => checkTryArgs(["fuzzy", "-q", "x", "--", "xpcom/tests/unit"]), /"--" is not allowed/);
   assert.throws(() => checkTryArgs(["fuzzy", "xpcom/tests/unit"]), /needs -q/);
-  assert.throws(() => checkTryArgs(["chooser"]), /unsupported selector/);
+  assert.throws(() => checkTryArgs(["chooser"]), /must be a selector/);
+  assert.throws(() => checkTryArgs(["-q", "x"]), /must be a selector/);
   assert.throws(() => checkTryArgs([]), /missing/);
-  checkTryArgs(["fuzzy", "-q", "'xpcshell 'linux2404-64/opt", "--rebuild", "5", "xpcom/tests/unit"]);
-  checkTryArgs(["fuzzy", "--query='xpcshell"]);
+  assert.throws(() => checkTryArgs(["fuzzy"]), UsageError);
+  checkTryArgs(["fuzzy", "-q", "'xpcshell 'linux2404-64/opt", "--rebuild", "5", "--no-artifact", "--no-pernosco", "xpcom/tests/unit"]);
+  checkTryArgs(["fuzzy", "--query='xpcshell", "--preset", "x"]);
   checkTryArgs(["auto"]);
 });
 
@@ -79,34 +91,46 @@ test("parseDryRunOutput: chunk patterns hide the real task count", () => {
 test("parseDryRunOutput: --rebuild multiplies the task count", () => {
   const p = parseDryRunOutput(text("dry-run-rebuild.txt"));
   assert.equal(p.tasks.length, 6);
-  assert.equal(p.rebuild, 3);
   assert.equal(p.taskCount, 18);
   assert.deepEqual(p.warnings, []);
   assert.equal(p.tryTaskConfig["use-artifact-builds"], true);
 });
 
+test("parseDryRunOutput: per-label rebuild and chemspill priority", () => {
+  const out = text("dry-run-rebuild.txt").replace('"rebuild": 3,', '"priority": "low", "rebuild": {"test-linux2404-64/opt-xpcshell-1": 5},');
+  const p = parseDryRunOutput(out);
+  assert.equal(p.taskCount, 5 + 5);
+  assert.deepEqual(p.warnings, ["--chemspill-priority needs the user's permission, for this push only."]);
+});
+
 test("parseDryRunOutput: large push prompt", () => {
   const p = parseDryRunOutput(text("dry-run-large-push.txt"));
-  assert.equal(p.rebuild, 2);
   assert.equal(p.taskCount, p.tasks.length * 2);
-  assert.ok(p.warnings.some((w) => /at least 2580 tasks.*lowest priority/.test(w)));
+  assert.deepEqual(p.warnings, ["Large push (at least 2580 tasks): it will run at the lowest priority."]);
 });
 
 test("parseDryRunOutput: no tasks selected", () => {
   assert.throws(() => parseDryRunOutput(text("dry-run-no-tasks.txt")), /no tasks/);
 });
 
-test("dryRun runs mach with --no-push and reports the stack", async () => {
+test("dryRun puts --no-push right after the selector and reports the stack", async () => {
   const { run, calls } = fakeExec(text("dry-run-rebuild.txt"));
-  const args = ["fuzzy", "-q", "'xpcshell 'linux2404-64/opt", "--rebuild", "3", "--artifact"];
+  const args = ["fuzzy", "-q", "'xpcshell 'linux2404-64/opt", "--rebuild", "3", "--artifact", "xpcom/tests/unit"];
   const r = await dryRun("/wt", args, { exec: run });
-  assert.deepEqual(calls[0].cmd, ["./mach", "try", ...args, "--no-push"]);
+  assert.deepEqual(calls[0].cmd, ["./mach", "try", "fuzzy", "--no-push", "-q", "'xpcshell 'linux2404-64/opt", "--rebuild", "3", "--artifact", "xpcom/tests/unit"]);
   assert.equal(calls[0].input, "y\n");
   assert.deepEqual(r.command, ["./mach", "try", ...args]);
   assert.equal(r.taskCount, 18);
+  assert.equal(r.tryTaskConfig.rebuild, 3);
   assert.deepEqual(r.commits, COMMITS);
   assert.deepEqual(r.warnings, []);
   assert.equal(r.duplicateOf, undefined);
+});
+
+test("dryRun never runs mach with a -- in the arguments", async () => {
+  const { run, calls } = fakeExec(text("dry-run-rebuild.txt"));
+  await assert.rejects(dryRun("/wt", ["fuzzy", "-q", "x", "--", "xpcom/tests/unit"], { exec: run }), /"--" is not allowed/);
+  assert.deepEqual(calls, []);
 });
 
 test("dryRun warns about an artifact push of native changes", async () => {
@@ -118,15 +142,23 @@ test("dryRun warns about an artifact push of native changes", async () => {
 
 test("dryRun reports a duplicate of a pending push", async () => {
   const { run } = fakeExec(text("dry-run-rebuild.txt"));
-  const tasks = parseDryRunOutput(text("dry-run-rebuild.txt")).tasks;
+  const config = parseDryRunOutput(text("dry-run-rebuild.txt")).tryTaskConfig;
+  // Same config with its keys in another order.
+  const reordered = Object.fromEntries(Object.entries(config).reverse());
   const pending = [
-    { push: "p1", tasks, commits: ["other"] },
-    { push: "p2", tasks: [...tasks].reverse(), commits: COMMITS, taskCount: 18 },
+    { push: "p1", tryTaskConfig: config, commits: ["other"] },
+    { push: "p2", tryTaskConfig: reordered, commits: COMMITS },
   ];
   const r = await dryRun("/wt", ["fuzzy", "-q", "x"], { exec: run, pending });
   assert.equal(r.duplicateOf, "p2");
-  assert.equal(findDuplicate({ tasks, commits: COMMITS, taskCount: 6 }, pending), undefined, "different --rebuild");
-  assert.equal(findDuplicate({ tasks: tasks.slice(1), commits: COMMITS, taskCount: 15 }, pending), undefined);
+  assert.match(r.warnings.at(-1)!, /pending push p2/);
+
+  const differs = (change: Record<string, unknown>) => findDuplicate({ tryTaskConfig: { ...config, ...change }, commits: COMMITS }, pending);
+  assert.equal(differs({}), "p2");
+  assert.equal(differs({ rebuild: 5 }), undefined);
+  assert.equal(differs({ "use-artifact-builds": false }), undefined, "--no-artifact push for product code");
+  assert.equal(differs({ env: { TRY_SELECTOR: "fuzzy", MOZHARNESS_TEST_PATHS: '{"xpcshell": ["xpcom/tests/unit"]}' } }), undefined);
+  assert.equal(findDuplicate({ tryTaskConfig: config, commits: COMMITS }, [{ tryTaskConfig: config, commits: COMMITS }]), "0");
 });
 
 // Fake clock and fetch: Lando, Treeherder push and jobs answer from fixtures
@@ -297,10 +329,65 @@ test("pushStatus: a running push is not complete", () => {
   assert.deepEqual([s.done, s.total, s.failures, s.complete], [7, 66, 0, false]);
 });
 
-test("pushStatus: only the decision task done is not the end", () => {
+test("pushStatus: only the decision task done is not the end, for a while", () => {
   const jobs = rows(json("jobs-d25e111ef965.json")).filter((j) => j.job_type_name === "Gecko Decision Task");
+  const decisionEnd = utc(jobs[0].last_modified);
+  assert.equal(pushStatus(jobs, decisionEnd + 60_000).complete, false);
+  assert.equal(pushStatus(jobs, decisionEnd + 20 * 60_000).complete, true, "scheduled nothing");
+  assert.equal(pushStatus([{ ...jobs[0], result: "busted" }], decisionEnd).complete, true);
+});
+
+test("pushStatus: not complete while a retried task's replacement hasn't shown up", () => {
+  const jobs = rows(json("jobs-c4a4cfd245f2-page1.json"))
+    .concat(rows(json("jobs-c4a4cfd245f2-page2.json")))
+    .concat(rows(json("jobs-c4a4cfd245f2-page3.json")));
+  assert.equal(pushStatus(jobs).complete, true);
+  const retried = jobs.find((j) => j.result === "retry")!;
+  const withoutReplacement = jobs.filter((j) => !(j.task_id === retried.task_id && j.retry_id > retried.retry_id));
+  assert.equal(withoutReplacement.length, jobs.length - 1);
+  assert.equal(pushStatus(withoutReplacement).complete, false);
+});
+
+test("watch finishes when the only jobs left are unscheduled behind a failure", async () => {
+  // The macOS build's second attempt busted, so its tests never get scheduled.
+  const final = json("jobs-d25e111ef965.json") as JobsPage;
+  const names = final.job_property_names;
+  const col = (n: string) => names.indexOf(n);
+  const busted: JobsPage = {
+    ...final,
+    results: final.results.map((r) => {
+      const row = [...r];
+      if (row[col("job_type_name")] === "build-macosx64/opt" && row[col("retry_id")] === 1) {
+        row[col("result")] = "busted";
+      } else if (String(row[col("platform")]).startsWith("macosx")) {
+        row[col("state")] = "unscheduled";
+        row[col("result")] = "unknown";
+      }
+      return row;
+    }),
+  };
+  const notRun = rows(busted).filter((j) => j.state === "unscheduled");
+  assert.ok(notRun.length > 0);
+
+  const world = fakeWorld({ landoLandsAt: 0, pushAppearsAt: 0, jobs: () => busted });
+  const finished = await watch({ rev: REV }, world.deps, { intervalMs: 60_000 });
+  assert.deepEqual(finished.notRun, notRun.map((j) => j.job_type_name));
+  assert.equal(finished.failures, 2);
+  assert.match(finished.summary, new RegExp(`\\(1 retried, ${notRun.length} not run\\)`));
+  // One poll to see it, one to confirm it.
+  assert.deepEqual(
+    world.lines.map((l) => l.line.type),
+    ["pushed", "job-failed", "job-failed", "progress", "finished"],
+  );
+  // The push appears at 0, then the confirming poll is one interval later.
+  assert.equal(world.now(), 60_000);
+});
+
+test("pushStatus: unscheduled jobs without any failure are still to come", () => {
+  const jobs = rows(json("jobs-d25e111ef965.json")).map((j, i) =>
+    i === 5 ? { ...j, state: "unscheduled", result: "unknown" } : j.result === "testfailed" ? { ...j, result: "success" } : j,
+  );
   assert.equal(pushStatus(jobs).complete, false);
-  assert.equal(pushStatus([{ ...jobs[0], result: "busted" }]).complete, true);
 });
 
 test("fetchJobs follows pagination", async () => {
@@ -322,7 +409,30 @@ test("parsePushOutput finds the Lando job", () => {
     landoJobId: 103624,
     treeherderUrl: "https://treeherder.mozilla.org/jobs?repo=try&landoInstance=lando-prod-2025&landoCommitID=103624",
   });
-  assert.throws(() => parsePushOutput("abort: error submitting patches to Lando.\n"), /no Lando job/);
+  assert.throws(() => parsePushOutput("abort: error submitting patches to Lando.\n"), /no Lando job; the push may have been submitted, do not retry/);
+});
+
+test("CLI push honours dryRun from the config", () => {
+  const dir = mkdtempSync(join(tmpdir(), "try-test-"));
+  try {
+    const config = join(dir, "factory.config.json");
+    writeFileSync(config, JSON.stringify({ dryRun: true }));
+    // A cwd that doesn't exist: if dryRun were ignored, mach couldn't even start.
+    const r = spawnSync(process.execPath, [fileURLToPath(new URL("./try.ts", import.meta.url)), "push", "--cwd", join(dir, "nowhere"), "--", "fuzzy", "-q", "x"], {
+      env: { ...process.env, FACTORY_CONFIG: config },
+      encoding: "utf8",
+    });
+    assert.equal(r.status, 0, r.stderr);
+    assert.deepEqual(JSON.parse(r.stdout), { dryRun: true, command: ["./mach", "try", "fuzzy", "-q", "x"], cwd: join(dir, "nowhere") });
+  } finally {
+    rmSync(dir, { recursive: true });
+  }
+});
+
+test("CLI usage errors exit with 2", () => {
+  const r = spawnSync(process.execPath, [fileURLToPath(new URL("./try.ts", import.meta.url)), "dry-run", "--", "fuzzy", "-q", "x"], { encoding: "utf8" });
+  assert.equal(r.status, 2);
+  assert.match(JSON.parse(r.stdout).error, /--cwd/);
 });
 
 test("push refuses under --dry-run", async () => {
