@@ -20,8 +20,6 @@ ${PHAB_SYMBOL}
 <header><div class="hwrap">
   <h1>🏭 Fix factory</h1>
   ${renderStrip(requests, ctx)}
-  <div class="spacer"></div>
-  ${newRequestForm()}
 </div></header>
 <main id="main">
 ${renderMain(requests, ctx)}
@@ -43,19 +41,6 @@ export function renderStrip(requests: RequestState[], ctx: RenderContext): Html 
   </div>`;
 }
 
-function newRequestForm(): Html {
-  return html`<details class="newreq"><summary class="btn primary">+ New request</summary>
-    <form class="cmd" method="post" action="/api/commands" data-new-request>
-      <input type="hidden" name="back" value="/">
-      <select name="kind"><option value="burndown">Burn down a folder</option><option value="try-push">Fix the failures of a try push</option></select>
-      <input type="text" name="folder" placeholder="Folder, e.g. toolkit/components/extensions/test/xpcshell">
-      <input type="text" name="rev" placeholder="Try push revision">
-      <textarea name="text" rows="3" placeholder="What you want, constraints, platforms…"></textarea>
-      <div><button class="btn primary">Start</button></div>
-    </form>
-  </details>`;
-}
-
 // Everything under the header, also served alone so the client can refresh it
 // when a request appears or moves between sections.
 export function renderMain(requests: RequestState[], ctx: RenderContext): Html {
@@ -64,7 +49,7 @@ export function renderMain(requests: RequestState[], ctx: RenderContext): Html {
   const active = byUpdate.filter((r) => sectionOf(r) === "active").sort((a, b) => Number(b.needsUser.length > 0) - Number(a.needsUser.length > 0));
   const queued = byUpdate.filter((r) => sectionOf(r) === "queued").reverse();
   const finished = byUpdate.filter((r) => sectionOf(r) === "finished");
-  return html`<form class="ask cmd" method="post" action="/api/commands">${commandFields([{ cmd: "tell-factory" }], "/")}<input type="text" name="text" required placeholder="Tell the factory… (e.g. “Lando was down this morning, re-push what failed”)"><button class="btn">Send</button></form>
+  return html`<form class="ask cmd" method="post" action="/api/commands">${commandFields([{ cmd: "tell-factory" }], "/")}<input type="text" name="text" required placeholder="Tell the factory… (e.g. “burn down dom/base/test”, or “Lando was down this morning, re-push what failed”)"><button class="btn">Send</button></form>
 
   <h2>Active <span class="count">${active.length}</span></h2>
   <div id="section-active">${active.map((r) => renderRequest(r, ctx))}</div>
@@ -72,7 +57,7 @@ export function renderMain(requests: RequestState[], ctx: RenderContext): Html {
   ${queued.length ? html`<h2>Queued <span class="count">${queued.length}</span></h2>
   <div class="simple" id="section-queued">${queued.map(
     (r) =>
-      html`<div class="row" data-request="${r.id}" data-section="queued"><span class="grow"><b>${requestName(r)}</b> <span class="sub">· waits for an agent slot</span></span><form class="inline cmd" method="post" action="/api/commands">${commandFields(
+      html`<div class="row" data-request="${r.id}" data-section="queued"><span class="grow"><b>${requestName(r)}</b> <span class="sub">· ${r.kind === "unrouted" ? "not routed yet, " : ""}waits for an agent slot</span></span><form class="inline cmd" method="post" action="/api/commands">${commandFields(
         [{ cmd: "start-now", request: r.id }],
         "/",
       )}<button class="btn small">Start now</button></form></div>`,
@@ -85,7 +70,7 @@ export function renderMain(requests: RequestState[], ctx: RenderContext): Html {
     <summary>▸ ${plural(finished.length, "request")}</summary>
     <div class="simple" id="section-finished">${finished.map(
       (r) =>
-        html`<div class="row" data-request="${r.id}" data-section="finished"><span class="grow"><b>${requestName(r)}</b> <span class="sub">· ${plural(Object.keys(r.patches).length, "patch", "patches")}, done ${formatDate(r.updatedAt)}</span></span><a class="btn small" href="${profileUrl(ctx, r.id)}" target="_blank" rel="noopener">Profile</a></div>`,
+        html`<div class="row" data-request="${r.id}" data-section="finished"><span class="grow"><b>${requestName(r)}</b> <span class="sub">· ${r.kind === "unrouted" ? r.notes.at(-1)?.text : `${plural(Object.keys(r.patches).length, "patch", "patches")}, done ${formatDate(r.updatedAt)}`}</span></span><a class="btn small" href="${profileUrl(ctx, r.id)}" target="_blank" rel="noopener">Profile</a></div>`,
     )}</div>
   </details>` : null}`;
 }

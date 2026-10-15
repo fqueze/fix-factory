@@ -217,16 +217,6 @@ export function parseBugNumber(text: string): number | null {
 export function commandsFromForm(form: URLSearchParams): unknown[] {
   const text = form.get("text");
   const bugOrText = form.get("bugOrText");
-  if (!form.has("command") && form.has("kind")) {
-    const c: Record<string, string> = { cmd: "new-request", kind: form.get("kind")!, text: text ?? "" };
-    for (const k of ["folder", "rev"]) {
-      const v = form.get(k)?.trim();
-      if (v) {
-        c[k] = v;
-      }
-    }
-    return [c];
-  }
   return form.getAll("command").map((json) => {
     let c: unknown;
     try {

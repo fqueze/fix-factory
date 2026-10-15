@@ -1,0 +1,40 @@
+{
+  "id": "r-20261015-lando-was-down-re-push",
+  "kind": "unrouted",
+  "text": "Lando was down this morning, re-push what failed",
+  "createdAt": "2026-10-15T08:30:00.000Z",
+  "updatedAt": "2026-10-15T08:30:40.000Z",
+  "step": "done",
+  "config": {},
+  "items": {},
+  "patches": {},
+  "stacks": {},
+  "pushes": {},
+  "jobs": {
+    "j-route-lando": {
+      "job": "j-route-lando",
+      "kind": "agent",
+      "name": "route-request",
+      "cmd": [
+        "node"
+      ],
+      "cwd": "/build/fix-factory-state/requests/r-20261015-lando-was-down-re-push",
+      "pid": 1001,
+      "pidStartTime": 1,
+      "startedAt": "2026-10-15T08:30:05.000Z",
+      "endedAt": "2026-10-15T08:30:40.000Z",
+      "exitCode": 0,
+      "durationMs": 35000,
+      "costUsd": 0.02,
+      "model": "sonnet"
+    }
+  },
+  "needsUser": [],
+  "recoveryPlans": [],
+  "notes": [
+    {
+      "t": "2026-10-15T08:30:40.000Z",
+      "text": "Forwarded to r-20261013-tab-failures."
+    }
+  ]
+}

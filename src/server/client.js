@@ -130,8 +130,6 @@
         form.querySelectorAll("input[type=text], textarea").forEach(function (i) {
           i.value = "";
         });
-        var details = form.closest("details.newreq");
-        if (details) details.open = false;
         flash(form, "Sent", "flash");
       })
       .catch(function (e) {

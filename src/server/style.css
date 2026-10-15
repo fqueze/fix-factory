@@ -109,13 +109,8 @@ footer { max-width: 1100px; margin: 0 auto; padding: 8px 12px 24px; font-size: 1
   details.req > summary { grid-template-columns: 1fr; }
   .rright { grid-column: 1; grid-row: auto; }
 }
-/* Not in the mockup: forms, the new-request form, and what the mockup drew as plain buttons. */
+/* Not in the mockup: forms, and what the mockup drew as plain buttons. */
 form.inline { display: contents; }
-.newreq { position: relative; }
-.newreq > summary { list-style: none; }
-.newreq > summary::-webkit-details-marker { display: none; }
-.newreq form { position: absolute; right: 0; top: 32px; width: min(480px, 90vw); background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 10px; display: grid; gap: 6px; box-shadow: 0 4px 16px rgba(0,0,0,.15); }
-.newreq input, .newreq select { font: inherit; font-size: 13px; padding: 4px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-1); color: var(--text-primary); }
 details.cmdline { display: inline-block; font-size: 12px; }
 details.cmdline > summary { list-style: none; }
 details.cmdline > summary::-webkit-details-marker { display: none; }

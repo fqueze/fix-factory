@@ -1,11 +1,21 @@
 {
   "id": "r-20261014-extensions-xpcshell",
   "kind": "burndown",
-  "text": "",
+  "text": "Burn down toolkit/components/extensions/test/xpcshell, Linux and Windows only",
   "createdAt": "2026-10-14T10:00:00.000Z",
   "updatedAt": "2026-10-15T08:40:00.000Z",
   "step": "first signal",
-  "config": {},
+  "config": {
+    "folders": [
+      "toolkit/components/extensions/test/xpcshell"
+    ],
+    "tests": [],
+    "platforms": [
+      "linux",
+      "windows"
+    ],
+    "constraints": []
+  },
   "items": {},
   "patches": {
     "p-runif": {

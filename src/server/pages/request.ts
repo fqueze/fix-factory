@@ -49,7 +49,9 @@ export function renderRequest(r: RequestState, ctx: RenderContext, open = ctx.op
 
 export function requestSummary(r: RequestState): string {
   const parts: string[] = [];
-  if (r.step === "request") {
+  if (r.kind === "unrouted") {
+    parts.push(r.step === "done" ? (r.notes.at(-1)?.text ?? "") : "not routed yet: a new request, or about an existing one?");
+  } else if (r.step === "request") {
     const keys = Object.keys(r.config);
     parts.push(keys.length ? `config: ${keys.join(", ")}` : "turning the request into a config");
   }

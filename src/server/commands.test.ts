@@ -11,7 +11,7 @@ const R = "r-20261010-xpcshell-cwd";
 describe("validateCommand", () => {
   it("accepts each kind of command the page sends", () => {
     const ok = [
-      { cmd: "new-request", kind: "burndown", text: "", folder: "dom/base/test" },
+      { cmd: "new-request", kind: "burndown", text: "", folder: "dom/base/test" }, // no longer sent, still accepted
       { cmd: "approve-push", request: R, push: "A" },
       { cmd: "set-bug", request: R, patch: "p-copydir", bug: 2081216 },
       { cmd: "set-bug", request: R, patch: "meta", bug: 2081217 },
@@ -121,9 +121,5 @@ describe("forms", () => {
     form.append("command", JSON.stringify({ cmd: "retry-job", job: "b", reason: "y" }));
     assert.equal(commandsFromForm(form).length, 2);
     assert.deepEqual(commandsFromForm(new URLSearchParams({ command: '{"cmd":"tell-factory"}', text: "hello" })), [{ cmd: "tell-factory", text: "hello" }]);
-  });
-
-  it("builds new-request from the new-request form", () => {
-    assert.deepEqual(commandsFromForm(new URLSearchParams({ kind: "try-push", folder: " ", rev: "abc123", text: "fix it" })), [{ cmd: "new-request", kind: "try-push", text: "fix it", rev: "abc123" }]);
   });
 });

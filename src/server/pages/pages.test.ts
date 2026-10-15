@@ -59,7 +59,12 @@ describe("overview", () => {
     assert.match(page, /agents <b>5\/10<\/b>/);
     assert.match(page, /<b>8<\/b> requests need you/);
     assert.ok(page.includes(cmd({ cmd: "tell-factory" })));
-    assert.match(page, /\+ New request/);
+    assert.doesNotMatch(page, /New request|new-request/);
+  });
+
+  it("archives text forwarded to an existing request, with where it went", () => {
+    assert.ok(page.indexOf("r-20261015-lando-was-down-re-push") > page.indexOf("<h2>Finished"));
+    assert.match(page, /<b>Lando was down this morning, re-push what failed<\/b> <span class="sub">· Forwarded to r-20261013-tab-failures.<\/span>/);
   });
 
   it("lists recent try pushes across requests", () => {
@@ -74,14 +79,17 @@ describe("overview", () => {
 });
 
 describe("one fixture per step of docs/MVP.md", () => {
-  it("1. request: the parsed config is shown", () => {
+  it("1. request: text from the main box, titled by its text, while route-request runs", () => {
     const h = expanded("r-20261015-sessionstore");
     assert.match(h, /1 · request/);
-    assert.match(h, /<b>platforms<\/b>: \[&quot;linux&quot;,&quot;windows&quot;\]/);
+    assert.match(h, /<span class="rname">Burn down browser\/components\/sessionstore\/test, skip the mac pools for now<\/span>/);
+    assert.match(h, /not routed yet/);
+    assert.match(h, /route-request/);
   });
 
   it("2. first signal: approve the un-skip push, with its command and tasks", () => {
     const h = expanded("r-20261014-extensions-xpcshell");
+    assert.match(h, /<b>platforms<\/b>: \[&quot;linux&quot;,&quot;windows&quot;\]/);
     assert.match(h, /<span class="flag">Approve the un-skip push<\/span>/);
     assert.ok(h.includes(cmd({ cmd: "approve-push", request: "r-20261014-extensions-xpcshell", push: "unskip" })));
     assert.match(h, /Command \+ tasks/);
