@@ -16,7 +16,9 @@ import {
   parseDryRunOutput,
   parsePushOutput,
   push,
+  expectedTests,
   pushStatus,
+  testProgress,
   watch,
   type FetchResponse,
   type TreeherderJob,
@@ -579,4 +581,34 @@ test("push checks out the approved commits for the push, then puts the worktree 
   assert.equal(pushedFrom, "bbb");
   assert.equal(head, "other-branch");
   assert.deepEqual(calls.filter((c) => c.startsWith("checkout")), ["checkout --quiet --detach bbb", "checkout --quiet other-branch"]);
+});
+
+const thJob = (name: string, state: string, result: string, retryId = 0) =>
+  ({ id: 1, job_type_name: name, platform: "linux", platform_option: "opt", result, state, tier: 1, task_id: "T", retry_id: retryId, last_modified: "", duration: 0 }) as TreeherderJob;
+
+test("testProgress: finished runs of the expected tasks, retries not counted, capped at their runs", () => {
+  const jobs = [
+    thJob("a", "completed", "success"),
+    thJob("a", "completed", "retry"),
+    thJob("a", "completed", "testfailed", 1),
+    thJob("a", "completed", "success"),
+    thJob("b", "running", "unknown"),
+    thJob("b", "completed", "success"),
+    thJob("build", "completed", "success"),
+  ];
+  assert.deepEqual(testProgress(jobs, { a: 2, b: 3 }), { done: 3, total: 5 });
+});
+
+test("expectedTests: the dry run's test tasks with their runs, builds excluded", () => {
+  const job = (label: string, build?: string) => ({ label, platform: "linux", collection: "opt", group: "", symbol: "X", tier: 1, ...(build ? { build } : {}) });
+  const jobs = [job("build-linux/opt"), job("test-linux/opt-xpcshell-1", "build-linux/opt"), job("test-linux/opt-xpcshell-2", "build-linux/opt"), job("test-linux/opt-mochitest", "build-linux/opt")];
+  const d = { command: [], taskCount: 4, tasks: [], commits: [], warnings: [], jobs };
+  assert.equal(expectedTests({ ...d, tryTaskConfig: {}, jobs: undefined }), undefined);
+  assert.deepEqual(expectedTests({ ...d, tryTaskConfig: {} }), { "test-linux/opt-xpcshell-1": 1, "test-linux/opt-xpcshell-2": 1, "test-linux/opt-mochitest": 1 });
+  assert.deepEqual(expectedTests({ ...d, tryTaskConfig: { rebuild: 3 } }), { "test-linux/opt-xpcshell-1": 3, "test-linux/opt-xpcshell-2": 3, "test-linux/opt-mochitest": 3 });
+  assert.deepEqual(expectedTests({ ...d, tryTaskConfig: { rebuild: { "test-linux/opt-xpcshell-*": 5, "test-linux/opt-xpcshell-2": 7 } } }), {
+    "test-linux/opt-xpcshell-1": 5,
+    "test-linux/opt-xpcshell-2": 7,
+    "test-linux/opt-mochitest": 1,
+  });
 });

@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import { describe, it } from "node:test";
 import { FixtureStateSource } from "../state-source.ts";
 import type { RequestState } from "../../types.ts";
-import { jobLabel, type RenderContext } from "./common.ts";
+import { jobLabel, pushStatus, type RenderContext } from "./common.ts";
 import { renderOverview } from "./overview.ts";
 import { IDLE, itemBucket, runningSentence } from "./progress.ts";
 import { renderRequest } from "./request.ts";
@@ -830,5 +830,13 @@ describe("escaping", () => {
       assert.doesNotMatch(h, /javascript:/);
       assert.ok(h.includes('href="https://treeherder.mozilla.org/jobs?repo=try&amp;revision=abc%26x%3D%3Cy%3E&amp;resultStatus=unscheduled%2Ctestfailed%2Cbusted%2Cexception%2Csuccess%2Cretry%2Cusercancel%2Crunning%2Cpending%2Crunnable"'));
     }
+  });
+});
+
+describe("push status", () => {
+  it("counts the requested test tasks when known, else Treeherder's jobs", () => {
+    const p = { id: "initial", purpose: "verify", progress: { done: 30, total: 50, failures: 2 } } as unknown as Parameters<typeof pushStatus>[0];
+    assert.equal(pushStatus(p), "30/50, 2 failures");
+    assert.equal(pushStatus({ ...p, progress: { ...p.progress!, tests: { done: 7, total: 20 } } }), "7/20 test tasks, 2 failures");
   });
 });

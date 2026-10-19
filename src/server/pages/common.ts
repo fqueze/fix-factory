@@ -285,7 +285,8 @@ export function pushStatus(p: PushView): string {
     return p.result === "green" ? "green" : p.summary || "failures";
   }
   if (p.progress) {
-    return `${p.progress.done}/${p.progress.total}, ${plural(p.progress.failures, "failure")}`;
+    const t = p.progress.tests;
+    return `${t ? `${t.done}/${t.total} test tasks` : `${p.progress.done}/${p.progress.total}`}, ${plural(p.progress.failures, "failure")}`;
   }
   return p.rev ? "pushed" : "planned";
 }

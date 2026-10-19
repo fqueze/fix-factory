@@ -399,8 +399,8 @@ export function handleWatchLines(s: RequestState, view: View, push: PushId, line
         break;
       }
       case "progress":
-        if (progress?.done === line.done && progress.total === line.total && progress.failures === line.failures) break;
-        progress = { done: line.done, total: line.total, failures: line.failures };
+        if (progress?.done === line.done && progress.total === line.total && progress.failures === line.failures && progress.tests?.done === line.tests?.done) break;
+        progress = { done: line.done, total: line.total, failures: line.failures, ...(line.tests ? { tests: line.tests } : {}) };
         ev("try-progress", { push, ...progress });
         break;
       case "finished":

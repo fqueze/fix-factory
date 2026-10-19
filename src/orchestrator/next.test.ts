@@ -476,13 +476,25 @@ describe("3. work list", () => {
     assert.deepEqual(Object.keys(sc.state().items), ["i-test-a", "i-test-b"]);
   });
 
-  it("runs early as soon as the push reports a failure, without waiting 2 h", () => {
+  it("runs early once half the requested test tasks finished, without waiting 2 h", () => {
     const sc = new Scenario("try-push", { rev: "abc" });
     sc.step();
     sc.settle();
     sc.now += HOUR / 2;
+    // Treeherder's job count would say half, but the test tasks say otherwise.
+    sc.add({ type: "try-progress", request: ID, push: "initial", done: 30, total: 50, failures: 1, tests: { done: 9, total: 20 } });
     assert.deepEqual(sc.step(), []);
-    sc.add({ type: "try-progress", request: ID, push: "initial", done: 3, total: 50, failures: 1 });
+    sc.add({ type: "try-progress", request: ID, push: "initial", done: 31, total: 50, failures: 1, tests: { done: 10, total: 20 } });
+    assert.deepEqual(sc.step().sort(), ["collect:initial:early", "try-table:initial:early"]);
+  });
+
+  it("without the requested test tasks, runs early once half of Treeherder's jobs finished", () => {
+    const sc = new Scenario("try-push", { rev: "abc" });
+    sc.step();
+    sc.settle();
+    sc.add({ type: "try-progress", request: ID, push: "initial", done: 24, total: 50, failures: 1 });
+    assert.deepEqual(sc.step(), []);
+    sc.add({ type: "try-progress", request: ID, push: "initial", done: 25, total: 50, failures: 1 });
     assert.deepEqual(sc.step().sort(), ["collect:initial:early", "try-table:initial:early"]);
   });
 
@@ -1115,7 +1127,7 @@ function earlyThenFinal(finalRows: unknown[]): { sc: Scenario; push: string } {
   sc.complete(dry, { output: { command: ["./mach", "try", "fuzzy"], taskCount: 5, tasks: [], tryTaskConfig: {}, commits: [], warnings: [] } });
   sc.add({ type: "user-done", request: ID, key: `approve-push:${push}` });
   sc.add({ type: "try-pushed", request: ID, push, rev: "fed", url: "u" });
-  sc.add({ type: "try-progress", request: ID, push, done: 1, total: 5, failures: 1 });
+  sc.add({ type: "try-progress", request: ID, push, done: 2, total: 9, failures: 1, tests: { done: 3, total: 5 } });
   assert.ok(sc.settle().includes(`try-table:${push}:early`));
   sc.complete(`try-table:${push}:early`, { output: table([{ test: "a/test_a.js", config: "linux", result: "fail", failures: ["boom"], taskIds: ["T1"] }]) });
   assert.deepEqual(sc.settle(), [`author:i-test-a:try:${push}`]);
@@ -1130,6 +1142,26 @@ function earlyThenFinal(finalRows: unknown[]): { sc: Scenario; push: string } {
   sc.complete(`import:${author}`, { output: imported(sha("1"), "Bug XXXXXXX - Fix a/test_a.js, r=smaug.", ["a/test_a.js"]) });
   return { sc, push };
 }
+
+describe("6. verify on try, watched", () => {
+  it("the watch counts the test tasks the dry run asked for", () => {
+    const sc = stacked();
+    const planKey = sc.view().jobs.find((j) => j.purpose.what === "plan-pushes")!.purpose.key;
+    sc.complete(planKey, { report: { pushes: [{ purpose: "verify", tryArgs: ["fuzzy", "-q", "x"], rebuild: 5 }], feedback: [] } });
+    const [dry] = sc.settle();
+    const push = sc.purpose(dry).push!;
+    const job = (label: string, build?: string) => ({ label, platform: "linux", collection: "opt", group: "", symbol: "X", tier: 1, ...(build ? { build } : {}) });
+    const jobs = [job("build-linux/opt"), job("test-linux/opt-xpcshell-1", "build-linux/opt"), job("test-linux/opt-xpcshell-2", "build-linux/opt")];
+    sc.complete(dry, { output: { command: ["./mach", "try", "fuzzy"], taskCount: 3, tasks: [], tryTaskConfig: { rebuild: 5 }, commits: [], warnings: [], jobs } });
+    sc.add({ type: "user-done", request: ID, key: `approve-push:${push}` });
+    sc.add({ type: "try-pushed", request: ID, push, rev: "fed", url: "u" });
+    assert.ok(sc.settle().includes(`watch:${push}`));
+    const file = `/state/requests/${ID}/data/expect-${push}.json`;
+    const plan = sc.plan(`watch:${push}`);
+    assert.deepEqual(plan.cli?.args, ["watch", "fed", "--expect", file]);
+    assert.deepEqual(plan.files, [{ path: file, content: JSON.stringify({ "test-linux/opt-xpcshell-1": 5, "test-linux/opt-xpcshell-2": 5 }) + "\n" }]);
+  });
+});
 
 describe("6. verify on try, early then final", () => {
   const old = { test: "a/test_a.js", config: "linux", result: "fail", failures: ["boom"], taskIds: ["T1"] };

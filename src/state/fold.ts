@@ -211,7 +211,7 @@ export function foldEvents(events: readonly Event[]): RequestState {
         break;
       }
       case "try-progress":
-        push(e.push).progress = { done: e.done, total: e.total, failures: e.failures };
+        push(e.push).progress = { done: e.done, total: e.total, failures: e.failures, ...(e.tests ? { tests: e.tests } : {}) };
         break;
       case "try-finished": {
         const p = push(e.push);

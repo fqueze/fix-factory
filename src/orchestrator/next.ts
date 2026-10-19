@@ -15,7 +15,7 @@ import type { ClusterGroup, CollectedFailure, TryRow, TryTable } from "../cli/fa
 import type { ReviewerSuggestion } from "../cli/phab.ts";
 import type { ImportedCommit } from "../cli/stack/import.ts";
 import type { OrderOutput } from "../cli/stack/order.ts";
-import type { DryRunResult } from "../cli/try.ts";
+import { expectedTests, type DryRunResult } from "../cli/try.ts";
 import { REQUEST_STEPS } from "../server/commands.ts";
 import { COMMITS_CHANGED } from "../state/flags.ts";
 import { needsMetaBug } from "../state/meta-bug.ts";
@@ -613,12 +613,12 @@ class Planner {
         if (!pushed) continue;
         const o = this.out<{ rev?: string; landoJobId?: number; dryRun?: boolean }>(pushed);
         if (o.landoJobId !== undefined && !o.rev) {
-          this.want(`watch:${push.id}`, () => this.cli("watch", "try.ts", ["watch", "--lando", String(o.landoJobId)], { kind: "try-watch", purpose: { push: push.id } }));
+          this.want(`watch:${push.id}`, () => this.watch(push.id, ["--lando", String(o.landoJobId)]));
         }
         continue;
       }
       if (push.rev && push.result === undefined) {
-        this.want(`watch:${push.id}`, () => this.cli("watch", "try.ts", ["watch", push.rev!], { kind: "try-watch", purpose: { push: push.id } }));
+        this.want(`watch:${push.id}`, () => this.watch(push.id, [push.rev!]));
       }
     }
     for (const f of this.view.tryFailures) {
@@ -627,6 +627,18 @@ class Planner {
         this.cli("artifacts", "artifacts.ts", ["fetch", f.taskId, "--run", String(f.retryId), "--into", `${artifactsDir(this.config)}/${f.taskId}`], { purpose: { push: f.push } }),
       );
     }
+  }
+
+  // With the test tasks its dry run asks for, so its progress counts those.
+  private watch(push: PushId, target: string[]): JobPlan {
+    const dry = this.view.byKey.get(`dry-run:${push}`)?.find(succeeded);
+    const expect = dry && expectedTests(this.out<DryRunResult>(dry));
+    const file = dataPath(this.config, this.s.id, `expect-${push}.json`);
+    return this.cli("watch", "try.ts", ["watch", ...target, ...(expect ? ["--expect", file] : [])], {
+      kind: "try-watch",
+      purpose: { push },
+      ...(expect ? { files: [{ path: file, content: JSON.stringify(expect) + "\n" }] } : {}),
+    });
   }
 
   // Step 3 runs at whichever comes first, the push finishing or 2 h after it started, then again
@@ -638,8 +650,10 @@ class Planner {
     const runs: string[] = [];
     const pushedAt = this.view.pushedAt.get(push);
     const earlyStarted = [...this.view.byKey.keys()].some((k) => k.endsWith(`:${push}:early${e}`));
-    // Its first failure needs no wait for slow pools: a perma-fail on one platform is there to work on.
-    const early = (p.progress?.failures ?? 0) > 0 || (pushedAt !== undefined && this.ctx.now - pushedAt >= EARLY_WORK_LIST_MS);
+    // Once half the test tasks asked for have finished (Treeherder's job count, before the watch knew them), or
+    // after 2 h: a slow pool doesn't hold up what the others found.
+    const done = p.progress?.tests ?? p.progress;
+    const early = (done !== undefined && done.total > 0 && done.done * 2 >= done.total) || (pushedAt !== undefined && this.ctx.now - pushedAt >= EARLY_WORK_LIST_MS);
     if (earlyStarted || (p.result === undefined && early)) runs.push(`early${e}`);
     if (p.result) runs.push(`final${e}`);
     return runs;

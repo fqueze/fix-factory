@@ -488,7 +488,7 @@ export function treeherderPushUrl(rev: string): string {
 export type WatchLine =
   | { type: "lando"; landoJobId: number; status: string }
   | { type: "pushed"; rev: string; pushId: number; url: string }
-  | { type: "progress"; done: number; total: number; failures: number }
+  | { type: "progress"; done: number; total: number; failures: number; tests?: { done: number; total: number } }
   | { type: "job-failed"; taskId: string; retryId: number; jobId: number; jobName: string; platform: string; result: string; tier: number }
   | WatchFinished;
 
@@ -504,6 +504,9 @@ export interface WatchFinished {
 }
 
 export interface WatchOptions {
+  // The test tasks asked for, label → runs (--rebuild): Treeherder lists a task only once it's created, so its job
+  // count says little about how far along the push is.
+  expect?: Record<string, number>;
   intervalMs?: number;
   timeoutMs?: number;
   pageSize?: number;
@@ -582,6 +585,28 @@ export function pushStatus(jobs: TreeherderJob[], now = Date.now()): PushStatus 
     confirm,
     scheduledNothing,
   };
+}
+
+// Finished runs of the expected test tasks, each label counted up to its runs; a retried attempt doesn't count.
+export function testProgress(jobs: TreeherderJob[], expect: Record<string, number>): { done: number; total: number } {
+  const finished = new Map<string, number>();
+  for (const j of jobs) {
+    if (j.state === "completed" && j.result !== "retry" && j.job_type_name in expect) finished.set(j.job_type_name, (finished.get(j.job_type_name) ?? 0) + 1);
+  }
+  const labels = Object.keys(expect);
+  return { done: labels.reduce((n, l) => n + Math.min(finished.get(l) ?? 0, expect[l]), 0), total: labels.reduce((n, l) => n + expect[l], 0) };
+}
+
+// The test tasks a dry run asks for, label → runs: builds aren't tests, and a per-label rebuild may name a chunk pattern.
+export function expectedTests(d: DryRunResult): Record<string, number> | undefined {
+  if (!d.jobs) return undefined;
+  const builds = new Set(d.jobs.map((j) => j.build));
+  const rebuild = (d.tryTaskConfig.rebuild as number | Record<string, number> | undefined) ?? 1;
+  return Object.fromEntries(
+    d.jobs
+      .filter((j) => !builds.has(j.label))
+      .map((j) => [j.label, typeof rebuild === "number" ? rebuild : (rebuild[j.label] ?? rebuild[j.label.replace(/-\d+$/, "-*")] ?? 1)]),
+  );
 }
 
 export function summarize(jobs: TreeherderJob[], status = pushStatus(jobs)): string {
@@ -730,10 +755,11 @@ export async function watch(target: { rev: string } | { landoJobId: number }, de
           });
         }
       }
-      const progress = `${status.done}/${status.total}/${status.failures}`;
+      const tests = opts.expect && testProgress(jobs, opts.expect);
+      const progress = `${status.done}/${status.total}/${status.failures}/${tests?.done}`;
       if (progress !== lastProgress) {
         lastProgress = progress;
-        deps.emit({ type: "progress", done: status.done, total: status.total, failures: status.failures });
+        deps.emit({ type: "progress", done: status.done, total: status.total, failures: status.failures, ...(tests ? { tests } : {}) });
       }
       const signature = `${progress}/${status.notRun.length}`;
       if (signature !== lastSignature) {
@@ -809,7 +835,8 @@ async function main(): Promise<void> {
         } else {
           throw new UsageError("usage: watch <rev> | --lando <jobId>");
         }
-        await watch(target, defaultDeps(), { intervalMs, timeoutMs });
+        const expect = typeof values.expect === "string" ? (JSON.parse(readFileSync(values.expect, "utf8")) as Record<string, number>) : undefined;
+        await watch(target, defaultDeps(), { intervalMs, timeoutMs, ...(expect ? { expect } : {}) });
         // The JSON lines were the output.
         return undefined;
       },
@@ -820,6 +847,7 @@ async function main(): Promise<void> {
       "lando-timeout": { type: "string" },
       "expect-commits": { type: "string" },
       lando: { type: "string" },
+      expect: { type: "string" },
       interval: { type: "string" },
       timeout: { type: "string" },
     },
