@@ -87,6 +87,21 @@ function run(cmd: string[], cwd: string, env: NodeJS.ProcessEnv, outFd: number):
   });
 }
 
+// A remote-tracking base (origin/main) is only as fresh as the last fetch: fetch it first. Worktrees created at
+// the same time fetch at the same time, and git refuses to update a ref another fetch has locked: retry.
+async function fetchRemoteBase(repo: string, base: string): Promise<void> {
+  const ref = (await exec(["git", "rev-parse", "--symbolic-full-name", base], { cwd: repo })).stdout.trim();
+  const m = /^refs\/remotes\/([^/]+)\/(.+)$/.exec(ref);
+  if (!m) return;
+  for (let attempt = 1; ; attempt++) {
+    log(`git fetch ${m[1]} ${m[2]}`);
+    const r = await exec(["git", "fetch", m[1], m[2]], { cwd: repo });
+    if (r.code === 0) return;
+    if (attempt === 3) throw new Error(`git fetch ${m[1]} ${m[2]}: ${r.stderr.trim()}`);
+    await sleep(5000 * attempt);
+  }
+}
+
 export async function create(name: string, opts: { base?: string; build: BuildKind; repo: string; worktreesDir: string }) {
   validateName(name);
   const { repo } = opts;
@@ -105,6 +120,7 @@ export async function create(name: string, opts: { base?: string; build: BuildKi
     const branchExists = (await exec(["git", "show-ref", "--verify", "--quiet", `refs/heads/${name}`], { cwd: repo })).code === 0;
     if (branchExists && opts.base) throw new Error(`branch ${name} already exists; --base would be ignored`);
     base = branchExists ? name : (opts.base ?? (await git(["rev-parse", "--abbrev-ref", "HEAD"])).trim());
+    if (!branchExists) await fetchRemoteBase(repo, base);
     mkdirSync(opts.worktreesDir, { recursive: true });
     log(`creating worktree ${dest} off ${base}`);
     await git(worktreeAddArgs(dest, name, base, branchExists));
