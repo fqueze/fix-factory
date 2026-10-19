@@ -13,7 +13,7 @@ import type { RenderContext } from "./pages/common.ts";
 import { renderMain, renderOverview, renderStrip } from "./pages/overview.ts";
 import { renderRequest } from "./pages/request.ts";
 import { buildRequestProfile } from "./request-profile.ts";
-import { buildPatchView, buildStackReview, findStack, isRevName } from "./stack-review.ts";
+import { buildPatchView, buildStackReview, isRevName } from "./stack-review.ts";
 import { AGENT_FILES, agentFilePath, renderAgentFile, type AgentFile } from "./agent-files.ts";
 import { pushTasks } from "./pages/tasks.ts";
 import type { DryRunResult } from "../cli/try.ts";
@@ -22,7 +22,7 @@ import type { CommandInput } from "../state/commands.ts";
 import type { CommandSink, StateSource } from "./state-source.ts";
 
 export interface ServerOptions {
-  config: Pick<FactoryConfig, "port" | "profilerOrigin" | "stackViewerCommand" | "mdViewerCommand" | "diffViewerCommand" | "stateDir" | "maxAgents" | "maxBuilds" | "allowedHosts">;
+  config: Pick<FactoryConfig, "port" | "profilerOrigin" | "stackViewerCommand" | "mdViewerCommand" | "diffViewerCommand" | "stateDir" | "maxAgents" | "maxBuilds" | "allowedHosts" | "bugzillaEmail">;
   state: StateSource;
   sink: CommandSink;
   now?: () => number;
@@ -188,6 +188,7 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
       runningBuilds: opts.state.listRequests().reduce((n, r) => n + Object.values(r.jobs).filter((j) => j.kind === "build" && j.endedAt === undefined).length, 0),
       runningAgents: opts.state.listRequests().reduce((n, r) => n + Object.values(r.jobs).filter((j) => j.kind === "agent" && j.endedAt === undefined).length, 0),
       open,
+      bugzillaEmail: opts.config.bugzillaEmail,
       interdiff: readInterdiff,
     };
   }
@@ -308,12 +309,15 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
       res.end(method === "HEAD" ? undefined : body);
       return;
     }
-    if ((m = path.match(/^\/stacks\/([^/]+)\/review$/))) {
-      const id = decodeURIComponent(m[1]);
-      const found = findStack(opts.state.listRequests(), id);
-      if (!found) {
+    // Stack ids are only unique within their request.
+    if ((m = path.match(/^\/requests\/([^/]+)\/stacks\/([^/]+)\/review$/))) {
+      const request = getRequest(decodeURIComponent(m[1]));
+      const id = decodeURIComponent(m[2]);
+      const stack = request.stacks[id];
+      if (!stack) {
         throw new HttpError(404, `unknown stack: ${id}`);
       }
+      const found = { request, stack };
       const base = url.searchParams.get("base") ?? undefined;
       if (base !== undefined && !isRevName(base)) {
         throw new HttpError(400, `not a revision name: ${base}`);

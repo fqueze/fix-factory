@@ -8,6 +8,7 @@
   "claudeCommand": ["mozsb", "claude"],
   "stackViewerCommand": ["stack-viewer"],
   "profilerOrigin": "http://localhost:4242",
+  "bugzillaEmail": "you@mozilla.com",
   "allowedHosts": [],
   "maxAgents": 10,
   "maxBuilds": 3,

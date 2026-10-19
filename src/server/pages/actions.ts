@@ -1,15 +1,20 @@
-import type { NeedsUser, PlannedCommand, PushView, RefusedCommand, RequestState, StackView } from "../../types.ts";
-import { canDismiss, isPushJob, reviewLimitFlag } from "../../state/flags.ts";
+import type { JobView, NeedsUser, PlannedCommand, PushView, RefusedCommand, RequestState, StackView } from "../../types.ts";
+import { canDismiss, canRetry, reviewLimitFlag } from "../../state/flags.ts";
 import { html, join, type Html } from "../html.ts";
-import { actionKind, COMMAND_LABELS, commandFields, enterBugUrl, groupLabel, isStackedItem, jobLabel, jobNoun, refusedOf, requestUrl, stackOfPatch, submitChecks } from "./common.ts";
+import { actionKind, COMMAND_LABELS, commandFields, enterBugUrl, groupLabel, jobLabel, pushName, jobNoun, refusedOf, needsMetaBug, requestUrl, stackOfPatch, submitChecks, type RenderContext } from "./common.ts";
 
 // The ⚑ area of one open needs-user entry: what you're asked, why, and the buttons.
-export function renderAction(r: RequestState, n: NeedsUser): Html {
+export function renderAction(r: RequestState, n: NeedsUser, ctx: RenderContext): Html {
   const plan = recoveryPlanFor(r, n);
   if (plan) {
     return html`<div class="action" data-key="${n.key}"><span class="flag">${n.action}</span> ${youSaid(n.detail || `You said: “${plan.text}”`)}${recoveryPlan(r, plan, requestUrl(r.id))}</div>`;
   }
-  return html`<div class="action" data-key="${n.key}"><span class="flag">${flagTitle(r, n)}</span> <span class="why">${n.detail}</span>${flagControls(r, n)}</div>`;
+  return html`<div class="action" data-key="${n.key}"><span class="flag">${flagTitle(r, n)}</span>${flagControls(r, n, ctx)}${actionKind(n, r) === "submit" ? null : why(n.detail)}</div>`;
+}
+
+// Under the title and its buttons, the whole width: one line, all of it when clicked.
+function why(text: string | undefined): Html | null {
+  return text ? html`<span class="why clamp1" data-expand title="${text}">${text}</span>` : null;
 }
 
 // A stopped job by its label rather than its tool or prompt name.
@@ -26,7 +31,7 @@ export function flagText(r: RequestState, n: NeedsUser): string {
     return "critical reviews didn't pass";
   }
   if (!job) {
-    return n.action;
+    return n.push === undefined ? n.action : n.action.replace(n.push, pushName(n.push));
   }
   if (actionKind(n, r) === "stopped") {
     return `${jobNoun(job.name)} stopped by you`;
@@ -35,12 +40,13 @@ export function flagText(r: RequestState, n: NeedsUser): string {
 }
 
 // The buttons of a ⚑ (also on its group row): every ⚑ has a way out.
-export function flagControls(r: RequestState, n: NeedsUser): Html | null {
+export function flagControls(r: RequestState, n: NeedsUser, ctx: RenderContext): Html | null {
   const back = requestUrl(r.id);
   const job = n.job === undefined ? undefined : r.jobs[n.job];
   const item = n.item ?? job?.item;
-  const retry = job && !isPushJob(job) ? commandButton(r.id, { cmd: "retry", job: job.job }, "Retry", back, false, `Runs ${jobNoun(job.name)} again`) : null;
+  const retry = job && canRetry(job) ? retryButton(r.id, job, back) : null;
   const talk = item !== undefined && hasAuthorSession(r, item) ? continueBox(r.id, item, back) : null;
+  const handBack = item === undefined ? null : handBackButton(r.id, item, back);
   let controls: Html | null = null;
   switch (actionKind(n, r)) {
     case "approve-push": {
@@ -59,19 +65,20 @@ export function flagControls(r: RequestState, n: NeedsUser): Html | null {
     case "file-bug": {
       const patch = n.patch === undefined ? undefined : r.patches[n.patch];
       controls = patch?.bugDraft
-        ? html`<a class="btn small" href="${enterBugUrl(patch.bugDraft)}" target="_blank" rel="noopener">Bug to file ↗</a>${bugBox(r.id, patch.id, back)}`
+        ? html`<a class="btn small" href="${enterBugUrl(patch.bugDraft, ctx)}" target="_blank" rel="noopener">Bug to file ↗</a>${bugBox(r.id, patch.id, back)}`
         : null;
       break;
     }
     case "meta-bug": {
       const draft = r.metaBug?.draft;
       const stack = findStack(r, n);
-      controls = html`${draft ? html`<a class="btn small" href="${enterBugUrl(draft)}" target="_blank" rel="noopener">Meta: Bug to file ↗</a>` : null}${bugBox(r.id, "meta", back)}${stack ? submitControls(r, stack, back) : null}`;
+      controls = html`${draft ? html`<a class="btn small" href="${enterBugUrl(draft, ctx)}" target="_blank" rel="noopener">Meta: Bug to file ↗</a>` : null}${bugBox(r.id, "meta", back)}${stack ? submitControls(r, stack, back) : null}`;
       break;
     }
+    // What it asks, in its buttons; the checks are on the stack, below.
     case "submit": {
       const stack = findStack(r, n);
-      controls = stack ? submitControls(r, stack, back) : null;
+      controls = stack ? html`${stackViewerLink(r, stack)}${mozPhabButton(r.id, stack, !submitChecks(r, stack)[0].ok)}` : null;
       break;
     }
     case "resubmit":
@@ -83,11 +90,17 @@ export function flagControls(r: RequestState, n: NeedsUser): Html | null {
     case "failed": {
       // A critical review that ran but never said ok: the work is there, you judge it. A crashed one is retried.
       const accept = item !== undefined && reviewLimitFlag(r, item) === n;
-      controls = buttons(talk, accept ? commandButton(r.id, { cmd: "accept-review", item }, "Accept as reviewed", back, false, "Takes the patch as it is, without another critical review") : retry);
+      controls = buttons(
+        accept ? commandButton(r.id, { cmd: "accept-review", item }, "Accept the patch as it is", back, true, "Takes the patch without another critical review") : retry,
+        talk,
+        accept ? null : handBack,
+      );
       break;
     }
     case "stopped":
-      return buttons(talk, retry, dismissButton(r.id, n.key, back));
+      return buttons(retry, talk, handBack, dismissButton(r.id, n.key, back));
+    case "disagrees":
+      return buttons(talk, commandButton(r.id, { cmd: "dismiss", key: n.key }, "Go ahead with its patch", back, false, "Its patch goes on to critical review as it is"), handBack);
     case "recovery":
     case "other":
       break;
@@ -113,7 +126,18 @@ export function hasAuthorSession(r: RequestState, item: string): boolean {
 
 // A command the orchestrator refused, until you dismiss it or the same kind of command succeeds.
 export function renderRefused(r: RequestState, x: RefusedCommand): Html {
-  return html`<div class="action" data-key="${x.key}"><span class="flag">Your ${x.cmd ? COMMAND_LABELS[x.cmd] : "command"} was refused</span> <span class="why">${x.detail ?? ""}</span>${dismissButton(r.id, x.key, requestUrl(r.id))}</div>`;
+  return html`<div class="action" data-key="${x.key}"><span class="flag">Your ${x.cmd ? COMMAND_LABELS[x.cmd] : "command"} was refused</span>${dismissButton(r.id, x.key, requestUrl(r.id))}${why(x.detail)}</div>`;
+}
+
+export function handBackButton(request: string, item: string, back: string): Html {
+  return commandButton(request, { cmd: "hand-back", item }, "Hand back to me", back, false, "Closes the group: the factory stops working on it");
+}
+
+// An agent with a session is resumed where it stopped; anything else runs again.
+export function retryButton(request: string, job: JobView, back: string): Html {
+  return job.kind === "agent" && job.sessionId
+    ? commandButton(request, { cmd: "retry", job: job.job }, "Resume", back, true, "Its author continues where it stopped")
+    : commandButton(request, { cmd: "retry", job: job.job }, "Retry", back, true, `Runs ${jobNoun(job.name)} again`);
 }
 
 function commandButton(request: string, c: object, label: string, back: string, primary = false, title?: string): Html {
@@ -130,7 +154,7 @@ export function stopButton(request: string, job: string, back: string): Html {
 
 // Resumes the item's author with what you type.
 export function continueBox(request: string, item: string, back: string): Html {
-  return html`<form class="inline cmd" method="post" action="/api/commands">${commandFields([{ cmd: "continue", request, item }], back)}<input type="text" name="text" required placeholder="Tell its author what to do…"><button class="btn small primary" title="Resumes its author's session with your message; its patch then goes through lint and critical review again">Continue</button></form>`;
+  return html`<form class="inline cmd" method="post" action="/api/commands">${commandFields([{ cmd: "continue", request, item }], back)}<input type="text" name="text" required placeholder="Tell its author what to do…"><button class="btn small" title="Resumes its author's session with your message; its patch then goes through lint and critical review again">Send to its author</button></form>`;
 }
 
 // The plan a recovery entry asks about: its job's latest plan, or the latest plan
@@ -147,16 +171,13 @@ function findStack(r: RequestState, n: NeedsUser): StackView | undefined {
   return (n.stack === undefined ? undefined : r.stacks[n.stack]) ?? stackOfPatch(r, n.patch) ?? (stacks.length === 1 ? stacks[0] : undefined);
 }
 
+// One button for these pushes; their commands and tasks are on their rows.
 export function approvePushControls(r: RequestState, pushes: PushView[], back: string): Html {
   const label = pushes.length === 1 ? "Approve" : pushes.length === 2 ? "Approve both" : `Approve all ${pushes.length}`;
   return html`<form class="inline cmd" method="post" action="/api/commands">${commandFields(
     pushes.map((p) => ({ cmd: "approve-push", request: r.id, push: p.id })),
     back,
-  )}<button class="btn small primary">${label}</button></form>${pushes.map((p) => commandDetails(p, pushes.length === 1 ? "Command + tasks" : `Command ${p.id}`))}`;
-}
-
-export function commandDetails(p: PushView, label = "Command"): Html {
-  return html`<details class="cmdline"><summary class="btn small">${label}</summary><pre class="mono">${p.command.join(" ")}</pre>${p.taskCount === undefined ? null : html`<div class="sub">${p.taskCount} tasks</div>`}</details>`;
+  )}<button class="btn small primary">${label}</button></form>`;
 }
 
 // One box for both answers to a bug draft: a number sets the bug, anything else
@@ -167,11 +188,13 @@ export function bugBox(request: string, patch: string, back: string, cls = "inli
   }"><button class="btn small">Send</button></form>`;
 }
 
+// The checks say what isn't ready yet; you decide, but a WIP or DEBUG commit is never submitted.
+// Only the checks that fail, before the command: you decide, but a WIP or DEBUG commit is never submitted.
 export function submitControls(r: RequestState, stack: StackView, back: string): Html {
   const checks = submitChecks(r, stack);
-  const ready = checks.every((c) => c.ok);
-  return html`<div class="checks" style="flex-basis:100%">${checks.map((c) => html`<span class="${c.ok ? "ok" : "bad"}">${c.text}</span>`)}</div>${stackViewerLink(stack)}${mozPhabButton(r.id, stack, !ready)}${
-    stack.summary
+  const failing = checks.filter((c) => !c.ok);
+  return html`${failing.length ? html`<span class="checks">${failing.map((c) => html`<span class="bad">${c.text}</span>`)}</span>` : null}${mozPhabButton(r.id, stack, !checks[0].ok)}${
+    stack.summary && needsMetaBug(r, stack)
       ? html`<textarea hidden id="${summaryId(r.id, stack.id)}">${stack.summary}</textarea>${copyButton(summaryId(r.id, stack.id), "Copy the meta-bug comment")}`
       : null
   }`;
@@ -186,8 +209,8 @@ export function copyButton(id: string, label: string, primary = false): Html {
   return html`<button type="button" class="btn small${primary ? " primary" : ""}" data-copy="${id}">${label}</button>`;
 }
 
-export function stackViewerLink(stack: StackView): Html {
-  return html`<a class="btn small" href="/stacks/${encodeURIComponent(stack.id)}/review" target="_blank">Open in stack-viewer ↗</a>`;
+export function stackViewerLink(r: RequestState, stack: StackView): Html {
+  return html`<a class="btn small" href="/requests/${encodeURIComponent(r.id)}/stacks/${encodeURIComponent(stack.id)}/review" target="_blank">Open in stack-viewer ↗</a>`;
 }
 
 // The factory never runs moz-phab: you copy the command and run it yourself.
@@ -226,7 +249,7 @@ function plannedText(c: PlannedCommand, r: RequestState): string {
   }
 }
 
-function plannedLabel(c: PlannedCommand, r: RequestState): Html {
+export function plannedLabel(c: PlannedCommand, r: RequestState): Html {
   switch (c.cmd) {
     case "edit-config":
       return html`change the request config <code>${JSON.stringify(c.config)}</code>`;
@@ -263,7 +286,7 @@ export function recoveryPlan(r: RequestState, plan: RequestState["recoveryPlans"
   return html`<form class="inline cmd" method="post" action="/api/commands"><input type="hidden" name="back" value="${back}"><ul class="plan">${plan.plan.map(
     (c) =>
       // The shell escape hatch is opt-in; everything else is checked.
-      html`<li><label title="${plannedText(c, r)}"><input type="checkbox" name="command" value="${JSON.stringify({ ...c, request: r.id })}"${c.cmd === "shell" ? null : html` checked`}> ${plannedLabel(c, r)}</label><span class="reason clamp1" data-expand>${c.reason}</span></li>`,
+      html`<li><label title="${plannedText(c, r)}"><input type="checkbox" name="command" value="${JSON.stringify({ ...c, request: r.id })}"${c.cmd === "shell" ? null : html` checked`}> ${plannedLabel(c, r)}</label><span class="reason">${c.reason}</span></li>`,
   )}</ul>${plan.plan.length ? html`<button class="btn small primary">Run checked</button>` : null}</form>${
     plan.cannotDo.length || plan.questions.length
       ? html`<ul class="plan-notes">${plan.cannotDo.map((t) => html`<li>✋ Can't do: ${t}</li>`)}${plan.questions.map((t) => html`<li>❓ ${t}</li>`)}</ul>`
@@ -271,25 +294,19 @@ export function recoveryPlan(r: RequestState, plan: RequestState["recoveryPlans"
   }<form class="inline cmd" method="post" action="/api/commands">${commandFields([{ cmd: "reply-recovery", request: r.id, job: plan.job }], back)}<input type="text" name="text" required placeholder="Reply…"><button class="btn small">Reply</button></form>`;
 }
 
-// A group's ⚑ is handled on its row: the request header only points at it. The request's own ⚑s
-// (try approvals, recovery plans, meta bug, submit…) are handled here.
-export function actionsSummary(r: RequestState): Html {
-  return join(
-    [
-      ...r.needsUser.map((n) => {
-        const item = flagItem(r, n);
-        return item === undefined
-          ? renderAction(r, n)
-          : html`<div class="action pointer" data-key="${n.key}"><a class="flag" href="${requestUrl(r.id)}#item-${item}">${flagTitle(r, n)}</a></div>`;
-      }),
-      ...refusedOf(r).map((x) => renderRefused(r, x)),
-    ],
-    "",
-  );
+// A group's ⚑ is handled on its row, a try push's on its row too; the request's own ⚑s (recovery plans,
+// meta bug, submit…) here, under its name.
+export function actionsSummary(r: RequestState, ctx: RenderContext): Html {
+  return join([...r.needsUser.filter((n) => flagItemOf(r, n) === undefined && !isPushApproval(r, n)).map((n) => renderAction(r, n, ctx)), ...refusedOf(r).map((x) => renderRefused(r, x))], "");
 }
 
-// The group row a ⚑ is handled on; none when the group is shown by a stack (the ⚑ keeps its buttons in the header).
-function flagItem(r: RequestState, n: NeedsUser): string | undefined {
+// A planned push is approved on its row of the request's try pushes.
+export function isPushApproval(r: RequestState, n: NeedsUser): boolean {
+  return actionKind(n, r) === "approve-push" && n.push !== undefined && n.push in r.pushes && !r.pushes[n.push].rev;
+}
+
+// The group a ⚑ is about: its item, or its job's.
+export function flagItemOf(r: RequestState, n: NeedsUser): string | undefined {
   const item = n.item ?? (n.job === undefined ? undefined : r.jobs[n.job]?.item);
-  return item !== undefined && item in r.items && !isStackedItem(r, item) ? item : undefined;
+  return item !== undefined && item in r.items ? item : undefined;
 }

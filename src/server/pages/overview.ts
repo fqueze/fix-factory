@@ -13,6 +13,7 @@ export function renderOverview(requests: RequestState[], ctx: RenderContext): st
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Fix factory</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏭</text></svg>">
 <link rel="stylesheet" href="/style.css">
 <script src="/client.js" defer></script>
 </head>
@@ -34,11 +35,11 @@ export function renderStrip(requests: RequestState[], ctx: RenderContext): Html 
   const jobs = requests.flatMap((r) => Object.values(r.jobs)).filter((j) => j.endedAt === undefined);
   const agents = jobs.filter((j) => j.kind === "agent").length;
   const builds = jobs.filter((j) => j.kind === "build").length;
-  const progress = sumProgress(requests.filter((r) => sectionOf(r) !== "finished").map(requestProgress));
+  const progress = sumProgress(requests.filter((r) => sectionOf(r) !== "finished").map((r) => requestProgress(r, ctx)));
   return html`<div class="strip" id="strip">
     <span>agents <b>${agents}${ctx.maxAgents ? `/${ctx.maxAgents}` : ""}</b></span>
     <span>builds <b>${builds}${ctx.maxBuilds ? `/${ctx.maxBuilds}` : ""}</b></span>
-    <span class="progress">${progressLine(progress, ctx)}</span>
+    <span class="progress">${progressLine(progress)}</span>
   </div>`;
 }
 
@@ -68,7 +69,7 @@ export function renderMain(requests: RequestState[], ctx: RenderContext): Html {
 
   ${finished.length ? html`<h2>Finished</h2>
   <details class="archive"${finished.some((r) => r.id === ctx.open) ? html` open` : null}>
-    <summary>▸ ${plural(finished.length, "request")}</summary>
+    <summary>${plural(finished.length, "request")}</summary>
     <div class="simple" id="section-finished">${finished.map(
       (r) =>
         html`<div class="row" data-request="${r.id}" data-section="finished"><span class="grow"><b>${requestName(r)}</b> <span class="sub">· ${r.kind === "unrouted" ? routeOutcome(r) : `${plural(Object.values(r.patches).filter((p) => !isDropped(r, p) && !isDraft(r, p)).length, "patch", "patches")}, done ${formatDate(r.updatedAt)}`}</span></span><a class="btn small" href="${profileUrl(ctx, r.id)}" target="_blank" rel="noopener">Profile</a></div>`,

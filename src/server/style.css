@@ -34,7 +34,7 @@ main { max-width: 1100px; margin: 0 auto; padding: 12px; }
 .ask input { flex: 1; min-width: 0; font: inherit; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-1); color: var(--text-primary); }
 h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--text-secondary); margin: 18px 0 6px; font-weight: 600; }
 h2 .count { color: var(--text-muted); font-weight: normal; }
-details.req { background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 6px; }
+details.req { background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 6px; overflow: hidden; }
 details.req.needs { border-left: 4px solid var(--warning); }
 details.req > summary { list-style: none; cursor: pointer; padding: 8px 12px; display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; align-items: center; }
 details.req > summary::-webkit-details-marker { display: none; }
@@ -47,7 +47,11 @@ details[open] > summary .rname::before { content: "▾ "; }
 .action { grid-column: 1 / -1; background: var(--action-bg); border-radius: 6px; padding: 5px 8px; margin-top: 4px; font-size: 13px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .action .flag { font-weight: 600; }
 .action .flag::before { content: "⚑ "; color: var(--serious); }
-.action .why { color: var(--text-secondary); font-size: 12px; flex: 1 1 260px; }
+.action .flag { flex: 1 1 auto; }
+.action .why { color: var(--text-secondary); font-size: 12px; flex: 1 0 100%; order: 1; }
+/* Pre-submit checks, and the buttons after them, come under the text. */
+.action .checks, .action .checks ~ * { order: 2; }
+.action .checks ~ .why { order: 1; }
 .action ul { margin: 2px 0; padding-left: 0; list-style: none; flex-basis: 100%; font-size: 12px; }
 .action li { padding: 2px 0; }
 .rbody { padding: 0 12px 12px; border-top: 1px solid var(--border); }
@@ -63,6 +67,12 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-sp
 .bug { font-weight: 500; white-space: nowrap; margin-right: 4px; }
 .bug.tofile { color: var(--critical); }
 .bug.tofile::before { content: "⚑ "; }
+/* Opened, a patch's bug to file hangs from its label, like a tab. */
+details.row > summary .under { grid-column: 2 / -1; }
+details.row:not([open]) > summary .under { display: none; }
+details.row[open]:has(.under) .bug.tofile { background: var(--tofile-bg); border-radius: 6px 6px 0 0; padding: 2px 6px 6px; }
+.box.tofile { background: var(--tofile-bg); border-radius: 0 8px 8px 8px; margin: 0 0 4px; cursor: auto; }
+:root { --tofile-bg: color-mix(in srgb, var(--critical) 9%, transparent); }
 .bug.none { color: var(--text-muted); font-weight: normal; }
 .sub { color: var(--text-muted); font-size: 12px; }
 .dep { font-size: 12px; margin-top: 2px; color: var(--text-secondary); }
@@ -80,7 +90,6 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-sp
 .rv.block::before { content: "✗ "; color: var(--critical); font-weight: 700; }
 .rv.block { font-weight: 600; }
 .rv.pend::before { content: "… "; color: var(--text-muted); }
-.landable { font-size: 11px; color: var(--good); white-space: nowrap; display: block; }
 .box { background: var(--bg); border-radius: 8px; padding: 8px; margin-top: 6px; }
 .box h4 { margin: 0 0 4px; font-size: 12px; color: var(--text-secondary); font-weight: 500; }
 .box .row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 6px; }
@@ -101,7 +110,8 @@ textarea { width: 100%; font: inherit; font-size: 13px; border: 1px solid var(--
 .simple .row { display: flex; gap: 10px; padding: 6px 0; border-top: 1px solid var(--border); align-items: baseline; flex-wrap: wrap; }
 .simple .row:first-child { border-top: 0; }
 .simple .row .grow { flex: 1 1 300px; }
-details.archive > summary { cursor: pointer; color: var(--text-secondary); font-size: 13px; padding: 6px 0; }
+details.archive > summary::-webkit-details-marker { display: none; }
+details.archive > summary { list-style: none; cursor: pointer; color: var(--text-secondary); font-size: 13px; padding: 6px 0; }
 footer { max-width: 1100px; margin: 0 auto; padding: 8px 12px 24px; font-size: 12px; color: var(--text-muted); }
 @media (max-width: 700px) {
   .hide-sm { display: none; }
@@ -120,56 +130,119 @@ details.cmdline pre { margin: 4px 0; white-space: pre-wrap; word-break: break-al
 .box .desc { white-space: pre-wrap; font-size: 12px; margin: 4px 0; }
 .flash { color: var(--good); font-size: 12px; }
 .error { color: var(--critical); font-size: 12px; }
-/* Failure groups: messages and state details clamped (open a detail to read it all), closed groups and history folded. */
-table.groups td.gname { width: 38%; overflow-wrap: anywhere; }
-.clamp2 { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
-details.clamp3 > summary { list-style: none; cursor: pointer; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; overflow-wrap: anywhere; }
-details.clamp3 > summary::-webkit-details-marker { display: none; }
-details.clamp3[open] > summary { display: block; }
-td.foldrow { padding: 0; }
 details.fold > summary { list-style: none; cursor: pointer; color: var(--text-secondary); font-size: 12px; padding: 6px; }
 details.fold > summary::-webkit-details-marker { display: none; }
-details.fold > summary::after { content: " ▸"; color: var(--text-muted); }
-details.fold[open] > summary::after { content: " ▾"; }
+details.fold > summary::before, details.archive > summary::before { content: "▸ "; color: var(--text-muted); }
+details.fold[open] > summary::before, details.archive[open] > summary::before { content: "▾ "; }
 details.fold > div { padding: 0 6px 4px; }
-details.fold table.groups tr:last-child td { border-bottom: 0; }
-details.fold.section > summary { font-weight: 600; margin: 14px 0 4px; padding: 0; }
-details.fold.section > div { padding: 0; }
-/* Request-level jobs (no group row to show them) and compact recovery plans: one line each, open a reason to read it all. */
-.rwork { font-size: 12px; color: var(--text-secondary); grid-column: 1; }
-.rbody > .rwork { margin-top: 8px; }
+/* Compact recovery plans: one line each, open a reason to read it all. */
 .clamp1 { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-.action .why.clamp1 { flex: 1 1 0; }
 [data-expand] { cursor: pointer; }
 [data-expand].open { white-space: normal; overflow-wrap: anywhere; }
-ul.plan li > label { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-ul.plan .reason { color: var(--text-muted); font-size: 12px; padding-left: 20px; }
-/* Stop, Watch and Continue on running jobs and closed groups; the activity of an agent. */
-.said { display: inline-block; max-width: 40em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
-.rwork form.inline .btn, .jobctl .btn { font-size: 11px; padding: 0 6px; }
-.jobctl { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 4px; }
-.jobctl input[type=text], .rwork input[type=text] { font: inherit; font-size: 12px; padding: 1px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-1); color: var(--text-primary); min-width: 0; flex: 1 1 160px; }
-details.watch { display: inline-block; vertical-align: top; }
-details.watch > summary { list-style: none; font-size: 11px; padding: 0 6px; }
-details.watch > summary::-webkit-details-marker { display: none; }
-details.watch[open] { display: block; flex-basis: 100%; }
-.activity { background: var(--bg); border-radius: 6px; padding: 6px 8px; margin-top: 4px; }
+ul.plan { min-width: 0; }
+ul.plan li > label { display: block; overflow-wrap: anywhere; }
+ul.plan .reason { display: block; color: var(--text-muted); font-size: 12px; padding-left: 20px; overflow-wrap: anywhere; }
+/* An agent's activity, and the box to answer it under. And Reopen on a closed group. */
+.activity { background: var(--bg); border-radius: 6px; padding: 6px 8px; margin-top: 4px; font-weight: normal; }
 ol.steps { margin: 4px 0; padding-left: 22px; font-size: 12px; }
 ol.steps li { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 ol.steps li.subagent { color: var(--text-muted); }
 .said-last { white-space: pre-wrap; font-size: 12px; color: var(--text-secondary); border-left: 3px solid var(--border); padding-left: 8px; max-height: 12em; overflow: auto; }
-/* Working / Waiting for you / Done, per request and in the header. */
-.rprog .busy { color: var(--accent); }
-.rprog .waiting, .progress .waiting { color: var(--serious); font-weight: 600; }
-.progress .busy { color: var(--text-primary); }
+.jobs .talk { margin: 4px 0 6px; }
+.jobs .talk input[type=text] { width: 32em; max-width: 60vw; }
 details.reopen { display: inline-block; }
 details.reopen > summary { list-style: none; }
 details.reopen > summary::-webkit-details-marker { display: none; }
 details.reopen[open] > summary { display: none; }
-.action.pointer { background: transparent; padding: 2px 0; }
-.action.pointer a.flag { color: var(--text-primary); font-weight: 600; }
-.action.pointer a.flag::after { content: " ↓"; color: var(--text-muted); font-weight: normal; }
-td .clamp3 > summary .detail { color: var(--text-secondary); }
-.why-dropped { margin: 2px 0 6px 12px; }
-.patch { padding: 2px 0 6px; }
-.patch + .patch { border-top: 1px dashed var(--border); padding-top: 6px; }
+/* Progress per request and for the factory: a bar, then the counts. */
+.pbar { display: inline-flex; width: 120px; height: 8px; border-radius: 4px; overflow: hidden; background: var(--track); vertical-align: middle; margin-right: 8px; }
+.pbar > span { min-width: 3px; }
+.pbar .needs-you { background: var(--serious); } .pbar .working { background: var(--accent); } .pbar .ready { background: var(--good); }
+.pbar .pending { background: var(--text-muted); opacity: .5; } .pbar .closed { background: var(--border); }
+.rprog > .needs-you, .progress > .needs-you { color: var(--serious); font-weight: 600; }
+.rprog > .working, .progress > .working { color: var(--accent); }
+/* One row per group or patch: its name and cost on the first line, where it stands under it, the rest when opened. */
+.rows { margin: 8px -12px 0; }
+.rows .rows { margin: 0; }
+.rows > details.fold > summary { padding: 6px 12px; }
+details.fold > div.rows { padding: 0; }
+details.row { border-bottom: 1px solid var(--border); }
+details.row > summary { list-style: none; cursor: pointer; display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; gap: 0 8px; padding: 5px 12px; align-items: baseline; }
+details.row > summary::-webkit-details-marker { display: none; }
+details.row > summary:hover { background: var(--bg); }
+details.row .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+details.row .end { display: flex; gap: 10px; font-size: 12px; color: var(--text-muted); white-space: nowrap; }
+details.row .end { align-items: baseline; }
+form.decline { display: flex; gap: 6px; align-items: flex-end; }
+form.decline textarea { flex: 1; font: inherit; }
+details.row .state { grid-column: 2 / -1; font-size: 12px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+details.row[open] > summary .state, details.row[open] > summary .name { white-space: normal; overflow-wrap: anywhere; }
+details.row .st.find ~ .state { color: var(--serious); }
+.rowbody { padding: 2px 12px 10px 38px; font-size: 13px; display: flex; flex-direction: column; gap: 4px; }
+.rowbody .failure { overflow-wrap: anywhere; }
+.jobs { display: flex; flex-direction: column; gap: 2px; font-size: 12px; margin-top: 4px; }
+.jobs .job { font-weight: normal; }
+.jobs .job > summary { cursor: pointer; }
+.jobs .job > summary::marker { color: var(--text-muted); }
+div.job { padding-left: 14px; }
+.jobctl { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.jobctl input[type=text] { font: inherit; font-size: 12px; padding: 1px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-1); color: var(--text-primary); min-width: 0; flex: 1 1 260px; }
+.jobs .btn, .jobctl .btn { font-size: 11px; padding: 0 6px; }
+.said { display: inline-block; max-width: 40em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
+.landable { color: var(--good); }
+details.fold.configs > summary { padding: 0; }
+/* What a group needing you asks: in sight under its line, with its buttons. */
+div.asks { border-bottom: 1px solid var(--border); }
+div.asks > details.row { border-bottom: 0; }
+.ask-you { margin: 0 12px 8px 38px; padding: 6px 10px; background: var(--action-bg); border-radius: 6px; font-size: 13px; }
+.ask-you p { margin: 0 0 4px; overflow-wrap: anywhere; }
+.ask-you ul.findings { margin: 0 0 6px; padding-left: 18px; font-size: 12px; color: var(--text-secondary); }
+.ask-you ul.findings li { overflow-wrap: anywhere; }
+.jobs .outcome { color: var(--text-secondary); padding-left: 14px; }
+.jobs .job[open] .outcome { display: none; }
+.jobs details.fold.ended > summary { padding: 2px 0; }
+.jobs details.fold.ended > div.jobs { padding: 0 0 0 8px; }
+.jobs .cost { text-decoration: underline dotted; cursor: help; }
+/* Evidence and reproduction under a row's state; its cause and how we know when opened. */
+details.row .trust { grid-column: 2 / -1; font-size: 12px; }
+details.row .trust { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-secondary); }
+.trust .weak { color: var(--serious); } .trust .bad { color: var(--critical); font-weight: 600; }
+details.why { border-left: 3px solid var(--border); padding-left: 8px; }
+details.why > summary { cursor: pointer; color: var(--text-secondary); font-size: 12px; }
+details.why h4 { margin: 6px 0 2px; font-size: 12px; color: var(--text-muted); font-weight: 500; }
+details.why p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+details.why pre { margin: 0; white-space: pre-wrap; word-break: break-all; }
+details.why ul { margin: 0; padding-left: 18px; }
+/* Notes: their subject in bold, the rest when opened. */
+.notes { display: flex; flex-direction: column; gap: 4px; }
+.note { font-size: 13px; color: var(--text-primary); border-left: 3px solid var(--border); padding-left: 8px; }
+details.note > summary { cursor: pointer; }
+details.note p { margin: 4px 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+details.note ul { margin: 4px 0; padding-left: 18px; }
+details.note li { overflow-wrap: anywhere; margin-bottom: 2px; }
+.trust .rates { display: inline-block; max-width: 24em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
+/* Edge to edge in a request's card: its ⚑ bars, and its Tell the factory box in the bottom corners. */
+details.req > summary > .action { margin: 4px -12px 0; border-radius: 0; padding: 5px 12px; }
+details.req > summary > .action + .action { margin-top: 1px; }
+details.req > summary > .action:last-child { margin-bottom: -8px; }
+form.reqask { margin: 10px -12px -12px; gap: 0; border-top: 1px solid var(--border); }
+form.reqask input { border: 0; border-radius: 0; padding: 8px 12px; }
+form.reqask .btn { border: 0; border-left: 1px solid var(--border); border-radius: 0; padding: 0 16px; }
+/* Try pushes: the command wrapped across the row, then its jobs and try_task_config. */
+pre.command { margin: 0; white-space: pre-wrap; word-break: break-all; background: var(--bg); border-radius: 6px; padding: 6px 8px; }
+.rbody h3 form.inline .btn { font-weight: normal; }
+/* Treeherder's job view: a row per platform and collection, no rules; symbols bold, grey as not run yet. */
+.ptasks { display: flex; flex-direction: column; gap: 6px; }
+pre.ttc { margin: 0; font-size: 11px; background: var(--bg); border-radius: 6px; padding: 6px 8px; overflow-x: auto; }
+table.jobs { width: auto; font-size: 12px; line-height: 16px; }
+table.jobs th { white-space: nowrap; color: var(--text-primary); font-weight: normal; font-size: 12px; padding: 0 12px 0 0; border: 0; vertical-align: top; }
+table.jobs td { padding: 0; border: 0; }
+table.jobs .btype { color: var(--text-muted); }
+.job { font-weight: 700; color: var(--text-primary); padding: 0 1px; cursor: default; }
+.jgroup { color: var(--text-secondary); }
+table.jobs .tier { color: var(--text-muted); font-size: 11px; margin: 0 2px 0 6px; }
+/* A stack: its title with the stack-viewer link at the end of the line; the moz-phab command in its bottom right corner. */
+h3.stackhead { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+h3.stackhead .btn { font-weight: normal; }
+.stack-submit { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; align-items: center; padding: 8px 0 4px; }
+.stack-submit .checks { margin: 0; }

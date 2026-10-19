@@ -4,16 +4,6 @@ import { join } from "node:path";
 import { exec } from "../lib/exec.ts";
 import type { PatchView, RequestState, StackView } from "../types.ts";
 
-export function findStack(requests: RequestState[], stackId: string): { request: RequestState; stack: StackView } | undefined {
-  for (const request of requests) {
-    const stack = request.stacks[stackId];
-    if (stack) {
-      return { request, stack };
-    }
-  }
-  return undefined;
-}
-
 // A git revision name that can't be taken for an option: a sha, a branch, HEAD~2, sha^.
 export function isRevName(rev: string): boolean {
   return /^[A-Za-z0-9_][\w./^~@{}-]*$/.test(rev) && !rev.includes("..") && rev.length <= 200;

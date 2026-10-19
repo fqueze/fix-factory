@@ -183,11 +183,24 @@
     function (event) {
       var d = event.target;
       if (d.matches && d.matches("details[data-watch]") && d.open) loadActivity(d);
+      // A try push's jobs, once: its dry run doesn't change.
+      if (d.matches && d.matches("details[data-tasks]") && d.open) {
+        var box = d.querySelector(".ptasks");
+        if (box.dataset.loaded) return;
+        box.dataset.loaded = "1";
+        fetch(d.dataset.tasks)
+          .then(function (r) {
+            return r.text();
+          })
+          .then(function (text) {
+            box.innerHTML = text;
+          });
+      }
     },
     true
   );
   setInterval(function () {
-    if (document.visibilityState === "visible") document.querySelectorAll("details[data-watch][open]").forEach(loadActivity);
+    if (document.visibilityState === "visible") document.querySelectorAll("details[data-watch][data-live][open]").forEach(loadActivity);
   }, 3000);
 
   // Clicks in a ⚑ area that aren't on a control mustn't fold the request.
@@ -199,6 +212,13 @@
     }
     var clamped = t.closest("[data-expand]");
     if (clamped) clamped.classList.toggle("open");
+    // Decline… opens its push's row at the box asking why.
+    var decline = t.closest("[data-decline]");
+    if (decline) {
+      var row = decline.closest("details.row");
+      row.open = true;
+      row.querySelector("form.decline textarea").focus();
+    }
   });
 
   document.addEventListener("submit", function (event) {

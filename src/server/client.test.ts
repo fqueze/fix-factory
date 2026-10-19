@@ -11,9 +11,13 @@ const MIN = 60 * 1000;
 function loadPage(visibilityState: "visible" | "hidden") {
   const listeners = new Map<string, (() => void)[]>();
   const sent: { url: string; body: unknown; keepalive: unknown }[] = [];
+  const selectors: string[] = [];
   const document = {
     visibilityState,
-    querySelectorAll: () => [],
+    querySelectorAll: (selector: string) => {
+      selectors.push(selector);
+      return [];
+    },
     addEventListener(type: string, f: () => void) {
       listeners.set(type, [...(listeners.get(type) ?? []), f]);
     },
@@ -37,6 +41,7 @@ function loadPage(visibilityState: "visible" | "hidden") {
   runInNewContext(CLIENT, page);
   return {
     sent,
+    selectors,
     setVisibility(v: "visible" | "hidden") {
       document.visibilityState = v;
       for (const f of listeners.get("visibilitychange") ?? []) f();
@@ -87,5 +92,18 @@ describe("presence", () => {
     const page = loadPage("hidden");
     mock.timers.tick(60 * MIN);
     assert.deepEqual(page.sent, []);
+  });
+});
+
+describe("agent conversations", () => {
+  beforeEach(() => mock.timers.enable({ apis: ["setInterval", "setTimeout", "Date"] }));
+  afterEach(() => mock.timers.reset());
+
+  it("reloads the open ones of running agents only, every 3 s", () => {
+    const page = loadPage("visible");
+    page.selectors.length = 0;
+    mock.timers.tick(3000);
+    assert.ok(page.selectors.includes("details[data-watch][data-live][open]"));
+    assert.ok(!page.selectors.includes("details[data-watch][open]"));
   });
 });

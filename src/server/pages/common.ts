@@ -1,6 +1,7 @@
 import type { BugDraft, Command, ItemState, ItemView, NeedsUser, PatchView, PushView, RefusedCommand, RequestState, StackView } from "../../types.ts";
 import { REQUEST_STEPS } from "../commands.ts";
 import { html, type Html } from "../html.ts";
+import { needsMetaBug as stackNeedsMetaBug } from "../../state/meta-bug.ts";
 
 // What the pages need besides the state.
 export interface RenderContext {
@@ -12,6 +13,7 @@ export interface RenderContext {
   runningBuilds?: number; // across requests, for "waiting for a build slot (N builds running)"
   runningAgents?: number; // across requests, for "waiting for an agent (N/M running)"
   open?: string; // request id to show expanded
+  bugzillaEmail?: string; // bugs to file are assigned to you
   // The text of a patch's interdiffFile, read by the server inside stateDir.
   interdiff?: (p: PatchView) => string | undefined;
 }
@@ -75,10 +77,18 @@ export function bugUrl(bug: number): string {
   return `${BUGZILLA}/show_bug.cgi?id=${bug}`;
 }
 
-export function enterBugUrl(d: BugDraft): string {
+// Assigned to you when you have a Bugzilla email: its patches are yours.
+export function enterBugUrl(d: BugDraft, ctx: RenderContext): string {
   const p = new URLSearchParams({ product: d.product, component: d.component, short_desc: d.summary, comment: d.description });
+  if (ctx.bugzillaEmail) {
+    p.set("assigned_to", ctx.bugzillaEmail);
+    p.set("bug_status", "ASSIGNED");
+  }
   if (d.blocks?.length) {
     p.set("blocked", d.blocks.join(","));
+  }
+  if (d.dependsOn?.length) {
+    p.set("dependson", d.dependsOn.join(","));
   }
   if (d.bugType) {
     p.set("bug_type", d.bugType);
@@ -145,11 +155,6 @@ export function stackPatches(r: RequestState, s: StackView): PatchView[] {
   return s.order.map((id) => r.patches[id]).filter((p) => p !== undefined);
 }
 
-// A group whose patches are in a stack is shown by the stack's rows, not by a group row.
-export function isStackedItem(r: RequestState, item: string): boolean {
-  return Object.values(r.stacks).some((s) => s.order.some((id) => r.patches[id]?.item === item));
-}
-
 export function patchesOutsideStacks(r: RequestState): PatchView[] {
   const stacked = new Set(Object.values(r.stacks).flatMap((s) => s.order));
   return Object.values(r.patches).filter((p) => !stacked.has(p.id));
@@ -178,6 +183,11 @@ export function submitChecks(r: RequestState, s: StackView): Check[] {
     { ok: noReviewer === 0, text: noReviewer === 0 ? "r= on every patch" : `${noReviewer} patches without r=` },
     { ok: noBug === 0, text: noBug === 0 ? "every patch has a bug" : `${noBug} ${noBug === 1 ? "patch still says" : "patches still say"} Bug XXXXXXX` },
   ];
+}
+
+// The meta-bug comment is offered when the stack gets a meta bug, or one was filed already.
+export function needsMetaBug(r: RequestState, s: StackView): boolean {
+  return r.metaBug !== undefined || stackNeedsMetaBug(stackPatches(r, s));
 }
 
 export function stackOfPatch(r: RequestState, patch: string | undefined): StackView | undefined {
@@ -224,8 +234,8 @@ export const COMMAND_LABELS: Record<Command["cmd"], string> = {
   dismiss: "dismiss",
 };
 
-export type ActionKind = "approve-push" | "take-it" | "file-bug" | "meta-bug" | "submit" | "resubmit" | "land" | "recovery" | "failed" | "stopped" | "other";
-const ACTION_KINDS: ActionKind[] = ["approve-push", "take-it", "file-bug", "meta-bug", "submit", "resubmit", "land", "recovery", "failed", "stopped"];
+export type ActionKind = "approve-push" | "take-it" | "file-bug" | "meta-bug" | "submit" | "resubmit" | "land" | "recovery" | "failed" | "stopped" | "disagrees" | "other";
+const ACTION_KINDS: ActionKind[] = ["approve-push", "take-it", "file-bug", "meta-bug", "submit", "resubmit", "land", "recovery", "failed", "stopped", "disagrees"];
 
 // The key's "<kind>:" prefix names the buttons of a needs-user entry, and the ids
 // it carries (push, item, patch, stack, job) say what they act on. Entries with
@@ -249,6 +259,11 @@ export function actionKind(n: NeedsUser, r: RequestState): ActionKind {
     return "take-it";
   }
   return "other";
+}
+
+// Pushes named after their stack ("browser-components-…-a62d-3") go by their number.
+export function pushName(id: string): string {
+  return id.length > 12 ? (id.split("-").at(-1) ?? id) : id;
 }
 
 export function pushStatus(p: PushView): string {

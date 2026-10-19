@@ -303,9 +303,9 @@ describe("agent activity, transcript and profile", () => {
   });
 });
 
-describe("GET /stacks/:stack/review", () => {
+describe("GET /requests/:id/stacks/:stack/review", () => {
   it("runs stack-viewer on the stack's range and injects the send button", async () => {
-    const r = await fetch(`${base}/stacks/storage-unit/review`);
+    const r = await fetch(`${base}/requests/r-20261010-xpcshell-cwd/stacks/storage-unit/review`);
     assert.equal(r.status, 200);
     const page = await r.text();
     const args = JSON.parse(page.match(/<pre id="args">(.*?)<\/pre>/)![1]);
@@ -321,28 +321,39 @@ describe("GET /stacks/:stack/review", () => {
     assert.equal(cfg.shas[first], "p-prefs");
   });
 
+  it("opens the stack of the request it's asked for when two requests have a stack of the same id", async () => {
+    const other = structuredClone(state.getRequest("r-20261007-focus")!);
+    other.stacks["storage-unit"] = { ...other.stacks.focus, id: "storage-unit", worktree: "/build/worktrees/other" };
+    state.set(other);
+    const page = await (await fetch(`${base}/requests/r-20261007-focus/stacks/storage-unit/review`)).text();
+    assert.equal(JSON.parse(page.match(/<pre id="args">(.*?)<\/pre>/)![1])[2], "/build/worktrees/other");
+    assert.equal(JSON.parse(page.match(/<script type="application\/json" id="ff-review-config">(.*?)<\/script>/)![1]).request, "r-20261007-focus", "its comments go to that request");
+    delete other.stacks["storage-unit"];
+    state.set(other);
+  });
+
   it("takes the base from the URL", async () => {
-    const page = await (await fetch(`${base}/stacks/storage-unit/review?base=central`)).text();
+    const page = await (await fetch(`${base}/requests/r-20261010-xpcshell-cwd/stacks/storage-unit/review?base=central`)).text();
     assert.match(page, /&quot;central\.\.ff\/storage-unit&quot;|"central\.\.ff\/storage-unit"/);
   });
 
   it("refuses a base that isn't a revision name", async () => {
     for (const bad of ["--upload-pack=touch /tmp/x", "-n", "a..b", "a b", ""]) {
-      const r = await fetch(`${base}/stacks/storage-unit/review?base=${encodeURIComponent(bad)}`);
+      const r = await fetch(`${base}/requests/r-20261010-xpcshell-cwd/stacks/storage-unit/review?base=${encodeURIComponent(bad)}`);
       assert.equal(r.status, 400, bad);
     }
   });
 
   it("uses the stack's own base", async () => {
-    const page = await (await fetch(`${base}/stacks/focus/review`)).text();
+    const page = await (await fetch(`${base}/requests/r-20261007-focus/stacks/focus/review`)).text();
     assert.match(page, /&quot;central\.\.ff\/focus&quot;|"central\.\.ff\/focus"/);
   });
 
   it("reports stack-viewer failures and unknown stacks", async () => {
-    const r = await fetch(`${base}/stacks/storage-unit/review?base=fail`);
+    const r = await fetch(`${base}/requests/r-20261010-xpcshell-cwd/stacks/storage-unit/review?base=fail`);
     assert.equal(r.status, 502);
     assert.match(await r.text(), /bad revision/);
-    assert.equal((await fetch(`${base}/stacks/nope/review`)).status, 404);
+    assert.equal((await fetch(`${base}/requests/r-20261010-xpcshell-cwd/stacks/nope/review`)).status, 404);
   });
 });
 

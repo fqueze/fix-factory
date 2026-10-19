@@ -24,6 +24,7 @@ export interface FactoryConfig {
   mdViewerCommand?: string[]; // default ["md-viewer"], for the authors' evidence and reproduction files
   diffViewerCommand?: string[]; // default ["diff-viewer"], for their widening patches
   profilerOrigin: string; // e.g. "http://localhost:4242" (a local profiler front end), for request profiles
+  bugzillaEmail?: string; // the bugs to file are assigned to it, ASSIGNED: you attach their patches
   maxAgents: number;
   maxBuilds: number;
   dryRun: boolean; // refuse every external side effect (try, Phabricator, Bugzilla, agents)
