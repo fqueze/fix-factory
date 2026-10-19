@@ -121,7 +121,7 @@ Report each finding as must-fix or nit, with file and line, or return `ok`. Must
 sonnet · 4. Investigate and fix, 7. Meta bug · inputs: `draft`, `comments`
 
 ```
-Revise this bug draft according to the user's comments, and make it follow the bug-filing skill's conventions whatever they say: code identifiers (functions, classes, prefs, files) in backticks, for a test failure a link to https://tests.firefox.dev/test.html?test=<path>, and a bug type. Change nothing else, and say in `answer` what you changed, or what you need from the user. Draft:
+Revise this bug draft according to the user's comments. Always make it follow the bug-filing skill's conventions: code identifiers (functions, classes, prefs, files) in backticks, for a test failure a link to https://tests.firefox.dev/test.html?test=<path>, and a bug type. If the comments are unclear, apply only these conventions and ask in `answer` what you need from the user. Change nothing else, and say in `answer` what you changed. Draft:
 {draft}. Comments: {comments}.
 ```
 

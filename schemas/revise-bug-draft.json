@@ -77,7 +77,7 @@
     },
     "answer": {
       "type": "string",
-      "description": "One or two sentences to the user: what you changed, or what you need from them when the comments are unclear (then leave the draft unchanged)."
+      "description": "One or two sentences to the user: what you changed, or what you need from them when the comments are unclear (then apply only the bug-filing conventions)."
     }
   },
   "required": [

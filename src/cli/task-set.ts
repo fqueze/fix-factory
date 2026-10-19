@@ -26,9 +26,7 @@ export function taskSetPath(topsrcdir: string, full: boolean, stateDir = process
 
 // mozbuild's artifact_builds JOB_CHOICES.
 const ARTIFACT_JOBS = new Set(
-  ["android-arm", "android-x86_64", "android-aarch64", "linux64", "linux64-aarch64", "macosx64", "win32", "win64", "win64-aarch64"]
-    .flatMap((p) => [`${p}-opt`, `${p}-debug`])
-    .concat("macosx64-aarch64-debug"),
+  ["android-arm", "android-x86_64", "android-aarch64", "linux64", "linux64-aarch64", "macosx64", "macosx64-aarch64", "win32", "win64", "win64-aarch64"].flatMap((p) => [`${p}-opt`, `${p}-debug`]),
 );
 
 // The task set is one JSON object, label → task, written by json.dump without spaces: `{"label":{"kind":…},"label":…}`.

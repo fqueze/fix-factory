@@ -176,3 +176,9 @@ test("bug descriptions: code identifiers in backticks, and the failing test's da
   const fixed = "`DocumentLoadListener::OpenInParent` runs before `loadURI()` in `browser_policy_x.js` (https://tests.firefox.dev/test.html?test=a/browser_policy_x.js).";
   assert.deepEqual([...codeInBackticks(fixed), ...testDashboardLink(fixed)], []);
 });
+
+test("bug descriptions: product names and abbreviations aren't code", () => {
+  const prose = "Fails on macOS and iOS, e.g. with WebRender, JavaScript or WebGPU (E.g. I.e. U.S. on GitHub), with Python3.11.";
+  assert.deepEqual(codeInBackticks(prose), []);
+  assert.deepEqual(codeInBackticks("On macOS, BrowserTestUtils.waitForEvent and gBrowser time out.").map((v) => v.text), ["put code identifiers in backticks: BrowserTestUtils.waitForEvent, gBrowser"]);
+});

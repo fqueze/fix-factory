@@ -162,14 +162,16 @@ export function descriptionLength(description: string): Violation[] {
 // The bug-filing skill's conventions: Bugzilla renders markdown, so code reads as code only in backticks.
 const CODE = [
   /\b\w+(?:::\w+)+/g, // C++ scopes
-  /\b[A-Z]\w*\.\w+/g, // members of a class or module
+  /\b[A-Z]\w*\.[A-Za-z]\w+/g, // members of a class or module, not "E.g", "U.S" or "Python3.11"
   /\b\w+\(\)/g, // calls
   /\b[a-z]+[A-Z]\w*/g, // camelCase
   /\b[\w/.-]+\.(?:m?js|jsm|cpp|h|toml|ini|py|rs|idl|webidl|html|xhtml)\b/g, // files
 ];
+// Product and platform names that look like code.
+const PROSE_WORDS = new Set(["macOS", "iOS", "iPadOS", "iPhone", "iPad", "JavaScript", "TypeScript", "GitHub", "WebRender", "WebGL", "WebGPU", "WebDriver"]);
 export function codeInBackticks(description: string): Violation[] {
   const prose = description.replace(/`[^`]*`/g, " ").replace(/https?:\/\/\S+/g, " ");
-  const all = [...new Set(CODE.flatMap((re) => prose.match(re) ?? []))];
+  const all = [...new Set(CODE.flatMap((re) => prose.match(re) ?? []))].filter((x) => !PROSE_WORDS.has(x));
   const found = all.filter((x) => !all.some((y) => y !== x && y.includes(x)));
   return found.length ? [{ rule: "codeInBackticks", text: `put code identifiers in backticks: ${found.slice(0, 6).join(", ")}` }] : [];
 }
