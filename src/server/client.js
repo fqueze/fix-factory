@@ -92,20 +92,39 @@
     true
   );
 
-  var mainSeq = 0;
+  // Changes come in bursts and their answers can arrive out of order: one sequence across the main list and
+  // the requests in it, so an older answer never replaces newer content. A failed latest fetch is retried.
+  var seq = 0;
+  var mainLatest = 0;
+  var mainShown = 0;
+  var retryMain = false;
+  var retryRequests = new Set();
   function refreshMain() {
     var open = Array.prototype.map.call(document.querySelectorAll("details.req[open]"), function (d) {
       return d.dataset.request;
     });
     var url = "/fragments/main" + (open.length === 1 ? "?open=" + encodeURIComponent(open[0]) : "");
-    var seq = ++mainSeq;
-    return fetchText(url).then(function (text) {
-      if (seq !== mainSeq) return;
-      var main = document.getElementById("main");
-      if (main.contains(document.activeElement) && document.activeElement.value) return;
-      main.replaceChildren(parse(text));
-      reopenFolds(main);
-    });
+    var s = (mainLatest = ++seq);
+    retryMain = false;
+    return fetchText(url).then(
+      function (text) {
+        if (s !== mainLatest) return;
+        var main = document.getElementById("main");
+        if (main.contains(document.activeElement) && document.activeElement.value) return;
+        var fresh = parse(text);
+        // Requests refreshed since this was asked for keep their newer version.
+        main.querySelectorAll("[data-request][data-seq]").forEach(function (el) {
+          var old = +el.dataset.seq > s && fresh.querySelector('[data-request="' + CSS.escape(el.dataset.request) + '"]');
+          if (old) old.replaceWith(el);
+        });
+        main.replaceChildren(fresh);
+        mainShown = s;
+        reopenFolds(main);
+      },
+      function () {
+        if (s === mainLatest) retryMain = true;
+      }
+    );
   }
 
   var latest = {};
@@ -118,23 +137,31 @@
       return Promise.resolve();
     }
     var open = el.tagName === "DETAILS" && el.open;
-    var seq = (latest[id] = (latest[id] || 0) + 1);
+    var s = (latest[id] = ++seq);
+    retryRequests.delete(id);
     return fetchText("/fragments/requests/" + encodeURIComponent(id) + (open ? "?open=1" : ""))
       .then(function (text) {
-        // Changes come in bursts and their answers can arrive out of order: only the latest is shown.
-        if (seq !== latest[id]) return;
+        if (s !== latest[id] || s < mainShown) return;
         el = requestElement(id);
         if (!el) return;
         var fresh = parse(text).firstElementChild;
         // A request that moved between active, queued and finished needs the whole list.
         if (!fresh || fresh.dataset.section !== el.dataset.section) return refreshMain();
+        fresh.dataset.seq = s;
         el.replaceWith(fresh);
         reopenFolds(fresh);
       })
       .catch(function (e) {
         if (e.status === 404) el.remove();
+        else if (s === latest[id]) retryRequests.add(id);
       });
   }
+  setInterval(function () {
+    if (retryMain) refreshMain();
+    retryRequests.forEach(function (id) {
+      refreshRequest(id);
+    });
+  }, 5000);
 
   function refreshStrip() {
     return fetchText("/fragments/strip").then(function (text) {
@@ -197,13 +224,13 @@
       if (d.matches && d.matches("details[data-tasks]") && d.open) {
         var box = d.querySelector(".ptasks");
         if (box.dataset.loaded) return;
-        box.dataset.loaded = "1";
-        fetch(d.dataset.tasks)
-          .then(function (r) {
-            return r.text();
-          })
+        fetchText(d.dataset.tasks)
           .then(function (text) {
             box.innerHTML = text;
+            box.dataset.loaded = "1";
+          })
+          .catch(function (e) {
+            box.textContent = "Couldn't load the jobs (" + e.message + "): reopen to try again.";
           });
       }
     },
@@ -347,14 +374,17 @@
   }, 5000);
 
   // After the server restarted on new code, the page reloads, once nothing you typed would be lost.
-  var bootId = null;
+  // The server renders its id on the page, so a page from an earlier run reloads on its first hello.
+  var bootId = document.body.dataset.boot;
   function typing() {
-    // Drafted replies come filled in: only what you changed counts.
+    // Drafted replies come filled in: only a focused field, or one you changed, counts, and only with text.
     return Array.prototype.some.call(document.querySelectorAll("input[type=text], textarea"), function (i) {
-      return i.value !== i.defaultValue;
+      return i.value !== "" && (i === document.activeElement || i.value !== i.defaultValue);
     });
   }
+  var reloading = false;
   function reloadWhenIdle() {
+    reloading = true;
     if (typing()) setTimeout(reloadWhenIdle, 5000);
     else location.reload();
   }
@@ -365,9 +395,7 @@
   function connect() {
     var source = new EventSource("/events");
     source.addEventListener("hello", function (event) {
-      var id = JSON.parse(event.data);
-      if (bootId !== null && id !== bootId) reloadWhenIdle();
-      bootId = id;
+      if (JSON.parse(event.data) !== bootId && !reloading) reloadWhenIdle();
     });
     source.addEventListener("open", function () {
       // After a server restart or a network drop, changes may have been missed.

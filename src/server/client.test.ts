@@ -8,15 +8,21 @@ import { runInNewContext } from "node:vm";
 const CLIENT = readFileSync(join(import.meta.dirname, "client.js"), "utf8");
 const MIN = 60 * 1000;
 
-function loadPage(visibilityState: "visible" | "hidden") {
+type Field = { value: string; defaultValue: string };
+
+function loadPage(visibilityState: "visible" | "hidden", fields: Field[] = []) {
   const listeners = new Map<string, (() => void)[]>();
+  const sse = new Map<string, (event: { data: string }) => void>();
   const sent: { url: string; body: unknown; keepalive: unknown }[] = [];
   const selectors: string[] = [];
+  let reloads = 0;
   const document = {
     visibilityState,
+    body: { dataset: { boot: "1" } },
+    activeElement: null as Field | null,
     querySelectorAll: (selector: string) => {
       selectors.push(selector);
-      return [];
+      return selector === "input[type=text], textarea" ? fields : [];
     },
     addEventListener(type: string, f: () => void) {
       listeners.set(type, [...(listeners.get(type) ?? []), f]);
@@ -25,7 +31,9 @@ function loadPage(visibilityState: "visible" | "hidden") {
   const page = {
     document,
     EventSource: class {
-      addEventListener() {}
+      addEventListener(type: string, f: (event: { data: string }) => void) {
+        sse.set(type, f);
+      }
     },
     fetch(url: string, init: { body: string; keepalive?: boolean }) {
       sent.push({ url, body: JSON.parse(init.body), keepalive: init.keepalive });
@@ -35,13 +43,23 @@ function loadPage(visibilityState: "visible" | "hidden") {
     clearInterval,
     setTimeout,
     Date,
-    location: { hash: "", pathname: "/", search: "" },
+    location: {
+      hash: "",
+      pathname: "/",
+      search: "",
+      reload() {
+        reloads++;
+      },
+    },
     history: { replaceState() {} },
   };
   runInNewContext(CLIENT, page);
   return {
     sent,
     selectors,
+    document,
+    reloads: () => reloads,
+    hello: (id: string) => sse.get("hello")!({ data: JSON.stringify(id) }),
     setVisibility(v: "visible" | "hidden") {
       document.visibilityState = v;
       for (const f of listeners.get("visibilitychange") ?? []) f();
@@ -105,5 +123,41 @@ describe("agent conversations", () => {
     mock.timers.tick(3000);
     assert.ok(page.selectors.includes("details[data-watch][data-live][open]"));
     assert.ok(!page.selectors.includes("details[data-watch][open]"));
+  });
+});
+
+describe("reload after a server restart", () => {
+  beforeEach(() => mock.timers.enable({ apis: ["setInterval", "setTimeout", "Date"] }));
+  afterEach(() => mock.timers.reset());
+
+  it("reloads a page served by an earlier run on its first hello, not one served by this run", () => {
+    const page = loadPage("visible");
+    page.hello("1");
+    assert.equal(page.reloads(), 0);
+    page.hello("2");
+    assert.equal(page.reloads(), 1);
+  });
+
+  it("waits while you type, with a single poller, and a cleared field isn't typing", () => {
+    const field = { value: "draft", defaultValue: "" };
+    const page = loadPage("visible", [field]);
+    page.hello("2");
+    page.hello("3");
+    assert.equal(page.reloads(), 0);
+    // Sent: the field is emptied but its form wasn't re-rendered.
+    field.value = "";
+    mock.timers.tick(5000);
+    assert.equal(page.reloads(), 1);
+  });
+
+  it("counts a focused field with text, even as rendered", () => {
+    const field = { value: "drafted reply", defaultValue: "drafted reply" };
+    const page = loadPage("visible", [field]);
+    page.document.activeElement = field;
+    page.hello("2");
+    assert.equal(page.reloads(), 0);
+    page.document.activeElement = null;
+    mock.timers.tick(5000);
+    assert.equal(page.reloads(), 1);
   });
 });

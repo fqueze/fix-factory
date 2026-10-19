@@ -75,6 +75,8 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
   const hosts = new HostCheck(opts.config.allowedHosts ?? [], opts.machineName);
   void hosts.addFqdn(opts.machineName);
   const bootId = String(now());
+  // client.js reloads a page served by an earlier run of the server once it hears this one's id.
+  const page = (text: string) => text.replace("<body>", `<body data-boot="${bootId}">`);
   // The jobs of dry runs that didn't record them, by dry run job: reading a task set takes a while.
   const pushJobs = new Map<string, TryJob[] | undefined>();
   const sseClients = new Set<ServerResponse>();
@@ -230,12 +232,12 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
     }
 
     if (path === "/") {
-      return send(res, 200, "text/html; charset=utf-8", renderOverview(opts.state.listRequests(), ctx(req)));
+      return send(res, 200, "text/html; charset=utf-8", page(renderOverview(opts.state.listRequests(), ctx(req))));
     }
     if ((m = path.match(/^\/requests\/([^/]+)$/))) {
       const id = decodeURIComponent(m[1]);
       getRequest(id);
-      return send(res, 200, "text/html; charset=utf-8", renderOverview(opts.state.listRequests(), ctx(req, id)));
+      return send(res, 200, "text/html; charset=utf-8", page(renderOverview(opts.state.listRequests(), ctx(req, id))));
     }
     if ((m = path.match(/^\/fragments\/requests\/([^/]+)$/))) {
       const id = decodeURIComponent(m[1]);
