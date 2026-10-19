@@ -1,9 +1,9 @@
 import { REQUEST_STEPS } from "../commands.ts";
 import type { BugDraft, ItemView, PatchView, PushView, RequestState, StackView } from "../../types.ts";
 import { html, join, type Html } from "../html.ts";
-import { actionsSummary, approvePushControls, bugBox, continueBox, copyButton, plannedLabel, recoveryPlanFor, hasAuthorSession, stackViewerLink, submitControls, summaryId } from "./actions.ts";
+import { actionsSummary, approvePushControls, bugBox, continueBox, copyButton, flagControls, flagItemOf, flagText, plannedLabel, recoveryPlanFor, hasAuthorSession, stackViewerLink, submitControls, summaryId } from "./actions.ts";
 import { groupJobs, jobLine } from "./activity.ts";
-import { itemBucket, itemSentence, progressLine, requestProgress, type Bucket } from "./progress.ts";
+import { flagAsk, itemBucket, itemSentence, progressLine, requestProgress, type Bucket } from "./progress.ts";
 import {
   actionKind,
   bugUrl,
@@ -220,23 +220,37 @@ interface Row {
   end: Html | null;
   state: Html;
   trust?: Html | null; // the evidence and reproduction behind it
+  warn?: Html | null; // what you should know before answering, under its state
   ask?: Html; // what a group needing you asks, with its buttons: in sight without opening the row
   under?: Html | null; // opened, right under its name: a patch's bug to file
   body: Html;
 }
 
+// Opened, the box under its name comes first in the body (clicking in it mustn't fold the row), styled as hanging
+// from its label; its state and trust lines then move under the box.
 function row(x: Row): Html {
-  const d = html`<details class="row" ${x.anchor} data-fold="${x.fold}"><summary><span class="st ${x.cls}"></span><span class="name" title="${x.title}">${x.name}</span><span class="end">${x.end}</span>${x.under ? html`<div class="under">${x.under}</div>` : null}<span class="state">${x.state}</span>${x.trust ? html`<span class="trust">${x.trust}</span>` : null}</summary><div class="rowbody">${x.body}</div></details>`;
+  const lines = html`<span class="state">${x.state}</span>${x.trust ? html`<span class="trust">${x.trust}</span>` : null}`;
+  const d = html`<details class="row" ${x.anchor} data-fold="${x.fold}"><summary><span class="st ${x.cls}"></span><span class="name" title="${x.title}">${x.name}</span><span class="end">${x.end}</span>${lines}${
+    x.warn ? html`<span class="warn">${x.warn}</span>` : null
+  }</summary>${x.under ? html`<div class="under">${x.under}<div class="lines">${lines}</div></div>` : null}<div class="rowbody">${x.body}</div></details>`;
   return x.ask ? html`<div class="asks">${d}<div class="ask-you">${x.ask}</div></div>` : d;
 }
 
-// The question, the patch to look at, then the answers.
-function askBlock(r: RequestState, i: ItemView, ctx: RenderContext, patches: PatchView[]): Html | undefined {
+// The question, the patch to look at, then the answers; then the group's other ⚑s, each with its own answers.
+// withFirst: false when the first ⚑'s answers are elsewhere on the row (the bug box).
+function askBlock(r: RequestState, i: ItemView, ctx: RenderContext, patches: PatchView[], withFirst = true): Html | undefined {
   const s = itemSentence(r, i, ctx);
   if (s.cls !== "find" || !s.ask) {
     return undefined;
   }
-  return html`${s.ask}${patches.length ? html`<p>${patches.map((p) => html`“${patchTitle(p)}” ${viewLink(r, p, "View the patch")} `)}</p>` : null}${s.controls ? html`<div class="jobctl">${s.controls}</div>` : null}`;
+  const more = r.needsUser.filter((n) => flagItemOf(r, n) === i.id).slice(1);
+  if (!withFirst && !more.length) {
+    return undefined;
+  }
+  const controls = (c: Html | null) => (c ? html`<div class="jobctl">${c}</div>` : null);
+  return html`${withFirst ? html`${s.ask}${patches.length ? html`<p>${patches.map((p) => html`“${patchTitle(p)}” ${viewLink(r, p, "View the patch")} `)}</p>` : null}${controls(s.controls)}` : null}${more.map(
+    (n) => html`<div class="ask-more" data-key="${n.key}"><p><b>Also: ${flagText(r, n)}</b></p>${flagAsk(r, i, n)}${controls(flagControls(r, n, ctx))}</div>`,
+  )}`;
 }
 
 // What needs you first, then what runs, what's ready and what waits; the closed ones folded under one line.
@@ -335,6 +349,8 @@ function patchRow(r: RequestState, p: PatchView, ctx: RenderContext): Html {
   const bugBoxShown = !hasBug(p) && p.bugDraft !== undefined;
   // A "file the bug" ⚑'s buttons are the bug box's.
   const controls = bugBoxShown && r.needsUser.some((n) => n.patch === p.id && actionKind(n, r) === "file-bug") ? null : sentence?.controls;
+  // A group's question is asked once, on the row of its first patch.
+  const asks = item !== undefined && Object.values(r.patches).find((x) => x.item === item.id && !isDraft(r, x) && !isDropped(r, x)) === p;
   return row({
     anchor: html`id="patch-${p.id}" data-patch="${p.id}"`,
     fold: `patch-${p.id}`,
@@ -345,7 +361,7 @@ function patchRow(r: RequestState, p: PatchView, ctx: RenderContext): Html {
     // "in the stack" says nothing a patch row in its stack's section doesn't.
     state: html`${item ? html`fixes <b>${groupLabel(r, item)}</b>${item.state === "in stack" ? null : html` · ${stateText(r, item, ctx)}`}` : p.review ? p.review.status : null}${landable ? html` · <span class="landable">landable</span>` : null}`,
     trust: item ? trustLine(r, item, ctx) : null,
-    ask: item && !controls ? undefined : item ? askBlock(r, item, ctx, []) : undefined,
+    ask: item && asks ? askBlock(r, item, ctx, [], controls !== null) : undefined,
     under: bugBoxShown ? bugDraftBox(r, p, back) : null,
     body: html`${item ? html`${failure(r, item)}${talkBox(r, item, ctx)}${allowPush(r, item)}${investigationHtml(item)}` : null}${p.effort === undefined ? null : html`<div class="sub">review effort ${p.effort}/5</div>`}${reviewers(p)}${p.deps.map((d) => depLine(r, d))}${controls && !sentence?.ask ? html`<div class="jobctl">${controls}</div>` : null}${reviewBox(r, p, back, p.interdiffFile === undefined ? undefined : ctx.interdiff?.(p))}${
       item ? itemJobs(r, item, ctx) : null
@@ -550,7 +566,7 @@ function pushRowOf(r: RequestState, p: PushView, ctx: RenderContext): Html {
     anchor: html`id="push-${p.id}" data-push="${p.id}"${p.taskCount === undefined ? null : html` data-tasks="${tasks}"`}`,
     fold: `push-${p.id}`,
     cls: p.rev ? ({ ok: "ok", bad: "find", run: "run" } as const)[pushResultClass(p)] : waiting || (job && job.exitCode !== 0 && job.endedAt) ? "find" : p.declined === undefined ? "run" : "closed",
-    name: html`push ${pushName(p.id)}: ${p.purpose}`,
+    name: html`push ${pushName(r, p.id)}: ${p.purpose}`,
     title: p.purpose,
     end: html`${p.taskCount === undefined ? null : html`<span>${plural(p.taskCount, "task")}</span>`}${
       p.rev ? html`<a class="mono" href="${pushUrl(p)}" target="_blank" rel="noopener">${p.rev.slice(0, 12)}</a>` : null
@@ -572,6 +588,7 @@ function pushRowOf(r: RequestState, p: PushView, ctx: RenderContext): Html {
                   ? "pushed, waiting for its revision"
                   : "approved, not pushed: see its ⚑ above"
     }`,
+    warn: waiting ? dryRunWarnings(r, p) : null,
     body: html`${p.taskCount === undefined ? html`<pre class="mono command">${p.command.join(" ")}</pre>` : html`<div class="ptasks">Loading…</div>`}${waiting ? declineBox(r, p) : null}`,
   });
 }
@@ -579,6 +596,22 @@ function pushRowOf(r: RequestState, p: PushView, ctx: RenderContext): Html {
 // Planned, and its approval is still asked.
 function isWaiting(r: RequestState, p: PushView): boolean {
   return !p.rev && p.declined === undefined && r.needsUser.some((n) => n.key === `approve-push:${p.id}`);
+}
+
+// The dry run's warnings, which its approval ⚑ carries after "N tasks · purpose" (see handlers.ts, "dry-run").
+function dryRunWarnings(r: RequestState, p: PushView): Html | null {
+  let rest = r.needsUser.find((n) => n.key === `approve-push:${p.id}`)!.detail;
+  for (const known of [`${p.taskCount} tasks`, p.purpose]) {
+    if (rest === known) {
+      return null;
+    }
+    if (!rest.startsWith(`${known} · `)) {
+      // Not written by the dry run: nothing to tell apart.
+      return known === p.purpose ? html`⚠ ${rest}` : null;
+    }
+    rest = rest.slice(known.length + 3);
+  }
+  return html`⚠ ${rest}`;
 }
 
 function declineBox(r: RequestState, p: PushView): Html {

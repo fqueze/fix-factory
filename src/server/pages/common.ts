@@ -261,9 +261,21 @@ export function actionKind(n: NeedsUser, r: RequestState): ActionKind {
   return "other";
 }
 
-// Pushes named after their stack ("browser-components-…-a62d-3") go by their number.
-export function pushName(id: string): string {
-  return id.length > 12 ? (id.split("-").at(-1) ?? id) : id;
+// Pushes named after their stack ("browser-components-…-a62d-3") go by their number; when another stack's push has
+// the same number, by as many of their last segments as tell them apart.
+export function pushName(r: RequestState, id: string): string {
+  if (id.length <= 12) {
+    return id;
+  }
+  const parts = id.split("-");
+  const others = Object.keys(r.pushes).filter((x) => x !== id).map((x) => x.split("-"));
+  for (let k = 1; k < parts.length; k++) {
+    const short = parts.slice(-k).join("-");
+    if (!others.some((o) => o.slice(-k).join("-") === short)) {
+      return short;
+    }
+  }
+  return id;
 }
 
 export function pushStatus(p: PushView): string {

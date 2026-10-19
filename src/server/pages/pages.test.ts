@@ -292,6 +292,35 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.equal(state("i-done"), "closed: already fixed by bug 2078564");
     assert.match(h, /<span class="rprog"><span class="pbar">.*?<\/span><span class="needs-you">6 need you<\/span> · <span class="working">2 working<\/span>/);
   });
+  it("asks to retry a crashed reviewer, not to resume its author; and shows every ⚑ of a group, each with its answers", () => {
+    const D = "r-20261015-downloads-stuck";
+    const r = structuredClone(get(D));
+    r.jobs["j-rev-idle"] = { ...r.jobs["j-review-race"], job: "j-rev-idle", item: "i-idle", exitCode: 1, endedAt: "2026-10-15T08:00:00.000Z" };
+    r.items["i-idle"].jobs.push("j-rev-idle");
+    r.needsUser.push(
+      { key: "failed:j-rev-idle", action: "review-patch failed", detail: "API error", job: "j-rev-idle", item: "i-idle", since: r.createdAt },
+      { key: "note:odd", action: "Something odd", detail: "look at it", item: "i-idle", since: r.createdAt },
+    );
+    const row = rowOf(renderRequest(r, ctx, true).value, "item-i-idle");
+    const ask = row.slice(row.indexOf('<div class="ask-you">'));
+    assert.match(ask, /^<div class="ask-you"><p>Critical review failed: API error<\/p><p>Retry it, or hand the group back to you\.<\/p>/);
+    assert.match(ask, /title="Runs critical review again">Retry</);
+    assert.doesNotMatch(ask, /Its author|Resume/);
+    assert.ok(!ask.includes(cmd({ cmd: "continue", request: D, item: "i-idle" })), "its author has nothing to do with it");
+    assert.ok(ask.includes(cmd({ cmd: "hand-back", item: "i-idle", request: D })));
+    assert.match(ask, /<div class="ask-more" data-key="note:odd"><p><b>Also: Something odd<\/b><\/p><p>look at it<\/p><p>Take it if[^<]*<\/p><div class="jobctl"><form[^]*?>Take it<\/button>/, "the second ⚑ with its own buttons");
+  });
+
+  it("asks a flagged group's question once when it has two patches", () => {
+    const T = "r-20261013-tab-failures";
+    const r = structuredClone(get(T));
+    r.patches["p-close2"] = { ...r.patches["p-close"], id: "p-close2", sha: "e".repeat(40) };
+    r.needsUser.push({ key: "note:close", action: "Something odd", detail: "look at it", item: "i-close", since: r.createdAt });
+    const h = renderRequest(r, ctx, true).value;
+    assert.match(rowOf(h, "patch-p-close"), /<div class="ask-you"><p>look at it<\/p>/);
+    assert.doesNotMatch(rowOf(h, "patch-p-close2"), /ask-you/);
+  });
+
   it("asks you when its author disagrees with your message, with Tell it again, Go ahead and Hand back", () => {
     const D = "r-20261015-downloads-stuck";
     const r = structuredClone(get(D));
@@ -351,6 +380,24 @@ describe("one fixture per step of docs/MVP.md", () => {
     const r = structuredClone(get("r-20261010-xpcshell-cwd"));
     r.needsUser.push({ key: "approve-push:storage-unit-a62d-3", action: "Approve try push storage-unit-a62d-3", detail: "6 tasks · why", push: "storage-unit-a62d-3", since: r.createdAt });
     assert.match(renderRequest(r, ctx).value, /<span class="flag">Approve try push 3<\/span>/);
+    r.pushes["storage-unit-a62d-3"] = { ...r.pushes.A, id: "storage-unit-a62d-3" };
+    r.pushes["dom-quota-b71e-3"] = { ...r.pushes.A, id: "dom-quota-b71e-3" };
+    const h = renderRequest(r, ctx, true).value;
+    assert.match(rowOf(h, "push-storage-unit-a62d-3"), /<span class="name" title="[^"]*">push a62d-3: /, "two stacks' pushes 3 told apart");
+    assert.match(rowOf(h, "push-dom-quota-b71e-3"), /<span class="name" title="[^"]*">push b71e-3: /);
+    assert.match(rowOf(h, "push-A"), /<span class="name" title="[^"]*">push A: /);
+  });
+
+  it("shows a planned push's dry-run warnings on its row, without its task count and purpose again", () => {
+    const r = structuredClone(get("r-20261010-xpcshell-cwd"));
+    const n = r.needsUser.find((x) => x.key === "approve-push:A")!;
+    n.detail = `312 tasks · ${r.pushes.A.purpose} · --chemspill-priority is set · Large push: 312 tasks`;
+    const h = renderRequest(r, ctx, true).value;
+    assert.match(rowOf(h, "push-A"), /<span class="state">waiting for your approval<\/span><span class="warn">⚠ --chemspill-priority is set · Large push: 312 tasks<\/span><\/summary>/);
+    assert.doesNotMatch(rowOf(h, "push-B"), /class="warn"/, "no warnings");
+    r.pushes.A.purpose = "";
+    n.detail = "312 tasks · chunks: xpcshell-1, xpcshell-2";
+    assert.match(rowOf(renderRequest(r, ctx, true).value, "push-A"), /<span class="warn">⚠ chunks: xpcshell-1, xpcshell-2<\/span>/, "without a purpose");
   });
 
   it("shows a refused command as a ⚑ you can dismiss", () => {
@@ -371,7 +418,8 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.doesNotMatch(row, /assigned_to/, "no Bugzilla email configured");
     const mine = rowOf(renderRequest(source.getRequest("r-20261010-xpcshell-cwd")!, { ...ctx, bugzillaEmail: "me@mozilla.com" }, true).value, "patch-p-copydir");
     assert.match(mine, /&amp;assigned_to=me%40mozilla\.com&amp;bug_status=ASSIGNED/, "yours to attach its patch to");
-    assert.match(row, /<span class="end">.*<div class="under"><div class="box tofile">\n    <h4>Core::XPCOM · “CopyDirectoryTo leaves a read-only source directory&#39;s contents behind”/, "right under the name");
+    assert.match(row, /<\/summary><div class="under"><div class="box tofile">\n    <h4>Core::XPCOM · “CopyDirectoryTo leaves a read-only source directory&#39;s contents behind”/, "first in the body: clicking in it doesn't fold the row");
+    assert.match(row, /<\/div><div class="lines"><span class="state">fixes <b>/, "its state under it");
     assert.ok(row.includes(cmd({ cmd: "set-bug", request: "r-20261010-xpcshell-cwd", patch: "p-copydir" })));
     assert.equal((row.match(/name="bugOrText"/g) ?? []).length, 1, "the ⚑'s buttons are the bug box");
 

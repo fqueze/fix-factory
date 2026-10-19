@@ -31,7 +31,7 @@ export function flagText(r: RequestState, n: NeedsUser): string {
     return "critical reviews didn't pass";
   }
   if (!job) {
-    return n.push === undefined ? n.action : n.action.replace(n.push, pushName(n.push));
+    return n.push === undefined ? n.action : n.action.replace(n.push, pushName(r, n.push));
   }
   if (actionKind(n, r) === "stopped") {
     return `${jobNoun(job.name)} stopped by you`;
@@ -92,7 +92,7 @@ export function flagControls(r: RequestState, n: NeedsUser, ctx: RenderContext):
       const accept = item !== undefined && reviewLimitFlag(r, item) === n;
       controls = buttons(
         accept ? commandButton(r.id, { cmd: "accept-review", item }, "Accept the patch as it is", back, true, "Takes the patch without another critical review") : retry,
-        talk,
+        job?.kind === "agent" && !isAuthorJob(job) ? null : talk,
         accept ? null : handBack,
       );
       break;
@@ -120,8 +120,12 @@ function buttons(...list: (Html | null)[]): Html {
 
 // Continue resumes the author's session: there has to be one.
 export function hasAuthorSession(r: RequestState, item: string): boolean {
-  // Jobs folded before JobView had a purpose: their name tells.
-  return r.items[item].jobs.some((j) => r.jobs[j].sessionId !== undefined && (r.jobs[j].purpose?.what === "author" || r.jobs[j].name === "investigate-and-fix"));
+  return r.items[item].jobs.some((j) => r.jobs[j].sessionId !== undefined && isAuthorJob(r.jobs[j]));
+}
+
+// Jobs folded before JobView had a purpose: their name tells.
+export function isAuthorJob(j: JobView): boolean {
+  return j.purpose?.what === "author" || j.name === "investigate-and-fix";
 }
 
 // A command the orchestrator refused, until you dismiss it or the same kind of command succeeds.
@@ -133,9 +137,9 @@ export function handBackButton(request: string, item: string, back: string): Htm
   return commandButton(request, { cmd: "hand-back", item }, "Hand back to me", back, false, "Closes the group: the factory stops working on it");
 }
 
-// An agent with a session is resumed where it stopped; anything else runs again.
+// An author with a session is resumed where it stopped; anything else runs again.
 export function retryButton(request: string, job: JobView, back: string): Html {
-  return job.kind === "agent" && job.sessionId
+  return job.kind === "agent" && job.sessionId && isAuthorJob(job)
     ? commandButton(request, { cmd: "retry", job: job.job }, "Resume", back, true, "Its author continues where it stopped")
     : commandButton(request, { cmd: "retry", job: job.job }, "Retry", back, true, `Runs ${jobNoun(job.name)} again`);
 }
