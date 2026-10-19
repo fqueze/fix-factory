@@ -211,8 +211,8 @@ export type Command =
   | (CommandBase & { cmd: "tell-factory"; text: string })
   | (CommandBase & { cmd: "reply-recovery"; job: JobId; text: string })
   | (CommandBase & { cmd: "start-now" })
-  | (CommandBase & { cmd: "redo-annotations" })
-  | (CommandBase & { cmd: "poll-phab" }) // check its revisions on Phabricator now // the skip-ifs group again, from today's manifests
+  | (CommandBase & { cmd: "redo-annotations" }) // the skip-ifs group again, from today's manifests
+  | (CommandBase & { cmd: "poll-phab" }) // check its revisions on Phabricator now
   | (CommandBase & { cmd: "presence"; visible: boolean }) // sent by a visible page, see docs/ORCHESTRATOR.md
   // The ways out of a ⚑, from its buttons.
   | (CommandBase & { cmd: "accept-review"; item: ItemId }) // the item is reviewed despite its critical review findings
