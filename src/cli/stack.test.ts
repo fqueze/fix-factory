@@ -4,7 +4,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { assemble, check, detectDeps, importStack, interdiff, rewrite } from "./stack.ts";
-import { currentBranch, gitTry } from "./stack/git.ts";
+import { currentBranch, git, gitTry } from "./stack/git.ts";
 import { lines, makeRepo, type TestRepo } from "./stack/testutil.ts";
 
 const D = "Differential Revision: https://phabricator.services.mozilla.com/D";
@@ -27,7 +27,9 @@ test("import lists commits oldest first with parsed metadata", async (t) => {
   t.after(() => repo.cleanup());
   const out = await importStack(repo.dir, "main..work");
   assert.equal(out.length, 4);
-  assert.deepEqual(out[0], {
+  const { patchId, ...first } = out[0];
+  assert.match(patchId!, /^[0-9a-f]{40}$/);
+  assert.deepEqual(first, {
     sha: A,
     title: "Bug XXXXXXX - Change line 2, r=alice.",
     bug: null,
@@ -43,6 +45,10 @@ test("import lists commits oldest first with parsed metadata", async (t) => {
   assert.equal(out[2].sha, C);
   assert.deepEqual(out[2].files, ["b.txt", "dir/test/test_c.js"]);
   assert.equal(out[2].insertions, 2);
+  // Reworded, a commit keeps its patch-id.
+  const tree = (await git(repo.dir, ["rev-parse", `${A}^{tree}`])).trim();
+  const reworded = (await git(repo.dir, ["commit-tree", tree, "-p", `${A}^`, "-m", "Bug 1 - Change line 2, r=bob."])).trim();
+  assert.equal((await importStack(repo.dir, `${A}^..${reworded}`))[0].patchId, patchId);
 });
 
 test("assemble creates and extends a branch, HEAD attached", async (t) => {

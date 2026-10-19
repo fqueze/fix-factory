@@ -11,6 +11,7 @@ export interface ImportedCommit {
   insertions: number; // binary files count as 0
   deletions: number;
   testOnly: boolean;
+  patchId?: string; // git patch-id --stable: the same for a reworded commit, "" when it changes nothing
 }
 
 export async function importStack(cwd: string, revset: string): Promise<ImportedCommit[]> {
@@ -27,6 +28,8 @@ export async function importStack(cwd: string, revset: string): Promise<Imported
       insertions += Number(ins) || 0;
       deletions += Number(del) || 0;
     }
+    const diff = await git(cwd, ["diff-tree", "-p", "--no-renames", sha]);
+    const patchId = diff.trim() ? (await git(cwd, ["patch-id", "--stable"], { input: diff })).split(" ")[0] : "";
     const t = title(c.message);
     out.push({
       sha,
@@ -38,6 +41,7 @@ export async function importStack(cwd: string, revset: string): Promise<Imported
       insertions,
       deletions,
       testOnly: isTestOnly(files),
+      patchId,
     });
   }
   return out;

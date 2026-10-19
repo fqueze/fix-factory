@@ -2,7 +2,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { InvalidReport } from "./handlers.ts";
-import { resumeAuthorPlan } from "./next.ts";
+import { resumeAuthorPlan, stackId } from "./next.ts";
 import { config, HOUR, ID, Scenario, sha } from "./testkit.ts";
 
 const none = { verdict: "none", quote: "no bug", feedback: [] };
@@ -770,6 +770,44 @@ describe("5. stack", () => {
     assert.equal(s.step, "verify on try");
   });
 
+  it("names a stack after its folder, cutting its first parts to one letter so the last ones fit", () => {
+    assert.equal(stackId("dom/base/test"), "dom-base-test");
+    assert.equal(stackId("browser/components/enterprisepolicies/tests/browser"), "b-c-enterprisepolicies-tests-browser");
+    assert.equal(stackId("browser/components/enterprisepolicies/tests/xpcshell"), "b-c-enterprisepolicies-tests-xpcshell");
+    assert.equal(stackId(""), "root");
+  });
+
+  it("gives two folders whose names start alike their own stacks", () => {
+    const long = "a".repeat(45);
+    const sc = workList([group("ka", `${long}/x/test_a.js`, "boom"), group("kb", `${long}/y/test_b.js`, "bang")]);
+    investigating(sc, "i-test-a");
+    investigating(sc, "i-test-b");
+    reviewed(sc, "i-test-a", sha("1"), `${long}/x/test_a.js`);
+    reviewed(sc, "i-test-b", sha("2"), `${long}/y/test_b.js`);
+    const wts = sc.view().jobs.filter((j) => j.purpose.key.startsWith("wt:a")).map((j) => j.purpose.key);
+    assert.equal(new Set(wts).size, 2, JSON.stringify(wts));
+  });
+
+  it("goes on when an author reported its commit by a short sha", () => {
+    const sc = workList([group("ka", "a/test_a.js", "boom")]);
+    investigating(sc, "i-test-a");
+    reviewed(sc, "i-test-a", sha("1").slice(0, 12), "a/test_a.js");
+    sc.complete("wt:a", { output: { name: `${ID}-a`, path: `/wt/${ID}-a`, branch: `${ID}-a` } });
+    const [assemble] = sc.settle();
+    sc.complete(assemble, { output: { branch: `${ID}-a`, commits: [{ sha: sha("1"), newSha: sha("a") }], skipped: [], empty: [] } });
+    assert.ok(sc.settle().includes(`deps:a:${assemble.split(":")[2]}`));
+  });
+
+  it("drops the ⚑ of a job of an earlier version of the stack", () => {
+    const sc = twoReviewed();
+    sc.startJob({ purpose: { key: "review-stack:a:0123456789", what: "review-stack", stack: "a" }, kind: "agent", name: "review-stack", cwd: "/wt", agent: { sessionId: "s-old", resume: false, message: "x" } });
+    const old = sc.running("review-stack:a:0123456789");
+    sc.complete("review-stack:a:0123456789", { exitCode: -1, error: "cancelled by you" });
+    sc.add({ type: "needs-user", request: ID, key: `stopped:${old}`, action: "stopped", detail: "", job: old });
+    sc.settle();
+    assert.ok(!sc.open().includes(`stopped:${old}`));
+  });
+
   it("waits for every item of the folder", () => {
     const sc = workList([group("ka", "a/test_a.js", "boom"), group("kb", "a/test_b.js", "bang")]);
     investigating(sc, "i-test-a");
@@ -913,6 +951,22 @@ describe("6. verify on try, again", () => {
     sc.complete(planKey, { report: { pushes: [], feedback: [] } });
     sc.settle();
     assert.equal(sc.state().step, "meta bug");
+  });
+
+  it("withdraws the pushes planned for the stack's earlier code that weren't made", () => {
+    const sc = stacked();
+    const planKey = sc.view().jobs.find((j) => j.purpose.what === "plan-pushes")!.purpose.key;
+    sc.complete(planKey, { report: { pushes: [{ purpose: "verify", tryArgs: ["fuzzy", "-q", "x"], rebuild: 5 }], feedback: [] } });
+    const [dry] = sc.settle();
+    const push = sc.purpose(dry).push!;
+    sc.complete(dry, { output: { command: ["./mach", "try", "fuzzy"], taskCount: 5, tasks: [], tryTaskConfig: {}, commits: [], warnings: [] } });
+    sc.settle();
+    assert.deepEqual(sc.open(), [`approve-push:${push}`]);
+    sc.add({ type: "step", request: ID, step: "verify on try" });
+    sc.settle();
+    assert.match(sc.state().pushes[push].declined ?? "", /^not needed anymore/);
+    assert.equal(sc.state().pushes[push].withdrawn, true, "by the factory, not you");
+    assert.deepEqual(sc.open(), []);
   });
 });
 
@@ -1199,6 +1253,33 @@ describe("10. landing", () => {
     const removes = sc.view().jobs.filter((j) => j.purpose.what === "remove");
     assert.deepEqual(removes.map((j) => j.purpose.key).sort(), [`remove:${ID}-a`, `remove:${ID}-i-test-a`, `remove:${ID}-i-test-b`].sort());
     assert.ok(removes.every((j) => j.cwd === config.firefoxRepo));
+  });
+});
+
+describe("burndown stack", () => {
+  it("is one stack for the request's folder, its subfolders' groups included", () => {
+    const sc = new Scenario("burndown", { folder: "a" });
+    sc.step();
+    sc.settle();
+    sc.complete("annotations", { output: [] });
+    sc.settle();
+    sc.complete("collect:folder:folder", { output: [failure("a/test_a.js", "boom"), failure("a/sub/test_b.js", "bang")] });
+    sc.settle();
+    sc.complete("cluster:folder:folder", { output: { groups: [group("ka", "a/test_a.js", "boom"), group("kb", "a/sub/test_b.js", "bang")], singles: [] } });
+    sc.settle();
+    const merge = sc.view().jobs.find((j) => j.purpose.key.startsWith("merge:") && !j.end)?.purpose.key;
+    if (merge) {
+      sc.complete(merge, { report: { groups: [group("ka", "a/test_a.js", "boom"), group("kb", "a/sub/test_b.js", "bang")].map((g) => ({ message: g.message, tests: g.tests, configs: g.configs, from: [g.key], reason: "unchanged" })), feedback: [] } });
+      sc.settle();
+    }
+    investigating(sc, "i-test-a");
+    investigating(sc, "i-test-b");
+    reviewed(sc, "i-test-a", sha("1"), "a/test_a.js");
+    reviewed(sc, "i-test-b", sha("2"), "a/sub/test_b.js");
+    assert.deepEqual(sc.view().jobs.filter((j) => j.purpose.key.startsWith("wt:a")).map((j) => j.purpose.key), ["wt:a"]);
+    sc.complete("wt:a", { output: { name: `${ID}-a`, path: `/wt/${ID}-a`, branch: `${ID}-a` } });
+    const [assemble] = sc.settle();
+    assert.deepEqual(sc.plan(assemble).cli?.args.slice(-2), [sha("1"), sha("2")]);
   });
 });
 

@@ -23,7 +23,9 @@ A tick runs on any change to `commands.jsonl` or a job file, and at least every 
   and isn't a round. After that, it comes to you.
 - **Authors** are resumed in their own session. They never push: a hook refuses any push from an agent.
 - **Try pushes** wait for your approval. A push you decline, with a reason, isn't made; the plan's others still
-  wait for you.
+  wait for you. A stack's reviews and verification pushes are keyed
+  by its code (git patch-id), not its commit ids: rewording a commit plans no new push. Pushes planned for code
+  the stack no longer has, and not made, are withdrawn.
 - **When step 3 runs:** at whichever comes first, the push finishing or 2 h after it started, so slow pools don't
   hold everything up. It runs again when the push finishes, adding new groups.
 - **Try failures:**

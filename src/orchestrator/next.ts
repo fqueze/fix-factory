@@ -119,8 +119,14 @@ export function fileBugKey(patch: PatchId, epoch: string): string {
   return `file-bug:${patch}:meta-bug-step${epoch}`;
 }
 
+// A folder's id: within slug's 40 characters, its first parts are cut to one letter, from the left,
+// so that its last ones, which tell folders apart, stay whole.
 export function stackId(folder: string): string {
-  return slug(folder) || "root";
+  const parts = folder.split("/").filter(Boolean);
+  for (let i = 0; i < parts.length - 1 && slug(parts.join("-")).length < parts.join("-").length; i++) {
+    parts[i] = parts[i].charAt(0);
+  }
+  return slug(parts.join("-")) || "root";
 }
 
 export function folderOf(test: string): string {
@@ -186,6 +192,7 @@ interface StackInfo {
   id: string;
   folder: string;
   hash: string; // of the author commits it assembles
+  code: string; // of their changes: a reworded commit keeps it, so its reviews and try pushes still count
   patches: { id: PatchId; source: string; item: ItemId }[];
   wt?: string;
   branch: string;
@@ -905,10 +912,21 @@ class Planner {
   // -------------------------------------------------------------------------
   // 5. Stack, per folder once every item in it is settled
 
+  // A burndown's groups make one stack for its folder, subfolders included; other requests, one per folder.
+  private stackFolder(i: ItemView): string {
+    const f = this.s.kind === "burndown" ? this.s.folder : undefined;
+    return f !== undefined && (i.folder === f || i.folder.startsWith(`${f}/`)) ? f : i.folder;
+  }
+
   private computeStacks(): void {
-    const folders = [...new Set(Object.values(this.s.items).map((i) => i.folder))];
+    const folders = [...new Set(Object.values(this.s.items).map((i) => this.stackFolder(i)))].sort();
+    const ids = new Map<string, string>();
     for (const folder of folders) {
-      const items = Object.values(this.s.items).filter((i) => i.folder === folder);
+      // A stack keeps the id it was made with; two folders whose ids are the same don't share one.
+      let id = Object.values(this.s.stacks).find((st) => st.folder === folder)?.id ?? stackId(folder);
+      if (ids.has(id)) id = `${id.slice(0, 33)}-${shortHash([folder]).slice(0, 6)}`;
+      ids.set(id, folder);
+      const items = Object.values(this.s.items).filter((i) => this.stackFolder(i) === folder);
       if (items.some((i) => !SETTLED.includes(i.state))) continue;
       const patches: StackInfo["patches"] = [];
       for (const item of items) {
@@ -919,10 +937,10 @@ class Planner {
         });
       }
       if (patches.length === 0) continue;
-      const id = stackId(folder);
       const wtJob = this.view.byKey.get(`wt:${id}`)?.find(succeeded);
       const hash = shortHash(patches.map((p) => `${p.id}=${p.source}`)) + this.stepEpoch("stack");
-      const info: StackInfo = { id, folder, hash, patches, branch: `${this.s.id}-${id}`, ready: false };
+      const code = shortHash(patches.map((p) => `${p.id}=${this.codeOf(p.id) ?? p.source}`)) + this.stepEpoch("stack");
+      const info: StackInfo = { id, folder, hash, code, patches, branch: `${this.s.id}-${id}`, ready: false };
       if (wtJob) info.wt = this.out<{ path: string }>(wtJob).path;
       info.ready = this.view.byKey.get(`summary:${id}:${hash}`)?.some(succeeded) ?? false;
       this.stackInfos.set(id, info);
@@ -946,7 +964,12 @@ class Planner {
   }
 
   private buildStack(info: StackInfo): void {
-    const { id, hash } = info;
+    const { id, hash, code } = info;
+    // The ⚑s of an earlier version of this stack (its patches changed since) ask nothing anymore.
+    for (const n of this.s.needsUser) {
+      const job = n.job === undefined ? undefined : this.view.jobs.find((j) => j.job === n.job);
+      if (job?.purpose.stack === id && /:[0-9a-f]{10}/.test(job.purpose.key) && !job.purpose.key.includes(`:${hash}`) && !job.purpose.key.includes(`:${code}`)) this.clear(n.key);
+    }
     if (!this.want(`wt:${id}`, () => this.worktree(info.branch))) return;
     const wt = info.wt!;
     const prev = this.s.stacks[id];
@@ -995,15 +1018,17 @@ class Planner {
         this.cli("assemble", "stack.ts", ["assemble", "--cwd", wt, "--branch", info.branch, "--leave-conflict", ...remaining], { cwd: wt, purpose: { stack: id, patches: patchesOf(remaining) } }),
       );
     }
-    if (!cur || sources.some((sha) => !mapped.has(sha))) return;
+    // Authors may report short shas; the stack scripts answer with full ones.
+    const among = (set: Set<string>, sha: string) => [...set].some((x) => x.startsWith(sha) || sha.startsWith(x));
+    if (!cur || sources.some((sha) => !among(mapped, sha))) return;
     // A change already in the base makes no commit: that patch is left out.
-    const kept = info.patches.filter((p) => !empty.has(p.source));
+    const kept = info.patches.filter((p) => !among(empty, p.source));
     const inStack = kept.filter((p) => this.s.patches[p.id].worktree === wt);
     if (inStack.length < kept.length) return; // the handlers' patch events haven't landed yet
     const shaToPatch = Object.fromEntries(inStack.map((p) => [this.s.patches[p.id].sha.slice(0, 12), p.id]));
     const deps = this.want(`deps:${id}:${hash}`, () => this.cli("deps", "stack.ts", ["deps", "--cwd", wt, "--base", this.config.baseRef], { cwd: wt, purpose: { stack: id, patches: shaToPatch } }));
     const efforts = inStack.map((p) =>
-      this.wantAgent(`effort:${p.id}:${p.source}`, "effort", "estimate-review-effort", { sha: this.s.patches[p.id].sha, worktree: wt }, { cwd: wt, purpose: { patch: p.id, stack: id } }),
+      this.wantAgent(`effort:${p.id}:${this.codeOf(p.id) ?? p.source}`, "effort", "estimate-review-effort", { sha: this.s.patches[p.id].sha, worktree: wt }, { cwd: wt, purpose: { patch: p.id, stack: id } }),
     );
     if (!deps || efforts.some((x) => !x)) return;
     const value = (pid: PatchId) => this.s.items[this.s.patches[pid].item ?? ""]?.group.ratePerWeek;
@@ -1048,7 +1073,7 @@ class Planner {
       return;
     }
     const depsFile = dataPath(this.config, this.s.id, `deps-${id}-${hash}.json`);
-    const review = this.wantAgent(`review-stack:${id}:${hash}`, "review-stack", "review-stack", { base: this.config.baseRef, branch: info.branch, worktree: wt, depsFile }, {
+    const review = this.wantAgent(`review-stack:${id}:${code}`, "review-stack", "review-stack", { base: this.config.baseRef, branch: info.branch, worktree: wt, depsFile }, {
       cwd: wt,
       purpose: { stack: id },
       files: [
@@ -1138,6 +1163,16 @@ class Planner {
   // -------------------------------------------------------------------------
   // 6. Verify on try
 
+  // Its author commit's patch-id, from the import of its author's commits (none from before patch-ids).
+  private codeOf(pid: PatchId): string | undefined {
+    const p = this.s.patches[pid];
+    const author = p.item ? this.authorReport(p.item) : undefined;
+    const imp = author && this.view.byKey.get(`import:${author.job.job}`)?.find(succeeded);
+    if (!imp) return undefined;
+    const index = author.commits.findIndex((_, i) => patchId(p.item!, i) === p.id);
+    return this.out<ImportedCommit[]>(imp)[index]?.patchId || undefined;
+  }
+
   private patchFiles(p: PatchView): string[] {
     if (!p.item) return [];
     const author = this.authorReport(p.item);
@@ -1158,8 +1193,13 @@ class Planner {
     );
   }
 
-  // The pushes to make for the current plan.
-  private verifyPushes(info: StackInfo): PushId[] | undefined {
+  // The ids of the verification pushes of the stack's current code.
+  private verifyPrefix(info: StackInfo): string {
+    return `${info.id}-${shortHash([info.code, this.stepEpoch("verify on try")]).slice(0, 4)}`;
+  }
+
+  // The current plan's pushes (ids) and those to make (made).
+  private verifyPushes(info: StackInfo): { ids: PushId[]; made: PushId[] } | undefined {
     const e = this.stepEpoch("verify on try");
     const stack = this.s.stacks[info.id];
     if (!stack || !info.wt) return undefined;
@@ -1174,7 +1214,7 @@ class Planner {
     }
     const failuresFile = dataPath(this.config, this.s.id, `failures-${info.id}.json`);
     const initialFile = dataPath(this.config, this.s.id, "initial-pushes.json");
-    const planKey = `plan:verify:${info.id}:${info.hash}${e}`;
+    const planKey = `plan:verify:${info.id}:${info.code}${e}`;
     const planned = this.planPushes(planKey, {
       goal: `verify the fixes of the ${info.folder} stack: every failure below should be gone, with no new one`,
       failuresFile,
@@ -1210,8 +1250,8 @@ class Planner {
             ) + "\n",
         },
       ],
-    }, (i) => `${info.id}-${shortHash([info.hash, e]).slice(0, 4)}-${i + 1}`, info.wt, info.id);
-    return planned?.made;
+    }, (i) => `${this.verifyPrefix(info)}-${i + 1}`, info.wt, info.id);
+    return planned && { ids: planned.ids, made: planned.made };
   }
 
   private debugCommit(): string | undefined {
@@ -1220,6 +1260,14 @@ class Planner {
   }
 
   private verify(): void {
+    // Once verified, the stacks' pushes still waiting for you ask nothing anymore.
+    if (at(this.s.step) > at("verify on try") && this.s.step !== "done") {
+      for (const push of Object.values(this.s.pushes)) {
+        if (this.s.needsUser.some((n) => n.key === `approve-push:${push.id}`) && this.view.byKey.get(`dry-run:${push.id}`)?.[0].purpose.stack) {
+          this.event(this.ev("try-declined", { push: push.id, text: "not needed anymore: the stack was verified", by: "factory" }));
+        }
+      }
+    }
     if (this.s.step !== "verify on try") return;
     // Every verification push's failures are routed, also those of a stack being redone: its
     // other authors still need to hear about theirs.
@@ -1229,10 +1277,23 @@ class Planner {
     }
     let green = this.stackInfos.size > 0;
     for (const info of this.stackInfos.values()) {
-      const pushes = info.ready ? this.verifyPushes(info) : undefined;
-      if (!pushes || pushes.some((push) => this.s.pushes[push]?.result !== "green")) green = false;
+      const plan = info.ready ? this.verifyPushes(info) : undefined;
+      // Pushes not made that aren't in the current plan (planned for code the stack no longer has, or by an earlier
+      // version of the factory) ask nothing anymore.
+      for (const push of Object.values(this.s.pushes)) {
+        const stack = this.view.byKey.get(`dry-run:${push.id}`)?.[0].purpose.stack;
+        const current = plan ? plan.ids.includes(push.id) : push.id.startsWith(`${this.verifyPrefix(info)}-`);
+        if (stack === info.id && !push.rev && push.declined === undefined && !current) {
+          this.event(this.ev("try-declined", { push: push.id, text: "not needed anymore: the stack changed since it was planned", by: "factory" }));
+        }
+      }
+      if (!plan || plan.made.some((push) => this.s.pushes[push]?.result !== "green")) green = false;
     }
-    if (green) this.setStep("meta bug");
+    if (green) {
+      // Verified: no longer "on try".
+      for (const info of this.stackInfos.values()) for (const p of info.patches) if (this.s.items[p.item]?.state === "in try") this.setItem(p.item, "in stack");
+      this.setStep("meta bug");
+    }
   }
 
   private routeTryFailures(push: PushId, patches: PatchView[]): void {
@@ -1329,6 +1390,8 @@ class Planner {
         continue;
       }
       submitted = false;
+      // Verified before this step (requests from before 2026-10-19 kept "in try").
+      for (const p of patches) if (p.item && this.s.items[p.item]?.state === "in try") this.setItem(p.item, "in stack");
       if (this.s.kind === "burndown" && this.debugCommit()) {
         if (!this.want(`checkout:${st.id}${e}`, () => this.cli("checkout", "git", ["checkout", st.branch], { cwd: st.worktree, purpose: { stack: st.id } }))) continue;
       }
