@@ -72,7 +72,7 @@ test("list: first commit adding each condition line, with its bug from Bugzilla"
       const id = /bug\/(\d+)/.exec(url)![1];
       if (id === "3333333") return new Response(JSON.stringify({ error: true, message: "private" }), { status: 401 });
       if (url.includes("/comment")) return new Response(JSON.stringify({ bugs: { [id]: { comments: [{ text: `about ${id}` }] } } }));
-      return new Response(JSON.stringify({ bugs: [{ id: Number(id), summary: `summary ${id}` }] }));
+      return new Response(JSON.stringify({ bugs: [{ id: Number(id), summary: `summary ${id}`, status: "NEW", resolution: "" }] }));
     }) as typeof fetch;
 
     const out = await list("dir", repo, { fetch: fakeFetch });
@@ -82,10 +82,10 @@ test("list: first commit adding each condition line, with its bug from Bugzilla"
     assert.equal(tsan.condition, "tsan");
     assert.equal(tsan.comment, "Bug 1111111");
     assert.equal(tsan.commit?.subject, "Bug 2222222 - Skip browser_a.js on tsan, r=x.");
-    assert.deepEqual(tsan.bug, { id: 2222222, summary: "summary 2222222", firstComment: "about 2222222" });
-    assert.deepEqual(tsan.commentBugs, [{ id: 1111111, summary: "summary 1111111", firstComment: "about 1111111" }]);
+    assert.deepEqual(tsan.bug, { id: 2222222, summary: "summary 2222222", status: "NEW", resolution: "", firstComment: "about 2222222" });
+    assert.deepEqual(tsan.commentBugs, [{ id: 1111111, summary: "summary 1111111", status: "NEW", resolution: "", firstComment: "about 1111111" }]);
     assert.equal(asan.commit?.subject, "Bug 3333333 - Skip browser_a.js on asan too, r=x.");
-    assert.deepEqual(asan.bug, { id: 3333333, error: "Bugzilla bug/3333333?include_fields=id,summary: private" });
+    assert.deepEqual(asan.bug, { id: 3333333, error: "Bugzilla bug/3333333?include_fields=id,summary,status,resolution: private" });
     assert.equal(asan.comment, undefined);
     assert.deepEqual(asan.commentBugs, []);
     assert.equal(new Set(urls).size, urls.length, "each bug is fetched once");

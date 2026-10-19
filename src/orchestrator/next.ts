@@ -454,6 +454,22 @@ class Planner {
     return `${this.stepEpoch("first signal")}${this.itemEpoch(ANNOTATIONS_ITEM)}`;
   }
 
+  // A skip-if naming a bug, or added in an intermittent-failure bug, is a failure skip. Otherwise an agent reads the
+  // history: the commit found may be a rewrite (the .ini → .toml conversion, os_version renames) of the real one.
+  private classification(a: Annotation, index: number, wt: string): ClassifyAnnotationReport | undefined {
+    if (a.commentBugs.length) return { kind: "flakiness", reason: `its comment names bug ${a.commentBugs.map((b) => b.id).join(", ")}`, feedback: [] };
+    const bug = a.bug && "summary" in a.bug ? a.bug : undefined;
+    if (bug && /^intermittent\b/i.test(bug.summary)) return { kind: "flakiness", reason: `added in bug ${bug.id} (“${bug.summary}”)`, feedback: [] };
+    const r = this.wantAgent(`classify:${index}${this.annotationsEpoch()}`, "classify", "classify-annotation", {
+      annotation: `${a.kind} = ${a.condition}${a.comment ? ` # ${a.comment}` : ""}`,
+      manifest: `${a.manifest} [${a.test}]`,
+      worktree: wt,
+      commit: a.commit ? `${a.commit.sha.slice(0, 12)} (${a.commit.date.slice(0, 10)}, “${a.commit.subject}”)` : "not found",
+      bug: bug ? `bug ${bug.id} (${bug.status}${bug.resolution ? ` ${bug.resolution}` : ""}, “${bug.summary}”), whose first comment is: ${bug.firstComment.slice(0, 3000)}` : a.bug ? `bug ${a.bug.id}` : "no bug",
+    }, { cwd: wt, purpose: { index } });
+    return r && this.rep<ClassifyAnnotationReport>(r);
+  }
+
   private firstSignal(): void {
     if (this.s.kind !== "burndown") return;
     const redone = this.s.step !== "first signal";
@@ -472,15 +488,8 @@ class Planner {
       return;
     }
     const classified = skips.map(({ a, index }) => {
-      const bug = a.bug && "summary" in a.bug ? a.bug : undefined;
-      const r = this.wantAgent(`classify:${index}${this.annotationsEpoch()}`, "classify", "classify-annotation", {
-        annotation: `${a.kind} = ${a.condition}`,
-        manifest: `${a.manifest} [${a.test}]`,
-        bug: a.bug?.id ?? "unknown",
-        summary: bug?.summary ?? "",
-        comment: (bug?.firstComment ?? a.comment ?? "").slice(0, 3000),
-      }, { purpose: { index } });
-      return r && { ...a, classification: this.rep<ClassifyAnnotationReport>(r) };
+      const c = this.classification(a, index, wt.path);
+      return c && { ...a, classification: c };
     });
     if (classified.some((c) => !c)) return;
     if (!classified.some((c) => c!.classification.kind !== "unclear")) {
@@ -839,8 +848,7 @@ class Planner {
   private annotationsInput(wt: string): unknown[] | undefined {
     const skips = this.skipIfs(wt);
     const input = skips?.map(({ a, index }) => {
-      const r = this.view.byKey.get(`classify:${index}${this.annotationsEpoch()}`)?.find(succeeded);
-      const c = r && this.rep<ClassifyAnnotationReport>(r);
+      const c = this.classification(a, index, wt);
       return c && { manifest: a.manifest, test: a.test, condition: a.condition, line: a.line, comment: a.comment, kind: c.kind, reason: c.reason };
     });
     // Nothing to write when every skip-if is unclear (firstSignal then closes the group).

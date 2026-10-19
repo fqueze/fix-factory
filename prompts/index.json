@@ -1,6 +1,6 @@
 {
   "route-request": { "model": "sonnet", "step": "1. Request", "purpose": "Turn text from the main box into a new request, or route it to an existing one." },
-  "classify-annotation": { "model": "haiku", "step": "2. First signal", "purpose": "Classify a skip-if as scoping or flakiness." },
+  "classify-annotation": { "model": "sonnet", "step": "2. First signal", "purpose": "Classify a skip-if as scoping or flakiness." },
   "write-annotation-patches": { "model": "sonnet", "step": "2. First signal", "purpose": "Write the run-if commit and the DEBUG un-skip commit." },
   "plan-try-pushes": { "model": "sonnet", "step": "2. First signal, 6. Verify on try", "purpose": "Plan the try pushes, each with a command and a purpose." },
   "triage-try": { "model": "haiku", "step": "3. Work list, 6. Verify on try", "purpose": "Classify failures fx-tests couldn't parse or that match no patch." },

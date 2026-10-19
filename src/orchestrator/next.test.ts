@@ -140,7 +140,7 @@ describe("1. request", () => {
 });
 
 describe("2. first signal", () => {
-  const ann = (condition: string, kind = "skip-if") => ({ manifest: "dom/base/test/mochitest.toml", test: "test_a.html", kind, condition, line: 3, commit: null, bug: { id: 123, summary: "Intermittent", firstComment: "fails" }, commentBugs: [] });
+  const ann = (condition: string, kind = "skip-if") => ({ manifest: "dom/base/test/mochitest.toml", test: "test_a.html", kind, condition, line: 3, commit: null, bug: { id: 123, summary: "Skip test_a.html", status: "RESOLVED", resolution: "FIXED", firstComment: "fails" }, commentBugs: [] as { id: number }[] });
 
   function burndown(): Scenario {
     const sc = new Scenario("burndown", { folder: "dom/base/test" });
@@ -164,7 +164,14 @@ describe("2. first signal", () => {
     sc.complete("annotations", { output: [ann("os == 'mac'"), ann("debug", "fail-if"), ann("tsan")] });
     assert.deepEqual(sc.settle().sort(), ["classify:0", "classify:2"]);
     assert.equal(sc.plan("classify:0").name, "classify-annotation");
-    assert.deepEqual(sc.plan("classify:0").agent?.vars, { annotation: "skip-if = os == 'mac'", manifest: "dom/base/test/mochitest.toml [test_a.html]", bug: 123, summary: "Intermittent", comment: "fails" });
+    assert.deepEqual(sc.plan("classify:0").agent?.vars, {
+      annotation: "skip-if = os == 'mac'",
+      manifest: "dom/base/test/mochitest.toml [test_a.html]",
+      worktree: `/wt/${ID}-signal`,
+      commit: "not found",
+      bug: "bug 123 (RESOLVED FIXED, “Skip test_a.html”), whose first comment is: fails",
+    });
+    assert.equal(sc.plan("classify:0").cwd, `/wt/${ID}-signal`);
     sc.complete("classify:0", { report: { kind: "scoping", reason: "no mac", feedback: [] } });
     sc.complete("classify:2", { report: { kind: "flakiness", reason: "races", feedback: [] } });
     assert.deepEqual(sc.settle(), ["author:i-annotations:initial"]);
@@ -211,6 +218,39 @@ describe("2. first signal", () => {
     sc.add({ type: "try-pushed", request: ID, push: "unskip", rev: "def", url: "u" });
     sc.settle();
     assert.equal(sc.state().step, "work list");
+  });
+
+  it("a skip-if whose comment names a bug is a failure skip, without an agent", () => {
+    const sc = burndown();
+    signalWorktree(sc);
+    sc.complete("annotations", { output: [{ ...ann("tsan"), comment: "Bug 456", commentBugs: [{ id: 456 }] }] });
+    assert.deepEqual(sc.settle(), ["author:i-annotations:initial"]);
+    const [a] = JSON.parse(sc.plan("author:i-annotations:initial").files![0].content);
+    assert.deepEqual([a.kind, a.reason], ["flakiness", "its comment names bug 456"]);
+  });
+
+  it("a skip-if added in an Intermittent bug is a failure skip, without an agent", () => {
+    const sc = burndown();
+    signalWorktree(sc);
+    sc.complete("annotations", { output: [{ ...ann("tsan"), bug: { id: 789, summary: "Intermittent test_a.html | timed out", status: "NEW", resolution: "", firstComment: "" } }] });
+    assert.deepEqual(sc.settle(), ["author:i-annotations:initial"]);
+    assert.equal(JSON.parse(sc.plan("author:i-annotations:initial").files![0].content)[0].kind, "flakiness");
+  });
+
+  it("otherwise, the classify agent reads the commit and bug in the signal worktree", () => {
+    const sc = burndown();
+    signalWorktree(sc);
+    const commit = { sha: "0123456789abcdef", date: "2024-03-05T10:00:00Z", author: "A", subject: "Bug 123 - Convert to toml" };
+    sc.complete("annotations", { output: [{ ...ann("asan"), comment: "slow", commit, bug: { id: 123 } }] });
+    assert.deepEqual(sc.settle(), ["classify:0"]);
+    assert.equal(sc.plan("classify:0").cwd, `/wt/${ID}-signal`);
+    assert.deepEqual(sc.plan("classify:0").agent?.vars, {
+      annotation: "skip-if = asan # slow",
+      manifest: "dom/base/test/mochitest.toml [test_a.html]",
+      worktree: `/wt/${ID}-signal`,
+      commit: "0123456789ab (2024-03-05, “Bug 123 - Convert to toml”)",
+      bug: "bug 123",
+    });
   });
 
   it("without skip-ifs, the work list comes from the folder's history on central", () => {

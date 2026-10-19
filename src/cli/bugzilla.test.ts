@@ -76,9 +76,9 @@ test("bugInfo: first non-empty comment, Bugzilla errors", async () => {
     if (url.includes("bug/6")) {
       return new Response(JSON.stringify({ error: true, code: 102, message: "You are not authorized to access bug 6." }), { status: 401 });
     }
-    return new Response(JSON.stringify({ bugs: [{ id: 5, summary: "Intermittent x" }] }));
+    return new Response(JSON.stringify({ bugs: [{ id: 5, summary: "Intermittent x", status: "RESOLVED", resolution: "FIXED" }] }));
   }) as typeof fetch;
-  assert.deepEqual(await bugInfo(5, fetchFn), { id: 5, summary: "Intermittent x", firstComment: "real text" });
+  assert.deepEqual(await bugInfo(5, fetchFn), { id: 5, summary: "Intermittent x", status: "RESOLVED", resolution: "FIXED", firstComment: "real text" });
   await assert.rejects(bugInfo(6, fetchFn), /not authorized/);
 });
 

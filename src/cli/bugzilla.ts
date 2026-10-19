@@ -32,19 +32,23 @@ export async function getJson(path: string, fetchFn: typeof fetch = fetch): Prom
 export interface BugInfo {
   id: number;
   summary: string;
+  status: string;
+  resolution: string;
   firstComment: string; // the first non-empty comment, truncated
 }
 
 const FIRST_COMMENT_MAX = 2000;
 
 export async function bugInfo(id: number, fetchFn: typeof fetch = fetch): Promise<BugInfo> {
-  const bug = await getJson(`bug/${id}?include_fields=id,summary`, fetchFn);
+  const bug = await getJson(`bug/${id}?include_fields=id,summary,status,resolution`, fetchFn);
   const comments = await getJson(`bug/${id}/comment?include_fields=text,count`, fetchFn);
   // Intermittent tracking bugs have an empty comment 0 (the summary says it all).
   const first: string = comments.bugs[String(id)].comments.find((c: { text: string }) => c.text.trim() !== "")?.text ?? "";
   return {
     id,
     summary: bug.bugs[0].summary,
+    status: bug.bugs[0].status,
+    resolution: bug.bugs[0].resolution,
     firstComment: first.length > FIRST_COMMENT_MAX ? first.slice(0, FIRST_COMMENT_MAX) + "…" : first,
   };
 }
