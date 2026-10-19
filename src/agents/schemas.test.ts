@@ -72,7 +72,7 @@ const investigateSample: InvestigateReport = {
   reproduction: { reproduced: true, where: "locally", widened: false, before: "6 of 20 runs", after: "0 of 100" },
   files: { evidence: "artifacts/evidence.md", reproduction: "artifacts/reproduction.md" },
   commits: ["0123abc", "4567def"],
-  bugDraft: { product: "Firefox", component: "General", summary: "Intermittent foo", description: "...", blocks: [123] },
+  bugDraft: { product: "Firefox", component: "General", summary: "Intermittent foo", description: "...", blocks: [123], bugType: "defect" },
   landsAfter: [{ what: "D12345", reason: "uses its helper" }],
   feedback,
 };
@@ -119,6 +119,7 @@ test("investigate-and-fix schema rejects common mistakes", () => {
     "$.bugDraft.component: required",
     "$.bugDraft.summary: required",
     "$.bugDraft.description: required",
+    "$.bugDraft.bugType: required",
   ]);
   assert.deepEqual(validateReport(investigate, { ...investigateSample, feedback: [{ target: "mach", text: "x" }] }).length, 1);
   assert.deepEqual(validateReport(investigate, { ...investigateSample, bug: 123 }), ["$.bug: unexpected property"]);

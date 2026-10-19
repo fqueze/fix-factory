@@ -4,6 +4,8 @@ import { readFileSync } from "node:fs";
 import {
   blankSecondLine,
   unknownReviewerViolations,
+  codeInBackticks,
+  testDashboardLink,
   bodyLength,
   descriptionLength,
   firstLineFormat,
@@ -165,4 +167,12 @@ test("unknownReviewerViolations: names Phabricator doesn't know; unreachable, no
   assert.deepEqual(v.map((x) => [x.rule, x.line]), [["unknownReviewer", 1]]);
   assert.match(v[0].text, /no user or group #testing-reviewers/);
   assert.deepEqual(await unknownReviewerViolations(msg, async () => { throw new Error("no token"); }), []);
+});
+
+test("bug descriptions: code identifiers in backticks, and the failing test's dashboard link", () => {
+  const raw = "DocumentLoadListener::OpenInParent runs before BrowserTestUtils.startLoadingURIString and loadURI() in browser_policy_x.js.";
+  assert.deepEqual(codeInBackticks(raw).map((v) => v.text), ["put code identifiers in backticks: DocumentLoadListener::OpenInParent, BrowserTestUtils.startLoadingURIString, loadURI(), browser_policy_x.js"]);
+  assert.deepEqual(testDashboardLink(raw).map((v) => v.rule), ["testDashboardLink"]);
+  const fixed = "`DocumentLoadListener::OpenInParent` runs before `loadURI()` in `browser_policy_x.js` (https://tests.firefox.dev/test.html?test=a/browser_policy_x.js).";
+  assert.deepEqual([...codeInBackticks(fixed), ...testDashboardLink(fixed)], []);
 });

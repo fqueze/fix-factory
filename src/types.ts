@@ -91,6 +91,7 @@ export interface BugDraft {
   summary: string;
   description: string;
   blocks?: number[];
+  dependsOn?: number[]; // a meta bug's: the bugs it tracks
   bugType?: "defect" | "task" | "enhancement";
   keywords?: string[]; // e.g. ["meta"]
 }
@@ -479,6 +480,7 @@ export interface PriorArtVerdictReport {
 
 export interface ReviseBugDraftReport {
   draft: BugDraft;
+  answer: string; // to you: what it changed, or what it needs from you
   feedback: Feedback[];
 }
 

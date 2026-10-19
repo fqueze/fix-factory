@@ -159,12 +159,34 @@ export function descriptionLength(description: string): Violation[] {
   return n > BODY_MAX_LINES ? [{ rule: "descriptionLength", text: `description has ${n} lines, max ${BODY_MAX_LINES}` }] : [];
 }
 
+// The bug-filing skill's conventions: Bugzilla renders markdown, so code reads as code only in backticks.
+const CODE = [
+  /\b\w+(?:::\w+)+/g, // C++ scopes
+  /\b[A-Z]\w*\.\w+/g, // members of a class or module
+  /\b\w+\(\)/g, // calls
+  /\b[a-z]+[A-Z]\w*/g, // camelCase
+  /\b[\w/.-]+\.(?:m?js|jsm|cpp|h|toml|ini|py|rs|idl|webidl|html|xhtml)\b/g, // files
+];
+export function codeInBackticks(description: string): Violation[] {
+  const prose = description.replace(/`[^`]*`/g, " ").replace(/https?:\/\/\S+/g, " ");
+  const all = [...new Set(CODE.flatMap((re) => prose.match(re) ?? []))];
+  const found = all.filter((x) => !all.some((y) => y !== x && y.includes(x)));
+  return found.length ? [{ rule: "codeInBackticks", text: `put code identifiers in backticks: ${found.slice(0, 6).join(", ")}` }] : [];
+}
+
+export function testDashboardLink(description: string): Violation[] {
+  const test = /\b(?:browser|test)_\w+\.(?:js|html|xhtml)\b/.test(description);
+  return test && !description.includes("tests.firefox.dev/test.html") ? [{ rule: "testDashboardLink", text: "link the failing test's dashboard: https://tests.firefox.dev/test.html?test=<path>" }] : [];
+}
+
 export function lintBug(draft: Partial<BugDraft>): LintResult {
   const description = draft.description ?? "";
   return result([
     ...requiredFields(draft),
     ...summaryLength(draft.summary ?? ""),
     ...descriptionLength(description),
+    ...codeInBackticks(description),
+    ...testDashboardLink(description),
     ...noAiAttribution([draft.summary ?? "", ...splitLines(description)]),
   ]);
 }

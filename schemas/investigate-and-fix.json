@@ -131,20 +131,31 @@
           "type": "string"
         },
         "description": {
-          "type": "string"
+          "type": "string",
+          "description": "Markdown: code identifiers (functions, classes, prefs, files, flags) in backticks. For a test failure, link the test's dashboard: https://tests.firefox.dev/test.html?test=<path>."
         },
         "blocks": {
           "type": "array",
           "items": {
             "type": "integer"
           }
+        },
+        "bugType": {
+          "type": "string",
+          "enum": [
+            "defect",
+            "task",
+            "enhancement"
+          ],
+          "description": "defect: shipping code misbehaves (crash, race, regression); task: tests, tooling, config, refactoring with no user-facing change; enhancement: new or changed behavior."
         }
       },
       "required": [
         "product",
         "component",
         "summary",
-        "description"
+        "description",
+        "bugType"
       ],
       "additionalProperties": false
     },

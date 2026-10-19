@@ -24,7 +24,7 @@ const samples: Record<string, unknown[]> = {
   "triage-try": [{ cells: [{ test: "a.js", config: "linux", verdict: "broken by patch", patch: "abc", evidence: "TEST-UNEXPECTED-FAIL" }, { taskId: "T", verdict: "infra", evidence: "worker lost" }], feedback } satisfies R.TriageTryReport],
   "merge-clusters": [{ groups: [{ message: "m", tests: ["a.js"], configs: ["c"], from: ["k1", "k2"], reason: "same crash" }], feedback } satisfies R.MergeClustersReport],
   "prior-art-verdict": [{ verdict: "reuse", bug: 123, quote: "open, no assignee", feedback } satisfies R.PriorArtVerdictReport],
-  "revise-bug-draft": [{ draft: { product: "Core", component: "DOM", summary: "s", description: "d", keywords: ["intermittent-failure"], bugType: "defect" }, feedback } satisfies R.ReviseBugDraftReport],
+  "revise-bug-draft": [{ draft: { product: "Core", component: "DOM", summary: "s", description: "d", keywords: ["intermittent-failure"], bugType: "defect" }, answer: "Put the function names in backticks.", feedback } satisfies R.ReviseBugDraftReport],
   "resolve-conflict": [{ state: "resolved", commit: "abc", explanation: "kept both", feedback } satisfies R.ResolveConflictReport],
   "estimate-review-effort": [{ effort: 3, reason: "product change", feedback } satisfies R.EstimateReviewEffortReport],
   "review-stack": [{ findings: [{ patch: "abc", severity: "must-fix", text: "same approach twice" }], addDeps: [{ patch: "abc", needs: "def", kind: "hard", reason: "helper" }], removeDeps: [], feedback } satisfies R.ReviewStackReport],

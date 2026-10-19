@@ -147,6 +147,7 @@ export function enterBugUrl(draft: BugDraft): string {
     ["short_desc", draft.summary],
     ["comment", draft.description],
     ...(draft.blocks ?? []).map((b): [string, string] => ["blocked", String(b)]),
+    ...(draft.dependsOn ?? []).map((b): [string, string] => ["dependson", String(b)]),
   ];
   if (draft.bugType) fields.push(["bug_type", draft.bugType]);
   if (draft.keywords?.length) fields.push(["keywords", draft.keywords.join(", ")]);
