@@ -1,7 +1,7 @@
 // Starts planned jobs and records finished ones. The side-effecting half of the orchestrator:
 // writes the plan's files, renders prompts, starts the detached job, and turns its output into
 // events (src/orchestrator/handlers.ts says what they mean).
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { appendFeedback, buildAgentCommand, parseStreamJson, promptVersion, renderPrompt, validateReport, type JsonSchema } from "../agents/run.ts";
 import { appendCommand } from "../state/commands.ts";
@@ -67,6 +67,8 @@ export function startPlan(deps: RunnerDeps, request: string, plan: JobPlan): Job
     jobFiles["prompt.md"] = text;
     stdinFile = join(jobDir(config.stateDir, job), "prompt.md");
     const schema = readFileSync(join(deps.factoryRoot, "schemas", `${plan.name}.json`), "utf8");
+    // Its report is checked against the schema it was given, even if schemas/ changes meanwhile.
+    jobFiles["schema.json"] = schema;
     cmd = buildAgentCommand(config, plan.agent.resume ? { model, schema, resume: plan.agent.sessionId } : { model, schema, sessionId: plan.agent.sessionId });
   } else if (plan.cli) {
     cmd = [...deps.cliCommand(plan.cli.tool), ...plan.cli.args];
@@ -151,7 +153,9 @@ export function finishJob(deps: RunnerDeps, s: RequestState, view: View, rec: Jo
     if (!summary.done) error = `no result line (exit code ${exit.exitCode})${errTail(config, rec.job) ? `: ${errTail(config, rec.job)}` : ""}`;
     else if (summary.isError) error = `claude reported an error: ${(summary.resultText ?? "").slice(0, 300)}`;
     else {
-      const schema = JSON.parse(readFileSync(join(deps.factoryRoot, "schemas", `${rec.name}.json`), "utf8")) as JsonSchema;
+      // Jobs started before schema.json was saved have only the current one.
+      const saved = join(jobDir(config.stateDir, rec.job), "schema.json");
+      const schema = JSON.parse(readFileSync(existsSync(saved) ? saved : join(deps.factoryRoot, "schemas", `${rec.name}.json`), "utf8")) as JsonSchema;
       const problems = summary.report === undefined ? ["$: no structured_output"] : validateReport(schema, summary.report);
       if (problems.length > 0) error = `invalid report: ${problems.join("; ")}`.slice(0, 1500);
     }
@@ -178,15 +182,28 @@ export function finishJob(deps: RunnerDeps, s: RequestState, view: View, rec: Jo
       if (error === undefined) handle();
     }
   }
+  const machProfiles = rec.kind === "agent" ? 0 : keepMachProfiles(config, rec.job, out);
   appendEventSafe(config.stateDir, {
     type: "job-finished",
     request: s.id,
     job: rec.job,
     exitCode: exit.exitCode,
     durationMs,
+    ...(machProfiles ? { machProfiles } : {}),
     ...(costUsd !== undefined ? { costUsd } : {}),
     ...(error !== undefined ? { error } : {}),
   });
+}
+
+// mach builds and test runs name the resource-usage profile they write ("Streaming resource usage profile
+// to: <path>"). Copies go in the job's directory, as mach-profile-<n>.json: the objdir's can be replaced
+// or removed with its worktree.
+function keepMachProfiles(config: FactoryConfig, job: JobId, out: string): number {
+  const errFile = join(jobDir(config.stateDir, job), "err.log");
+  const text = `${existsSync(errFile) ? readFileSync(errFile, "utf8") : ""}\n${out}`;
+  const paths = [...new Set([...text.matchAll(/Streaming resource usage profile to: (\S+\.json)/g)].map((m) => m[1]))].filter((p) => existsSync(p));
+  paths.forEach((p, n) => copyFileSync(p, join(jobDir(config.stateDir, job), `mach-profile-${n + 1}.json`)));
+  return paths.length;
 }
 
 function cliError(out: string): string | undefined {

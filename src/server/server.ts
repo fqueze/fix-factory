@@ -1,4 +1,4 @@
-import { readFileSync, realpathSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { createRequire } from "node:module";
 import { homedir } from "node:os";
@@ -257,13 +257,28 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
       res.end(method === "HEAD" ? undefined : body);
       return;
     }
-    if ((m = path.match(/^\/api\/requests\/([^/]+)\/jobs\/([^/]+)\/(activity|transcript|profile)$/))) {
+    if ((m = path.match(/^\/api\/requests\/([^/]+)\/jobs\/([^/]+)\/(activity|transcript|profile|log|mach-profile-\d+)$/))) {
       const r = getRequest(decodeURIComponent(m[1]));
       const id = decodeURIComponent(m[2]);
       if (!Object.hasOwn(r.jobs, id)) {
         throw new HttpError(404, `unknown job: ${id}`);
       }
       const job = r.jobs[id];
+      const dir = join(opts.config.stateDir, "jobs", id);
+      if (m[3] === "log") {
+        const part = (name: string) => (existsSync(join(dir, name)) ? readFileSync(join(dir, name), "utf8") : "");
+        return send(res, 200, "text/plain; charset=utf-8", `${job.error ? `${job.error}\n\n` : ""}== stderr ==\n${part("err.log")}\n== stdout ==\n${part("out.log")}`);
+      }
+      if (m[3].startsWith("mach-profile-")) {
+        const file = join(dir, `${m[3]}.json`);
+        if (!existsSync(file)) {
+          throw new HttpError(404, `no ${m[3]} for ${id}`);
+        }
+        const body = readFileSync(file);
+        res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Content-Length": body.length, "Access-Control-Allow-Origin": opts.config.profilerOrigin });
+        res.end(method === "HEAD" ? undefined : body);
+        return;
+      }
       if (m[3] === "activity") {
         return send(res, 200, "text/html; charset=utf-8", renderActivity(r.id, job, activity(r.id, job, req), ctx(req)).value);
       }

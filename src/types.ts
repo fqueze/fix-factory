@@ -143,7 +143,7 @@ export type Event =
       promptVersion?: string; // git blob sha of the prompt file
       purpose?: JobPurpose;
     })
-  | (EventBase & { type: "job-finished"; job: JobId; exitCode: number; durationMs: number; output?: unknown; costUsd?: number; error?: string })
+  | (EventBase & { type: "job-finished"; job: JobId; exitCode: number; durationMs: number; output?: unknown; costUsd?: number; error?: string; machProfiles?: number })
   | (EventBase & { type: "agent-report"; job: JobId; item?: ItemId; prompt: string; report: unknown })
   | (EventBase & {
       type: "patch";
@@ -275,6 +275,7 @@ export interface JobView {
   sessionId?: string;
   error?: string;
   purpose?: JobPurpose; // absent for jobs whose job-started has none
+  machProfiles?: number; // resource-usage profiles of the mach builds and test runs it made, kept in its directory
 }
 
 export interface ItemView {

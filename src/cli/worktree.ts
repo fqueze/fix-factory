@@ -140,7 +140,11 @@ export async function create(name: string, opts: { base?: string; build: BuildKi
   } finally {
     closeSync(fd);
   }
-  if (smokeStatus !== 0) throw new Error(`${dest} built but can't run a mochitest; log: ${smokeLog}`);
+  if (smokeStatus !== 0) {
+    // The log is overwritten by the next attempt: its end goes in this job's own log.
+    process.stderr.write(`--- end of ${smokeLog} ---\n${readFileSync(smokeLog, "utf8").split("\n").slice(-200).join("\n")}\n`);
+    throw new Error(`${dest} built but can't run a mochitest (the end of its log is in this job's stderr)`);
+  }
 
   return { name, path: dest, branch: name, base, build: opts.build, mozconfig: mozconfigPath, objdir: join(dest, `obj-${flavor(opts.build)}`), smokeLog };
 }

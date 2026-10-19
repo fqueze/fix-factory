@@ -338,6 +338,23 @@ describe("GET /stacks/:stack/review", () => {
   });
 });
 
+describe("GET /api/requests/:id/jobs/:job/log and mach-profile-<n>", () => {
+  it("serves a job's output, and its mach profiles to the profiler", async () => {
+    const dir = join(stateDir, "jobs", "j-recover");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "err.log"), "0:01 build failed\n");
+    writeFileSync(join(dir, "out.log"), '{"error":"x"}\n');
+    writeFileSync(join(dir, "mach-profile-1.json"), '{"meta":{}}');
+    const J = `${base}/api/requests/r-20261013-tab-failures/jobs/j-recover`;
+    assert.equal(await (await fetch(`${J}/log`)).text(), '== stderr ==\n0:01 build failed\n\n== stdout ==\n{"error":"x"}\n');
+    const profile = await fetch(`${J}/mach-profile-1`);
+    assert.equal(profile.headers.get("access-control-allow-origin"), "http://localhost:4242");
+    assert.equal(await profile.text(), '{"meta":{}}');
+    assert.equal((await fetch(`${J}/mach-profile-2`)).status, 404);
+    rmSync(dir, { recursive: true, force: true });
+  });
+});
+
 describe("GET /requests/:id/patches/:patch/view", () => {
   it("runs stack-viewer on the patch alone, in its worktree, with a button sending comments to its author", async () => {
     const p = state.getRequest("r-20261010-xpcshell-cwd")!.patches["p-prefs"];

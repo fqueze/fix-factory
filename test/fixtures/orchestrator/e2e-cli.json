@@ -43,7 +43,7 @@
     }
   },
   { "match": "^bugzilla\\.ts prior-art (\\S+)", "out": { "test": "$1", "query": "test", "bugs": [] } },
-  { "match": "^worktree\\.ts create (\\S+)", "mkdir": "$WORKTREES/$1", "out": { "name": "$1", "path": "$WORKTREES/$1", "branch": "$1", "base": "origin/main", "build": "artifact" } },
+  { "match": "^worktree\\.ts create (\\S+)", "mkdir": "$WORKTREES/$1", "write": { "$WORKTREES/$1/profile_log.json": "{\"meta\":{}}" }, "stderr": "Streaming resource usage profile to: $WORKTREES/$1/profile_log.json\n", "out": { "name": "$1", "path": "$WORKTREES/$1", "branch": "$1", "base": "origin/main", "build": "artifact" } },
   {
     "match": "^stack\\.ts import --cwd \\S+ a{40}\\^\\.\\.a{40}",
     "out": [{ "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "title": "Bug XXXXXXX - Wait for the load event in test_a.html, r=smaug.", "bug": null, "reviewers": ["smaug"], "files": ["dom/base/test/test_a.html"], "insertions": 3, "deletions": 1, "testOnly": true }]

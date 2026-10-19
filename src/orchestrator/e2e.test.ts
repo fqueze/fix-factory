@@ -105,6 +105,10 @@ test("a try-push request goes from the request to a planned verification push", 
     assert.equal(investigate.costUsd, 1.5);
     assert.equal(investigate.model, "opus");
     assert.ok(existsSync(join(config.stateDir, "jobs", investigate.job, "prompt.md")));
+    assert.ok(existsSync(join(config.stateDir, "jobs", investigate.job, "schema.json")), "its report is checked against the schema it was given");
+    const build = Object.values(s.jobs).find((j) => j.name.startsWith("worktree.ts create"))!;
+    assert.equal(build.machProfiles, 1);
+    assert.equal(readFileSync(join(config.stateDir, "jobs", build.job, "mach-profile-1.json"), "utf8"), '{"meta":{}}', "its build profile, kept with the job");
 
     // 5: assembled, ordered (a rewrite, since the order changed), reviewed and summarized.
     const stack = s.stacks["dom-base-test"];

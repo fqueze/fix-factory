@@ -123,6 +123,7 @@ export function foldEvents(events: readonly Event[]): RequestState {
         job.durationMs = e.durationMs;
         job.costUsd = e.costUsd;
         job.error = e.error;
+        if (e.machProfiles) job.machProfiles = e.machProfiles;
         break;
       }
       case "agent-report": {
