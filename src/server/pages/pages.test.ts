@@ -165,7 +165,7 @@ describe("one fixture per step of docs/MVP.md", () => {
 
   it("4. investigate and fix: item states, running agent, recovery plan with a checkbox per command", () => {
     const h = expanded("r-20261013-tab-failures");
-    assert.match(rowOf(h, "item-i-spinner"), /<span class="st run"><\/span>[^]*<span class="state">investigating · <span data-since="[^"]+">6 h<\/span><\/span>/);
+    assert.match(rowOf(h, "item-i-spinner"), /<span class="st run"><\/span>[^]*<span class="state"><span class="working">investigating · <span data-since="[^"]+">6 h<\/span><\/span><\/span>/);
     assert.match(rowOf(h, "item-i-drag"), /<span class="st find"><\/span>[^]*<span class="state">stalled: nothing running: the drag session is still left open on failure<\/span>/);
     assert.match(rowOf(h, "item-i-mute"), /<span class="st closed"><\/span>[^]*<span class="state">closed: handed back to you: bug 2081413, dao active<\/span>/);
     assert.match(rowOf(h, "item-i-pin"), /<span class="state">waiting for a build slot \(0 builds running\)<\/span>/);
@@ -305,8 +305,8 @@ describe("one fixture per step of docs/MVP.md", () => {
     const stopped = renderRequest(r, ctx, true).value;
     assert.equal(state("i-idle", stopped), "stalled after you stopped its lint message");
     assert.match(rowOf(stopped, "item-i-idle"), /title="Runs lint message again">Retry</);
-    assert.match(state("i-nits")!, /^author addressing review nits · <span data-since="2026-10-15T08:58:00.000Z">2 min<\/span>$/);
-    assert.match(rowOf(h, "item-i-review"), /<span class="state">being reviewed by Opus · <span data-since="2026-10-15T08:59:00.000Z">1 min<\/span><\/span>/);
+    assert.match(state("i-nits")!, /^<span class="working">author addressing review nits · <span data-since="2026-10-15T08:58:00.000Z">2 min<\/span><\/span>$/);
+    assert.match(rowOf(h, "item-i-review"), /<span class="state"><span class="working">being reviewed by Opus · <span data-since="2026-10-15T08:59:00.000Z">1 min<\/span><\/span><\/span>/);
     assert.equal(state("i-wait"), "waiting for a build slot (0 builds running)");
     assert.equal(state("i-done"), "closed: already fixed by bug 2078564");
     assert.match(h, /<span class="rprog"><span class="pbar">.*?<\/span><span class="needs-you">6 need you<\/span> · <span class="working">2 working<\/span>/);
@@ -608,9 +608,9 @@ describe("a burndown with closed groups, running agents and a dropped patch", ()
     assert.match(row, /<div class="failure"><span class="sub">Failure:<\/span> leaked 1 window\(s\) until shutdown \[url = about:preferences#etp\]<\/div>/);
   });
   it("shows running work in the group rows, with the group's cost at the end of its line", () => {
-    assert.match(h, /<span class="end"><span class="cost" title="Agent cost of this group so far">\$0\.40<\/span><\/span><span class="state">investigating · <span data-since="2026-10-15T08:53:00.000Z">7 min<\/span><\/span>/);
-    assert.match(h, /<span class="state">investigating · <span data-since="2026-10-15T08:54:00.000Z">6 min<\/span><\/span>/);
-    assert.match(h, /<span class="state">building its worktree · <span data-since/);
+    assert.match(h, /<span class="end"><span class="cost" title="Agent cost of this group so far">\$0\.40<\/span><\/span><span class="state"><span class="working">investigating · <span data-since="2026-10-15T08:53:00.000Z">7 min<\/span><\/span><\/span>/);
+    assert.match(h, /<span class="state"><span class="working">investigating · <span data-since="2026-10-15T08:54:00.000Z">6 min<\/span><\/span><\/span>/);
+    assert.match(h, /<span class="state"><span class="working">building its worktree · <span data-since/);
   });
   it("puts the running groups first, then the others, and folds the closed ones with their full reasons", () => {
     const at = (item: string) => h.indexOf(`data-item="${item}"`);
