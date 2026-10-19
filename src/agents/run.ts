@@ -40,10 +40,16 @@ export type AgentCommandOptions = {
 } & ({ sessionId: string; resume?: undefined } | { resume: string; sessionId?: undefined });
 
 // Builds and test runs take longer than Claude Code's 10-minute command limit. Without a higher one,
-// agents run them in the background, and a headless session ends before they finish.
-const AGENT_SETTINGS = JSON.stringify({ env: { BASH_DEFAULT_TIMEOUT_MS: "7200000", BASH_MAX_TIMEOUT_MS: "7200000" } });
+// agents run them in the background, and a headless session ends before they finish. no-push.ts
+// refuses any push: an instruction alone isn't enough.
+// It reads the one-push allowances you give (allow-push/<session> in the state directory).
+const agentSettings = (stateDir: string) =>
+  JSON.stringify({
+    env: { BASH_DEFAULT_TIMEOUT_MS: "7200000", BASH_MAX_TIMEOUT_MS: "7200000" },
+    hooks: { PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: `${process.execPath} ${join(import.meta.dirname, "no-push.ts")} ${stateDir}` }] }] },
+  });
 
-export function buildAgentCommand(config: Pick<FactoryConfig, "claudeCommand">, opts: AgentCommandOptions): string[] {
+export function buildAgentCommand(config: Pick<FactoryConfig, "claudeCommand" | "stateDir">, opts: AgentCommandOptions): string[] {
   const schema = typeof opts.schema === "string" ? opts.schema : JSON.stringify(opts.schema);
   const session = opts.resume !== undefined ? ["--resume", opts.resume] : ["--session-id", opts.sessionId];
   return [
@@ -58,7 +64,7 @@ export function buildAgentCommand(config: Pick<FactoryConfig, "claudeCommand">, 
     "--json-schema",
     schema,
     "--settings",
-    AGENT_SETTINGS,
+    agentSettings(config.stateDir),
   ];
 }
 

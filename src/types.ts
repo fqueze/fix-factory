@@ -202,6 +202,7 @@ export type Command =
   | (CommandBase & { cmd: "presence"; visible: boolean }) // sent by a visible page, see docs/ORCHESTRATOR.md
   // The ways out of a ⚑, from its buttons.
   | (CommandBase & { cmd: "accept-review"; item: ItemId }) // the item is reviewed despite its critical review findings
+  | (CommandBase & { cmd: "allow-push"; item: ItemId }) // its author's session may make one try push
   | (CommandBase & { cmd: "continue"; item: ItemId; text: string }) // resumes the item's author session with your message
   | (CommandBase & { cmd: "retry"; job: JobId }) // what retry-job does, except for try pushes
   | (CommandBase & { cmd: "stop"; job: JobId }) // cancels a running job; its item waits for a continue

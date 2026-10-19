@@ -7,7 +7,7 @@
 //
 // --dry-run (or "dryRun" in the config): starts no agents, and passes --dry-run to every CLI,
 // which then refuses try pushes and Phabricator or Bugzilla writes.
-import { existsSync, mkdirSync, readFileSync, watch, type FSWatcher } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, watch, writeFileSync, type FSWatcher } from "node:fs";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { loadConfig } from "../config.ts";
@@ -209,6 +209,10 @@ export class Orchestrator {
         }
         case "start-now":
           this.plan(e.request);
+          break;
+        case "allow-push":
+          mkdirSync(join(this.config.stateDir, "allow-push"), { recursive: true });
+          writeFileSync(join(this.config.stateDir, "allow-push", e.sessionId), new Date(this.now()).toISOString() + "\n");
           break;
       }
     }

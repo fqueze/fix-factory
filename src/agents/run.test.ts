@@ -41,15 +41,22 @@ test("renderPrompt lists every missing variable", () => {
 
 test("buildAgentCommand with a new session", () => {
   const schema = { type: "object" };
-  assert.deepEqual(buildAgentCommand({ claudeCommand: ["mozsb", "claude"] }, { model: "opus", schema, sessionId: "s1" }), [
+  const cmd = buildAgentCommand({ claudeCommand: ["mozsb", "claude"], stateDir: "/state" }, { model: "opus", schema, sessionId: "s1" });
+  assert.deepEqual(cmd.slice(0, -1), [
     "mozsb", "claude", "-p", "--output-format", "stream-json", "--verbose",
     "--session-id", "s1", "--model", "opus", "--json-schema", '{"type":"object"}',
-    "--settings", '{"env":{"BASH_DEFAULT_TIMEOUT_MS":"7200000","BASH_MAX_TIMEOUT_MS":"7200000"}}',
+    "--settings",
   ]);
+  const settings = JSON.parse(cmd.at(-1)!);
+  assert.deepEqual(settings.env, { BASH_DEFAULT_TIMEOUT_MS: "7200000", BASH_MAX_TIMEOUT_MS: "7200000" });
+  // Every agent's Bash commands go through no-push.ts first.
+  const [hook] = settings.hooks.PreToolUse;
+  assert.equal(hook.matcher, "Bash");
+  assert.match(hook.hooks[0].command, /^\S+node\S* \S+\/src\/agents\/no-push\.ts \/state$/);
 });
 
 test("buildAgentCommand resuming a session", () => {
-  const cmd = buildAgentCommand({ claudeCommand: ["claude"] }, { model: "haiku", schema: '{"type":"object"}', resume: "s1" });
+  const cmd = buildAgentCommand({ claudeCommand: ["claude"], stateDir: "/state" }, { model: "haiku", schema: '{"type":"object"}', resume: "s1" });
   assert.deepEqual(cmd.slice(4, 7), ["--verbose", "--resume", "s1"]);
   assert.ok(!cmd.includes("--session-id"));
   assert.equal(cmd[cmd.indexOf("--json-schema") + 1], '{"type":"object"}');

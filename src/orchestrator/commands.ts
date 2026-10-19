@@ -15,7 +15,8 @@ export type Effect =
   | { type: "event"; event: EventInput }
   | { type: "start"; plan: JobPlan }
   | { type: "cancel"; job: JobId; request: RequestId; detail: string } // then job-finished with error CANCELLED
-  | { type: "start-now"; request: RequestId };
+  | { type: "start-now"; request: RequestId }
+  | { type: "allow-push"; sessionId: string }; // no-push.ts lets that session make one push
 
 export interface CommandContext {
   config: FactoryConfig;
@@ -254,6 +255,17 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
       clearItemFlags(c.item);
       done(true);
       break;
+    case "allow-push": {
+      const session = view.jobs.filter((j) => j.item === c.item && j.purpose.what === "author" && j.sessionId).at(-1)?.sessionId;
+      if (!session) {
+        done(false, `${itemName(c.item)} has no author session`);
+        break;
+      }
+      effects.push({ type: "allow-push", sessionId: session });
+      ev({ type: "note", text: `You allowed ${itemName(c.item)}'s author one try push.` });
+      done(true);
+      break;
+    }
     case "continue": {
       const error = resume(c.item, "continue", `A message from the user:\n${c.text}\n\nDo what it says, amending your commit if your fix changes, then end with the JSON report again.`);
       if (!error) {

@@ -212,6 +212,7 @@ export const COMMAND_LABELS: Record<Command["cmd"], string> = {
   "edit-config": "config change",
   shell: "shell command",
   "accept-review": "accept as reviewed",
+  "allow-push": "one try push allowed",
   continue: "continue",
   retry: "retry",
   stop: "stop",

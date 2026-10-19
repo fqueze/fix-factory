@@ -255,6 +255,16 @@ describe("commands", () => {
     assert.deepEqual(sc.open(), []);
   });
 
+  it("allow-push lets the item's author session make one push", () => {
+    const sc = withPatch();
+    const fix = cmd({ cmd: "comment-fix", patch: "p-a", text: "x" });
+    run(sc, fix);
+    const session = sc.view().jobs.find((j) => j.item === "i-a" && j.purpose.what === "author")!.sessionId;
+    const effects = run(sc, cmd({ cmd: "allow-push", item: "i-a" }));
+    assert.deepEqual(effects.filter((e) => e.type === "allow-push"), [{ type: "allow-push", sessionId: session }]);
+    assert.equal(executed(sc).at(-1)?.ok, true);
+  });
+
   it("continue resumes the item's author with your message and answers its ⚑s; refused while it runs", () => {
     const sc = withPatch();
     sc.add({ type: "item-state", request: ID, item: "i-a", state: "left as-is" });
