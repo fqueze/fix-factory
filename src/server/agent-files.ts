@@ -27,7 +27,9 @@ export function agentFilePath(r: RequestState, i: ItemView, which: AgentFile): s
 }
 
 // The rendered page can hold the agent's raw HTML: no script, no form posts, nothing loaded from elsewhere.
-export const AGENT_FILE_CSP = "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:";
+// diff-viewer's pages need their inline scripts. In a sandbox without allow-same-origin they run in an opaque origin:
+// they can't read the factory's pages, and server.ts refuses commands posted from another origin.
+export const AGENT_FILE_CSP = "sandbox allow-scripts; default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; font-src data:";
 
 export async function renderAgentFile(opts: { mdViewer: string[]; diffViewer: string[]; path: string; title: string }): Promise<string> {
   if (opts.path.endsWith(".diff") || opts.path.endsWith(".patch")) {

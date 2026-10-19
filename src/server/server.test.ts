@@ -102,6 +102,13 @@ describe("POST /api/commands", () => {
     assert.deepEqual(sink.commands, [{ cmd: "tell-factory", text: "Lando was down" }]);
   });
 
+  it("refuses commands posted from another origin, such as an agent's sandboxed file", async () => {
+    const form = new URLSearchParams({ command: JSON.stringify({ cmd: "tell-factory" }), text: "x", back: "/" });
+    for (const origin of ["null", "https://evil.example"]) {
+      assert.equal((await post(form.toString(), "application/x-www-form-urlencoded", { Origin: origin })).status, 403);
+    }
+  });
+
   it("only redirects to local paths", async () => {
     const form = new URLSearchParams({ command: JSON.stringify({ cmd: "tell-factory" }), text: "x", back: "//evil.example/" });
     const r = await post(form.toString(), "application/x-www-form-urlencoded");
@@ -472,7 +479,7 @@ describe("agent files: symlinks and script", () => {
     const url = (which: string) => `${base}/requests/${ID}/items/${i.id}/files/${which}`;
     const evidence = await fetch(url("evidence"));
     assert.equal(evidence.status, 200);
-    assert.match(evidence.headers.get("content-security-policy")!, /^sandbox; default-src 'none'; /);
+    assert.match(evidence.headers.get("content-security-policy")!, /^sandbox allow-scripts; default-src 'none'; script-src 'unsafe-inline'; /);
     assert.equal((await fetch(url("reproduction"))).status, 404, "symlink out of the worktree");
     rmSync(wt, { recursive: true, force: true });
     rmSync(outside, { recursive: true, force: true });

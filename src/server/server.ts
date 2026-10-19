@@ -225,6 +225,11 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
       if (path !== "/api/commands") {
         throw new HttpError(404, "not found");
       }
+      // Only from the factory's own pages: not from an agent's file (a sandbox's origin is "null") or another site.
+      const origin = req.headers.origin;
+      if (origin !== undefined && !(URL.canParse(origin) && new URL(origin).host === req.headers.host)) {
+        throw new HttpError(403, "commands come from the factory's pages only");
+      }
       return postCommands(req, res);
     }
     if (method !== "GET" && method !== "HEAD") {
