@@ -60,6 +60,29 @@ export async function buildPatchView(opts: { command: string[]; request: Request
   }
 }
 
+// What a try push would carry (the dry run's commits, newest first, in the worktree it pushes from), read-only.
+export async function buildPushView(opts: { command: string[]; cwd: string; commits: string[] }): Promise<string> {
+  const newest = opts.commits[0];
+  const oldest = opts.commits.at(-1)!;
+  for (const rev of [newest, oldest]) {
+    if (!isRevName(rev)) {
+      throw new Error(`not a revision name: ${rev}`);
+    }
+  }
+  const dir = mkdtempSync(join(tmpdir(), "fix-factory-stack-viewer-"));
+  try {
+    const file = join(dir, "push.html");
+    const cmd = [...opts.command, "--no-open", "-R", opts.cwd, "-o", file, `${oldest}^..${newest}`];
+    const r = await exec(cmd);
+    if (r.code !== 0) {
+      throw new Error(`${cmd.join(" ")} exited with ${r.code}: ${r.stderr.trim().slice(-2000)}`);
+    }
+    return readFileSync(file, "utf8");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
 // JSON safe inside a <script> element.
 function jsonForScript(value: unknown): string {
   return JSON.stringify(value).replace(/</g, "\\u003c");

@@ -574,7 +574,7 @@ function pushRowOf(r: RequestState, p: PushView, ctx: RenderContext): Html {
     cls: p.rev ? ({ ok: "ok", bad: "find", run: "run" } as const)[pushResultClass(p)] : waiting || (job && job.exitCode !== 0 && job.endedAt) ? "find" : p.declined === undefined ? "run" : "closed",
     name: html`push ${pushName(r, p.id)}: ${p.purpose}`,
     title: p.purpose,
-    end: html`${p.taskCount === undefined ? null : html`<span>${plural(p.taskCount, "task")}</span>`}${
+    end: html`${p.taskCount === undefined ? null : html`<span>${plural(p.taskCount, "task")}</span><a class="btn small" href="/requests/${encodeURIComponent(r.id)}/pushes/${encodeURIComponent(p.id)}/view" target="_blank" rel="noopener" title="The commits it carries, in stack-viewer">View stack ↗</a>`}${
       p.rev ? html`<a class="mono" href="${pushUrl(p)}" target="_blank" rel="noopener">${p.rev.slice(0, 12)}</a>` : null
     }${waiting ? html`${approvePushControls(r, [p], requestUrl(r.id))}<button type="button" class="btn small" data-decline title="This push won't be made; say why">Decline…</button>` : null}${
       p.declined !== undefined && !p.withdrawn && !p.replan && !p.rev

@@ -14,7 +14,7 @@ import type { RenderContext } from "./pages/common.ts";
 import { renderMain, renderOverview, renderStrip } from "./pages/overview.ts";
 import { renderRequest } from "./pages/request.ts";
 import { buildRequestProfile } from "./request-profile.ts";
-import { buildPatchView, buildStackReview, isRevName } from "./stack-review.ts";
+import { buildPatchView, buildPushView, buildStackReview, isRevName } from "./stack-review.ts";
 import { AGENT_FILE_CSP, AGENT_FILES, agentFilePath, renderAgentFile, type AgentFile } from "./agent-files.ts";
 import { pushTasks } from "./pages/tasks.ts";
 import type { DryRunResult } from "../cli/try.ts";
@@ -81,6 +81,17 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
   // The jobs of dry runs that didn't record them, by dry run job: reading a task set takes a while.
   const pushJobs = new Map<string, TryJob[] | undefined>();
   const pushCommits = new Map<string, { sha: string; subject: string }[]>();
+  // The latest dry run of a push says what it would run and carry.
+  function pushDryRun(requestId: string, pushId: string) {
+    const request = getRequest(decodeURIComponent(requestId));
+    const push = request.pushes[decodeURIComponent(pushId)];
+    const dry = push && Object.values(request.jobs).findLast((j) => j.purpose?.push === push.id && j.name.startsWith("try.ts dry-run") && j.exitCode === 0);
+    const out = dry && join(opts.config.stateDir, "jobs", dry.job, "out.log");
+    if (!dry || !out || !existsSync(out)) {
+      throw new HttpError(404, "no dry run for this push");
+    }
+    return { dry, d: JSON.parse(readFileSync(out, "utf8")) as DryRunResult };
+  }
   const sseClients = new Set<ServerResponse>();
   const broadcast = (data: string) => {
     for (const res of sseClients) {
@@ -360,16 +371,21 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
       }
       return send(res, 200, "text/html; charset=utf-8", page);
     }
-    if ((m = path.match(/^\/api\/requests\/([^/]+)\/pushes\/([^/]+)\/tasks$/))) {
-      const request = getRequest(decodeURIComponent(m[1]));
-      const push = request.pushes[decodeURIComponent(m[2])];
-      // The latest dry run of the push says what it would run.
-      const dry = push && Object.values(request.jobs).findLast((j) => j.purpose?.push === push.id && j.name.startsWith("try.ts dry-run") && j.exitCode === 0);
-      const out = dry && join(opts.config.stateDir, "jobs", dry.job, "out.log");
-      if (!push || !out || !existsSync(out)) {
-        throw new HttpError(404, "no dry run for this push");
+    if ((m = path.match(/^\/requests\/([^/]+)\/pushes\/([^/]+)\/view$/))) {
+      const { dry, d } = pushDryRun(m[1], m[2]);
+      if (d.commits.length === 0) {
+        throw new HttpError(404, "this push carries no commits");
       }
-      const d = JSON.parse(readFileSync(out, "utf8")) as DryRunResult;
+      let page: string;
+      try {
+        page = await buildPushView({ command: opts.config.stackViewerCommand, cwd: dry.cwd, commits: d.commits });
+      } catch (e) {
+        throw new HttpError(502, errorMessage(e));
+      }
+      return send(res, 200, "text/html; charset=utf-8", page);
+    }
+    if ((m = path.match(/^\/api\/requests\/([^/]+)\/pushes\/([^/]+)\/tasks$/))) {
+      const { dry, d } = pushDryRun(m[1], m[2]);
       // Dry runs from before jobs were recorded: from the worktree's task set now, once.
       if (!d.jobs) {
         if (!pushJobs.has(dry.job)) {
