@@ -184,6 +184,9 @@ export function foldEvents(events: readonly Event[]): RequestState {
           submitCopied: s.stacks[e.stack]?.submitCopied,
         };
         break;
+      case "poll-requested":
+        s.pollRequested = e.t;
+        break;
       case "submit-copied":
         if (s.stacks[e.stack]) s.stacks[e.stack].submitCopied = e.t;
         break;

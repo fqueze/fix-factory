@@ -148,6 +148,10 @@ function commandButton(request: string, c: object, label: string, back: string, 
   return html`<form class="inline cmd" method="post" action="/api/commands">${commandFields([{ ...c, request }], back)}<button class="btn small${primary ? " primary" : ""}"${title ? html` title="${title}"` : null}>${label}</button></form>`;
 }
 
+export function pollPhabButton(request: string, back: string): Html {
+  return commandButton(request, { cmd: "poll-phab" }, "Check Phabricator now", back, false, "Reviews, comments and statuses are otherwise checked every few hours");
+}
+
 export function redoAnnotationsButton(request: string, back: string): Html {
   return commandButton(request, { cmd: "redo-annotations" }, "Redo with today's skip-ifs", back, false, "Lists and classifies the folder's skip-ifs again, writes the patches and plans the un-skip push");
 }

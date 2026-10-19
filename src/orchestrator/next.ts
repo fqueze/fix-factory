@@ -1701,7 +1701,10 @@ class Planner {
   pollDue(): boolean {
     const polls = this.view.jobs.filter((j) => j.purpose.what === "poll");
     const last = polls.at(-1);
-    if (!this.ctx.presence.present || (last && !last.end)) return false;
+    if (last && !last.end) return false;
+    // You asked: whether you're present or not.
+    if (this.s.pollRequested && (!last || Date.parse(this.s.pollRequested) > last.startedAt)) return true;
+    if (!this.ctx.presence.present) return false;
     if (!last) return true;
     const age = this.ctx.now - last.startedAt;
     if (age >= (this.config.phabPollHours ?? 3) * HOUR) return true;

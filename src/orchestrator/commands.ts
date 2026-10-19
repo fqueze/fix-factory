@@ -189,6 +189,10 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
       done(!error, error);
       break;
     }
+    case "poll-phab":
+      ev({ type: "poll-requested" });
+      done(true);
+      break;
     case "redo-annotations":
       ev({ type: "item-state", item: ANNOTATIONS_ITEM, state: "not started", detail: "redone with today's skip-ifs" });
       for (const n of s.needsUser.filter((x) => x.key.startsWith("approve-push:unskip"))) {

@@ -172,6 +172,7 @@ export type Event =
   | (EventBase & { type: "try-declined"; push: PushId; text: string; by?: "factory"; replan?: true }) // you said no, or the factory withdrew it
   | (EventBase & { type: "submit-copied"; stack: string })
   | (EventBase & { type: "try-pushed"; push: PushId; rev: string; url: string })
+  | (EventBase & { type: "poll-requested" })
   | (EventBase & { type: "try-progress"; push: PushId; done: number; total: number; failures: number; tests?: { done: number; total: number } })
   | (EventBase & { type: "try-job-failed"; push: PushId; taskId: string; retryId?: number; jobName: string; platform: string; tier?: number; result: string })
   | (EventBase & { type: "try-finished"; push: PushId; result: "green" | "failures"; summary: string })
@@ -209,7 +210,8 @@ export type Command =
   | (CommandBase & { cmd: "tell-factory"; text: string })
   | (CommandBase & { cmd: "reply-recovery"; job: JobId; text: string })
   | (CommandBase & { cmd: "start-now" })
-  | (CommandBase & { cmd: "redo-annotations" }) // the skip-ifs group again, from today's manifests
+  | (CommandBase & { cmd: "redo-annotations" })
+  | (CommandBase & { cmd: "poll-phab" }) // check its revisions on Phabricator now // the skip-ifs group again, from today's manifests
   | (CommandBase & { cmd: "presence"; visible: boolean }) // sent by a visible page, see docs/ORCHESTRATOR.md
   // The ways out of a ⚑, from its buttons.
   | (CommandBase & { cmd: "accept-review"; item: ItemId }) // the item is reviewed despite its critical review findings
@@ -390,6 +392,7 @@ export interface RequestState {
   jobs: Record<JobId, JobView>;
   needsUser: NeedsUser[]; // open ones only
   metaBug?: { bug: number | null; draft?: BugDraft };
+  pollRequested?: Iso; // you asked to check Phabricator now
   recoveryPlans: { job: JobId; text: string; plan: PlannedCommand[]; cannotDo: string[]; questions: string[]; t: Iso }[];
   // The latest commands the orchestrator refused, until dismissed or a later command with the same cmd succeeds.
   // Optional: folded states saved before it existed don't have it.

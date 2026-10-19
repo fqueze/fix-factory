@@ -2,7 +2,7 @@ import { REQUEST_STEPS } from "../commands.ts";
 import type { BugDraft, ItemView, PatchView, PushView, RequestState, StackView } from "../../types.ts";
 import { html, join, type Html } from "../html.ts";
 import { ANNOTATIONS_ITEM } from "../../orchestrator/next.ts";
-import { actionsSummary, redoAnnotationsButton, approvePushControls, bugBox, continueBox, copyButton, flagControls, flagItemOf, flagText, plannedLabel, recoveryPlanFor, hasAuthorSession, stackViewerLink, submitControls, summaryId } from "./actions.ts";
+import { actionsSummary, pollPhabButton, redoAnnotationsButton, approvePushControls, bugBox, continueBox, copyButton, flagControls, flagItemOf, flagText, plannedLabel, recoveryPlanFor, hasAuthorSession, stackViewerLink, submitControls, summaryId } from "./actions.ts";
 import { groupJobs, jobLine } from "./activity.ts";
 import { flagAsk, itemBucket, itemSentence, progressLine, requestProgress, type Bucket } from "./progress.ts";
 import {
@@ -186,7 +186,11 @@ function stackSection(r: RequestState, s: StackView, ctx: RenderContext): Html {
     <div class="rows">${patches.filter((p) => !isDropped(r, p)).map((p) => patchRow(r, p, ctx))}${
       dropped.length ? html`<details class="fold" data-fold="dropped-${s.id}"><summary>${dropped.length} dropped</summary><div class="rows">${dropped.map((p) => patchRow(r, p, ctx))}</div></details>` : null
     }</div>
-    <div class="stack-submit">${submitControls(r, s, requestUrl(r.id))}</div>`;
+    <div class="stack-submit">${
+      patches.some((p) => p.revision !== undefined) && REQUEST_STEPS.indexOf(r.step) >= REQUEST_STEPS.indexOf("review comments")
+        ? pollPhabButton(r.id, requestUrl(r.id))
+        : null
+    }${submitControls(r, s, requestUrl(r.id))}</div>`;
 }
 
 // The bugs of the stacks' patches, which a meta bug tracks.
