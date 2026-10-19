@@ -638,7 +638,9 @@ class Planner {
     const runs: string[] = [];
     const pushedAt = this.view.pushedAt.get(push);
     const earlyStarted = [...this.view.byKey.keys()].some((k) => k.endsWith(`:${push}:early${e}`));
-    if (earlyStarted || (p.result === undefined && pushedAt !== undefined && this.ctx.now - pushedAt >= EARLY_WORK_LIST_MS)) runs.push(`early${e}`);
+    // Its first failure needs no wait for slow pools: a perma-fail on one platform is there to work on.
+    const early = (p.progress?.failures ?? 0) > 0 || (pushedAt !== undefined && this.ctx.now - pushedAt >= EARLY_WORK_LIST_MS);
+    if (earlyStarted || (p.result === undefined && early)) runs.push(`early${e}`);
     if (p.result) runs.push(`final${e}`);
     return runs;
   }
@@ -1466,7 +1468,14 @@ class Planner {
         if (item) byItem.set(item, [...(byItem.get(item) ?? []), row]);
         else unmatched.push(row);
       }
-      for (const [item, rows] of byItem) this.routeToAuthor(item, push, rows.map((r) => `- ${r.test} on ${r.config}: ${r.failures.join(" | ").slice(0, 300)} (tasks ${r.taskIds.join(", ")})`));
+      // The final run tells an author only what the early one didn't.
+      const line = (r: TryRow) => `- ${r.test} on ${r.config}: ${r.failures.join(" | ").slice(0, 300)} (tasks ${r.taskIds.join(", ")})`;
+      const early = run.startsWith("final") ? this.view.byKey.get(`try-table:${push}:${run.replace(/^final/, "early")}`)?.find(succeeded) : undefined;
+      const told = new Set(early ? this.out<TryTable>(early).rows.filter((r) => r.result === "fail").map((r) => `${r.test} ${r.config}`) : []);
+      for (const [item, rows] of byItem) {
+        const fresh = rows.filter((r) => !told.has(`${r.test} ${r.config}`));
+        if (fresh.length) this.routeToAuthor(item, push, fresh.map(line), early ? ":final" : "");
+      }
       if (unmatched.length === 0 && t.unparsed.length === 0) continue;
       const file = dataPath(this.config, this.s.id, `triage-${push}-${run}.json`);
       const triage = this.wantAgent(`triage:${push}:${run}`, "triage", "triage-try", { rev: p.rev!, goal: p.purpose || "verify the stack", tableFile: file, logsDir: artifactsDir(this.config) }, {
@@ -1483,8 +1492,8 @@ class Planner {
     }
   }
 
-  private routeToAuthor(item: ItemId, push: PushId, lines: string[]): void {
-    this.resumeAuthor(item, `author:${item}${this.itemEpoch(item)}:try:${push}`, "try", `Try push ${this.s.pushes[push].rev} found these failures, which point at your patch:\n${lines.join("\n")}\n\nThe logs are under ${artifactsDir(this.config)}/<task id>. Fix them by amending your commit, then end with the JSON report again.`);
+  private routeToAuthor(item: ItemId, push: PushId, lines: string[], suffix = ""): void {
+    this.resumeAuthor(item, `author:${item}${this.itemEpoch(item)}:try:${push}${suffix}`, "try", `Try push ${this.s.pushes[push].rev} found these failures, which point at your patch:\n${lines.join("\n")}\n\nThe logs are under ${artifactsDir(this.config)}/<task id>. Fix them by amending your commit, then end with the JSON report again.`);
   }
 
   // -------------------------------------------------------------------------
