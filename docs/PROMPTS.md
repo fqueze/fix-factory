@@ -36,7 +36,7 @@ You wrote this in the factory's main box: {text}. The active requests, one per l
 haiku · 2. First signal · inputs: `annotation`, `manifest`, `bug`, `summary`, `comment`
 
 ```
-The annotation `{annotation}` in {manifest} was added in bug {bug} ("{summary}"), whose first comment is: {comment}. Is it **scoping** (the test can't work in that config by design, such as a feature that config doesn't have, so it should become `run-if`) or **flakiness** (it was added because the test failed there: intermittently or every time, as a workaround for a bug, or copied from another config's failure skips)? Answer `unclear` with one sentence if neither fits.
+The annotation `{annotation}` in {manifest} was added in bug {bug} ("{summary}"), whose first comment is: {comment}. Is it **scoping** (the test can never work in that config by design, such as a feature that config doesn't have, so it should become `run-if`) or **flakiness** (anything that made the test fail there: intermittent or permanent failures, a workaround for a bug or for a limitation tracked by a bug, or a copy of another config's failure skips)? When in doubt, say flakiness: the DEBUG try push will show whether it still fails. Answer `unclear` with one sentence if neither fits.
 ```
 
 ## write-annotation-patches
