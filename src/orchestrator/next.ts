@@ -795,6 +795,8 @@ class Planner {
         // Groups failing the same test ask once, as the first of them, whichever's verdict found someone.
         const first = Object.values(this.s.items).find((i) => i.group.tests[0] === test)!;
         const key = `take-it:${first.id}`;
+        // Earlier versions asked once per group.
+        if (first.id !== item.id) this.clear(`take-it:${item.id}`);
         const bug = this.out<{ bugs: PriorArtBug[] }>(prior).bugs.find((b) => b.id === v.bug);
         this.raise(key, { action: `Someone else may be fixing ${basename(test)}`, detail: bug ? describePriorArt(bug) : v.quote.slice(0, 500), item: first.id });
         if (!this.view.done.has(key)) return;
