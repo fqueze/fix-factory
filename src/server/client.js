@@ -27,9 +27,13 @@
   // Don't swap a request out from under what you're typing; it's refreshed when
   // you leave the field.
   var pending = new Set();
+  // Re-rendering waits while you type, and while anything you typed isn't sent yet, focused or not: it would be lost.
   function busy(el) {
     var a = document.activeElement;
-    return a && el.contains(a) && (a.tagName === "INPUT" || a.tagName === "TEXTAREA" || a.tagName === "SELECT") && a.value !== "";
+    if (a && el.contains(a) && (a.tagName === "INPUT" || a.tagName === "TEXTAREA" || a.tagName === "SELECT") && a.value !== "") return true;
+    return Array.prototype.some.call(el.querySelectorAll("input[type=text], textarea"), function (i) {
+      return i.value !== "" && i.value !== i.defaultValue;
+    });
   }
 
   // What you opened (requests, and folded parts of them: rows, closed groups, an agent's activity) stays
@@ -110,7 +114,10 @@
       function (text) {
         if (s !== mainLatest) return;
         var main = document.getElementById("main");
-        if (main.contains(document.activeElement) && document.activeElement.value) return;
+        if (busy(main)) {
+          retryMain = true;
+          return;
+        }
         var fresh = parse(text);
         // Requests refreshed since this was asked for keep their newer version.
         main.querySelectorAll("[data-request][data-seq]").forEach(function (el) {
