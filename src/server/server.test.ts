@@ -139,7 +139,10 @@ describe("GET /events", () => {
     const decoder = new TextDecoder();
     let text = "";
     text += decoder.decode((await reader.read()).value);
-    assert.match(text, /^retry: \d+/);
+    while (!text.includes("event: hello")) {
+      text += decoder.decode((await reader.read()).value);
+    }
+    assert.match(text, /^retry: \d+\n\nevent: hello\ndata: "\d+"\n\n/, "the id of this run of the server, for the page to reload after a restart");
     state.set(state.getRequest("r-20261005-newtab")!);
     while (!text.includes("event: changed")) {
       text += decoder.decode((await reader.read()).value);

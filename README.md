@@ -2,6 +2,10 @@
 
 Orchestrator and web dashboard for producing, verifying and landing Firefox test-fix patches with Claude agents.
 
+Run the page with `npm start` and the orchestrator with `npm run orchestrator`. Both restart on their own when
+`src/` changes; the orchestrator only once the typecheck and the tests pass. An open page reloads itself after the
+server restarts.
+
 Design docs, read in this order:
 - [docs/MVP.md](docs/MVP.md): what gets built first, and how the factory updates without stopping
 - [docs/WORKFLOW.md](docs/WORKFLOW.md): the full target workflow

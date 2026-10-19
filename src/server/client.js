@@ -32,39 +32,83 @@
     return a && el.contains(a) && (a.tagName === "INPUT" || a.tagName === "TEXTAREA" || a.tagName === "SELECT") && a.value !== "";
   }
 
-  // Folded parts of a request you opened (closed groups, recent jobs, a long reason) stay open
-  // when the request is re-rendered.
-  function openFolds(root) {
-    return Array.prototype.map.call(root.querySelectorAll("details[data-fold][open]"), function (d) {
-      return d.closest("[data-request]").dataset.request + " " + d.dataset.fold;
+  // What you opened (requests, and folded parts of them: rows, closed groups, an agent's activity) stays
+  // open when a request is re-rendered, and in the URL's hash, so a reload (after the server restarted on
+  // new code) opens it again.
+  var opened = new Set(
+    location.hash
+      .slice(1)
+      .split(",")
+      .filter(Boolean)
+      .map(decodeURIComponent)
+  );
+  function keyOf(d) {
+    if (d.matches("details.req")) return "r " + d.dataset.request;
+    var req = d.dataset.fold && d.closest("[data-request]");
+    return req ? req.dataset.request + " " + d.dataset.fold : null;
+  }
+  // Inside a closed request nothing counts as open, and a part that's gone (a group row replaced by its
+  // patch's) is forgotten.
+  function pruneOpened(root) {
+    opened.forEach(function (key) {
+      var sp = key.indexOf(" ");
+      var request = key.slice(0, sp);
+      if (request === "r") return;
+      if (!opened.has("r " + request)) {
+        opened.delete(key);
+        return;
+      }
+      var el = requestElement(request);
+      if (el && root.contains(el) && !el.querySelector(":scope > .rbody[data-lazy]")) {
+        var present = Array.prototype.some.call(el.querySelectorAll("details[data-fold]"), function (d) {
+          return d.dataset.fold === key.slice(sp + 1);
+        });
+        if (!present) opened.delete(key);
+      }
     });
   }
-  function reopenFolds(root, folds) {
-    root.querySelectorAll("details[data-fold]").forEach(function (d) {
-      if (folds.indexOf(d.closest("[data-request]").dataset.request + " " + d.dataset.fold) >= 0) d.open = true;
-    });
+  function saveOpened() {
+    pruneOpened(document);
+    history.replaceState(null, "", location.pathname + location.search + (opened.size ? "#" + Array.from(opened).map(encodeURIComponent).join(",") : ""));
   }
+  function reopenFolds(root) {
+    root.querySelectorAll("details.req, details[data-fold]").forEach(function (d) {
+      if (!d.open && opened.has(keyOf(d))) d.open = true;
+      // The page of one request comes with it open.
+      else if (d.open && d.matches("details.req")) opened.add(keyOf(d));
+    });
+    saveOpened();
+  }
+  document.addEventListener(
+    "toggle",
+    function (event) {
+      var d = event.target;
+      var key = d.matches && keyOf(d);
+      if (!key || d.open === opened.has(key)) return;
+      if (d.open) opened.add(key);
+      else opened.delete(key);
+      saveOpened();
+    },
+    true
+  );
 
+  var mainSeq = 0;
   function refreshMain() {
     var open = Array.prototype.map.call(document.querySelectorAll("details.req[open]"), function (d) {
       return d.dataset.request;
     });
     var url = "/fragments/main" + (open.length === 1 ? "?open=" + encodeURIComponent(open[0]) : "");
+    var seq = ++mainSeq;
     return fetchText(url).then(function (text) {
+      if (seq !== mainSeq) return;
       var main = document.getElementById("main");
       if (main.contains(document.activeElement) && document.activeElement.value) return;
-      var folds = openFolds(main);
       main.replaceChildren(parse(text));
-      reopenFolds(main, folds);
-      open.forEach(function (id) {
-        var el = requestElement(id);
-        if (el && el.tagName === "DETAILS" && !el.open) {
-          el.open = true;
-        }
-      });
+      reopenFolds(main);
     });
   }
 
+  var latest = {};
   function refreshRequest(id) {
     var el = requestElement(id);
     // Queued and finished requests are one-line rows of the main fragment.
@@ -74,14 +118,18 @@
       return Promise.resolve();
     }
     var open = el.tagName === "DETAILS" && el.open;
+    var seq = (latest[id] = (latest[id] || 0) + 1);
     return fetchText("/fragments/requests/" + encodeURIComponent(id) + (open ? "?open=1" : ""))
       .then(function (text) {
+        // Changes come in bursts and their answers can arrive out of order: only the latest is shown.
+        if (seq !== latest[id]) return;
+        el = requestElement(id);
+        if (!el) return;
         var fresh = parse(text).firstElementChild;
         // A request that moved between active, queued and finished needs the whole list.
         if (!fresh || fresh.dataset.section !== el.dataset.section) return refreshMain();
-        var folds = openFolds(el);
         el.replaceWith(fresh);
-        reopenFolds(fresh, folds);
+        reopenFolds(fresh);
       })
       .catch(function (e) {
         if (e.status === 404) el.remove();
@@ -268,9 +316,29 @@
     });
   }, 5000);
 
+  // After the server restarted on new code, the page reloads, once nothing you typed would be lost.
+  var bootId = null;
+  function typing() {
+    // Drafted replies come filled in: only what you changed counts.
+    return Array.prototype.some.call(document.querySelectorAll("input[type=text], textarea"), function (i) {
+      return i.value !== i.defaultValue;
+    });
+  }
+  function reloadWhenIdle() {
+    if (typing()) setTimeout(reloadWhenIdle, 5000);
+    else location.reload();
+  }
+
+  reopenFolds(document);
+
   var connectedOnce = false;
   function connect() {
     var source = new EventSource("/events");
+    source.addEventListener("hello", function (event) {
+      var id = JSON.parse(event.data);
+      if (bootId !== null && id !== bootId) reloadWhenIdle();
+      bootId = id;
+    });
     source.addEventListener("open", function () {
       // After a server restart or a network drop, changes may have been missed.
       if (connectedOnce) {

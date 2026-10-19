@@ -74,6 +74,7 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
   const homeDir = opts.homeDir ?? homedir();
   const hosts = new HostCheck(opts.config.allowedHosts ?? [], opts.machineName);
   void hosts.addFqdn(opts.machineName);
+  const bootId = String(now());
   // The jobs of dry runs that didn't record them, by dry run job: reading a task set takes a while.
   const pushJobs = new Map<string, TryJob[] | undefined>();
   const sseClients = new Set<ServerResponse>();
@@ -248,6 +249,8 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
       res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive" });
       // Reconnection delay for EventSource, e.g. while the server restarts.
       res.write("retry: 2000\n\n");
+      // A page connected to an earlier run of the server reloads: its script, style or markup may have changed.
+      res.write(`event: hello\ndata: ${JSON.stringify(bootId)}\n\n`);
       sseClients.add(res);
       req.on("close", () => sseClients.delete(res));
       return;

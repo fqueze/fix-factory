@@ -31,6 +31,8 @@ function loadPage(visibilityState: "visible" | "hidden") {
     clearInterval,
     setTimeout,
     Date,
+    location: { hash: "", pathname: "/", search: "" },
+    history: { replaceState() {} },
   };
   runInNewContext(CLIENT, page);
   return {
