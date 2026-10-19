@@ -305,12 +305,15 @@ export function handleFinished(input: HandlerInput): HandlerResult {
   return { events, files, commands };
 }
 
+// The author runs that answer a message of yours.
+const YOUR_MESSAGES = ["continue", "comment", "stack comments"];
+
 function authorReport(input: HandlerInput, ev: <T extends EventInput["type"]>(type: T, fields: Fields<T>) => void): void {
   const { job } = input;
   const item = job.item!;
-  const blocked = (summary: string) => {
+  const blocked = (summary: string, action = "The author is blocked") => {
     ev("item-state", { item, state: "blocked", detail: summary.slice(0, 300) });
-    ev("needs-user", { key: `failed:${job.job}`, action: "The author is blocked", detail: summary.slice(0, 500), job: job.job, item });
+    ev("needs-user", { key: `failed:${job.job}`, action, detail: summary.slice(0, 500), job: job.job, item });
   };
   switch (job.name) {
     case "investigate-and-fix": {
@@ -319,7 +322,25 @@ function authorReport(input: HandlerInput, ev: <T extends EventInput["type"]>(ty
         blocked(r.summary);
         return;
       }
+      // Its DEBUG commits wait for the folder's try repro push.
+      if (r.state === "needs a try repro") {
+        ev("item-state", { item, state: "waiting for a try repro", detail: r.summary.slice(0, 300) });
+        return;
+      }
+      // A fix for a failure nobody saw happen can't be trusted.
+      if (r.state === "not reproduced") {
+        blocked(r.summary, "The author couldn't reproduce the failure");
+        return;
+      }
+      if (r.state === "fix verified locally" && r.reproduction?.reproduced === false) {
+        blocked(r.summary, "Fixed without reproducing the failure");
+        return;
+      }
       ev("item-state", { item, state: r.state, detail: r.summary.slice(0, 300) });
+      // A refusal of what you told it waits for you.
+      if (r.disagreement && YOUR_MESSAGES.includes(job.purpose?.reason ?? "")) {
+        ev("needs-user", { key: `disagrees:${job.job}`, action: "Its author disagrees with you", detail: r.disagreement.slice(0, 1000), job: job.job, item });
+      }
       if (r.state !== "fix verified locally") return;
       const patch = patchId(item, Math.max(0, r.commits.length - 1));
       for (const l of r.landsAfter) ev("dep", { dep: { patch, needs: l.what, kind: "hard", reason: l.reason, source: "agent" } });

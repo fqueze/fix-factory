@@ -237,6 +237,7 @@ class Planner {
     this.pushes();
     this.workList();
     for (const item of Object.values(this.s.items)) this.item(item);
+    this.reproPushes();
     this.stacks();
     this.bugEdits();
     this.verify();
@@ -800,6 +801,8 @@ class Planner {
     if (!this.want(latest.purpose.key)) return;
     const author = this.authorReport(item.id)!;
     if (author.commits.length === 0) return;
+    // Its author didn't do what you said: nothing goes on until you answer.
+    if (this.s.needsUser.some((n) => n.key === `disagrees:${author.job.job}`)) return;
     this.checkAndReview(item, author.job, author.commits);
   }
 
@@ -911,6 +914,65 @@ class Planner {
       return;
     }
     this.resumeAuthor(item.id, key, "review", `A critical reviewer found these problems in your patch:\n${list}\n\nAddress them by amending your commit, then end with the JSON report again. Must-fix findings have to be fixed; where you disagree with one, say why in the report's summary. For nits, address them or say in one line why not.`, "review findings");
+  }
+
+  // -------------------------------------------------------------------------
+  // 4b. Try repro: the DEBUG commits that log and widen a race, from every author of a folder who
+  // needs one, in one push once the folder's other groups are settled. Its results go back to each.
+
+  private reproPushes(): void {
+    const folders = [...new Set(Object.values(this.s.items).map((i) => this.stackFolder(i)))];
+    for (const folder of folders) {
+      const items = Object.values(this.s.items).filter((i) => this.stackFolder(i) === folder);
+      const waiting = items.filter((i) => i.state === "waiting for a try repro");
+      if (!waiting.length || items.some((i) => !SETTLED.includes(i.state) && i.state !== "waiting for a try repro")) continue;
+      const debug = waiting.map((item) => {
+        const author = this.authorJobs(item.id).filter(succeeded).at(-1)!;
+        return { item, author, commits: this.rep<InvestigateReport>(author).commits };
+      });
+      const hash = shortHash(debug.map((d) => `${d.item.id}=${d.commits.join(",")}`));
+      const short = hash.slice(0, 6);
+      const wtJob = this.want(`wt:repro:${hash}`, () => this.worktree(`${this.s.id}-repro-${short}`));
+      if (!wtJob) continue;
+      const wt = this.out<{ path: string; branch: string }>(wtJob);
+      const branch = this.want(`repro-branch:${hash}`, () =>
+        this.cli("repro-branch", "stack.ts", ["assemble", "--cwd", wt.path, "--branch", wt.branch, "--base", this.config.baseRef, "--leave-conflict", ...debug.flatMap((d) => d.commits)], { cwd: wt.path }),
+      );
+      if (!branch) continue;
+      const conflict = this.out<{ conflict?: { sha: string; files: string[] } }>(branch).conflict;
+      if (conflict) {
+        this.raise(`failed:${branch.job}`, { action: "The DEBUG commits for the try repro conflict", detail: `${conflict.sha.slice(0, 12)} in ${conflict.files.join(", ")}`.slice(0, 500), job: branch.job });
+        continue;
+      }
+      const failuresFile = dataPath(this.config, this.s.id, `repro-${short}.json`);
+      const noInitial = dataPath(this.config, this.s.id, "no-initial-push.json");
+      const planned = this.planPushes(`plan:repro:${hash}`, {
+        goal: `reproduce these failures on try, with the DEBUG commits on the branch logging and widening their races (each group's reproduction notes say what to look for)`,
+        failuresFile,
+        initialPushFile: noInitial,
+        branch: wt.branch,
+        worktree: wt.path,
+        base: this.config.baseRef,
+      }, {
+        cwd: wt.path,
+        files: [
+          { path: failuresFile, content: JSON.stringify(debug.map((d) => ({ item: d.item.id, debugCommits: d.commits, reproduction: this.rep<InvestigateReport>(d.author).files?.reproduction, ...d.item.group })), null, 2) + "\n" },
+          { path: noInitial, content: '{"note": "none"}\n' },
+        ],
+      }, (i, count) => `repro-${short}${count === 1 ? "" : `-${i + 1}`}`, wt.path);
+      if (!planned) continue;
+      const pushed = planned.made;
+      if (pushed.some((id) => this.s.pushes[id]?.result === undefined)) continue;
+      const results = pushed.map((id) => `${this.s.pushes[id].rev} (${this.s.pushes[id].result === "green" ? "green" : (this.s.pushes[id].summary ?? "failures")})`).join(", ");
+      for (const d of debug) {
+        this.resumeAuthor(
+          d.item.id,
+          `author:${d.item.id}${this.itemEpoch(d.item.id)}:repro:${hash}`,
+          "repro",
+          `The factory pushed your DEBUG commits to try, with those of the folder's other groups: ${results}. Read the results with fx-tests (fx-tests try <rev>); the failed jobs' logs are under ${artifactsDir(this.config)}/<task id>. Say in your reproduction file whether it reproduced, and how often. Then drop your DEBUG commits and fix it as usual, with the reproduction "on try"; or, if it didn't reproduce, report "not reproduced". End with the JSON report again.`,
+        );
+      }
+    }
   }
 
   // -------------------------------------------------------------------------

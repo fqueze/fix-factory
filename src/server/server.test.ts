@@ -23,6 +23,8 @@ const server = createFactoryServer({
     port: 0,
     profilerOrigin: "http://localhost:4242",
     stackViewerCommand: [process.execPath, join(FIXTURES, "fake-stack-viewer.js")],
+    mdViewerCommand: [process.execPath, join(FIXTURES, "fake-md-viewer.js")],
+    diffViewerCommand: [process.execPath, join(FIXTURES, "fake-md-viewer.js")],
     stateDir,
     maxAgents: 10,
     maxBuilds: 3,
@@ -391,6 +393,29 @@ describe("GET /api/requests/:id/pushes/:push/tasks", () => {
     assert.match(page, /<th>Linux 24\.04 <span class="btype">debug<\/span><\/th><td><span class="jgroup">X\( <span class="job"[^>]*>X1<\/span> <span class="job"[^>]*>X2<\/span> \)/);
     assert.equal((await fetch(`${base}/api/requests/${ID}/pushes/nope/tasks`)).status, 404);
     rmSync(dir, { recursive: true, force: true });
+  });
+});
+
+describe("GET /requests/:id/items/:item/files/:which", () => {
+  it("renders its author's evidence and reproduction with md-viewer and its widening patch with diff-viewer, from its worktree only", async () => {
+    const ID = "r-20261015-enterprisepolicies";
+    const r = structuredClone(state.getRequest(ID)!);
+    const wt = mkdtempSync(join(tmpdir(), "ff-wt-"));
+    mkdirSync(join(wt, "artifacts"));
+    writeFileSync(join(wt, "artifacts", "evidence.md"), "# The query holds the window\n");
+    writeFileSync(join(wt, "artifacts", "reproduction.diff"), "--- a\n+++ b\n");
+    const i = r.items["i-browser-policy-trackingprotection"];
+    r.jobs["j-inv-tp"].cwd = wt;
+    i.investigation = { state: "fix verified locally", summary: "s", cause: "c", verification: "v", commits: [], landsAfter: [], feedback: [], files: { evidence: "artifacts/evidence.md", reproduction: "../outside.md", widening: "artifacts/reproduction.diff" } };
+    state.set(r);
+    const url = (which: string) => `${base}/requests/${ID}/items/${i.id}/files/${which}`;
+    const evidence = await (await fetch(url("evidence"))).text();
+    assert.match(evidence, /<pre id="args">\["-n","--no-open","--",".*\/artifacts\/evidence\.md"\]<\/pre><pre id="text"># The query holds the window/);
+    const widening = await (await fetch(url("widening"))).text();
+    assert.match(widening, /"--no-open","-t","widening: [^"]*","-o"/);
+    assert.equal((await fetch(url("reproduction"))).status, 404, "not outside the worktree");
+    assert.equal((await fetch(url("other"))).status, 404);
+    rmSync(wt, { recursive: true, force: true });
   });
 });
 

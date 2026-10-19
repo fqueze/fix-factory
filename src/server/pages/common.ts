@@ -291,6 +291,7 @@ export function stateClass(s: ItemState): StateClass {
     case "not started":
     case "waiting for a build slot":
     case "waiting for review":
+    case "waiting for a try repro":
       return "wait";
     case "review findings":
     case "blocked":

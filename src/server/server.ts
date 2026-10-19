@@ -14,6 +14,7 @@ import { renderMain, renderOverview, renderStrip } from "./pages/overview.ts";
 import { renderRequest } from "./pages/request.ts";
 import { buildRequestProfile } from "./request-profile.ts";
 import { buildPatchView, buildStackReview, findStack, isRevName } from "./stack-review.ts";
+import { AGENT_FILES, agentFilePath, renderAgentFile, type AgentFile } from "./agent-files.ts";
 import { pushTasks } from "./pages/tasks.ts";
 import type { DryRunResult } from "../cli/try.ts";
 import { dryRunJobs, type TryJob } from "../cli/task-set.ts";
@@ -21,7 +22,7 @@ import type { CommandInput } from "../state/commands.ts";
 import type { CommandSink, StateSource } from "./state-source.ts";
 
 export interface ServerOptions {
-  config: Pick<FactoryConfig, "port" | "profilerOrigin" | "stackViewerCommand" | "stateDir" | "maxAgents" | "maxBuilds" | "allowedHosts">;
+  config: Pick<FactoryConfig, "port" | "profilerOrigin" | "stackViewerCommand" | "mdViewerCommand" | "diffViewerCommand" | "stateDir" | "maxAgents" | "maxBuilds" | "allowedHosts">;
   state: StateSource;
   sink: CommandSink;
   now?: () => number;
@@ -359,6 +360,27 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
         d.jobs = pushJobs.get(dry.job);
       }
       return send(res, 200, "text/html; charset=utf-8", pushTasks(d).value);
+    }
+    if ((m = path.match(/^\/requests\/([^/]+)\/items\/([^/]+)\/files\/([a-z]+)$/))) {
+      const request = opts.state.getRequest(decodeURIComponent(m[1]));
+      const item = request?.items[decodeURIComponent(m[2])];
+      const which = m[3] as AgentFile;
+      const file = request && item && AGENT_FILES.includes(which) ? agentFilePath(request, item, which) : undefined;
+      if (!request || !item || !file) {
+        throw new HttpError(404, "no such file");
+      }
+      let page: string;
+      try {
+        page = await renderAgentFile({
+          mdViewer: opts.config.mdViewerCommand ?? ["md-viewer"],
+          diffViewer: opts.config.diffViewerCommand ?? ["diff-viewer"],
+          path: file,
+          title: `${which}: ${item.group.tests.join(", ")}`,
+        });
+      } catch (e) {
+        throw new HttpError(502, errorMessage(e));
+      }
+      return send(res, 200, "text/html; charset=utf-8", page);
     }
     const file = STATIC[path];
     if (file) {

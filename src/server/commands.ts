@@ -16,6 +16,7 @@ export const ITEM_STATES = [
   "waiting for review",
   "addressing review comments",
   "blocked",
+  "waiting for a try repro",
   "fixed",
   "left as-is",
   "handed back",

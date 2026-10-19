@@ -7,25 +7,116 @@
         "fix verified locally",
         "left as-is",
         "handed back",
-        "blocked"
+        "blocked",
+        "not reproduced",
+        "needs a try repro"
       ]
     },
     "summary": {
       "type": "string",
       "description": "One line, shown on the status page."
     },
+    "disagreement": {
+      "type": "string",
+      "description": "Only when resumed with a message from the user that you didn't follow: why. The factory stops and shows it to them."
+    },
     "cause": {
       "type": "string"
     },
+    "evidence": {
+      "type": "array",
+      "description": "What kinds of evidence show the cause, strongest first. \"code reading\" alone is a guess. The details go in files.evidence.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": "string",
+            "enum": [
+              "profile",
+              "log",
+              "local run",
+              "code reading"
+            ]
+          },
+          "finding": {
+            "type": "string",
+            "description": "What it shows."
+          }
+        },
+        "required": [
+          "source",
+          "finding"
+        ],
+        "additionalProperties": false
+      }
+    },
     "verification": {
       "type": "string"
+    },
+    "reproduction": {
+      "type": "object",
+      "description": "Reproduced locally, or \"on try\": in a factory try push (the un-skip push, or the push of your DEBUG commit). You never push to try yourself. The details go in files.reproduction.",
+      "properties": {
+        "reproduced": {
+          "type": "boolean"
+        },
+        "where": {
+          "type": "string",
+          "enum": [
+            "locally",
+            "on try"
+          ]
+        },
+        "before": {
+          "type": "string",
+          "description": "Short, e.g. \"7 of 20 runs\"."
+        },
+        "after": {
+          "type": "string",
+          "description": "Short, e.g. \"0 of 100 runs\"."
+        },
+        "widened": {
+          "type": "boolean",
+          "description": "The race was made wider (a delay, a forced condition) to reproduce it."
+        }
+      },
+      "required": [
+        "reproduced",
+        "where",
+        "widened",
+        "before"
+      ],
+      "additionalProperties": false
+    },
+    "files": {
+      "type": "object",
+      "description": "Paths relative to your worktree, under artifacts/.",
+      "properties": {
+        "evidence": {
+          "type": "string",
+          "description": "Markdown: what shows the cause, with links to profiles and logs; if the fix changes the test rather than the product, why the product is right."
+        },
+        "reproduction": {
+          "type": "string",
+          "description": "Markdown: how to reproduce the failure: the commands, the environment, how often it failed without and with the fix."
+        },
+        "widening": {
+          "type": "string",
+          "description": "A .diff that widens the race to reproduce it, if you used one."
+        }
+      },
+      "required": [
+        "evidence",
+        "reproduction"
+      ],
+      "additionalProperties": false
     },
     "commits": {
       "type": "array",
       "items": {
         "type": "string"
       },
-      "description": "Commit shas in your worktree, oldest first."
+      "description": "Commit shas in your worktree, oldest first. With \"needs a try repro\": your DEBUG commits, which log and widen the race."
     },
     "bugDraft": {
       "type": "object",
@@ -108,6 +199,9 @@
     "state",
     "summary",
     "cause",
+    "evidence",
+    "reproduction",
+    "files",
     "verification",
     "commits",
     "landsAfter",

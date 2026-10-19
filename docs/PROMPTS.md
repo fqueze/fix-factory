@@ -85,10 +85,11 @@ Facts about existing bugs and revisions for {test}: {facts}. Someone is actively
 opus · 4. Investigate and fix · inputs: `test`, `worktree`, `failureSummary`
 
 ```
-Fix {test} in {worktree}, following debug-a-test-failure. The failure: {failureSummary}. Commit the fix with a message following the commit-message skill, using `Bug XXXXXXX` if the fix needs a bug of its own. When the test exposes a product bug (a leak, a race), fix the product: a test-side wait or guard that hides it is not a fix. Use "handed back" only when someone else is actively working on it. Run builds and tests in the foreground and wait for them: your session ends when you stop, and anything still running in the background is lost. End with the JSON report: state, cause, how you verified it, a bug draft (bug-filing skill) if one is needed, and any patch yours must land after.
+Fix {test} in {worktree}, following debug-a-test-failure. The failure: {failureSummary}. Commit the fix with a message following the commit-message skill, its `r=` from the find-reviewer skill, using `Bug XXXXXXX` if the fix needs a bug of its own. When the test exposes a product bug (a leak, a race), fix the product: a test-side wait or guard that hides it is not a fix. Use "handed back" only when someone else is actively working on it. Reproduce the failure locally before changing anything; one that only shows on a platform you don't have counts as reproduced if the factory's un-skip try push shows it. Never push to try yourself (add --no-push to any mach try). If it only fails on CI and you know which race, commit a "DEBUG -" commit that logs and widens it, and stop with state "needs a try repro": the factory pushes it, with the folder's others, once the user approves, and resumes you with the results. If you can't reproduce it, stop with state "not reproduced" and say what you tried. Run builds and tests in the foreground and wait for them: your session ends when you stop, and anything still running in the background is lost. Write artifacts/evidence.md (what shows the cause, and why the fix belongs where it is) and artifacts/reproduction.md (how to reproduce it, how often it failed with and without the fix), plus artifacts/reproduction.diff if you widened the race. End with the JSON report: state, cause, the kinds of evidence (a guess from reading code says so), the reproduction, those files, how you verified the fix, a bug draft (bug-filing skill) if one is needed, and any patch yours must land after.
 
 Other agents work in sibling worktrees of the same repository:
 - Never run `git stash`: the stash is shared by every worktree. To test without your change, make a WIP commit, then `git checkout HEAD~1 -- <files>`.
+- Only commit to your own branch: never move another branch (`git update-ref`, `git branch -f`, a rebase), the stack's included. The factory rewrites the stack from your commits.
 - Only kill processes whose command line names your own worktree.
 - Name your `profiler-cli` session and pass `--session <id>` on every call; never a bare `stop`, never `--all`.
 - Never submit a bug: drafts go in the report.
@@ -106,7 +107,8 @@ Look for:
 - new code more complicated than the fix needs: abstractions, helpers or options used once, null checks or other defensive code with no known reason, a bigger change than the cause requires;
 - comments in the code that add nothing, and padding in the commit message;
 - a message claiming a mechanism the evidence doesn't show, or not saying why an apparently healthy file is edited;
-- a guard on the victim's side where the leaker should have been fixed, or a test change that hides a product bug;
+- a guard on the victim's side where the leaker should have been fixed, or a test change that hides a product bug: artifacts/evidence.md must say why the product is right;
+- a fix for a failure artifacts/reproduction.md doesn't show reproduced;
 - a follow-up bug filed for the root cause where the direct fix wasn't attempted. "Different component", "shared helper", "needs UX input" and "design question" are not reasons on their own;
 - a fix not verified by the checks it claims;
 - several citations for one claim that all trace back to the same source.

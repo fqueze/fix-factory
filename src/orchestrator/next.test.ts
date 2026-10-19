@@ -581,6 +581,23 @@ describe("4. investigate and fix", () => {
     assert.deepEqual(started, [`author:i-test-a:review:${job}`]);
   });
 
+  it("an author that disagrees with your message waits for you", () => {
+    const sc = workList([group("ka", "a/test_a.js", "boom")]);
+    investigating(sc, "i-test-a");
+    sc.complete("author:i-test-a:initial", { report: fixed([sha("1")]) });
+    sc.settle();
+    const plan = resumeAuthorPlan(ID, sc.view(), "i-test-a", "continue", { message: "fix the leak instead" }, "investigating");
+    assert.ok(plan && plan !== "busy");
+    plan.purpose.key = "author:i-test-a:continue:c-1";
+    sc.startJob(plan);
+    sc.complete("author:i-test-a:continue:c-1", { report: fixed([sha("1")], { disagreement: "there is no leak" }) });
+    const job = sc.view().byKey.get("author:i-test-a:continue:c-1")![0].job;
+    assert.ok(sc.open().includes(`disagrees:${job}`));
+    assert.ok(!sc.settle().includes(`import:${job}`), "nothing goes on");
+    sc.add({ type: "user-done", request: ID, key: `disagrees:${job}` });
+    assert.ok(sc.settle().includes(`import:${job}`), "go ahead with its patch");
+  });
+
   // The author's commit through import and a clean lint; returns the author job.
   function linted(sc: Scenario, author: string, commit: string): string {
     sc.complete(author, { report: fixed([commit]) });
@@ -731,6 +748,44 @@ function stacked(reportA?: object): Scenario {
   sc.settle();
   return sc;
 }
+
+describe("4b. try repro", () => {
+  it("pushes the folder's DEBUG commits in one try push once you approve it, then gives each author the results", () => {
+    const sc = workList([group("ka", "a/test_a.js", "boom"), group("kb", "a/test_b.js", "bang")]);
+    investigating(sc, "i-test-a");
+    investigating(sc, "i-test-b");
+    sc.complete("author:i-test-a:initial", { report: fixed([sha("d")], { state: "needs a try repro", summary: "the race only shows on mac debug" }) });
+    sc.settle();
+    assert.equal(sc.state().items["i-test-a"].state, "waiting for a try repro");
+    assert.ok(![...sc.view().byKey.keys()].some((k) => k.startsWith("wt:repro:")), "waits for the folder's other groups");
+    reviewed(sc, "i-test-b", sha("2"), "a/test_b.js");
+    const wt = [...sc.view().byKey.keys()].find((k) => k.startsWith("wt:repro:"))!;
+    assert.ok(wt);
+    const hash = wt.split(":")[2];
+    assert.ok(!sc.view().byKey.has("wt:a"), "no stack while a group of the folder waits for its repro");
+    sc.complete(wt, { output: { name: `${ID}-repro`, path: `/wt/${ID}-repro`, branch: `${ID}-repro` } });
+    sc.settle();
+    assert.deepEqual(sc.plan(`repro-branch:${hash}`).cli?.args.slice(-2), ["--leave-conflict", sha("d")]);
+    sc.complete(`repro-branch:${hash}`, { output: { branch: `${ID}-repro`, commits: [{ sha: sha("d"), newSha: sha("e") }] } });
+    sc.settle();
+    sc.complete(`plan:repro:${hash}`, { report: { pushes: [{ purpose: "repro on mac debug", tryArgs: ["fuzzy", "-q", "mac"], rebuild: 10 }], feedback: [] } });
+    sc.settle();
+    const push = `repro-${hash.slice(0, 6)}`;
+    sc.complete(`dry-run:${push}`, { output: { command: ["./mach", "try", "fuzzy"], taskCount: 4, tasks: [], tryTaskConfig: {}, commits: [sha("e")], warnings: [] } });
+    sc.settle();
+    assert.ok(sc.open().includes(`approve-push:${push}`), "nothing is pushed before you approve");
+    assert.ok(!sc.view().byKey.has(`push:${push}`));
+    sc.add({ type: "user-done", request: ID, key: `approve-push:${push}` });
+    sc.settle();
+    sc.complete(`push:${push}`, { output: { rev: "fff", landoJobId: 1, treeherderUrl: "t" } });
+    sc.settle();
+    sc.add({ type: "try-finished", request: ID, push, result: "failures", summary: "3 failures" });
+    sc.settle();
+    const resumed = sc.plan(`author:i-test-a:repro:${hash}`);
+    assert.match(resumed.agent?.message ?? "", /fff \(3 failures\)[^]*drop your DEBUG commits/);
+    assert.equal(sc.state().items["i-test-a"].state, "investigating");
+  });
+});
 
 describe("5. stack", () => {
   it("assembles a settled folder, finds deps and efforts, orders, reviews the stack and summarizes it", () => {

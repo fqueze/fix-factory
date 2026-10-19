@@ -21,6 +21,8 @@ export interface FactoryConfig {
   phabPollHours?: number; // default 3, only while you are present
   claudeCommand: string[]; // e.g. ["mozsb", "claude"]; the runner appends -p and its flags
   stackViewerCommand: string[]; // e.g. ["stack-viewer"]
+  mdViewerCommand?: string[]; // default ["md-viewer"], for the authors' evidence and reproduction files
+  diffViewerCommand?: string[]; // default ["diff-viewer"], for their widening patches
   profilerOrigin: string; // e.g. "http://localhost:4242" (a local profiler front end), for request profiles
   maxAgents: number;
   maxBuilds: number;
@@ -43,6 +45,7 @@ export type ItemState =
   | "waiting for review"
   | "addressing review comments"
   | "blocked"
+  | "waiting for a try repro" // its DEBUG commit goes to try with the folder's others
   // terminal
   | "fixed"
   | "left as-is"
@@ -234,10 +237,14 @@ export interface Feedback {
 }
 
 export interface InvestigateReport {
-  state: "fix verified locally" | "left as-is" | "handed back" | "blocked";
+  state: "fix verified locally" | "left as-is" | "handed back" | "blocked" | "not reproduced" | "needs a try repro"; // needs a try repro: commits are DEBUG commits widening the race
   summary: string; // one line, shown on the status page
+  disagreement?: string; // why it didn't follow your message: the factory stops and asks you
   cause: string;
+  evidence?: { source: "profile" | "log" | "local run" | "code reading"; ref?: string; finding: string }[]; // absent from reports older than it; ref: in the first ones
   verification: string;
+  reproduction?: { reproduced: boolean; where?: "locally" | "on try"; widened?: boolean; command?: string; before: string; after?: string }; // command: in the first reports, before files
+  files?: { evidence: string; reproduction: string; widening?: string }; // relative to the worktree
   commits: string[]; // shas in the agent's worktree, oldest first
   bugDraft?: BugDraft; // when the fix needs its own bug
   landsAfter: { what: string; reason: string }[];
@@ -290,6 +297,7 @@ export interface ItemView {
   detail?: string;
   jobs: JobId[]; // oldest first
   lastReport?: { prompt: string; report: unknown; job: JobId };
+  investigation?: InvestigateReport; // the latest investigate-and-fix report: cause, evidence, reproduction
 }
 
 export interface PatchView {

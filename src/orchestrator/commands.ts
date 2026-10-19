@@ -166,13 +166,13 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
         const item = s.patches[x.patch]?.item;
         if (item) byItem.set(item, [...(byItem.get(item) ?? []), `- On ${s.patches[x.patch].title}: ${x.text}`]);
       }
-      const errors = [...byItem].map(([item, lines]) => resume(item, "stack comments", `Review comments on your patch, from stack-viewer:\n${lines.join("\n")}\n\nAddress them by amending your commit, then end with the JSON report again.`)).filter((e) => e);
+      const errors = [...byItem].map(([item, lines]) => resume(item, "stack comments", `Review comments on your patch, from stack-viewer:\n${lines.join("\n")}\n\nAddress them by amending your commit, then end with the JSON report again. If you think it is wrong, don't do it: leave your commits as they are and say why in \`disagreement\`.`)).filter((e) => e);
       done(errors.length === 0, errors.join("; "));
       break;
     }
     case "comment-fix": {
       const item = s.patches[c.patch]?.item;
-      const error = item ? resume(item, "comment", `A comment on your fix:\n${c.text}\n\nAddress it by amending your commit, then end with the JSON report again.`) : "this patch has no group, so no author to tell";
+      const error = item ? resume(item, "comment", `A comment on your fix:\n${c.text}\n\nAddress it by amending your commit, then end with the JSON report again. If you think it is wrong, don't do it: leave your commits as they are and say why in \`disagreement\`.`) : "this patch has no group, so no author to tell";
       done(!error, error);
       break;
     }
@@ -280,7 +280,7 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
       break;
     }
     case "continue": {
-      const error = resume(c.item, "continue", `A message from the user:\n${c.text}\n\nDo what it says, amending your commit if your fix changes, then end with the JSON report again.`);
+      const error = resume(c.item, "continue", `A message from the user:\n${c.text}\n\nDo what it says, amending your commit if your fix changes, then end with the JSON report again. If you think it is wrong, don't do it: leave your commits as they are and say why in \`disagreement\`.`);
       if (!error) {
         clearItemFlags(c.item);
         reopen(c.item);

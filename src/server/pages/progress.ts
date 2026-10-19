@@ -54,6 +54,7 @@ export const IDLE: Record<ItemState, { text: (i: ItemView, builds: number) => st
   "waiting for review": { text: () => "waiting for review on Phabricator", active: false },
   "addressing review comments": { text: () => "addressing Phabricator review comments", active: true },
   blocked: { text: () => "blocked", active: true },
+  "waiting for a try repro": { text: () => "waiting for the try push of its DEBUG commit", active: false },
   fixed: { text: () => "done: fixed", active: false },
   landed: { text: () => "done: landed", active: false },
   "left as-is": { text: () => "closed", active: false },

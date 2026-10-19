@@ -10,7 +10,7 @@
 //   Events for unknown items are ignored, as are unknown event types.
 // - pushes keep creation order as long as push ids aren't integer-like strings
 //   (JavaScript orders those keys first).
-import type { Dep, Event, ItemView, PatchView, PushView, RefusedCommand, RequestState } from "../types.ts";
+import type { Dep, Event, InvestigateReport, ItemView, PatchView, PushView, RefusedCommand, RequestState } from "../types.ts";
 
 const MAX_REFUSED = 5;
 
@@ -131,6 +131,7 @@ export function foldEvents(events: readonly Event[]): RequestState {
         const item: ItemView | undefined = itemId === undefined ? undefined : s.items[itemId];
         if (!item) continue;
         item.lastReport = { prompt: e.prompt, report: e.report, job: e.job };
+        if (e.prompt === "investigate-and-fix") item.investigation = e.report as InvestigateReport;
         break;
       }
       case "patch":

@@ -19,7 +19,7 @@ function exact<T>() {
 }
 
 const feedbackTargets = exact<Feedback["target"]>()(["fx-tests", "profiler-cli", "searchfox-cli", "factory", "inputs"]);
-const investigateStates = exact<InvestigateReport["state"]>()(["fix verified locally", "left as-is", "handed back", "blocked"]);
+const investigateStates = exact<InvestigateReport["state"]>()(["fix verified locally", "left as-is", "handed back", "blocked", "not reproduced", "needs a try repro"]);
 const verdicts = exact<ReviewPatchReport["verdict"]>()(["ok", "findings"]);
 const severities = exact<ReviewPatchReport["findings"][number]["severity"]>()(["must-fix", "nit"]);
 const plannedCmds = exact<PlannedCommand["cmd"]>()([
@@ -27,7 +27,7 @@ const plannedCmds = exact<PlannedCommand["cmd"]>()([
 ]);
 const itemStates = exact<ItemState>()([
   "not started", "waiting for a build slot", "investigating", "fix verified locally", "in critical review",
-  "review findings", "reviewed", "in stack", "in try", "waiting for review", "addressing review comments", "blocked",
+  "review findings", "reviewed", "in stack", "in try", "waiting for review", "addressing review comments", "blocked", "waiting for a try repro",
   "fixed", "left as-is", "handed back", "landed",
 ]);
 const requestSteps = exact<RequestStep>()([
@@ -67,7 +67,10 @@ const investigateSample: InvestigateReport = {
   state: "fix verified locally",
   summary: "Wait for the popup before clicking",
   cause: "The test clicked before popupshown.",
+  evidence: [{ source: "profile", finding: "The click lands 40 ms before popupshown." }],
   verification: "Passed 50 times with --verify.",
+  reproduction: { reproduced: true, where: "locally", widened: false, before: "6 of 20 runs", after: "0 of 100" },
+  files: { evidence: "artifacts/evidence.md", reproduction: "artifacts/reproduction.md" },
   commits: ["0123abc", "4567def"],
   bugDraft: { product: "Firefox", component: "General", summary: "Intermittent foo", description: "...", blocks: [123] },
   landsAfter: [{ what: "D12345", reason: "uses its helper" }],
@@ -119,6 +122,9 @@ test("investigate-and-fix schema rejects common mistakes", () => {
   ]);
   assert.deepEqual(validateReport(investigate, { ...investigateSample, feedback: [{ target: "mach", text: "x" }] }).length, 1);
   assert.deepEqual(validateReport(investigate, { ...investigateSample, bug: 123 }), ["$.bug: unexpected property"]);
+  assert.deepEqual(validateReport(investigate, { ...investigateSample, evidence: [{ source: "hunch", finding: "x" }] }).length, 1);
+  assert.deepEqual(validateReport(investigate, { ...investigateSample, reproduction: { before: "y" } }), ["$.reproduction.reproduced: required", "$.reproduction.where: required", "$.reproduction.widened: required"]);
+  assert.deepEqual(validateReport(investigate, { ...investigateSample, files: { evidence: "e.md" } }), ["$.files.reproduction: required"]);
 });
 
 test("review-patch schema rejects common mistakes", () => {

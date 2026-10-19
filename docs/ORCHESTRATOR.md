@@ -26,6 +26,9 @@ A tick runs on any change to `commands.jsonl` or a job file, and at least every 
   wait for you. A stack's reviews and verification pushes are keyed
   by its code (git patch-id), not its commit ids: rewording a commit plans no new push. Pushes planned for code
   the stack no longer has, and not made, are withdrawn.
+- **Try repro:** an author that can only reproduce on CI hands back a DEBUG commit that logs and widens the race
+  ("needs a try repro"). Once the folder's other groups are settled, their DEBUG commits go on one branch and one
+  push, planned like the others and approved by you. When it finishes, each author is resumed with its results.
 - **When step 3 runs:** at whichever comes first, the push finishing or 2 h after it started, so slow pools don't
   hold everything up. It runs again when the push finishes, adding new groups.
 - **Try failures:**
