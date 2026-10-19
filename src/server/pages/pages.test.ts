@@ -561,14 +561,14 @@ describe("escaping", () => {
     assert.match(h, /&lt;img src=x onerror=&quot;alert\(1\)&quot;&gt;/);
   });
 
-  it("only links to https try push URLs", () => {
+  it("only links to https try push URLs, showing the jobs not scheduled yet", () => {
     const r = structuredClone(get("r-20261005-newtab"));
     r.pushes.v2.url = "javascript:alert(1)";
     r.pushes.v2.rev = "abc&x=<y>";
     const pages = [renderRequest(r, ctx, true).value, renderOverview([r], ctx)];
     for (const h of pages) {
       assert.doesNotMatch(h, /javascript:/);
-      assert.ok(h.includes('href="https://treeherder.mozilla.org/jobs?repo=try&amp;revision=abc%26x%3D%3Cy%3E"'));
+      assert.ok(h.includes('href="https://treeherder.mozilla.org/jobs?repo=try&amp;revision=abc%26x%3D%3Cy%3E&amp;resultStatus=unscheduled%2Ctestfailed%2Cbusted%2Cexception%2Csuccess%2Cretry%2Cusercancel%2Crunning%2Cpending%2Crunnable"'));
     }
   });
 });

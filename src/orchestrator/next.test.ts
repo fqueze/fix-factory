@@ -884,6 +884,38 @@ function verified(reportA?: object): Scenario {
   return sc;
 }
 
+describe("6. verify on try, again", () => {
+  it("leaves out a push you declined, without planning again; the plan's others still count", () => {
+    const sc = stacked();
+    const planKey = sc.view().jobs.find((j) => j.purpose.what === "plan-pushes")!.purpose.key;
+    const two = [1, 2].map((n) => ({ purpose: `p${n}`, tryArgs: ["fuzzy", "-q", `x${n}`], rebuild: 5 }));
+    sc.complete(planKey, { report: { pushes: two, feedback: [] } });
+    const dries = sc.settle();
+    for (const d of dries) sc.complete(d, { output: { command: ["./mach", "try", "fuzzy"], taskCount: 5, tasks: [], tryTaskConfig: {}, commits: [], warnings: [] } });
+    sc.settle();
+    const [keep, drop] = dries.map((d) => sc.purpose(d).push!);
+    sc.add({ type: "try-declined", request: ID, push: drop, text: "too slow" });
+    assert.deepEqual(sc.settle(), [], "no new plan");
+    assert.deepEqual(sc.open(), [`approve-push:${keep}`]);
+    sc.add({ type: "user-done", request: ID, key: `approve-push:${keep}` });
+    sc.add({ type: "try-pushed", request: ID, push: keep, rev: "fed", url: "u" });
+    sc.add({ type: "try-finished", request: ID, push: keep, result: "green", summary: "green" });
+    sc.settle();
+    sc.complete(`try-table:${keep}:final`, { output: table() });
+    sc.settle();
+    assert.equal(sc.state().step, "meta bug");
+  });
+
+  it("moves on when the planner finds nothing left to push", () => {
+    const sc = stacked();
+    const planKey = sc.view().jobs.find((j) => j.purpose.what === "plan-pushes")!.purpose.key;
+    assert.match(String(sc.plan(planKey).files?.[1].content), /^\[/);
+    sc.complete(planKey, { report: { pushes: [], feedback: [] } });
+    sc.settle();
+    assert.equal(sc.state().step, "meta bug");
+  });
+});
+
 describe("7. meta bug", () => {
   it("drafts the meta bug, and its number goes in every patch without a bug of its own", () => {
     const sc = verified();

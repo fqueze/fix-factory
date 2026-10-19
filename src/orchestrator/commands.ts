@@ -118,6 +118,14 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
       ev({ type: "user-done", key: `approve-push:${c.push}` });
       done(true);
       break;
+    case "decline-push":
+      if (s.pushes[c.push]?.rev || !s.needsUser.some((n) => n.key === `approve-push:${c.push}`)) {
+        done(false, `push ${c.push} isn't waiting for your approval`);
+        break;
+      }
+      ev({ type: "try-declined", push: c.push, text: c.text });
+      done(true);
+      break;
     case "set-bug":
       if (c.patch === "meta") {
         ev({ type: "meta-bug", bug: c.bug, ...(s.metaBug?.draft ? { draft: s.metaBug.draft } : {}) });

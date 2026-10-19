@@ -57,6 +57,7 @@ type Field =
 // to src/types.ts without being added to the page's validation.
 const SPECS: Record<Command["cmd"], Record<string, Field>> = {
   "approve-push": { push: "string" },
+  "decline-push": { push: "string", text: "string" },
   presence: { visible: "boolean" },
   "set-bug": { patch: "string", bug: "int" },
   "comment-bug-draft": { patch: "string", text: "string" },
@@ -86,6 +87,7 @@ const SPECS: Record<Command["cmd"], Record<string, Field>> = {
 // Commands that only make sense about a request.
 const NEEDS_REQUEST = new Set<string>([
   "approve-push",
+  "decline-push",
   "set-bug",
   "comment-bug-draft",
   "stack-comments",

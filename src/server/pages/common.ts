@@ -193,6 +193,7 @@ export function needsYou(r: RequestState): boolean {
 // Refused commands name theirs in plain words.
 export const COMMAND_LABELS: Record<Command["cmd"], string> = {
   "approve-push": "try push approval",
+  "decline-push": "declining a try push",
   presence: "presence",
   "set-bug": "bug number",
   "comment-bug-draft": "comment on the bug draft",
@@ -262,11 +263,15 @@ export function pushResultClass(p: PushView): "ok" | "bad" | "run" {
 
 // Only https links from the state: anything else (javascript:, data:) falls back
 // on Treeherder.
+// Treeherder's job view also showing the jobs not scheduled yet, waiting for their builds.
+const RESULT_STATUS = "unscheduled,testfailed,busted,exception,success,retry,usercancel,running,pending,runnable";
+
 export function pushUrl(p: PushView): string {
-  if (p.url && /^https:\/\//i.test(p.url) && URL.canParse(p.url)) {
-    return p.url;
+  const url = new URL(p.url && /^https:\/\//i.test(p.url) && URL.canParse(p.url) ? p.url : TREEHERDER + encodeURIComponent(p.rev ?? ""));
+  if (url.host === "treeherder.mozilla.org" && url.pathname === "/jobs") {
+    url.searchParams.set("resultStatus", RESULT_STATUS);
   }
-  return TREEHERDER + encodeURIComponent(p.rev ?? "");
+  return url.href;
 }
 
 export type StateClass = "run" | "wait" | "find" | "ok" | "closed";

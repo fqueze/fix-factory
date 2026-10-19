@@ -308,3 +308,21 @@ test("refused commands: the last 5, until dismissed or a later command with the 
   assert.deepEqual(later.refused, []);
   assert.deepEqual(fold(refused(1), ev({ type: "command-executed", command: "c-2", ok: true })).refused?.length, 1, "a success without its cmd clears nothing");
 });
+
+test("a push declined along with another stays approved if you had approved it, declined otherwise", () => {
+  const planned = (push: string) => [
+    ev({ type: "try-planned", push, purpose: "p", command: [] }),
+    ev({ type: "needs-user", key: `approve-push:${push}`, action: "Approve", detail: "", push }),
+  ];
+  const s = fold(
+    ...planned("a"),
+    ...planned("b"),
+    ...planned("c"),
+    ev({ type: "user-done", key: "approve-push:a" }),
+    ev({ type: "try-declined", push: "c", text: "too slow" }),
+    ev({ type: "try-declined", push: "a", text: "along with c" }),
+    ev({ type: "try-declined", push: "b", text: "along with c" }),
+  );
+  assert.deepEqual([s.pushes.a.declined, s.pushes.b.declined, s.pushes.c.declined], [undefined, "along with c", "too slow"]);
+  assert.deepEqual([s.pushes.b.withdrawn, s.pushes.c.withdrawn], [true, undefined], "the factory took b down, you declined c");
+});

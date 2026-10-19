@@ -164,6 +164,7 @@ export type Event =
   | (EventBase & { type: "stack"; stack: string; folder: string; branch: string; worktree: string; base?: string; order: PatchId[]; summary?: string })
   | (EventBase & { type: "meta-bug"; bug: number | null; draft?: BugDraft })
   | (EventBase & { type: "try-planned"; push: PushId; purpose: string; command: string[]; taskCount?: number })
+  | (EventBase & { type: "try-declined"; push: PushId; text: string; by?: "factory" }) // you said no, or the factory withdrew it
   | (EventBase & { type: "try-pushed"; push: PushId; rev: string; url: string })
   | (EventBase & { type: "try-progress"; push: PushId; done: number; total: number; failures: number })
   | (EventBase & { type: "try-job-failed"; push: PushId; taskId: string; retryId?: number; jobName: string; platform: string; tier?: number; result: string })
@@ -191,6 +192,7 @@ interface CommandBase {
 
 export type Command =
   | (CommandBase & { cmd: "approve-push"; push: PushId })
+  | (CommandBase & { cmd: "decline-push"; push: PushId; text: string })
   | (CommandBase & { cmd: "set-bug"; patch: PatchId; bug: number })
   | (CommandBase & { cmd: "comment-bug-draft"; patch: PatchId | "meta"; text: string })
   | (CommandBase & { cmd: "stack-comments"; stack: string; comments: { patch: PatchId; text: string }[] })
@@ -320,6 +322,8 @@ export interface PushView {
   purpose: string;
   command: string[];
   taskCount?: number;
+  declined?: string; // why you said no, or why the factory withdrew it
+  withdrawn?: boolean; // by the factory, not you
   rev?: string;
   url?: string;
   progress?: { done: number; total: number; failures: number };

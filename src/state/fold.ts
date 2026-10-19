@@ -183,6 +183,15 @@ export function foldEvents(events: readonly Event[]): RequestState {
         p.taskCount = e.taskCount;
         break;
       }
+      case "try-declined":
+        // Declining one push used to decline the rest of its plan "along with" it, even those you had approved: those
+        // still count as approved.
+        if (e.text.startsWith("along with ") && !s.needsUser.some((n) => n.key === `approve-push:${e.push}`)) break;
+        push(e.push).declined = e.text;
+        // Those taken down "along with" another were the factory's doing too, and its withdrawals from before "by".
+        if (e.by === "factory" || /^(along with |not needed anymore)/.test(e.text)) push(e.push).withdrawn = true;
+        s.needsUser = s.needsUser.filter((n) => n.key !== `approve-push:${e.push}`);
+        break;
       case "try-pushed": {
         const p = push(e.push);
         p.rev = e.rev;

@@ -22,6 +22,8 @@ A tick runs on any change to `commands.jsonl` or a job file, and at least every 
   its findings back, for at most 3 rounds; one with only nits gets a single author pass, then only the lint again,
   and isn't a round. After that, it comes to you.
 - **Authors** are resumed in their own session. They never push: a hook refuses any push from an agent.
+- **Try pushes** wait for your approval. A push you decline, with a reason, isn't made; the plan's others still
+  wait for you.
 - **When step 3 runs:** at whichever comes first, the push finishing or 2 h after it started, so slow pools don't
   hold everything up. It runs again when the push finishes, adding new groups.
 - **Try failures:**

@@ -36,6 +36,16 @@ describe("commands", () => {
     assert.equal(newRequestId({ t, text: "!!!" }, () => false), "r-20261015-request");
   });
 
+  it("decline-push declines a push waiting for you, with your reason", () => {
+    const sc = withPatch();
+    sc.add({ type: "needs-user", request: ID, key: "approve-push:A", action: "Approve", detail: "", push: "A" });
+    run(sc, cmd({ cmd: "decline-push", push: "A", text: "too many rebuilds" }));
+    assert.equal(sc.state().pushes.A.declined, "too many rebuilds");
+    assert.deepEqual(sc.open(), []);
+    run(sc, cmd({ cmd: "decline-push", push: "A", text: "again" }));
+    assert.deepEqual(executed(sc).map((e) => e.ok), [true, false]);
+  });
+
   it("approve-push, take-it and hand-back answer their needs-user", () => {
     const sc = withPatch();
     run(sc, cmd({ cmd: "approve-push", push: "A" }));

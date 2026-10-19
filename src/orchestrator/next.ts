@@ -473,10 +473,8 @@ class Planner {
       return;
     }
     const e = this.stepEpoch("first signal");
-    const plan = this.wantAgent(
+    const planned = this.planPushes(
       `plan:unskip${e}`,
-      "plan-pushes",
-      "plan-try-pushes",
       {
         goal: `reproduce the failures hidden by the flakiness skip-ifs of ${this.s.folder} that the DEBUG commit removes`,
         failuresFile: dataPath(this.config, this.s.id, "annotations.json"),
@@ -486,20 +484,18 @@ class Planner {
         base: this.config.baseRef,
       },
       { cwd: wt.path, files: [{ path: dataPath(this.config, this.s.id, "no-initial-push.json"), content: '{"note": "none: this is the un-skip push"}\n' }] },
+      (i, count) => `unskip${e.replace("@", "-")}${count === 1 ? "" : `-${i + 1}`}`,
+      wt.path,
     );
-    if (!plan) return;
-    const pushes = this.rep<PlanTryPushesReport>(plan).pushes;
-    const ids = pushes.map((_, i) => `unskip${e.replace("@", "-")}${pushes.length === 1 ? "" : `-${i + 1}`}`);
-    const dry = pushes.map((push, i) => this.dryRun(ids[i], push.tryArgs, push.purpose, wt.path));
-    if (dry.some((d) => !d)) return;
-    if (ids.every((id) => this.s.pushes[id]?.rev || dry[ids.indexOf(id)]!.duplicateOf !== undefined)) this.setStep("work list");
+    if (!planned) return;
+    if (planned.made.every((id) => this.s.pushes[id]?.rev)) this.setStep("work list");
   }
 
   private dryRun(push: PushId, args: string[], purpose: string, cwd: string, stack?: string): DryRunResult | undefined {
     const r = this.want(`dry-run:${push}`, () => {
       // try.ts refuses a duplicate of a push still pending.
       const pending = Object.values(this.s.pushes)
-        .filter((p) => p.id !== push && p.result === undefined)
+        .filter((p) => p.id !== push && p.result === undefined && !p.declined)
         .flatMap((p) => {
           const d = this.view.byKey.get(`dry-run:${p.id}`)?.find(succeeded);
           return d ? [{ push: p.id, ...this.out<DryRunResult>(d) }] : [];
@@ -515,13 +511,33 @@ class Planner {
     return r && this.out<DryRunResult>(r);
   }
 
+  // Plans pushes and dry-runs them. A push you declined stays out; the plan's others don't depend on it.
+  private planPushes(
+    key: string,
+    vars: Record<string, string>,
+    opts: Parameters<Planner["wantAgent"]>[4],
+    idOf: (i: number, count: number) => string,
+    cwd: string,
+    stack?: string,
+  ): { ids: PushId[]; dry: DryRunResult[]; made: PushId[] } | undefined {
+    const plan = this.wantAgent(key, "plan-pushes", "plan-try-pushes", vars, opts);
+    if (!plan) return undefined;
+    const planned = this.rep<PlanTryPushesReport>(plan).pushes;
+    const ids = planned.map((_, i) => idOf(i, planned.length));
+    const dry = planned.map((push, i) => this.dryRun(ids[i], push.tryArgs, push.purpose, cwd, stack));
+    if (dry.some((d) => !d)) return undefined;
+    // The ones to make: not a duplicate of a pending push, not declined.
+    const made = ids.filter((id, i) => dry[i]!.duplicateOf === undefined && this.s.pushes[id]?.declined === undefined);
+    return { ids, dry: dry as DryRunResult[], made };
+  }
+
   // -------------------------------------------------------------------------
   // Try pushes, in any step: push once approved, watch, fetch the failed jobs' artifacts.
 
   private pushes(): void {
     for (const push of Object.values(this.s.pushes)) {
       const dry = this.view.byKey.get(`dry-run:${push.id}`)?.find(succeeded);
-      if (!push.rev && dry && this.view.done.has(`approve-push:${push.id}`)) {
+      if (!push.rev && !push.declined && dry && this.view.done.has(`approve-push:${push.id}`)) {
         const { args = [], cwd = this.config.firefoxRepo, stack } = dry.purpose;
         const commits = this.out<DryRunResult>(dry).commits;
         const items = stack ? (this.stackInfos.get(stack)?.patches.map((x) => x.item) ?? []) : [];
@@ -1142,6 +1158,7 @@ class Planner {
     );
   }
 
+  // The pushes to make for the current plan.
   private verifyPushes(info: StackInfo): PushId[] | undefined {
     const e = this.stepEpoch("verify on try");
     const stack = this.s.stacks[info.id];
@@ -1158,7 +1175,7 @@ class Planner {
     const failuresFile = dataPath(this.config, this.s.id, `failures-${info.id}.json`);
     const initialFile = dataPath(this.config, this.s.id, "initial-pushes.json");
     const planKey = `plan:verify:${info.id}:${info.hash}${e}`;
-    const plan = this.wantAgent(planKey, "plan-pushes", "plan-try-pushes", {
+    const planned = this.planPushes(planKey, {
       goal: `verify the fixes of the ${info.folder} stack: every failure below should be gone, with no new one`,
       failuresFile,
       initialPushFile: initialFile,
@@ -1174,23 +1191,27 @@ class Planner {
           path: initialFile,
           content:
             JSON.stringify(
-              this.signalPushes().map((id) => {
-                const push = this.s.pushes[id];
-                const table = this.view.byKey.get(`try-table:${id}:final`)?.find(succeeded);
-                return { push: id, purpose: push.purpose, command: push.command, rev: push.rev, result: push.result, summary: push.summary, resultsTable: table ? outPath(this.config, table.job) : undefined };
-              }),
+              [
+                ...this.signalPushes().map((id) => {
+                  const push = this.s.pushes[id];
+                  const table = this.view.byKey.get(`try-table:${id}:final`)?.find(succeeded);
+                  return { push: id, purpose: push.purpose, command: push.command, rev: push.rev, result: push.result, summary: push.summary, resultsTable: table ? outPath(this.config, table.job) : undefined };
+                }),
+                // This stack's pushes already made: their local commits tell whether they tested the same changes.
+                ...Object.values(this.s.pushes)
+                  .filter((p) => p.rev && this.view.byKey.get(`dry-run:${p.id}`)?.[0].purpose.stack === info.id)
+                  .map((p) => {
+                    const dry = this.view.byKey.get(`dry-run:${p.id}`)!.find(succeeded)!;
+                    return { push: p.id, earlierVerificationOfThisStack: true, commits: this.out<DryRunResult>(dry).commits, purpose: p.purpose, command: p.command, rev: p.rev, result: p.result ?? "running", summary: p.summary };
+                  }),
+              ],
               null,
               2,
             ) + "\n",
         },
       ],
-    });
-    if (!plan) return undefined;
-    const planned = this.rep<PlanTryPushesReport>(plan).pushes;
-    const ids = planned.map((_, i) => `${info.id}-${shortHash([info.hash, e]).slice(0, 4)}-${i + 1}`);
-    const dry = planned.map((push, i) => this.dryRun(ids[i], push.tryArgs, push.purpose, info.wt!, info.id));
-    if (dry.some((d) => !d)) return undefined;
-    return ids.filter((_, i) => dry[i]!.duplicateOf === undefined);
+    }, (i) => `${info.id}-${shortHash([info.hash, e]).slice(0, 4)}-${i + 1}`, info.wt, info.id);
+    return planned?.made;
   }
 
   private debugCommit(): string | undefined {
@@ -1338,9 +1359,12 @@ class Planner {
       }
       const pushes = Object.values(this.s.pushes).filter((p) => this.view.byKey.get(`dry-run:${p.id}`)?.some((j) => j.purpose.stack === st.id));
       const latestPlan = this.view.jobs.filter((j) => j.purpose.what === "plan-pushes" && j.purpose.stack === st.id).at(-1);
-      const current = pushes.filter((p) => latestPlan && (this.view.byKey.get(`dry-run:${p.id}`)?.[0].startedAt ?? 0) >= latestPlan.startedAt);
+      const planned = pushes.filter((p) => latestPlan && (this.view.byKey.get(`dry-run:${p.id}`)?.[0].startedAt ?? 0) >= latestPlan.startedAt);
+      // A latest plan with nothing to push left it to the pushes already made.
+      const current = planned.length ? planned : pushes.filter((p) => p.rev);
       const tryFile = dataPath(this.config, this.s.id, `try-${st.id}-${contentKey}.json`);
-      const check = this.want(`check:${st.id}:${contentKey}${e}`, () =>
+      const tryKey = current.length ? `:${shortHash(current.map((p) => `${p.id}=${p.result ?? ""}`)).slice(0, 6)}` : "";
+      const check = this.want(`check:${st.id}:${contentKey}${tryKey}${e}`, () =>
         this.cli("check", "stack.ts", ["check", "--cwd", st.worktree, "--base", st.base ?? this.config.baseRef, "--try", tryFile], {
           cwd: st.worktree,
           purpose: { stack: st.id },
