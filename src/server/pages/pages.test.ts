@@ -8,6 +8,7 @@ import { jobLabel, type RenderContext } from "./common.ts";
 import { renderOverview } from "./overview.ts";
 import { IDLE, itemBucket, runningSentence } from "./progress.ts";
 import { renderRequest } from "./request.ts";
+import { conversationOf, renderActivity } from "./activity.ts";
 import { ITEM_STATES } from "../commands.ts";
 
 const FIXTURES = resolve(import.meta.dirname, "../../../test/fixtures/server");
@@ -653,6 +654,36 @@ describe("a burndown with closed groups, running agents and a dropped patch", ()
     assert.equal(jobLabel("failures.ts collect"), "collect failures");
     assert.equal(jobLabel("review-patch"), "critical review");
     assert.equal(jobLabel("draft-reply"), "draft-reply");
+  });
+});
+
+describe("agent activity", () => {
+  const log = readFileSync(resolve(FIXTURES, "../agents/stream-json-tools.jsonl"), "utf8");
+  it("reads a run as a conversation: messages, tool calls with their output, in order", () => {
+    const turns = conversationOf(log).map((t) => (t.kind === "call" ? `${t.tool}${t.subagent ? " in a subagent" : ""}${t.output === undefined ? "" : `: ${t.output}`}` : `${t.kind}: ${t.text}`));
+    // The last line is still being written.
+    assert.deepEqual(turns, ["said: I'll start by reading the test.", "Read: ...", "Grep", "Bash", "Agent", "Glob in a subagent", "Edit", "said: The spinner waits on a paint that never comes in headless mode."]);
+  });
+
+  it("shows the prompt, what the agent said, its tool calls on one line each, and its report last; no time or cost again", () => {
+    const r = get("r-20261013-tab-failures");
+    const job = { ...r.jobs["j-inv-spinner"], endedAt: "2026-10-15T08:00:00.000Z" };
+    const turns = [...conversationOf(log), { kind: "call" as const, id: "t9", tool: "StructuredOutput", input: {} }];
+    const summary = { done: true, report: { status: "fixed", summary: "Waits for the paint.", feedback: [], tests: ["a.js", "b.js"] }, costUsd: 0.5, toolUses: { count: 8, byName: {} } };
+    const h = renderActivity(r.id, job, { prompt: "Fix browser_tabSpinner.js.\n", turns, summary, transcript: true }, ctx).value;
+    assert.match(h, /^<div class="sub links"><a href="[^"]*\/transcript"[^>]*>Transcript<\/a><\/div>/);
+    assert.doesNotMatch(h, /ran |\$0\.50|tool calls ·|StructuredOutput|Feedback/);
+    const order = ['class="turn user prompt" data-expand', "I&#39;ll start by reading the test.", "<b>Read</b>", "<b>Edit</b>", 'class="turn agent report"'].map((x) => h.indexOf(x));
+    assert.deepEqual([...order].sort((a, b) => a - b), order, "in order");
+    assert.ok(!order.includes(-1));
+    assert.match(h, /<details class="call" data-more="call-t3"><summary><b>Bash<\/b> <span class="mono">\.\/mach test browser\/base\/content\/test\/tabs\/browser_tabSpinner\.js --repeat 20<\/span>/);
+    assert.match(h, /<pre class="in">\.\/mach test [^<]*\necho done<\/pre>/);
+    assert.match(h, /<details class="call subagent" data-more="call-t5" title="in a subagent">/);
+    assert.match(h, /<div class="turn agent report"><dl><dt>Status<\/dt><dd><span class="rtext">fixed<\/span>/);
+    // A long run of tool calls: the last ones shown, the earlier ones folded.
+    const many = Array.from({ length: 6 }, (_, n) => ({ kind: "call" as const, id: `c${n}`, tool: "Read", input: { file_path: `f${n}.js` }, output: "x" }));
+    const m = renderActivity(r.id, job, { turns: many, summary: { done: false, toolUses: { count: 6, byName: {} } }, transcript: false }, ctx).value;
+    assert.match(m, /<div class="calls"><details class="more" data-more="calls-c0"><summary>3 earlier tool calls<\/summary>(<details class="call" data-more="call-c[012]">[^]*?<\/details>){3}<\/details><details class="call" data-more="call-c3">/);
   });
 });
 

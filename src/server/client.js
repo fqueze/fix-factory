@@ -167,14 +167,24 @@
     true
   );
 
-  // An agent's activity: loaded when its Watch opens, then reloaded while it stays open.
+  // An agent's conversation: loaded when its job line opens, then reloaded while it runs and stays open.
   function loadActivity(d) {
     fetch(d.dataset.watch)
       .then(function (r) {
         return r.text();
       })
       .then(function (text) {
-        d.querySelector(".activity").innerHTML = text;
+        var box = d.querySelector(".activity");
+        // Its folded parts (tool calls, the prompt) stay as you left them.
+        var open = Array.prototype.map.call(box.querySelectorAll("details[data-more][open]"), function (x) {
+          return x.dataset.more;
+        });
+        var expanded = box.querySelector("[data-expand].open");
+        box.innerHTML = text;
+        box.querySelectorAll("details[data-more]").forEach(function (x) {
+          if (open.indexOf(x.dataset.more) >= 0) x.open = true;
+        });
+        if (expanded) box.querySelector("[data-expand]").classList.add("open");
       })
       .catch(function () {});
   }

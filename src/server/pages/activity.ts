@@ -1,4 +1,4 @@
-import type { StreamStep, StreamSummary } from "../../agents/run.ts";
+import { toolCallText, type StreamSummary } from "../../agents/run.ts";
 import { isPushJob } from "../../state/flags.ts";
 import type { ItemView, JobView, RequestId, RequestState } from "../../types.ts";
 import { html, type Html } from "../html.ts";
@@ -82,28 +82,163 @@ function isAuthor(j: JobView): boolean {
   return j.purpose ? j.purpose.what === "author" : j.name === "investigate-and-fix";
 }
 
-const SHOWN_STEPS = 20;
+// An agent's run as a conversation, from its out.log (claude -p stream-json): what it was told, what it said,
+// its tool calls in order, and its report.
+export type Turn =
+  | { kind: "user"; text: string; synthetic?: boolean } // synthetic: a skill's instructions, loaded by a tool call
+  | { kind: "said"; text: string }
+  | { kind: "call"; id: string; tool: string; input: Record<string, unknown>; output?: string; error?: boolean; subagent?: boolean };
 
 export interface Activity {
-  steps: StreamStep[];
+  prompt?: string; // its prompt.md: the first prompt, or the message a resumed session got
+  turns: Turn[];
   summary: StreamSummary;
   transcript: boolean; // the session's transcript exists
   profileUrl?: string; // when claude-profiler is installed
 }
 
-// The last steps of an agent run from its out.log: what it's doing now, and where to read more.
+interface Block {
+  type?: string;
+  id?: string;
+  name?: string;
+  text?: string;
+  input?: Record<string, unknown>;
+  tool_use_id?: string;
+  content?: unknown;
+  is_error?: boolean;
+}
+
+export function conversationOf(log: string): Turn[] {
+  const turns: Turn[] = [];
+  const calls = new Map<string, Extract<Turn, { kind: "call" }>>();
+  for (const line of log.split("\n")) {
+    let msg: Record<string, any>;
+    try {
+      msg = JSON.parse(line);
+    } catch {
+      continue; // blank, or still being written
+    }
+    if ((msg?.type !== "assistant" && msg?.type !== "user") || !Array.isArray(msg.message?.content)) {
+      continue;
+    }
+    // A subagent's own conversation runs beside the main one: only its tool calls are shown.
+    const subagent = typeof msg.parent_tool_use_id === "string";
+    for (const b of msg.message.content as Block[]) {
+      if (b.type === "tool_use" && b.id && b.name) {
+        const call = { kind: "call" as const, id: b.id, tool: b.name, input: b.input ?? {}, ...(subagent ? { subagent } : {}) };
+        calls.set(b.id, call);
+        turns.push(call);
+      } else if (b.type === "tool_result" && b.tool_use_id && calls.has(b.tool_use_id)) {
+        const call = calls.get(b.tool_use_id)!;
+        call.output = typeof b.content === "string" ? b.content : Array.isArray(b.content) ? (b.content as Block[]).map((c) => c.text ?? `[${c.type}]`).join("\n") : "";
+        call.error = b.is_error === true;
+      } else if (b.type === "text" && b.text?.trim() && !subagent) {
+        turns.push(msg.type === "assistant" ? { kind: "said", text: b.text } : { kind: "user", text: b.text, ...(msg.isSynthetic ? { synthetic: true } : {}) });
+      }
+    }
+  }
+  return turns;
+}
+
+const SHOWN_CALLS = 3; // of a long run of tool calls, the last ones; the earlier ones folded
+const MAX_TEXT = 3000; // of a tool call's input or output
+
+// Where to read more, then the conversation; the time and cost are on its line already.
 export function renderActivity(request: RequestId, job: JobView, a: Activity | undefined, ctx: RenderContext): Html {
-  const time =
-    job.endedAt === undefined ? html`running for ${elapsed(job.startedAt, ctx)}` : html`ran ${formatDuration(job.durationMs ?? Date.parse(job.endedAt) - Date.parse(job.startedAt))}`;
-  const cost = job.costUsd ?? a?.summary.costUsd;
-  const head = html`<div class="sub">${time}${cost === undefined ? null : html` · ${formatCost(cost)}`}${a ? html` · ${a.summary.toolUses.count} tool calls` : null}${
-    a?.transcript ? html` · <a href="${jobUrl(request, job.job, "transcript")}" target="_blank" rel="noopener">Transcript</a>` : null
-  }${a?.profileUrl ? html` · <a href="${a.profileUrl}" target="_blank" rel="noopener">Profile</a>` : null}</div>`;
+  const links = [
+    a?.transcript ? html`<a href="${jobUrl(request, job.job, "transcript")}" target="_blank" rel="noopener">Transcript</a>` : null,
+    a?.profileUrl ? html`<a href="${a.profileUrl}" target="_blank" rel="noopener">Profile</a>` : null,
+  ].filter((x) => x !== null);
+  const head = links.length ? html`<div class="sub links">${links.map((l, n) => html`${n ? " · " : ""}${l}`)}</div>` : null;
   if (!a) {
     return html`${head}<div class="sub">No output yet.</div>`;
   }
-  const steps = a.steps.slice(-SHOWN_STEPS);
-  return html`${head}<ol class="steps">${steps.map(
-    (s) => html`<li${s.subagent ? html` class="subagent" title="in a subagent"` : null}><b>${s.tool}</b>${s.text ? html` <span class="mono">${s.text}</span>` : null}</li>`,
-  )}</ol>${a.summary.lastAssistantText ? html`<div class="said-last">${a.summary.lastAssistantText}</div>` : null}`;
+  const turns = a.turns.filter((t) => t.kind !== "call" || t.tool !== "StructuredOutput");
+  // Runs of tool calls between messages.
+  const groups: Turn[][] = [];
+  for (const t of turns) {
+    const last = groups.at(-1);
+    if (t.kind === "call" && last?.[0].kind === "call") {
+      last.push(t);
+    } else {
+      groups.push([t]);
+    }
+  }
+  const s = a.summary;
+  const end =
+    s.report !== undefined
+      ? html`<div class="turn agent report">${reportHtml(s.report)}</div>`
+      : s.isError && s.resultText
+        ? html`<div class="turn agent bad">${s.resultText}</div>`
+        : job.endedAt === undefined
+          ? html`<div class="sub">working ${elapsed(job.startedAt, ctx)}…</div>`
+          : null;
+  return html`${head}<div class="convo">${a.prompt ? html`<div class="turn user prompt" data-expand title="Click to expand">${a.prompt.trim()}</div>` : null}${groups.map((g, n) =>
+    g[0].kind === "call" ? callRun(g as Extract<Turn, { kind: "call" }>[]) : turnHtml(g[0], n),
+  )}${end}</div>`;
+}
+
+function turnHtml(t: Exclude<Turn, { kind: "call" }>, n: number): Html {
+  if (t.kind === "said") {
+    return html`<div class="turn agent">${t.text.trim()}</div>`;
+  }
+  return t.synthetic
+    ? html`<div class="calls"><details class="call" data-more="loaded-${n}"><summary>${t.text.startsWith("Base directory for this skill") ? "the skill's instructions" : "instructions"}</summary><pre class="out">${clip(t.text)}</pre></details></div>`
+    : html`<div class="turn user">${t.text.trim()}</div>`;
+}
+
+function callRun(calls: Extract<Turn, { kind: "call" }>[]): Html {
+  const folded = calls.length > SHOWN_CALLS + 1 ? calls.slice(0, -SHOWN_CALLS) : [];
+  return html`<div class="calls">${
+    folded.length ? html`<details class="more" data-more="calls-${calls[0].id}"><summary>${plural(folded.length, "earlier tool call")}</summary>${folded.map(callHtml)}</details>` : null
+  }${calls.slice(folded.length).map(callHtml)}</div>`;
+}
+
+function callHtml(c: Extract<Turn, { kind: "call" }>): Html {
+  // Tools it has no short form for (Skill, ToolSearch…): their first text argument.
+  const text = withoutCd(toolCallText(c.tool, c.input) || (Object.values(c.input).find((x) => typeof x === "string") as string | undefined) || "");
+  const input = c.tool === "Bash" && typeof c.input.command === "string" ? c.input.command : JSON.stringify(c.input, null, 2);
+  return html`<details class="call${c.subagent ? " subagent" : ""}${c.error ? " bad" : ""}" data-more="call-${c.id}"${c.subagent ? html` title="in a subagent"` : null}><summary><b>${c.tool}</b>${
+    text ? html` <span class="mono">${text}</span>` : null
+  }${c.output === undefined ? html` <span class="sub">…</span>` : null}</summary><pre class="in">${clip(input)}</pre>${c.output ? html`<pre class="out">${clip(c.output)}</pre>` : null}</details>`;
+}
+
+function clip(text: string): string {
+  return text.length > MAX_TEXT ? `${text.slice(0, MAX_TEXT)}\n… ${text.length - MAX_TEXT} more characters` : text;
+}
+
+// A report in words: its fields as headings, lists as lists; empty fields left out, the agent's
+// feedback on the factory last.
+function reportHtml(v: unknown): Html | null {
+  if (v === null || v === undefined || v === "" || (Array.isArray(v) && !v.length)) {
+    return null;
+  }
+  if (Array.isArray(v)) {
+    return html`<ul>${v.map((x) => html`<li>${x !== null && typeof x === "object" && !Array.isArray(x) ? inline(x as Record<string, unknown>) : reportHtml(x)}</li>`)}</ul>`;
+  }
+  if (typeof v === "object") {
+    const entries = Object.entries(v as Record<string, unknown>).filter(([, x]) => reportHtml(x) !== null);
+    const sorted = [...entries.filter(([k]) => k !== "feedback"), ...entries.filter(([k]) => k === "feedback")];
+    return html`<dl>${sorted.map(([k, x]) => html`<dt>${inWords(k)}</dt><dd>${reportHtml(x)}</dd>`)}</dl>`;
+  }
+  return html`<span class="rtext">${String(v)}</span>`;
+}
+
+// A list item's short fields on one line ("must-fix · foo.js · 12"), its long text after them.
+function inline(o: Record<string, unknown>): Html {
+  const short = Object.entries(o).filter(([, x]) => (typeof x === "string" && x.length <= 60) || typeof x === "number" || typeof x === "boolean");
+  const rest = Object.entries(o).filter(([k]) => !short.some(([s]) => s === k));
+  return html`${short.length ? html`<span class="sub">${short.map(([, x]) => String(x)).join(" · ")}</span> ` : null}${rest.map(([k, x]) =>
+    typeof x === "string" ? html`<span class="rtext">${x}</span> ` : reportHtml(x) === null ? null : html`<div><b>${inWords(k)}</b> ${reportHtml(x)}</div>`,
+  )}`;
+}
+
+function inWords(key: string): string {
+  const words = key.replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+// Agents start most commands with "cd <their worktree>;", the same on every line.
+function withoutCd(command: string): string {
+  return command.replace(/^cd \S+\s*(?:&&|;)\s*/, "");
 }

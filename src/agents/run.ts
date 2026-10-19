@@ -163,7 +163,7 @@ export function streamSteps(text: string): StreamStep[] {
 }
 
 // Bash: the command's first line; file tools: the path; Grep and Glob: the pattern; Agent: its description.
-function toolCallText(name: string, input: Record<string, unknown>): string {
+export function toolCallText(name: string, input: Record<string, unknown>): string {
   const str = (k: string) => (typeof input[k] === "string" ? (input[k] as string) : undefined);
   switch (name) {
     case "Bash":

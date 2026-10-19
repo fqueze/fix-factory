@@ -3,12 +3,12 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import { delimiter, isAbsolute, join, relative, resolve } from "node:path";
-import { parseStreamJson, streamSteps, transcriptPath } from "../agents/run.ts";
+import { parseStreamJson, transcriptPath } from "../agents/run.ts";
 import { jobDir } from "../state/jobs.ts";
 import type { FactoryConfig, JobView, PatchView } from "../types.ts";
 import { HostCheck } from "./host-check.ts";
 import { commandsFromForm, validateCommand } from "./commands.ts";
-import { jobUrl, renderActivity, type Activity } from "./pages/activity.ts";
+import { conversationOf, jobUrl, renderActivity, type Activity } from "./pages/activity.ts";
 import type { RenderContext } from "./pages/common.ts";
 import { renderMain, renderOverview, renderStrip } from "./pages/overview.ts";
 import { renderRequest } from "./pages/request.ts";
@@ -134,18 +134,20 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
     }
   }
 
-  // The agent's out.log (stream-json) as steps, with links to its transcript and profile.
+  // The agent's out.log (stream-json) and prompt.md as a conversation, with links to its transcript and profile.
   function activity(request: string, job: JobView, req: IncomingMessage): Activity | undefined {
+    const dir = jobDir(opts.config.stateDir, job.job);
     let log: string;
     try {
-      log = readFileSync(join(jobDir(opts.config.stateDir, job.job), "out.log"), "utf8");
+      log = readFileSync(join(dir, "out.log"), "utf8");
     } catch {
       return undefined; // not started writing yet
     }
     const transcript = transcriptOf(job) !== undefined;
     const api = `http://${req.headers.host ?? `localhost:${opts.config.port}`}${jobUrl(request, job.job, "profile")}`;
     return {
-      steps: streamSteps(log),
+      prompt: existsSync(join(dir, "prompt.md")) ? readFileSync(join(dir, "prompt.md"), "utf8") : undefined,
+      turns: conversationOf(log),
       summary: parseStreamJson(log),
       transcript,
       profileUrl: transcript && loadProfiler() ? `${opts.config.profilerOrigin}/from-url/${encodeURIComponent(api)}?thread=0` : undefined,

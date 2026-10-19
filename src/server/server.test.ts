@@ -260,6 +260,7 @@ describe("agent activity, transcript and profile", () => {
   before(async () => {
     mkdirSync(join(stateDir, "jobs", "j-inv-spinner"), { recursive: true });
     writeFileSync(join(stateDir, "jobs", "j-inv-spinner", "out.log"), readFileSync(join(FIXTURES, "../agents/stream-json-tools.jsonl")));
+    writeFileSync(join(stateDir, "jobs", "j-inv-spinner", "prompt.md"), "Fix browser_tabSpinner.js.\n");
     mkdirSync(projects, { recursive: true });
     writeFileSync(join(projects, "3c1e.jsonl"), '{"type":"user"}\n{"type":"assistant"}\n');
     writeFileSync(join(home, "secret.jsonl"), "secret\n");
@@ -278,12 +279,13 @@ describe("agent activity, transcript and profile", () => {
     rmSync(home, { recursive: true, force: true });
   });
 
-  it("shows an agent's last steps, its latest message, and links to its transcript and profile", async () => {
+  it("shows an agent's run as a conversation, from its prompt, with links to its transcript and profile", async () => {
     const h = await (await fetch(`${bases[0]}${R}/j-inv-spinner/activity`)).text();
-    assert.match(h, /running for <span data-since="2026-10-15T03:00:00.000Z">6 h<\/span> · 6 tool calls/);
-    assert.match(h, /<li><b>Bash<\/b> <span class="mono">\.\/mach test browser\/base\/content\/test\/tabs\/browser_tabSpinner\.js --repeat 20<\/span><\/li>/);
-    assert.match(h, /<li class="subagent" title="in a subagent"><b>Glob<\/b>/);
-    assert.match(h, /<div class="said-last">The spinner waits on a paint that never comes in headless mode\.<\/div>/);
+    assert.doesNotMatch(h, /running for|tool calls ·/, "its line says it already");
+    assert.match(h, /<div class="convo"><div class="turn user prompt" data-expand title="Click to expand">Fix browser_tabSpinner\.js\.<\/div><div class="turn agent">I&#39;ll start by reading the test\.<\/div>/);
+    assert.match(h, /<details class="call" data-more="call-t3"><summary><b>Bash<\/b> <span class="mono">\.\/mach test browser\/base\/content\/test\/tabs\/browser_tabSpinner\.js --repeat 20<\/span>/);
+    assert.match(h, /<details class="call subagent" data-more="call-t5" title="in a subagent"><summary><b>Glob<\/b>/);
+    assert.match(h, /<div class="turn agent">The spinner waits on a paint that never comes in headless mode\.<\/div><div class="sub">working <span data-since/);
     assert.ok(h.includes(`href="${R}/j-inv-spinner/transcript"`));
     const api = encodeURIComponent(`${bases[0]}${R}/j-inv-spinner/profile`);
     assert.ok(h.includes(`href="http://localhost:4242/from-url/${api}?thread=0"`));
