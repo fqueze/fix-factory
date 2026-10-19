@@ -10,6 +10,7 @@
 // keys of that step (step events per step) or of that item (item-state "not started" events).
 import { basename, dirname, resolve } from "node:path";
 import type { Annotation } from "../cli/annotations.ts";
+import { describePriorArt, type PriorArtBug } from "../cli/bugzilla.ts";
 import type { ClusterGroup, CollectedFailure, TryRow, TryTable } from "../cli/failures.ts";
 import type { ReviewerSuggestion } from "../cli/phab.ts";
 import type { ImportedCommit } from "../cli/stack/import.ts";
@@ -100,7 +101,7 @@ const NO_RETRY = new Set(["push"]);
 
 const SETTLED: ItemState[] = ["reviewed", "in stack", "in try", "waiting for review", "addressing review comments", "fixed", "landed", "left as-is", "handed back"];
 const WITH_PATCHES: ItemState[] = ["reviewed", "in stack", "in try", "waiting for review", "addressing review comments", "fixed", "landed"];
-const TERMINAL: ItemState[] = ["left as-is", "handed back", "landed", "fixed"];
+export const TERMINAL: ItemState[] = ["left as-is", "handed back", "landed", "fixed"];
 
 const at = (step: RequestStep) => REQUEST_STEPS.indexOf(step);
 
@@ -431,32 +432,48 @@ class Planner {
   // -------------------------------------------------------------------------
   // 2. First signal (burndown)
 
+  // A redone annotations group gets a fresh one: the first is as old as the request.
   private signalWorktree(): { path: string; branch: string } | undefined {
-    const wt = this.want("wt:signal", () => this.worktree(`${this.s.id}-signal`));
+    const e = this.annotationsEpoch();
+    const wt = this.want(`wt:signal${e}`, () => this.worktree(`${this.s.id}-signal${e.replaceAll("@", "-")}`));
     return wt && this.out<{ path: string; branch: string }>(wt);
   }
 
-  private skipIfs(): { a: Annotation; index: number }[] | undefined {
-    const ann = this.want(`annotations${this.stepEpoch("first signal")}`, () => this.cli("annotations", "annotations.ts", ["list", this.s.folder ?? "", "--repo", this.config.firefoxRepo], { cwd: this.config.firefoxRepo }));
+  // Read in the worktree the patches are written in: your checkout may be days behind.
+  private skipIfs(wt: string): { a: Annotation; index: number }[] | undefined {
+    const ann = this.want(`annotations${this.annotationsEpoch()}`, () => this.cli("annotations", "annotations.ts", ["list", this.s.folder ?? "", "--repo", wt], { cwd: wt }));
     if (!ann) return undefined;
     return this.out<Annotation[]>(ann)
       .map((a, index) => ({ a, index }))
       .filter((x) => x.a.kind === "skip-if");
   }
 
+  // Redoing the annotations group later (Redo with today's skip-ifs) lists and classifies them again and plans its
+  // un-skip push, without going back a step: the work list adds the push's failures when it finishes.
+  private annotationsEpoch(): string {
+    return `${this.stepEpoch("first signal")}${this.itemEpoch(ANNOTATIONS_ITEM)}`;
+  }
+
   private firstSignal(): void {
-    if (this.s.kind !== "burndown" || this.s.step !== "first signal") return;
-    const skips = this.skipIfs();
+    if (this.s.kind !== "burndown") return;
+    const redone = this.s.step !== "first signal";
+    if (redone && (at(this.s.step) < at("first signal") || this.s.step === "done" || !this.itemEpoch(ANNOTATIONS_ITEM))) return;
+    const setStep = (step: RequestStep) => {
+      if (!redone) this.setStep(step);
+    };
+    const wt = this.signalWorktree();
+    if (!wt) return;
+    const skips = this.skipIfs(wt.path);
     if (!skips) return;
     if (skips.length === 0) {
       this.note(`No skip-if in ${this.s.folder}: the work list comes from its failures on central.`);
-      this.setStep("work list");
+      setStep("work list");
+      if (redone && !TERMINAL.includes(this.s.items[ANNOTATIONS_ITEM].state)) this.event(this.ev("item-state", { item: ANNOTATIONS_ITEM, state: "left as-is" }));
       return;
     }
-    const wt = this.signalWorktree();
     const classified = skips.map(({ a, index }) => {
       const bug = a.bug && "summary" in a.bug ? a.bug : undefined;
-      const r = this.wantAgent(`classify:${index}${this.stepEpoch("first signal")}`, "classify", "classify-annotation", {
+      const r = this.wantAgent(`classify:${index}${this.annotationsEpoch()}`, "classify", "classify-annotation", {
         annotation: `${a.kind} = ${a.condition}`,
         manifest: `${a.manifest} [${a.test}]`,
         bug: a.bug?.id ?? "unknown",
@@ -465,10 +482,11 @@ class Planner {
       }, { purpose: { index } });
       return r && { ...a, classification: this.rep<ClassifyAnnotationReport>(r) };
     });
-    if (!wt || classified.some((c) => !c)) return;
+    if (classified.some((c) => !c)) return;
     if (!classified.some((c) => c!.classification.kind !== "unclear")) {
       this.note("Every skip-if is unclear: the work list comes from the folder's failures on central.");
-      this.setStep("work list");
+      setStep("work list");
+      if (redone && !TERMINAL.includes(this.s.items[ANNOTATIONS_ITEM].state)) this.event(this.ev("item-state", { item: ANNOTATIONS_ITEM, state: "left as-is" }));
       return;
     }
     if (!this.s.items[ANNOTATIONS_ITEM] && !this.newItems.has(ANNOTATIONS_ITEM)) {
@@ -480,11 +498,13 @@ class Planner {
     if (!item || !SETTLED.includes(item.state)) return;
     const debug = this.debugCommit();
     if (!debug) {
-      this.note("No flakiness skip to remove: the work list comes from the folder's failures on central.");
-      this.setStep("work list");
+      const author = this.authorJobs(ANNOTATIONS_ITEM).filter(succeeded).at(-1);
+      const why = author ? this.rep<WriteAnnotationPatchesReport>(author).summary : `the group was ${item.state}`;
+      this.note(`No DEBUG commit removing flakiness skips (${why}): the work list comes from the folder's failures on central.`);
+      setStep("work list");
       return;
     }
-    const e = this.stepEpoch("first signal");
+    const e = this.annotationsEpoch();
     const planned = this.planPushes(
       `plan:unskip${e}`,
       {
@@ -496,11 +516,11 @@ class Planner {
         base: this.config.baseRef,
       },
       { cwd: wt.path, files: [{ path: dataPath(this.config, this.s.id, "no-initial-push.json"), content: '{"note": "none: this is the un-skip push"}\n' }] },
-      (i, count) => `unskip${e.replace("@", "-")}${count === 1 ? "" : `-${i + 1}`}`,
+      (i, count) => `unskip${e.replaceAll("@", "-")}${count === 1 ? "" : `-${i + 1}`}`,
       wt.path,
     );
     if (!planned) return;
-    if (planned.made.every((id) => this.s.pushes[id]?.rev)) this.setStep("work list");
+    if (planned.made.every((id) => this.s.pushes[id]?.rev)) setStep("work list");
   }
 
   private dryRun(push: PushId, args: string[], purpose: string, cwd: string, stack?: string): DryRunResult | undefined {
@@ -751,13 +771,15 @@ class Planner {
     if (item.id === ANNOTATIONS_ITEM) {
       const wt = this.signalWorktree();
       if (!wt) return;
+      const input = this.view.byKey.has(`${prefix}:initial`) ? [] : this.annotationsInput(wt.path);
+      if (!input) return;
       this.want(`${prefix}:initial`, () =>
         this.agent("author", "write-annotation-patches", { folder: this.s.folder ?? "", annotations: dataPath(this.config, this.s.id, "annotations.json") }, {
           key: `${prefix}:initial`,
           item: item.id,
           cwd: wt.path,
           purpose: { item: item.id, reason: "initial" },
-          files: [{ path: dataPath(this.config, this.s.id, "annotations.json"), content: JSON.stringify(this.annotationsInput(), null, 2) + "\n" }],
+          files: [{ path: dataPath(this.config, this.s.id, "annotations.json"), content: JSON.stringify(input, null, 2) + "\n" }],
           startEvents: [this.ev("item-state", { item: item.id, state: "investigating" })],
         }),
       );
@@ -770,8 +792,11 @@ class Planner {
       if (!verdict) return;
       const v = this.rep<PriorArtVerdictReport>(verdict);
       if (v.verdict === "active") {
-        const key = `take-it:${item.id}`;
-        this.raise(key, { action: `Someone may be on ${basename(test)}`, detail: v.quote.slice(0, 500), item: item.id });
+        // Groups failing the same test ask once, as the first of them, whichever's verdict found someone.
+        const first = Object.values(this.s.items).find((i) => i.group.tests[0] === test)!;
+        const key = `take-it:${first.id}`;
+        const bug = this.out<{ bugs: PriorArtBug[] }>(prior).bugs.find((b) => b.id === v.bug);
+        this.raise(key, { action: `Someone else may be fixing ${basename(test)}`, detail: bug ? describePriorArt(bug) : v.quote.slice(0, 500), item: first.id });
         if (!this.view.done.has(key)) return;
       }
       const wt = this.want(`wt:${item.id}${e}`, () => this.worktree(`${this.s.id}-${item.id}${e.replace("@", "-")}`, { item: item.id }));
@@ -808,13 +833,16 @@ class Planner {
     this.checkAndReview(item, author.job, author.commits);
   }
 
-  private annotationsInput(): unknown[] {
-    const skips = this.skipIfs() ?? [];
-    return skips.map(({ a, index }) => {
-      const r = this.view.byKey.get(`classify:${index}${this.stepEpoch("first signal")}`)?.find(succeeded);
+  // Undefined until every skip-if is listed and classified: a redone group exists before they are.
+  private annotationsInput(wt: string): unknown[] | undefined {
+    const skips = this.skipIfs(wt);
+    const input = skips?.map(({ a, index }) => {
+      const r = this.view.byKey.get(`classify:${index}${this.annotationsEpoch()}`)?.find(succeeded);
       const c = r && this.rep<ClassifyAnnotationReport>(r);
-      return { manifest: a.manifest, test: a.test, condition: a.condition, line: a.line, comment: a.comment, kind: c?.kind, reason: c?.reason };
+      return c && { manifest: a.manifest, test: a.test, condition: a.condition, line: a.line, comment: a.comment, kind: c.kind, reason: c.reason };
     });
+    // Nothing to write when every skip-if is unclear (firstSignal then closes the group).
+    return input?.every((x) => x) && input.some((x) => x!.kind !== "unclear") ? input : undefined;
   }
 
   // import → lint (commit message, bug draft, replies) → critical review, with the round limits.

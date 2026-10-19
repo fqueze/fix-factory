@@ -59,7 +59,7 @@ export function flagControls(r: RequestState, n: NeedsUser, ctx: RenderContext):
       controls =
         item === undefined
           ? null
-          : html`<form class="inline cmd" method="post" action="/api/commands">${commandFields([{ cmd: "take-it", request: r.id, item }], back)}<button class="btn small primary">Take it</button></form><form class="inline cmd" method="post" action="/api/commands">${commandFields([{ cmd: "hand-back", request: r.id, item }], back)}<button class="btn small">Hand back</button></form>`;
+          : html`<form class="inline cmd" method="post" action="/api/commands">${commandFields([{ cmd: "take-it", request: r.id, item }], back)}<button class="btn small primary">Fix it anyway</button></form><form class="inline cmd" method="post" action="/api/commands">${commandFields([{ cmd: "hand-back", request: r.id, item }], back)}<button class="btn small">Leave it to them</button></form>`;
       break;
     }
     case "file-bug": {
@@ -146,6 +146,10 @@ export function retryButton(request: string, job: JobView, back: string): Html {
 
 function commandButton(request: string, c: object, label: string, back: string, primary = false, title?: string): Html {
   return html`<form class="inline cmd" method="post" action="/api/commands">${commandFields([{ ...c, request }], back)}<button class="btn small${primary ? " primary" : ""}"${title ? html` title="${title}"` : null}>${label}</button></form>`;
+}
+
+export function redoAnnotationsButton(request: string, back: string): Html {
+  return commandButton(request, { cmd: "redo-annotations" }, "Redo with today's skip-ifs", back, false, "Lists and classifies the folder's skip-ifs again, writes the patches and plans the un-skip push");
 }
 
 function dismissButton(request: string, key: string, back: string): Html {

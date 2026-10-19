@@ -131,7 +131,7 @@ export function flagAsk(r: RequestState, i: ItemView, n: NeedsUser): Html {
     case "disagrees":
       return html`<p>Its author didn't do what you asked: ${n.detail}</p><p>Tell it again, go ahead with its patch as it is, or hand the group back to you.</p>`;
     case "take-it":
-      return html`<p>${n.detail}</p><p>Take it if it's yours to fix; hand it back to leave it to whoever is on it.</p>`;
+      return html`<p>${n.detail}</p><p>Fix it anyway, or leave it to them: the factory then stops working on this test.</p>`;
     default:
       return html`<p>${n.detail}</p>`;
   }

@@ -140,8 +140,8 @@ describe("one fixture per step of docs/MVP.md", () => {
     const h = expanded("r-20261013-dom-indexeddb");
     assert.ok(h.includes(cmd({ cmd: "take-it", request: "r-20261013-dom-indexeddb", item: "i-idb-quota" })));
     assert.ok(h.includes(cmd({ cmd: "hand-back", request: "r-20261013-dom-indexeddb", item: "i-idb-quota" })));
-    assert.match(h, />Take it</);
-    assert.match(h, />Hand back</);
+    assert.match(h, />Fix it anyway</);
+    assert.match(h, />Leave it to them</);
   });
 
   it("4. investigate and fix: item states, running agent, recovery plan with a checkbox per command", () => {
@@ -308,7 +308,7 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.doesNotMatch(ask, /Its author|Resume/);
     assert.ok(!ask.includes(cmd({ cmd: "continue", request: D, item: "i-idle" })), "its author has nothing to do with it");
     assert.ok(ask.includes(cmd({ cmd: "hand-back", item: "i-idle", request: D })));
-    assert.match(ask, /<div class="ask-more" data-key="note:odd"><p><b>Also: Something odd<\/b><\/p><p>look at it<\/p><p>Take it if[^<]*<\/p><div class="jobctl"><form[^]*?>Take it<\/button>/, "the second ⚑ with its own buttons");
+    assert.match(ask, /<div class="ask-more" data-key="note:odd"><p><b>Also: Something odd<\/b><\/p><p>look at it<\/p><p>Fix it anyway, or leave it to them[^<]*<\/p><div class="jobctl"><form[^]*?>Fix it anyway<\/button>/, "the second ⚑ with its own buttons");
   });
 
   it("asks a flagged group's question once when it has two patches", () => {
@@ -595,6 +595,14 @@ describe("a burndown with closed groups, running agents and a dropped patch", ()
     const h2 = renderRequest(r, ctx, true).value;
     assert.ok(h2.indexOf('data-item="i-browser-policy-trackingprotection"') < h2.indexOf('data-item="i-browser-policy-sitepolicies-serviceworke-2"'), "not started after running");
     assert.match(h2, /<summary>4 closed<\/summary>/);
+  });
+  it("offers to redo a closed skip-ifs group with today's skip-ifs, and only that group", () => {
+    assert.ok(rowOf(h, "item-i-annotations").includes(cmd({ cmd: "redo-annotations", request: ID })));
+    assert.match(rowOf(h, "item-i-annotations"), />Redo with today&#39;s skip-ifs<\/button>/);
+    assert.doesNotMatch(rowOf(h, "item-i-browser-policy-firefoxhome"), /redo-annotations/);
+    const r = structuredClone(get(ID));
+    r.items["i-annotations"].state = "investigating";
+    assert.doesNotMatch(renderRequest(r, ctx, true).value, /Redo with today/, "not while it's being worked on");
   });
   it("doesn't offer to file the bug a report drafted without a patch to attach", () => {
     assert.doesNotMatch(h, /Workers start slowly|enter_bug|tofile/);

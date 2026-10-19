@@ -69,6 +69,18 @@ export interface PriorArtBug {
   revisions: AttachedRevision[];
 }
 
+const REVISION_STATUS: Record<string, string> = { published: "landed", "needs-review": "in review", "needs-revision": "needs revision", "changes-planned": "changes planned" };
+
+// One line for the page: who is on the bug, and its revisions.
+export function describePriorArt(b: PriorArtBug): string {
+  const day = (t: string) => t.slice(0, 10);
+  const who = [b.status, b.assignee && `assigned to ${b.assignee}`, b.lastHumanComment && `last comment by ${b.lastHumanComment.author} on ${day(b.lastHumanComment.time)}`].filter(Boolean).join(", ");
+  const revs = b.revisions
+    .filter((r) => !r.obsolete)
+    .map((r) => `D${r.revision} ${REVISION_STATUS[r.status ?? ""] ?? r.status ?? ""}${r.modified ? `, updated ${day(r.modified)}` : ""}`);
+  return `Bug ${b.id} - ${b.summary} (${who})${revs.length ? `: ${revs.join("; ")}` : ""}.`;
+}
+
 export function priorArtQuery(test: string): string {
   return test.split("/").pop()!;
 }

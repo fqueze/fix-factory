@@ -92,7 +92,7 @@
   "needsUser": [
     {
       "key": "take-it:i-idb-quota",
-      "action": "Someone is on test_quota.js",
+      "action": "Someone else may be fixing test_quota.js",
       "detail": "Bug 2079911 has a patch in review by janv, updated 3 days ago",
       "since": "2026-10-15T07:30:00.000Z",
       "item": "i-idb-quota"

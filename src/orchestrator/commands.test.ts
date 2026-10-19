@@ -63,6 +63,28 @@ describe("commands", () => {
     assert.ok(executed(sc).every((e) => e.ok));
   });
 
+  it("hand-back on a take-it leaves every group of that test to them, and only those", () => {
+    const sc = withPatch();
+    const item = (id: string, test: string) => sc.add({ type: "item-created", request: ID, item: id, folder: "a", group: { message: id, tests: [test], configs: ["linux"] } });
+    item("i-a-2", "a/test_a.js");
+    item("i-b", "a/test_b.js");
+    sc.add({ type: "needs-user", request: ID, key: "take-it:i-a", action: "Someone else may be fixing test_a.js", detail: "", item: "i-a" });
+    run(sc, cmd({ cmd: "hand-back", item: "i-a" }));
+    const s = sc.state();
+    assert.deepEqual(["i-a", "i-a-2", "i-b"].map((i) => s.items[i].state), ["handed back", "handed back", "not started"]);
+    assert.deepEqual(sc.open(), []);
+  });
+
+  it("redo-annotations starts the skip-ifs group over", () => {
+    const sc = withPatch();
+    sc.add({ type: "item-created", request: ID, item: "i-annotations", folder: "a", group: { message: "skip-if annotations", tests: ["a/test_a.js"], configs: ["linux"] } });
+    sc.add({ type: "item-state", request: ID, item: "i-annotations", state: "left as-is" });
+    run(sc, cmd({ cmd: "redo-annotations" }));
+    assert.equal(sc.state().items["i-annotations"].state, "not started");
+    assert.equal(sc.view().itemResets.get("i-annotations"), 1);
+    assert.ok(executed(sc).every((e) => e.ok));
+  });
+
   it("set-bug sets a patch's bug, or the meta bug", () => {
     const sc = withPatch();
     sc.add({ type: "needs-user", request: ID, key: "file-bug:p-a:meta-bug-step", action: "File", detail: "", patch: "p-a" });

@@ -4,7 +4,7 @@ import { isDeepStrictEqual } from "node:util";
 import type { EventInput } from "../state/events.ts";
 import { canDismiss, canRetry, isPushJob, reviewLimitFlag } from "../state/flags.ts";
 import type { Command, FactoryConfig, ItemId, JobId, PlannedCommand, RequestId, RequestState } from "../types.ts";
-import { ANNOTATIONS_ITEM, authorJobsOf, CANCELLED, itemEpochOf, resumeAuthorPlan } from "./next.ts";
+import { ANNOTATIONS_ITEM, authorJobsOf, CANCELLED, itemEpochOf, TERMINAL, resumeAuthorPlan } from "./next.ts";
 import { requestDir, sessionIdFor, slug, type JobPlan } from "./plan.ts";
 import type { View } from "./view.ts";
 
@@ -178,6 +178,10 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
       done(!error, error);
       break;
     }
+    case "redo-annotations":
+      ev({ type: "item-state", item: ANNOTATIONS_ITEM, state: "not started", detail: "redone with today's skip-ifs" });
+      done(true);
+      break;
     case "take-it":
       ev({ type: "user-done", key: `take-it:${c.item}` });
       done(true);
@@ -185,6 +189,11 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
     case "hand-back":
       ev({ type: "item-state", item: c.item, state: "handed back" });
       ev({ type: "user-done", key: `take-it:${c.item}` });
+      // Leaving a test to whoever is on it leaves all its groups.
+      if (s.needsUser.some((n) => n.key === `take-it:${c.item}`)) {
+        const test = s.items[c.item]?.group.tests[0];
+        for (const i of Object.values(s.items)) if (i.id !== c.item && i.group.tests[0] === test && !TERMINAL.includes(i.state)) ev({ type: "item-state", item: i.id, state: "handed back" });
+      }
       // A stuck group handed back asks nothing more.
       for (const n of s.needsUser.filter((x) => x.item === c.item || (x.job !== undefined && s.jobs[x.job]?.item === c.item))) ev({ type: "user-done", key: n.key });
       done(true);

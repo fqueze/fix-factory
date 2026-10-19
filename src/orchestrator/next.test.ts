@@ -149,17 +149,24 @@ describe("2. first signal", () => {
     return sc;
   }
 
+  function signalWorktree(sc: Scenario): void {
+    sc.complete("wt:signal", { output: { name: `${ID}-signal`, path: `/wt/${ID}-signal`, branch: `${ID}-signal` } });
+    assert.deepEqual(sc.settle(), ["annotations"]);
+  }
+
   it("lists the skips, classifies each, writes the annotation patches, reviews the run-if and plans the un-skip push", () => {
     const sc = burndown();
-    assert.deepEqual(sc.view().jobs.filter((j) => !j.end).map((j) => j.purpose.key), ["annotations"]);
+    assert.deepEqual(sc.view().jobs.filter((j) => !j.end).map((j) => j.purpose.key), ["wt:signal"]);
+    signalWorktree(sc);
+    // Listed in the worktree, not in your checkout: it may be days behind.
+    assert.deepEqual(sc.plan("annotations").cli?.args, ["list", "dom/base/test", "--repo", `/wt/${ID}-signal`]);
+    assert.equal(sc.plan("annotations").cwd, `/wt/${ID}-signal`);
     sc.complete("annotations", { output: [ann("os == 'mac'"), ann("debug", "fail-if"), ann("tsan")] });
-    assert.deepEqual(sc.settle().sort(), ["classify:0", "classify:2", "wt:signal"]);
+    assert.deepEqual(sc.settle().sort(), ["classify:0", "classify:2"]);
     assert.equal(sc.plan("classify:0").name, "classify-annotation");
     assert.deepEqual(sc.plan("classify:0").agent?.vars, { annotation: "skip-if = os == 'mac'", manifest: "dom/base/test/mochitest.toml [test_a.html]", bug: 123, summary: "Intermittent", comment: "fails" });
     sc.complete("classify:0", { report: { kind: "scoping", reason: "no mac", feedback: [] } });
     sc.complete("classify:2", { report: { kind: "flakiness", reason: "races", feedback: [] } });
-    assert.deepEqual(sc.settle(), []);
-    sc.complete("wt:signal", { output: { name: `${ID}-signal`, path: `/wt/${ID}-signal`, branch: `${ID}-signal` } });
     assert.deepEqual(sc.settle(), ["author:i-annotations:initial"]);
     const author = sc.plan("author:i-annotations:initial");
     assert.equal(author.name, "write-annotation-patches");
@@ -208,10 +215,62 @@ describe("2. first signal", () => {
 
   it("without skip-ifs, the work list comes from the folder's history on central", () => {
     const sc = burndown();
+    signalWorktree(sc);
     sc.complete("annotations", { output: [ann("debug", "fail-if")] });
     assert.deepEqual(sc.settle(), ["collect:folder:folder"]);
     assert.equal(sc.state().step, "work list");
     assert.deepEqual(sc.plan("collect:folder:folder").cli?.args, ["collect", "dom/base/test"]);
+  });
+
+  it("redone at investigate and fix, lists and classifies today's skip-ifs, reruns the author and plans the un-skip push, without a step event", () => {
+    const sc = burndown();
+    signalWorktree(sc);
+    sc.complete("annotations", { output: [ann("tsan")] });
+    sc.settle();
+    sc.complete("classify:0", { report: { kind: "flakiness", reason: "races", feedback: [] } });
+    assert.deepEqual(sc.settle(), ["author:i-annotations:initial"]);
+    // No DEBUG commit: the group closes and the work list comes from central.
+    sc.complete("author:i-annotations:initial", { report: { summary: "the skip-if was already gone", feedback: [] } });
+    sc.settle();
+    assert.equal(sc.state().step, "work list");
+    sc.complete("collect:folder:folder", { output: [failure("dom/base/test/test_b.html", "boom")] });
+    sc.settle();
+    sc.complete("cluster:folder:folder", { output: { groups: [group("kb", "dom/base/test/test_b.html", "boom")], singles: [] } });
+    sc.settle();
+    assert.equal(sc.state().step, "investigate and fix");
+    const closed = sc.state().items["i-annotations"].state;
+    assert.ok(["left as-is", "fixed", "handed back", "landed"].includes(closed), closed);
+    const steps = sc.of("step").length;
+
+    sc.add({ type: "item-state", request: ID, item: "i-annotations", state: "not started", detail: "redone with today's skip-ifs" });
+    // A fresh worktree: the first one is as old as the request.
+    assert.ok(sc.settle().includes("wt:signal@1"));
+    sc.complete("wt:signal@1", { output: { name: `${ID}-signal-1`, path: `/wt/${ID}-signal-1`, branch: `${ID}-signal-1` } });
+    assert.ok(sc.settle().includes("annotations@1"));
+    assert.deepEqual(sc.plan("annotations@1").cli?.args, ["list", "dom/base/test", "--repo", `/wt/${ID}-signal-1`]);
+    sc.complete("annotations@1", { output: [ann("tsan"), ann("asan")] });
+    assert.deepEqual(sc.settle().filter((k) => k.startsWith("classify")).sort(), ["classify:0@1", "classify:1@1"]);
+    sc.complete("classify:0@1", { report: { kind: "flakiness", reason: "races", feedback: [] } });
+    sc.complete("classify:1@1", { report: { kind: "flakiness", reason: "races", feedback: [] } });
+    // Started once every skip-if is classified, not as soon as the group is reset.
+    assert.ok(sc.settle().includes("author:i-annotations@1:initial"));
+    const author = sc.plan("author:i-annotations@1:initial");
+    assert.equal(author.cwd, `/wt/${ID}-signal-1`);
+    assert.equal(JSON.parse(author.files![0].content).length, 2);
+    sc.complete("author:i-annotations@1:initial", { report: { debug: sha("9"), summary: "un-skip", feedback: [] } });
+    assert.ok(sc.settle().includes("plan:unskip@1"));
+    assert.equal(sc.plan("plan:unskip@1").agent?.vars?.branch, `${ID}-signal-1`);
+    sc.complete("plan:unskip@1", { report: { pushes: [{ purpose: "reproduce", tryArgs: ["fuzzy", "-q", "xpcshell"], rebuild: 10 }], feedback: [] } });
+    assert.ok(sc.settle().includes("dry-run:unskip-1"));
+    sc.complete("dry-run:unskip-1", { output: { command: ["./mach", "try", "fuzzy"], taskCount: 4, tasks: [], tryTaskConfig: {}, commits: [sha("9")], warnings: [] } });
+    sc.settle();
+    assert.ok(sc.open().includes("approve-push:unskip-1"));
+    sc.add({ type: "user-done", request: ID, key: "approve-push:unskip-1" });
+    sc.settle();
+    sc.add({ type: "try-pushed", request: ID, push: "unskip-1", rev: "def", url: "u" });
+    sc.settle();
+    assert.equal(sc.state().step, "investigate and fix");
+    assert.equal(sc.of("step").length, steps);
   });
 });
 
@@ -424,6 +483,37 @@ describe("4. investigate and fix", () => {
     const wt = sc.plan("wt:i-test-a");
     assert.equal(wt.kind, "build");
     assert.deepEqual(wt.cli?.args, ["create", `${ID}-i-test-a`, "--base", "origin/main", "--build", "artifact"]);
+  });
+
+  it("the second group of a test finding someone active asks as the first group", () => {
+    const sc = workList([group("ka", "a/test_a.js", "boom"), group("kb", "a/test_a.js", "bang")]);
+    for (const item of ["i-test-a", "i-test-a-2"]) sc.complete(`prior-art:${item}`, { output: { bugs: [] } });
+    sc.settle();
+    sc.complete("prior-art-verdict:i-test-a", { report: none });
+    sc.complete("prior-art-verdict:i-test-a-2", { report: { verdict: "active", bug: 77, quote: "assigned to janv", feedback: [] } });
+    assert.deepEqual(sc.settle(), ["wt:i-test-a"]);
+    assert.deepEqual(sc.open(), ["take-it:i-test-a"]);
+    const flag = sc.state().needsUser[0];
+    assert.equal(flag.item, "i-test-a");
+    assert.equal(flag.detail, "assigned to janv", "no such bug in the prior art: its quote");
+    sc.add({ type: "user-done", request: ID, key: "take-it:i-test-a" });
+    assert.deepEqual(sc.settle(), ["wt:i-test-a-2"]);
+  });
+
+  it("two groups of one test ask once, on the first, with the bug the verdict names; take it lets both go on", () => {
+    const sc = workList([group("ka", "a/test_a.js", "boom"), group("kb", "a/test_a.js", "bang")]);
+    const bug = { id: 77, summary: "Intermittent test_a.js", status: "ASSIGNED", product: "Core", component: "DOM", keywords: [], assignee: "janv", lastHumanComment: null, revisions: [] };
+    for (const item of ["i-test-a", "i-test-a-2"]) sc.complete(`prior-art:${item}`, { output: { bugs: [bug] } });
+    sc.settle();
+    for (const item of ["i-test-a", "i-test-a-2"]) sc.complete(`prior-art-verdict:${item}`, { report: { verdict: "active", bug: 77, quote: "assigned to janv", feedback: [] } });
+    assert.deepEqual(sc.settle(), []);
+    assert.deepEqual(sc.open(), ["take-it:i-test-a"]);
+    const flag = sc.state().needsUser[0];
+    assert.equal(flag.action, "Someone else may be fixing test_a.js");
+    assert.equal(flag.detail, "Bug 77 - Intermittent test_a.js (ASSIGNED, assigned to janv).");
+    assert.equal(flag.item, "i-test-a");
+    sc.add({ type: "user-done", request: ID, key: "take-it:i-test-a" });
+    assert.deepEqual(sc.settle().sort(), ["wt:i-test-a", "wt:i-test-a-2"]);
   });
 
   it("investigates in the worktree, imports the commits, lints, reviews; a bug draft doesn't ask you to file it yet", () => {
@@ -1406,6 +1496,8 @@ describe("burndown stack", () => {
     const sc = new Scenario("burndown", { folder: "a" });
     sc.step();
     sc.settle();
+    sc.complete("wt:signal", { output: { name: `${ID}-signal`, path: `/wt/${ID}-signal`, branch: `${ID}-signal` } });
+    sc.settle();
     sc.complete("annotations", { output: [] });
     sc.settle();
     sc.complete("collect:folder:folder", { output: [failure("a/test_a.js", "boom"), failure("a/sub/test_b.js", "bang")] });
@@ -1433,10 +1525,11 @@ describe("burndown verification", () => {
     const sc = new Scenario("burndown", { folder: "a" });
     sc.step();
     sc.settle();
+    sc.complete("wt:signal", { output: { name: `${ID}-signal`, path: `/wt/${ID}-signal`, branch: `${ID}-signal` } });
+    sc.settle();
     sc.complete("annotations", { output: [{ manifest: "a/xpcshell.toml", test: "test_a.js", kind: "skip-if", condition: "os == 'win'", line: 2, commit: null, bug: null, commentBugs: [] }] });
     sc.settle();
     sc.complete("classify:0", { report: { kind: "flakiness", reason: "intermittent", feedback: [] } });
-    sc.complete("wt:signal", { output: { name: `${ID}-signal`, path: `/wt/${ID}-signal`, branch: `${ID}-signal` } });
     sc.settle();
     // Only a DEBUG commit: nothing to review, the annotations item is done.
     sc.complete("author:i-annotations:initial", { report: { debug: sha("9"), summary: "un-skip", feedback: [] } });

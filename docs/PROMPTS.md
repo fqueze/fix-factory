@@ -36,7 +36,7 @@ You wrote this in the factory's main box: {text}. The active requests, one per l
 haiku · 2. First signal · inputs: `annotation`, `manifest`, `bug`, `summary`, `comment`
 
 ```
-The annotation `{annotation}` in {manifest} was added in bug {bug} ("{summary}"), whose first comment is: {comment}. Is it **scoping** (the test can't work in that config, so it should become `run-if`) or **flakiness** (it fails intermittently there)? Answer `unclear` with one sentence if neither fits.
+The annotation `{annotation}` in {manifest} was added in bug {bug} ("{summary}"), whose first comment is: {comment}. Is it **scoping** (the test can't work in that config by design, such as a feature that config doesn't have, so it should become `run-if`) or **flakiness** (it was added because the test failed there: intermittently or every time, as a workaround for a bug, or copied from another config's failure skips)? Answer `unclear` with one sentence if neither fits.
 ```
 
 ## write-annotation-patches
@@ -77,7 +77,7 @@ The failure clusters in {clustersFile} were grouped by exact message. Merge clus
 haiku · 3. Work list · inputs: `test`, `facts`
 
 ```
-Facts about existing bugs and revisions for {test}: {facts}. Someone is actively working on it only if a revision is in review or was updated in the last 30 days, or the bug is assigned to a person who commented in the last 30 days; bot comments and automated changes never count. Otherwise, say whether there's an open bug we should reuse, or neither. Quote the fact your verdict rests on.
+Facts about existing bugs and revisions for {test}: {facts}. Someone is actively working on it only if a revision is in review or was updated in the last 30 days, or the bug is assigned to a person who commented in the last 30 days; bot comments and automated changes never count. Otherwise, say whether there's an open bug we should reuse, or neither. Give the bug your verdict is about, and quote the fact it rests on.
 ```
 
 ## investigate-and-fix

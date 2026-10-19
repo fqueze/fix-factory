@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { isDeepStrictEqual } from "node:util";
-import { bugInfo, enterBugUrl, isBot, priorArt, priorArtQuery, revisionsFromAttachments } from "./bugzilla.ts";
+import { bugInfo, describePriorArt, enterBugUrl, isBot, priorArt, priorArtQuery, revisionsFromAttachments } from "./bugzilla.ts";
 import type { Conduit } from "./phab.ts";
 
 const fixtures = new URL("../../test/fixtures/bugzilla/", import.meta.url);
@@ -104,4 +104,27 @@ test("isBot: Bugzilla automation accounts", () => {
     assert.ok(isBot(bot), bot);
   }
   assert.ok(!isBot("florian@mozilla.com"));
+});
+
+test("describePriorArt: who is on the bug and its live revisions, in one line", () => {
+  const bug = {
+    id: 2079911,
+    summary: "Intermittent test_quota.js | Quota exceeded",
+    status: "ASSIGNED",
+    product: "Core",
+    component: "Storage: IndexedDB",
+    keywords: [],
+    assignee: "janv@mozilla.com",
+    lastHumanComment: { time: "2026-10-12T08:00:00Z", author: "janv@mozilla.com" },
+    revisions: [
+      { revision: 1, obsolete: true, status: "abandoned" },
+      { revision: 2, obsolete: false, status: "needs-review", modified: "2026-10-14T10:00:00Z" },
+      { revision: 3, obsolete: false, status: "draft" },
+    ],
+  };
+  assert.equal(
+    describePriorArt(bug),
+    "Bug 2079911 - Intermittent test_quota.js | Quota exceeded (ASSIGNED, assigned to janv@mozilla.com, last comment by janv@mozilla.com on 2026-10-12): D2 in review, updated 2026-10-14; D3 draft.",
+  );
+  assert.equal(describePriorArt({ ...bug, status: "NEW", assignee: null, lastHumanComment: null, revisions: [] }), "Bug 2079911 - Intermittent test_quota.js | Quota exceeded (NEW).");
 });

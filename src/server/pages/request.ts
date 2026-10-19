@@ -1,7 +1,8 @@
 import { REQUEST_STEPS } from "../commands.ts";
 import type { BugDraft, ItemView, PatchView, PushView, RequestState, StackView } from "../../types.ts";
 import { html, join, type Html } from "../html.ts";
-import { actionsSummary, approvePushControls, bugBox, continueBox, copyButton, flagControls, flagItemOf, flagText, plannedLabel, recoveryPlanFor, hasAuthorSession, stackViewerLink, submitControls, summaryId } from "./actions.ts";
+import { ANNOTATIONS_ITEM } from "../../orchestrator/next.ts";
+import { actionsSummary, redoAnnotationsButton, approvePushControls, bugBox, continueBox, copyButton, flagControls, flagItemOf, flagText, plannedLabel, recoveryPlanFor, hasAuthorSession, stackViewerLink, submitControls, summaryId } from "./actions.ts";
 import { groupJobs, jobLine } from "./activity.ts";
 import { flagAsk, itemBucket, itemSentence, progressLine, requestProgress, type Bucket } from "./progress.ts";
 import {
@@ -307,6 +308,8 @@ function groupRow(r: RequestState, i: ItemView, ctx: RenderContext): Html {
       .map((p) => html`<div>Draft patch, its critical review hasn't passed yet: “${patchTitle(p)}” ${viewLink(r, p)}</div>`)}${patches
       .filter((p) => isDropped(r, p))
       .map((p) => html`<div>Dropped patch: “${patchTitle(p)}” ${viewLink(r, p)}</div>`)}${
+      i.id === ANNOTATIONS_ITEM && stateClass(i.state) === "closed" ? redoAnnotationsButton(r.id, requestUrl(r.id)) : null
+    }${
       reopen ? html`<details class="reopen"><summary class="btn small">Reopen…</summary>${continueBox(r.id, i.id, requestUrl(r.id))}</details>` : null
     }${itemJobs(r, i, ctx)}`,
   });

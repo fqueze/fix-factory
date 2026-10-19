@@ -11,7 +11,8 @@
       "description": "active: someone is working on it; reuse: an open bug to reuse; none."
     },
     "bug": {
-      "type": "integer"
+      "type": "integer",
+      "description": "The bug the verdict is about: the one someone is on, or the one to reuse."
     },
     "quote": {
       "type": "string",

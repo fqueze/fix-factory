@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import { appendCommand } from "../state/commands.ts";
 import { appendEvent, listRequests, readEvents, type EventInput } from "../state/events.ts";
 import { foldEvents } from "../state/fold.ts";
-import { groupMembers, readPidFile, startJob } from "../state/jobs.ts";
+import { groupMembers, jobDir, readPidFile, startJob } from "../state/jobs.ts";
 import type { Event, FactoryConfig } from "../types.ts";
 import { Orchestrator, withDryRun, worktreeLock } from "./main.ts";
 
@@ -202,6 +202,10 @@ describe("Orchestrator", () => {
       // annotations.ts "succeeded" with no output: next() can't parse it.
       add(config.stateDir, { type: "request-created", request: "r-a", kind: "burndown", text: "", folder: "a" });
       add(config.stateDir, { type: "step", request: "r-a", step: "first signal" });
+      add(config.stateDir, { type: "job-started", request: "r-a", job: "j-wt", kind: "script", name: "worktree.ts create", pid: 1, pidStartTime: 1, cmd: [], cwd: root, codeVersion: "t", purpose: { key: "wt:signal", what: "worktree" } });
+      mkdirSync(jobDir(config.stateDir, "j-wt"), { recursive: true });
+      writeFileSync(join(jobDir(config.stateDir, "j-wt"), "out.log"), JSON.stringify({ path: root, branch: "b" }));
+      add(config.stateDir, { type: "job-finished", request: "r-a", job: "j-wt", exitCode: 0, durationMs: 1 });
       add(config.stateDir, { type: "job-started", request: "r-a", job: "j-ann", kind: "script", name: "annotations.ts list", pid: 1, pidStartTime: 1, cmd: [], cwd: root, codeVersion: "t", purpose: { key: "annotations", what: "annotations" } });
       add(config.stateDir, { type: "job-finished", request: "r-a", job: "j-ann", exitCode: 0, durationMs: 1 });
       add(config.stateDir, { type: "request-created", request: "r-b", kind: "try-push", text: "", rev: "abc" });
@@ -261,7 +265,7 @@ describe("Orchestrator", () => {
       await o.tick();
       const events = readEvents(config.stateDir, "r-a");
       const started = events.filter((e): e is Extract<Event, { type: "job-started" }> => e.type === "job-started");
-      assert.deepEqual(started.map((e) => e.name), ["annotations.ts list"]);
+      assert.deepEqual(started.map((e) => e.name), ["worktree.ts create"]);
       assert.equal(started[0].cmd.at(-1), "--dry-run");
       // A raw command can't be given --dry-run: refused.
       appendCommand(config.stateDir, { cmd: "shell", request: "r-a", cwd: root, command: "touch pushed", reason: "r" });
