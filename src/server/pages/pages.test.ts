@@ -499,6 +499,20 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.doesNotMatch(h, /run-moz-phab/);
   });
 
+  it("9. review comments: Check Phabricator now, under a stack with revisions from review comments on", () => {
+    const r = structuredClone(get("r-20261007-focus"));
+    const button = cmd({ cmd: "poll-phab", request: "r-20261007-focus" });
+    assert.ok(!renderRequest(r, ctx, true).value.includes(button), "not before it's submitted");
+    r.patches["p-focus"].revision = 5;
+    assert.ok(!renderRequest(r, ctx, true).value.includes(button), "not at submit");
+    r.step = "review comments";
+    assert.match(renderRequest(r, ctx, true).value, /<div class="stack-submit"><form class="inline cmd"[^]*?Check Phabricator now<\/button>/);
+    r.step = "landing";
+    assert.ok(renderRequest(r, ctx, true).value.includes(button));
+    delete r.patches["p-focus"].revision;
+    assert.ok(!renderRequest(r, ctx, true).value.includes(button), "not without revisions");
+  });
+
   it("8. submit: the meta-bug comment can be copied, from the ⚑ area and from the stack, when there is a meta bug", () => {
     const h = expanded("r-20261008-permissions");
     assert.match(h, /<textarea hidden id="summary-r-20261008-permissions-permissions">/);

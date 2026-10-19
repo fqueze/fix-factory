@@ -114,6 +114,13 @@ describe("commands", () => {
     assert.ok(executed(sc).every((e) => e.ok));
   });
 
+  it("poll-phab asks for a Phabricator poll now", () => {
+    const sc = withPatch();
+    run(sc, cmd({ cmd: "poll-phab" }));
+    assert.equal(sc.state().pollRequested, sc.of("poll-requested")[0].t);
+    assert.deepEqual(executed(sc), [{ ok: true, detail: undefined }]);
+  });
+
   it("set-bug sets a patch's bug, or the meta bug", () => {
     const sc = withPatch();
     sc.add({ type: "needs-user", request: ID, key: "file-bug:p-a:meta-bug-step", action: "File", detail: "", patch: "p-a" });

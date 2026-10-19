@@ -1096,7 +1096,12 @@ describe("6. verify on try", () => {
     assert.deepEqual(started.sort(), [`author:i-test-a:try:${push}`, `triage:${push}:final:v2`].sort());
     assert.match(sc.plan(`author:i-test-a:try:${push}`).agent?.message ?? "", /a\/test_a.js on linux: still boom/);
     const input = JSON.parse(sc.plan(`triage:${push}:final:v2`).files![0].content);
-    console.log(JSON.stringify(input));
+    // The push's patches and their files, so triage can tell a failure one of them caused.
+    assert.deepEqual(input.patches, [
+      { sha: sha("c"), title: "Bug 22 - Fix test_b, r=smaug.", files: ["a/test_b.js"] },
+      { sha: sha("d"), title: "Bug XXXXXXX - Fix a/test_a.js, r=smaug.", files: ["a/test_a.js"] },
+    ]);
+    assert.deepEqual([input.rev, input.rows.map((r: { test: string }) => r.test), input.unparsed], ["fed", ["z/test_z.js"], []]);
     sc.complete(`triage:${push}:final:v2`, { report: { cells: [{ test: "z/test_z.js", verdict: "broken by patch", patch: sha("c"), evidence: "TypeError" }], feedback: [] } });
     assert.deepEqual(sc.settle(), [`author:i-test-b:try:${push}`]);
     assert.equal(sc.state().step, "verify on try");
@@ -1569,6 +1574,25 @@ describe("9. review comments", () => {
     sc.presentSince = sc.now;
     sc.now += 10 * 60_000;
     assert.deepEqual(sc.settle(), ["poll:3"]);
+  });
+
+  it("polls right away when you ask, even while you're away, once per request", () => {
+    const sc = inReview();
+    sc.complete("poll:0", { output: polled("needs-review", [], "pending") });
+    sc.present = false;
+    sc.now += 60_000;
+    assert.deepEqual(sc.settle(), []);
+    sc.add({ type: "poll-requested", request: ID });
+    assert.equal(sc.state().pollRequested, new Date(sc.now - 1000).toISOString());
+    assert.deepEqual(sc.settle(), ["poll:1"]);
+    // Asked again while it runs: once more after it, then not again.
+    sc.add({ type: "poll-requested", request: ID });
+    assert.deepEqual(sc.settle(), []);
+    sc.complete("poll:1", { output: polled("needs-review", [], "pending") });
+    assert.deepEqual(sc.settle(), ["poll:2"]);
+    sc.complete("poll:2", { output: polled("needs-review", [], "pending") });
+    sc.now += 60_000;
+    assert.deepEqual(sc.settle(), []);
   });
 
   it("classifies new comments, the author addresses them first, then the stack is rewritten and you resubmit", () => {
