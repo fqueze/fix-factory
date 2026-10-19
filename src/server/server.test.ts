@@ -3,9 +3,11 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSyn
 import { request } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
-import { join, relative, resolve } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { after, before, describe, it } from "node:test";
 import { createFactoryServer } from "./server.ts";
+import { taskSetPath } from "../cli/task-set.ts";
+import { fakeTaskSet } from "../../test/fixtures/try/task-set.ts";
 import { FixtureStateSource, MemoryCommandSink, MemoryStateSource } from "./state-source.ts";
 
 const FIXTURES = resolve(import.meta.dirname, "../../test/fixtures/server");
@@ -30,6 +32,7 @@ const server = createFactoryServer({
   sink,
   now: () => Date.parse("2026-10-15T09:00:00Z"),
   machineName: "buildbox.corp.example",
+  mozbuildStateDir: join(stateDir, "mozbuild"),
 });
 let base = "";
 
@@ -351,6 +354,42 @@ describe("GET /api/requests/:id/jobs/:job/log and mach-profile-<n>", () => {
     assert.equal(profile.headers.get("access-control-allow-origin"), "http://localhost:4242");
     assert.equal(await profile.text(), '{"meta":{}}');
     assert.equal((await fetch(`${J}/mach-profile-2`)).status, 404);
+    rmSync(dir, { recursive: true, force: true });
+  });
+});
+
+describe("GET /api/requests/:id/pushes/:push/tasks", () => {
+  it("lays out what a planned push would run, from its latest dry run", async () => {
+    const ID = "r-20261014-extensions-xpcshell";
+    const r = structuredClone(state.getRequest(ID)!);
+    r.jobs["j-dry"].purpose = { key: "dry-run:unskip", what: "dry-run", push: "unskip" };
+    state.set(r);
+    const dir = join(stateDir, "jobs", "j-dry");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "out.log"), JSON.stringify({ command: ["./mach", "try", "fuzzy"], taskCount: 2, tasks: ["test-b", "test-a"], tryTaskConfig: {}, commits: [], warnings: ["2 labels are chunk patterns"] }));
+    const page = await (await fetch(`${base}/api/requests/${ID}/pushes/unskip/tasks`)).text();
+    assert.match(page, /<th>Other <span class="btype">opt<\/span><\/th><td><span class="job" title="test-a">test-a<\/span> <span class="job" title="test-b">test-b<\/span>/);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("reads the jobs of a dry run that didn't record them from its worktree's task set", async () => {
+    const ID = "r-20261014-extensions-xpcshell";
+    const r = structuredClone(state.getRequest(ID)!);
+    const wt = mkdtempSync(join(tmpdir(), "ff-wt-"));
+    // Another dry run than the one above, whose lack of jobs the server remembers.
+    r.jobs["j-dry2"] = { ...r.jobs["j-dry"], job: "j-dry2", cwd: wt, purpose: { key: "dry-run:unskip", what: "dry-run", push: "unskip" } };
+    state.set(r);
+    const file = taskSetPath(wt, false, join(stateDir, "mozbuild"));
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(file, fakeTaskSet());
+    const dir = join(stateDir, "jobs", "j-dry2");
+    mkdirSync(dir, { recursive: true });
+    const tasks = ["test-linux2404-64/debug-xpcshell-*"];
+    writeFileSync(join(dir, "out.log"), JSON.stringify({ command: ["./mach", "try", "fuzzy"], taskCount: 1, tasks, tryTaskConfig: { tasks }, commits: [], warnings: [] }));
+    const page = await (await fetch(`${base}/api/requests/${ID}/pushes/unskip/tasks`)).text();
+    assert.match(page, /<th>Linux <span class="btype">debug<\/span><\/th><td><span class="job" title="build-linux64\/debug">B<\/span>/);
+    assert.match(page, /<th>Linux 24\.04 <span class="btype">debug<\/span><\/th><td><span class="jgroup">X\( <span class="job"[^>]*>X1<\/span> <span class="job"[^>]*>X2<\/span> \)/);
+    assert.equal((await fetch(`${base}/api/requests/${ID}/pushes/nope/tasks`)).status, 404);
     rmSync(dir, { recursive: true, force: true });
   });
 });

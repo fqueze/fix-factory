@@ -9,7 +9,8 @@
 //   try_task_config.json, possibly chunk patterns ending in "*" (see warnings).
 //   taskCount counts --rebuild (a number, or a per-label dict). tryTaskConfig is
 //   the try_task_config of try_task_config.json. commits are the stack's shas,
-//   newest first.
+//   newest first. jobs: the expanded labels and their builds with their Treeherder platform,
+//   collection, group, symbol and tier, from mach's cached task set (left out when unreadable).
 //   --pending is a JSON list of PendingPush ({push?, tryTaskConfig, commits}), e.g.
 //   the dry-run outputs of pending pushes with `push` added; duplicateOf is set (to
 //   `push`, or the list index) when one has the same try config and commits.
@@ -47,6 +48,7 @@ import { loadConfig } from "../config.ts";
 import { log, runCli, UsageError } from "../lib/cli.ts";
 import { COMMITS_CHANGED } from "../state/flags.ts";
 import { exec, type ExecResult } from "../lib/exec.ts";
+import { dryRunJobs, type TryJob } from "./task-set.ts";
 
 export const TREEHERDER = "https://treeherder.mozilla.org";
 // The Lando instance mach uses by default (section lando-prod-new of .lando.ini).
@@ -133,6 +135,7 @@ export interface DryRunResult {
   commits: string[];
   warnings: string[];
   duplicateOf?: string;
+  jobs?: TryJob[]; // from mach's cached task set, when it could be read
 }
 
 export interface ParsedDryRun {
@@ -256,6 +259,10 @@ export async function dryRun(cwd: string, args: string[], opts: { pending?: Pend
     commits,
     warnings,
   };
+  const jobs = dryRunJobs(cwd, args, parsed.tryTaskConfig);
+  if (jobs) {
+    result.jobs = jobs;
+  }
   const duplicateOf = opts.pending ? findDuplicate(result, opts.pending) : undefined;
   if (duplicateOf !== undefined) {
     result.duplicateOf = duplicateOf;

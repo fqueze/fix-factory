@@ -14,6 +14,9 @@ import { renderMain, renderOverview, renderStrip } from "./pages/overview.ts";
 import { renderRequest } from "./pages/request.ts";
 import { buildRequestProfile } from "./request-profile.ts";
 import { buildPatchView, buildStackReview, findStack, isRevName } from "./stack-review.ts";
+import { pushTasks } from "./pages/tasks.ts";
+import type { DryRunResult } from "../cli/try.ts";
+import { dryRunJobs, type TryJob } from "../cli/task-set.ts";
 import type { CommandInput } from "../state/commands.ts";
 import type { CommandSink, StateSource } from "./state-source.ts";
 
@@ -25,6 +28,7 @@ export interface ServerOptions {
   machineName?: string; // os.hostname() by default
   homeDir?: string; // where agent transcripts are, under .claude/projects; os.homedir() by default
   claudeProfiler?: string | null; // its main module, null when not installed; looked up on PATH by default
+  mozbuildStateDir?: string; // where mach caches try task sets; $MOZBUILD_STATE_PATH or ~/.mozbuild by default
 }
 
 // The part of claude-profiler's library API the agent profile uses (see docs/research/tools.md).
@@ -69,6 +73,8 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
   const homeDir = opts.homeDir ?? homedir();
   const hosts = new HostCheck(opts.config.allowedHosts ?? [], opts.machineName);
   void hosts.addFqdn(opts.machineName);
+  // The jobs of dry runs that didn't record them, by dry run job: reading a task set takes a while.
+  const pushJobs = new Map<string, TryJob[] | undefined>();
   const sseClients = new Set<ServerResponse>();
   const broadcast = (data: string) => {
     for (const res of sseClients) {
@@ -334,6 +340,25 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
         throw new HttpError(502, errorMessage(e));
       }
       return send(res, 200, "text/html; charset=utf-8", page);
+    }
+    if ((m = path.match(/^\/api\/requests\/([^/]+)\/pushes\/([^/]+)\/tasks$/))) {
+      const request = getRequest(decodeURIComponent(m[1]));
+      const push = request.pushes[decodeURIComponent(m[2])];
+      // The latest dry run of the push says what it would run.
+      const dry = push && Object.values(request.jobs).findLast((j) => j.purpose?.push === push.id && j.name.startsWith("try.ts dry-run") && j.exitCode === 0);
+      const out = dry && join(opts.config.stateDir, "jobs", dry.job, "out.log");
+      if (!push || !out || !existsSync(out)) {
+        throw new HttpError(404, "no dry run for this push");
+      }
+      const d = JSON.parse(readFileSync(out, "utf8")) as DryRunResult;
+      // Dry runs from before jobs were recorded: from the worktree's task set now, once.
+      if (!d.jobs) {
+        if (!pushJobs.has(dry.job)) {
+          pushJobs.set(dry.job, dryRunJobs(dry.cwd, d.command.slice(2), d.tryTaskConfig, opts.mozbuildStateDir));
+        }
+        d.jobs = pushJobs.get(dry.job);
+      }
+      return send(res, 200, "text/html; charset=utf-8", pushTasks(d).value);
     }
     const file = STATIC[path];
     if (file) {
