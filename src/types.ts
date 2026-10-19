@@ -18,7 +18,8 @@ export interface FactoryConfig {
   firefoxRepo: string; // main checkout; worktrees are created next to it, never inside
   worktreesDir: string;
   baseRef: string; // central-based ref worktrees and stacks start from, e.g. "origin/main"
-  phabPollHours?: number; // default 3, only while you are present
+  phabPollMinutes?: number; // default 10, while you are present
+  phabPollHours?: number; // default 3, while you are away
   claudeCommand: string[]; // e.g. ["mozsb", "claude"]; the runner appends -p and its flags
   stackViewerCommand: string[]; // e.g. ["stack-viewer"]
   mdViewerCommand?: string[]; // default ["md-viewer"], for the authors' evidence and reproduction files

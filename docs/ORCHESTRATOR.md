@@ -43,9 +43,9 @@ A tick runs on any change to `commands.jsonl` or a job file, and at least every 
 - **Submission detected:** while a submit is waiting for you, `stack.ts import` runs every 2 min. Once every patch
   has a `Differential Revision:` trailer, the request moves to review comments.
 - **Phabricator:**
-  - **When:** polled every 3 h, and only while you're present.
+  - **When:** polled every 10 min while you're present (`phabPollMinutes`), every 3 h while you're away
+    (`phabPollHours`), and right away when you click "Check Phabricator now".
   - **Presence:** a visible page sends a `presence` command when it becomes visible or hidden, and every 15 min
     while visible. You count as away 30 min after the last
     `visible: true` (with several tabs, a hidden one sending `false` doesn't make you away).
-  - **Coming back:** when you return and the last poll is more than 1 h old, it polls right away.
 - **Worktrees** start from `baseRef` (new config field, central-based), with an artifact build.

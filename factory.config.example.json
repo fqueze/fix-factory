@@ -4,6 +4,7 @@
   "firefoxRepo": "/build/firefox",
   "worktreesDir": "/build/worktrees",
   "baseRef": "origin/main",
+  "phabPollMinutes": 10,
   "phabPollHours": 3,
   "claudeCommand": ["mozsb", "claude"],
   "stackViewerCommand": ["stack-viewer"],

@@ -1704,12 +1704,11 @@ class Planner {
     if (last && !last.end) return false;
     // You asked: whether you're present or not.
     if (this.s.pollRequested && (!last || Date.parse(this.s.pollRequested) > last.startedAt)) return true;
-    if (!this.ctx.presence.present) return false;
     if (!last) return true;
+    // Every few minutes while you're at the page, every few hours while you're away.
     const age = this.ctx.now - last.startedAt;
-    if (age >= (this.config.phabPollHours ?? 3) * HOUR) return true;
-    // Coming back after a while: poll right away.
-    return this.ctx.presence.since !== undefined && this.ctx.presence.since > last.startedAt && age > HOUR;
+    if (this.ctx.presence.present) return age >= (this.config.phabPollMinutes ?? 10) * 60_000;
+    return age >= (this.config.phabPollHours ?? 3) * HOUR;
   }
 
   private reviewComments(): void {

@@ -1095,6 +1095,8 @@ describe("6. verify on try", () => {
     const started = sc.settle();
     assert.deepEqual(started.sort(), [`author:i-test-a:try:${push}`, `triage:${push}:final:v2`].sort());
     assert.match(sc.plan(`author:i-test-a:try:${push}`).agent?.message ?? "", /a\/test_a.js on linux: still boom/);
+    const input = JSON.parse(sc.plan(`triage:${push}:final:v2`).files![0].content);
+    console.log(JSON.stringify(input));
     sc.complete(`triage:${push}:final:v2`, { report: { cells: [{ test: "z/test_z.js", verdict: "broken by patch", patch: sha("c"), evidence: "TypeError" }], feedback: [] } });
     assert.deepEqual(sc.settle(), [`author:i-test-b:try:${push}`]);
     assert.equal(sc.state().step, "verify on try");
@@ -1544,27 +1546,29 @@ const polled = (status: string, comments: unknown[] = [], reviewer = "accepted")
 ];
 
 describe("9. review comments", () => {
-  it("polls Phabricator only while you're present, every 3 h, and right away when you come back", () => {
+  it("polls Phabricator every 10 min while you're present, every 3 h while you're away", () => {
     const sc = inReview();
     assert.deepEqual(sc.view().jobs.filter((j) => !j.end).map((j) => j.purpose.key), ["poll:0"]);
     assert.deepEqual(sc.plan("poll:0").cli?.args, ["poll", "D100", "D101"]);
     assert.equal(sc.plan("poll:0").priority, 0);
     sc.complete("poll:0", { output: polled("needs-review", [], "pending") });
     assert.equal(sc.state().patches["p-test-a"].review?.status, "needs-review");
-    sc.now += 2 * HOUR;
+    sc.now += 9 * 60_000;
     assert.deepEqual(sc.settle(), []);
-    sc.now += HOUR;
+    sc.now += 60_000;
     assert.deepEqual(sc.settle(), ["poll:1"]);
     sc.complete("poll:1", { output: polled("needs-review", [], "pending") });
     sc.present = false;
-    sc.now += 4 * HOUR;
+    sc.now += 2 * HOUR;
     assert.deepEqual(sc.settle(), []);
-    sc.present = true;
-    sc.presentSince = sc.now;
+    sc.now += HOUR;
     assert.deepEqual(sc.settle(), ["poll:2"]);
     sc.complete("poll:2", { output: polled("needs-review", [], "pending") });
-    sc.now += 30 * 60_000;
-    assert.deepEqual(sc.settle(), []);
+    // Back at the page: the 10 min rule again.
+    sc.present = true;
+    sc.presentSince = sc.now;
+    sc.now += 10 * 60_000;
+    assert.deepEqual(sc.settle(), ["poll:3"]);
   });
 
   it("classifies new comments, the author addresses them first, then the stack is rewritten and you resubmit", () => {
