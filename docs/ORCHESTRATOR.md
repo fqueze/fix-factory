@@ -32,7 +32,9 @@ A tick runs on any change to `commands.jsonl` or a job file, and at least every 
 - **When step 3 runs:** at whichever comes first, the push finishing or 2 h after it started, so slow pools don't
   hold everything up. It runs again when the push finishes, adding new groups.
 - **Try failures:**
-  - **Matched:** a failure in a test that a patch touches, or in that patch's folder, goes to that patch's author.
+  - **Matched:** a failure in a test that a patch touches, or that its group fixes, goes to that patch's author (not
+    by folder: a burndown's patches share one). If the author says it isn't its patch's, it's triaged as unmatched.
+  - **When:** once half the test tasks the push asked for have finished, or 2 h after it started; again when it ends.
   - **Unmatched:** Haiku (`triage-try`) classifies each one, using its log and the test's history on central:
     - caused by a patch (a product change breaking another test) → that patch's author;
     - also failing on central → only noted on the page;

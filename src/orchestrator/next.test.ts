@@ -1167,9 +1167,10 @@ describe("6. verify on try, early then final", () => {
   const old = { test: "a/test_a.js", config: "linux", result: "fail", failures: ["boom"], taskIds: ["T1"] };
   it("the final run resumes the author with only the rows the early one didn't have", () => {
     const { sc, push } = earlyThenFinal([old, { test: "a/test_a.js", config: "mac", result: "fail", failures: ["bang"], taskIds: ["T2"] }]);
-    const started = sc.settle();
-    assert.ok(started.includes(`author:i-test-a:try:${push}:final`));
-    assert.ok(!started.some((k) => k.startsWith("author:i-test-b")));
+    sc.settle();
+    // Matched by its group's test, not its folder: it goes as soon as the author's last run ends.
+    assert.ok(sc.view().byKey.has(`author:i-test-a:try:${push}:final`));
+    assert.ok(!sc.view().jobs.some((j) => j.purpose.key.startsWith(`author:i-test-b:try:${push}`)));
     const message = sc.plan(`author:i-test-a:try:${push}:final`).agent?.message ?? "";
     assert.match(message, /a\/test_a.js on mac: bang/);
     assert.doesNotMatch(message, /on linux/);

@@ -1341,14 +1341,10 @@ class Planner {
   }
 
   // A failure in a test a patch touches, or in that patch's folder, goes to that patch's author.
+  // A test the patch changes, or one its group fixes. Not the folder: a burndown's patches share one, and every
+  // failure in it would go to its first patch's author.
   matchPatch(test: string, patches: PatchView[]): PatchView | undefined {
-    return (
-      patches.find((p) => this.patchFiles(p).includes(test)) ??
-      patches.find((p) => {
-        const folder = p.item ? this.s.items[p.item]?.folder : undefined;
-        return folder !== undefined && (folderOf(test) === folder || test.startsWith(`${folder}/`));
-      })
-    );
+    return patches.find((p) => this.patchFiles(p).includes(test) || (p.item !== undefined && this.s.items[p.item]?.group.tests.includes(test)));
   }
 
   // Verified by the current plan's pushes; with none to make (you declined them, or the planner found the earlier ones
@@ -1477,6 +1473,7 @@ class Planner {
       const t = this.out<TryTable>(table);
       const byItem = new Map<ItemId, TryRow[]>();
       const unmatched: TryRow[] = [];
+      let rejected = false;
       for (const row of t.rows.filter((r) => r.result === "fail")) {
         const item = this.matchPatch(row.test, patches)?.item;
         if (item) byItem.set(item, [...(byItem.get(item) ?? []), row]);
@@ -1489,10 +1486,20 @@ class Planner {
       for (const [item, rows] of byItem) {
         const fresh = rows.filter((r) => !told.has(`${r.test} ${r.config}`));
         if (fresh.length) this.routeToAuthor(item, push, fresh.map(line), early ? ":final" : "");
+        // An author that says they aren't its patch's: triaged like the others.
+        for (const suffix of ["", ":final"]) {
+          const r = this.view.byKey.get(`author:${item}${this.itemEpoch(item)}:try:${push}${suffix}`)?.find(succeeded);
+          if (r && this.rep<{ disagreement?: string }>(r).disagreement) {
+            unmatched.push(...rows.filter((x) => !unmatched.includes(x)));
+            rejected = true;
+          }
+        }
       }
       if (unmatched.length === 0 && t.unparsed.length === 0) continue;
       const file = dataPath(this.config, this.s.id, `triage-${push}-${run}.json`);
-      const triage = this.wantAgent(`triage:${push}:${run}`, "triage", "triage-try", { rev: p.rev!, goal: p.purpose || "verify the stack", tableFile: file, logsDir: artifactsDir(this.config) }, {
+      // Rows an author handed back come after the first triage of the run: a triage of their own.
+      const key = rejected ? `triage:${push}:${run}:${shortHash(unmatched.map((r) => `${r.test} ${r.config}`)).slice(0, 6)}` : `triage:${push}:${run}`;
+      const triage = this.wantAgent(key, "triage", "triage-try", { rev: p.rev!, goal: p.purpose || "verify the stack", tableFile: file, logsDir: artifactsDir(this.config) }, {
         purpose: { push },
         files: [{ path: file, content: JSON.stringify({ rev: p.rev, rows: unmatched, unparsed: t.unparsed }, null, 2) + "\n" }],
       });
