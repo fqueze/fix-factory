@@ -180,6 +180,9 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
     }
     case "redo-annotations":
       ev({ type: "item-state", item: ANNOTATIONS_ITEM, state: "not started", detail: "redone with today's skip-ifs" });
+      for (const n of s.needsUser.filter((x) => x.key.startsWith("approve-push:unskip"))) {
+        ev({ type: "try-declined", push: n.key.slice("approve-push:".length), text: "not needed anymore: the skip-ifs group was redone", by: "factory" });
+      }
       // What the earlier run asked you is moot.
       for (const n of s.needsUser.filter((x) => x.item === ANNOTATIONS_ITEM || (x.job !== undefined && s.jobs[x.job]?.item === ANNOTATIONS_ITEM))) ev({ type: "user-done", key: n.key });
       done(true);
