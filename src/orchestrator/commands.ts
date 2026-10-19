@@ -150,9 +150,11 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
       effects.push({
         type: "start",
         plan: {
-          purpose: { key: `revise-draft:${c.patch}:${c.id}`, what: "revise-draft", patch: c.patch },
+          purpose: { key: `revise-draft:${c.patch}:${c.id}`, what: "revise-draft", patch: c.patch, reason: c.text },
           kind: "agent",
           name: "revise-bug-draft",
+          // Listed with its group's other jobs.
+          ...(c.patch !== "meta" && s.patches[c.patch].item ? { item: s.patches[c.patch].item } : {}),
           cwd: requestDir(ctx.config, s.id),
           agent: { sessionId: sessionIdFor(s.id, `revise-draft:${c.patch}:${c.id}`), resume: false, vars: { draft: JSON.stringify(draft, null, 2), comments: c.text } },
         },
@@ -183,6 +185,8 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
     case "hand-back":
       ev({ type: "item-state", item: c.item, state: "handed back" });
       ev({ type: "user-done", key: `take-it:${c.item}` });
+      // A stuck group handed back asks nothing more.
+      for (const n of s.needsUser.filter((x) => x.item === c.item || (x.job !== undefined && s.jobs[x.job]?.item === c.item))) ev({ type: "user-done", key: n.key });
       done(true);
       break;
     case "reply-recovery": {
@@ -229,9 +233,10 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
       // The same plan through the same path, so a dry run still adds --dry-run (or refuses).
       const plan: JobPlan =
         job.kind === "agent" && job.sessionId
-          ? { purpose: { ...job.purpose }, kind: "agent", name: job.name, item: job.item, cwd: job.cwd, agent: { sessionId: job.sessionId, resume: true, message: "Try again: continue where you stopped, then end with the JSON report." } }
+          ? { purpose: { ...job.purpose, retried: true }, kind: "agent", name: job.name, item: job.item, cwd: job.cwd, agent: { sessionId: job.sessionId, resume: true, message: "Try again: continue where you stopped, then end with the JSON report." } }
           : { ...saved, purpose: { ...job.purpose } };
-      plan.startEvents = saved.startEvents;
+      // A resumed agent isn't started again: its group's line says so.
+      plan.startEvents = plan.agent?.resume ? saved.startEvents?.map((e) => (e.type === "item-state" && e.state === "investigating" ? { ...e, detail: "retried" } : e)) : saved.startEvents;
       effects.push({ type: "start", plan });
       for (const key of [`failed:${c.job}`, `stopped:${c.job}`]) if (s.needsUser.some((n) => n.key === key)) ev({ type: "user-done", key });
       // Out of the blocked state a stop or a failure left it in, unless the job's own start events set one.

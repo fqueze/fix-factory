@@ -287,6 +287,7 @@ export interface JobView {
   sessionId?: string;
   error?: string;
   purpose?: JobPurpose; // absent for jobs whose job-started has none
+  outcome?: string; // an agent's report on one line: its status or verdict, and its summary
   machProfiles?: number; // resource-usage profiles of the mach builds and test runs it made, kept in its directory
 }
 
@@ -421,8 +422,9 @@ export interface JobPurpose {
   titles?: Record<PatchId, string>; // first lines a rewrite gives commit messages (reviewers)
   patches?: Record<string, PatchId>; // 12-character sha prefix → patch, for the shas a stack.ts job gets
   comments?: number[]; // review comment ids an address-review run handles
-  reason?: string; // why an author is resumed: "lint", "review", "try", "comment", ...; what you told recover
+  reason?: string; // why an author is resumed: "lint", "review", "try", "comment", ...; what you told recover or said on a bug draft
   replyTo?: JobId; // the recover run a reply-recovery answers
+  retried?: boolean; // an agent's retry: its session resumed where it stopped
   requests?: RequestId[]; // the active requests a route-request run was given: its answer must be one of them
 }
 

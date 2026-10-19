@@ -111,6 +111,7 @@ test("jobs: started and finished, linked to their item, last report kept", () =>
     costUsd: 2,
     model: "opus",
     sessionId: "s",
+    outcome: "left as-is",
   });
   assert.equal(s.jobs.j2.endedAt, undefined);
   assert.deepEqual(s.items.i1.jobs, ["j1"]);
@@ -307,6 +308,22 @@ test("refused commands: the last 5, until dismissed or a later command with the 
   const later = fold(refused(1), refused(2, "retry"), ev({ type: "command-executed", command: "c-3", cmd: "start-agent", ok: true }), ev({ type: "user-done", key: "refused:c-2" }));
   assert.deepEqual(later.refused, []);
   assert.deepEqual(fold(refused(1), ev({ type: "command-executed", command: "c-2", ok: true })).refused?.length, 1, "a success without its cmd clears nothing");
+});
+
+test("keeps an agent's outcome on one line: its state or verdict, and its summary", () => {
+  const s = fold(
+    ev({ type: "job-started", job: "j1", kind: "agent", name: "investigate-and-fix", pid: 1, pidStartTime: 2, cmd: ["claude"], cwd: "/", codeVersion: "sha" }),
+    ev({ type: "agent-report", job: "j1", prompt: "investigate-and-fix", report: { state: "blocked", summary: "the build failed" } }),
+    ev({ type: "job-started", job: "j2", kind: "agent", name: "review-patch", pid: 1, pidStartTime: 2, cmd: ["claude"], cwd: "/", codeVersion: "sha" }),
+    ev({ type: "agent-report", job: "j2", prompt: "review-patch", report: { verdict: "findings", findings: [{ severity: "must-fix", text: "a" }, { severity: "nit", text: "b" }] } }),
+  );
+  assert.equal(s.jobs.j1.outcome, "blocked: the build failed");
+  assert.equal(s.jobs.j2.outcome, "findings: 1 must-fix, 1 nit");
+});
+
+test("drops the notes that used to repeat a job's report: review nits and answers to you", () => {
+  const s = fold(ev({ type: "note", text: "Review nits for a.js: x" }), ev({ type: "note", text: "Stack review nits for s: y" }), ev({ type: "note", text: "Dry run: try push A not made." }));
+  assert.deepEqual(s.notes.map((n) => n.text), ["Dry run: try push A not made."]);
 });
 
 test("a push declined along with another stays approved if you had approved it, declined otherwise", () => {

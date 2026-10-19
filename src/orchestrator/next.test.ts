@@ -581,7 +581,7 @@ describe("4. investigate and fix", () => {
     assert.deepEqual(started, [`author:i-test-a:review:${job}`]);
   });
 
-  it("an author that disagrees with your message waits for you", () => {
+  it("an author that disagrees with your message waits for you, its answer on its job's line", () => {
     const sc = workList([group("ka", "a/test_a.js", "boom")]);
     investigating(sc, "i-test-a");
     sc.complete("author:i-test-a:initial", { report: fixed([sha("1")]) });
@@ -593,6 +593,7 @@ describe("4. investigate and fix", () => {
     sc.complete("author:i-test-a:continue:c-1", { report: fixed([sha("1")], { disagreement: "there is no leak" }) });
     const job = sc.view().byKey.get("author:i-test-a:continue:c-1")![0].job;
     assert.ok(sc.open().includes(`disagrees:${job}`));
+    assert.equal(sc.state().jobs[job].outcome, "fix verified locally: disagrees with you: there is no leak", "its answer on its job's line");
     assert.ok(!sc.settle().includes(`import:${job}`), "nothing goes on");
     sc.add({ type: "user-done", request: ID, key: `disagrees:${job}` });
     assert.ok(sc.settle().includes(`import:${job}`), "go ahead with its patch");
@@ -630,7 +631,8 @@ describe("4. investigate and fix", () => {
     const job = linted(sc, "author:i-test-a:initial", sha("1"));
     sc.settle();
     sc.complete(`review:p-test-a:${job}`, { report: { verdict: "findings", findings: [nit], feedback: [] } });
-    assert.equal(sc.of("note").at(-1)?.text, "Review nits for test_a.js: a.js:2: wordy comment");
+    assert.equal(sc.of("note").length, 0, "the nits are in the review's report, on its job's line");
+    assert.equal(sc.state().jobs[sc.view().byKey.get(`review:p-test-a:${job}`)![0].job].outcome, "findings: 1 nit");
     const nits = `author:i-test-a:nits:${job}`;
     assert.deepEqual(sc.settle(), [nits]);
     assert.match(sc.plan(nits).agent?.message ?? "", /\[nit\] a.js:2 wordy comment[\s\S]*say in one line/);

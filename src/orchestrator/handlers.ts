@@ -207,13 +207,6 @@ export function handleFinished(input: HandlerInput): HandlerResult {
       if (p) patchEvent(p, { effort: (input.report as EstimateReviewEffortReport).effort });
       break;
     }
-    case "review": {
-      const nits = (input.report as ReviewPatchReport).findings.filter((f) => f.severity === "nit");
-      const tests = purpose.item ? s.items[purpose.item]?.group.tests : undefined;
-      const label = tests?.length === 1 ? tests[0].split("/").pop() : (s.patches[purpose.patch!]?.title ?? purpose.patch);
-      if (nits.length) ev("note", { text: `Review nits for ${label}: ${nits.map((f) => `${f.file ? `${f.file}${f.line ? `:${f.line}` : ""}: ` : ""}${f.text}`).join("; ")}`.slice(0, 2000) });
-      break;
-    }
     case "review-stack": {
       const r = input.report as ReviewStackReport;
       const bySha = (sha: string) => Object.values(s.patches).find((p) => p.sha.startsWith(sha.slice(0, 12)));
@@ -225,8 +218,6 @@ export function handleFinished(input: HandlerInput): HandlerResult {
         const patch = bySha(d.patch);
         if (patch) ev("dep-removed", { patch: patch.id, needs: bySha(d.needs)?.id ?? d.needs });
       }
-      const nits = r.findings.filter((f) => f.severity === "nit");
-      if (nits.length) ev("note", { text: `Stack review nits for ${purpose.stack}: ${nits.map((f) => f.text).join("; ")}`.slice(0, 2000) });
       break;
     }
     case "summary": {

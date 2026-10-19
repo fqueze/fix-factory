@@ -85,6 +85,8 @@ describe("commands", () => {
     const key = `revise-draft:p-a:${c.id}`;
     assert.equal(sc.plan(key).name, "revise-bug-draft");
     assert.equal(sc.plan(key).agent?.vars?.comments, "it's in DOM: Events");
+    assert.equal(sc.plan(key).purpose.reason, "it's in DOM: Events", "the page says what it revised it after");
+    assert.equal(sc.plan(key).item, "i-a", "listed with its group's jobs");
     sc.complete(key, { report: { draft: { product: "Core", component: "DOM: Events", summary: "s", description: "d" }, feedback: [] } });
     assert.equal(sc.state().patches["p-a"].bugDraft?.component, "DOM: Events");
   });
@@ -272,6 +274,17 @@ describe("commands", () => {
     assert.deepEqual(sc.open(), []);
   });
 
+  it("retry resumes an agent where it stopped, and says so rather than starting it again", () => {
+    const sc = withPatch();
+    const fix = cmd({ cmd: "comment-fix", patch: "p-a", text: "x" });
+    run(sc, fix);
+    const job = sc.running(`author:i-a:comment:${fix.id}`);
+    sc.complete(`author:i-a:comment:${fix.id}`, { exitCode: 1, error: "killed" });
+    const effects = run(sc, cmd({ cmd: "retry", job }));
+    const start = effects.find((e) => e.type === "start");
+    assert.ok(start?.type === "start" && start.plan.agent?.resume && start.plan.purpose.retried);
+  });
+
   it("allow-push lets the item's author session make one push", () => {
     const sc = withPatch();
     const fix = cmd({ cmd: "comment-fix", patch: "p-a", text: "x" });
@@ -280,6 +293,14 @@ describe("commands", () => {
     const effects = run(sc, cmd({ cmd: "allow-push", item: "i-a" }));
     assert.deepEqual(effects.filter((e) => e.type === "allow-push"), [{ type: "allow-push", sessionId: session }]);
     assert.equal(executed(sc).at(-1)?.ok, true);
+  });
+
+  it("hand-back closes a stuck group and answers all its ⚑s", () => {
+    const sc = withPatch();
+    sc.add({ type: "needs-user", request: ID, key: "failed:j-rev", action: "No ok", detail: "d", job: "j-rev", item: "i-a" });
+    run(sc, cmd({ cmd: "hand-back", item: "i-a" }));
+    assert.equal(sc.state().items["i-a"].state, "handed back");
+    assert.deepEqual(sc.open(), []);
   });
 
   it("continue resumes the item's author with your message and answers its ⚑s; refused while it runs", () => {

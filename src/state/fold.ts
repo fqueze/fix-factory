@@ -127,9 +127,15 @@ export function foldEvents(events: readonly Event[]): RequestState {
         break;
       }
       case "agent-report": {
-        const itemId = e.item ?? s.jobs[e.job]?.item;
+        const job = s.jobs[e.job];
+        const outcome = outcomeOf(e.report);
+        if (job && outcome) job.outcome = outcome;
+        const itemId = e.item ?? job?.item;
         const item: ItemView | undefined = itemId === undefined ? undefined : s.items[itemId];
-        if (!item) continue;
+        if (!item) {
+          if (!job) continue;
+          break;
+        }
         item.lastReport = { prompt: e.prompt, report: e.report, job: e.job };
         if (e.prompt === "investigate-and-fix") item.investigation = e.report as InvestigateReport;
         break;
@@ -250,6 +256,8 @@ export function foldEvents(events: readonly Event[]): RequestState {
         s.recoveryPlans.push({ job: e.job, text: e.text, plan: e.plan, cannotDo: e.cannotDo, questions: e.questions, t: e.t });
         break;
       case "note":
+        // Review nits and answers to you used to be notes; they are in their job's report.
+        if (/^(Review nits|Stack review nits|Its author answered you)\b/.test(e.text)) continue;
         s.notes.push({ t: e.t, text: e.text });
         break;
       default:
@@ -285,4 +293,17 @@ function stripUndefined<T>(value: T): T {
     return out as T;
   }
   return value;
+}
+
+// What an agent concluded, on one line: its state or verdict, and its summary.
+function outcomeOf(report: unknown): string | undefined {
+  if (report === null || typeof report !== "object") return undefined;
+  const r = report as Record<string, unknown>;
+  const head = [r.state, r.status, r.verdict].find((x) => typeof x === "string") as string | undefined;
+  const count = (severity: string) => (Array.isArray(r.findings) ? r.findings.filter((f) => (f as { severity?: string }).severity === severity).length : 0);
+  const findings = [count("must-fix") && `${count("must-fix")} must-fix`, count("nit") && `${count("nit")} ${count("nit") === 1 ? "nit" : "nits"}`].filter(Boolean).join(", ");
+  const text =
+    typeof r.disagreement === "string" ? `disagrees with you: ${r.disagreement}` : typeof r.summary === "string" ? r.summary : typeof r.answer === "string" ? r.answer : findings || undefined;
+  const out = [head, text].filter(Boolean).join(": ");
+  return out ? out.slice(0, 300) : undefined;
 }
