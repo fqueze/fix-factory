@@ -169,7 +169,7 @@ export type Event =
   | (EventBase & { type: "stack"; stack: string; folder: string; branch: string; worktree: string; base?: string; order: PatchId[]; summary?: string })
   | (EventBase & { type: "meta-bug"; bug: number | null; draft?: BugDraft })
   | (EventBase & { type: "try-planned"; push: PushId; purpose: string; command: string[]; taskCount?: number })
-  | (EventBase & { type: "try-declined"; push: PushId; text: string; by?: "factory" }) // you said no, or the factory withdrew it
+  | (EventBase & { type: "try-declined"; push: PushId; text: string; by?: "factory"; replan?: true }) // you said no, or the factory withdrew it
   | (EventBase & { type: "submit-copied"; stack: string })
   | (EventBase & { type: "try-pushed"; push: PushId; rev: string; url: string })
   | (EventBase & { type: "try-progress"; push: PushId; done: number; total: number; failures: number })
@@ -199,6 +199,7 @@ interface CommandBase {
 export type Command =
   | (CommandBase & { cmd: "approve-push"; push: PushId })
   | (CommandBase & { cmd: "decline-push"; push: PushId; text: string })
+  | (CommandBase & { cmd: "change-push"; push: PushId; text: string }) // declines it and asks for another plan in its place
   | (CommandBase & { cmd: "copied-submit"; stack: string }) // you copied its moz-phab command
   | (CommandBase & { cmd: "set-bug"; patch: PatchId; bug: number })
   | (CommandBase & { cmd: "comment-bug-draft"; patch: PatchId | "meta"; text: string })
@@ -339,6 +340,7 @@ export interface PushView {
   taskCount?: number;
   declined?: string; // why you said no, or why the factory withdrew it
   withdrawn?: boolean; // by the factory, not you
+  replan?: boolean; // you asked for another plan in its place, following what you said
   rev?: string;
   url?: string;
   progress?: { done: number; total: number; failures: number };

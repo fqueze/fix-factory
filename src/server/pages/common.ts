@@ -213,6 +213,7 @@ export const COMMAND_LABELS: Record<Command["cmd"], string> = {
   "comment-bug-draft": "comment on the bug draft",
   "stack-comments": "stack-viewer comments",
   "redo-annotations": "redo the skip-ifs group",
+  "change-push": "ask for another push instead",
   "take-it": "take it",
   "hand-back": "hand back",
   "comment-fix": "comment on the fix",

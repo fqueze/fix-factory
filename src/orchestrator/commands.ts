@@ -130,6 +130,17 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
       ev({ type: "try-declined", push: c.push, text: c.text });
       done(true);
       break;
+    case "change-push": {
+      const p = s.pushes[c.push];
+      const waiting = s.needsUser.some((n) => n.key === `approve-push:${c.push}`);
+      if (!p || p.rev || p.replan || !(waiting || (p.declined !== undefined && !p.withdrawn))) {
+        done(false, `push ${c.push} can't be planned again`);
+        break;
+      }
+      ev({ type: "try-declined", push: c.push, text: c.text, replan: true });
+      done(true);
+      break;
+    }
     case "set-bug":
       if (c.patch === "meta") {
         ev({ type: "meta-bug", bug: c.bug, ...(s.metaBug?.draft ? { draft: s.metaBug.draft } : {}) });

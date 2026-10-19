@@ -59,6 +59,7 @@ type Field =
 const SPECS: Record<Command["cmd"], Record<string, Field>> = {
   "approve-push": { push: "string" },
   "decline-push": { push: "string", text: "string" },
+  "change-push": { push: "string", text: "string" },
   "copied-submit": { stack: "string" },
   presence: { visible: "boolean" },
   "set-bug": { patch: "string", bug: "int" },
@@ -91,6 +92,7 @@ const SPECS: Record<Command["cmd"], Record<string, Field>> = {
 const NEEDS_REQUEST = new Set<string>([
   "approve-push",
   "decline-push",
+  "change-push",
   "copied-submit",
   "set-bug",
   "comment-bug-draft",
@@ -272,6 +274,10 @@ export function commandsFromForm(form: URLSearchParams): unknown[] {
     }
     if (text !== null) {
       c.text = text;
+    }
+    // The decline box's other button.
+    if (form.get("as") === "change-push" && c.cmd === "decline-push") {
+      c.cmd = "change-push";
     }
     if (bugOrText !== null && c.cmd === "set-bug") {
       const bug = parseBugNumber(bugOrText);

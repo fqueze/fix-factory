@@ -199,6 +199,7 @@ export function foldEvents(events: readonly Event[]): RequestState {
         // still count as approved.
         if (e.text.startsWith("along with ") && !s.needsUser.some((n) => n.key === `approve-push:${e.push}`)) break;
         push(e.push).declined = e.text;
+        if (e.replan) push(e.push).replan = true;
         // Those taken down "along with" another were the factory's doing too, and its withdrawals from before "by".
         if (e.by === "factory" || /^(along with |not needed anymore)/.test(e.text)) push(e.push).withdrawn = true;
         s.needsUser = s.needsUser.filter((n) => n.key !== `approve-push:${e.push}`);

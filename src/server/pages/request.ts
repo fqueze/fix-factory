@@ -576,14 +576,18 @@ function pushRowOf(r: RequestState, p: PushView, ctx: RenderContext): Html {
     title: p.purpose,
     end: html`${p.taskCount === undefined ? null : html`<span>${plural(p.taskCount, "task")}</span>`}${
       p.rev ? html`<a class="mono" href="${pushUrl(p)}" target="_blank" rel="noopener">${p.rev.slice(0, 12)}</a>` : null
-    }${waiting ? html`${approvePushControls(r, [p], requestUrl(r.id))}<button type="button" class="btn small" data-decline title="This push won't be made; say why">Decline…</button>` : null}`,
+    }${waiting ? html`${approvePushControls(r, [p], requestUrl(r.id))}<button type="button" class="btn small" data-decline title="This push won't be made; say why">Decline…</button>` : null}${
+      p.declined !== undefined && !p.withdrawn && !p.replan && !p.rev
+        ? html`<form class="inline cmd" method="post" action="/api/commands">${commandFields([{ cmd: "change-push", request: r.id, push: p.id, text: p.declined }], requestUrl(r.id))}<button class="btn small" title="The factory plans another push in its place, following what you wrote">Ask for another</button></form>`
+        : null
+    }`,
     state: html`${
       p.rev
         ? pushStatus(p)
         : p.declined !== undefined
           ? p.withdrawn
             ? html`withdrawn by the factory: ${p.declined}`
-            : html`you declined it: ${p.declined}`
+            : html`you declined it${p.replan ? ", asking for another" : ""}: ${p.declined}`
           : waiting
             ? "waiting for your approval"
             : !job
@@ -621,5 +625,5 @@ function dryRunWarnings(r: RequestState, p: PushView): Html | null {
 }
 
 function declineBox(r: RequestState, p: PushView): Html {
-  return html`<form class="cmd decline" method="post" action="/api/commands">${commandFields([{ cmd: "decline-push", request: r.id, push: p.id }], requestUrl(r.id))}<textarea name="text" required rows="2" placeholder="Why not? This push won't be made; the plan's others still wait for you"></textarea><button class="btn small">Decline</button></form>`;
+  return html`<form class="cmd decline" method="post" action="/api/commands">${commandFields([{ cmd: "decline-push", request: r.id, push: p.id }], requestUrl(r.id))}<textarea name="text" required rows="2" placeholder="Why not, or what should it be instead? The plan's other pushes still wait for you"></textarea><button class="btn small">Decline</button> <button class="btn small" name="as" value="change-push" title="Declines it, and the factory plans another push in its place following what you wrote">Ask for another</button></form>`;
 }

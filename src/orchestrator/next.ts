@@ -567,15 +567,30 @@ class Planner {
     cwd: string,
     stack?: string,
   ): { ids: PushId[]; dry: DryRunResult[]; made: PushId[] } | undefined {
-    const plan = this.wantAgent(key, "plan-pushes", "plan-try-pushes", vars, opts);
-    if (!plan) return undefined;
-    const planned = this.rep<PlanTryPushesReport>(plan).pushes;
-    const ids = planned.map((_, i) => idOf(i, planned.length));
-    const dry = planned.map((push, i) => this.dryRun(ids[i], push.tryArgs, push.purpose, cwd, stack));
-    if (dry.some((d) => !d)) return undefined;
+    const ids: PushId[] = [];
+    const dry: DryRunResult[] = [];
+    // A push you declined asking for another is planned again, alone, from what you wrote; and so on.
+    for (let round = 0, k = key, v = vars, id = idOf; ; ) {
+      const plan = this.wantAgent(k, "plan-pushes", "plan-try-pushes", v, opts);
+      if (!plan) return undefined;
+      const planned = this.rep<PlanTryPushesReport>(plan).pushes;
+      const these = planned.map((_, i) => id(i, planned.length));
+      const d = planned.map((push, i) => this.dryRun(these[i], push.tryArgs, push.purpose, cwd, stack));
+      if (d.some((x) => !x)) return undefined;
+      ids.push(...these);
+      dry.push(...(d as DryRunResult[]));
+      const replan = these.filter((p) => this.s.pushes[p]?.replan);
+      if (replan.length === 0) break;
+      round++;
+      const declined = replan.map((p) => `push ${p} (\`${this.s.pushes[p].command.join(" ")}\`), saying “${this.s.pushes[p].declined}”`).join("; and ");
+      k = `${key}:r${round}`;
+      v = { ...vars, goal: `${vars.goal}. The user declined ${declined}. Plan only what replaces it, as the user said: the plan's other pushes stand` };
+      const r = round;
+      id = (i, count) => `${idOf(0, 1)}-r${r}${count === 1 ? "" : `-${i + 1}`}`;
+    }
     // The ones to make: not a duplicate of a pending push, not declined.
-    const made = ids.filter((id, i) => dry[i]!.duplicateOf === undefined && this.s.pushes[id]?.declined === undefined);
-    return { ids, dry: dry as DryRunResult[], made };
+    const made = ids.filter((id, i) => dry[i].duplicateOf === undefined && this.s.pushes[id]?.declined === undefined);
+    return { ids, dry, made };
   }
 
   // -------------------------------------------------------------------------
@@ -1415,6 +1430,8 @@ class Planner {
       const stack = this.view.byKey.get(`dry-run:${push.id}`)?.[0].purpose.stack;
       if (stack && this.s.stacks[stack] && push.rev) this.routeTryFailures(push.id, this.s.stacks[stack].order.map((pid) => this.s.patches[pid]));
     }
+    // An un-skip push may still add groups to the stack: verifying it waits for its results.
+    if (this.signalPushes().some((id) => id !== "initial" && this.s.pushes[id].result === undefined)) return;
     let green = this.stackInfos.size > 0;
     for (const info of this.stackInfos.values()) {
       const plan = info.ready ? this.verifyPushes(info) : undefined;
