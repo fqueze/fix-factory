@@ -180,6 +180,8 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
     }
     case "redo-annotations":
       ev({ type: "item-state", item: ANNOTATIONS_ITEM, state: "not started", detail: "redone with today's skip-ifs" });
+      // What the earlier run asked you is moot.
+      for (const n of s.needsUser.filter((x) => x.item === ANNOTATIONS_ITEM || (x.job !== undefined && s.jobs[x.job]?.item === ANNOTATIONS_ITEM))) ev({ type: "user-done", key: n.key });
       done(true);
       break;
     case "take-it":

@@ -182,10 +182,10 @@ describe("2. first signal", () => {
     assert.deepEqual(annotations.map((a: { kind: string }) => a.kind), ["scoping", "flakiness"]);
     assert.equal(sc.state().items["i-annotations"].state, "investigating");
 
-    // The run-if commit goes through import, lint and critical review like any fix.
+    // The run-if commit goes through import, lint and critical review like any fix; the un-skip push doesn't wait.
     sc.complete("author:i-annotations:initial", { report: { runIf: sha("1"), debug: sha("2"), summary: "done", feedback: [] } });
     const authorJob = sc.view().byKey.get("author:i-annotations:initial")![0].job;
-    assert.deepEqual(sc.settle(), [`import:${authorJob}`]);
+    assert.deepEqual(sc.settle(), ["plan:unskip", `import:${authorJob}`]);
     sc.complete(`import:${authorJob}`, { output: imported(sha("1"), "Bug XXXXXXX - Turn scoping skips into run-if, r=jmaher.", ["dom/base/test/mochitest.toml"]) });
     sc.settle();
     sc.complete(`msg:p-annotations:${sha("1")}`, { output: "msg" });
@@ -193,7 +193,7 @@ describe("2. first signal", () => {
     sc.complete(`lint:p-annotations:${sha("1")}`, { output: lintOk });
     assert.deepEqual(sc.settle(), [`review:p-annotations:${authorJob}`]);
     sc.complete(`review:p-annotations:${authorJob}`, { report: ok });
-    assert.deepEqual(sc.settle(), ["plan:unskip"]);
+    assert.deepEqual(sc.settle(), []);
     assert.equal(sc.state().items["i-annotations"].state, "reviewed");
     const plan = sc.plan("plan:unskip");
     assert.equal(plan.agent?.vars?.branch, `${ID}-signal`);

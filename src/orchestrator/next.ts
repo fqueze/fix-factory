@@ -504,7 +504,12 @@ class Planner {
       this.event(this.ev("item-created", { item: ANNOTATIONS_ITEM, folder: this.s.folder ?? "", group }));
     }
     const item = this.s.items[ANNOTATIONS_ITEM];
-    if (!item || !SETTLED.includes(item.state)) return;
+    if (!item) return;
+    // The un-skip push only needs the DEBUG commit: it doesn't wait for the run-if commit's review, only for its
+    // author to be done and not to disagree with you.
+    const latest = this.latestAuthor(ANNOTATIONS_ITEM);
+    const authorDone = latest !== undefined && succeeded(latest) && !this.s.needsUser.some((n) => n.job === latest.job && n.key.startsWith("disagrees:"));
+    if (!authorDone && !SETTLED.includes(item.state)) return;
     const debug = this.debugCommit();
     if (!debug) {
       const author = this.authorJobs(ANNOTATIONS_ITEM).filter(succeeded).at(-1);

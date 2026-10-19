@@ -596,13 +596,14 @@ describe("a burndown with closed groups, running agents and a dropped patch", ()
     assert.ok(h2.indexOf('data-item="i-browser-policy-trackingprotection"') < h2.indexOf('data-item="i-browser-policy-sitepolicies-serviceworke-2"'), "not started after running");
     assert.match(h2, /<summary>4 closed<\/summary>/);
   });
-  it("offers to redo a closed skip-ifs group with today's skip-ifs, and only that group", () => {
+  it("offers to redo the skip-ifs group with today's skip-ifs, and only that group", () => {
     assert.ok(rowOf(h, "item-i-annotations").includes(cmd({ cmd: "redo-annotations", request: ID })));
     assert.match(rowOf(h, "item-i-annotations"), />Redo with today&#39;s skip-ifs<\/button>/);
     assert.doesNotMatch(rowOf(h, "item-i-browser-policy-firefoxhome"), /redo-annotations/);
     const r = structuredClone(get(ID));
     r.items["i-annotations"].state = "investigating";
-    assert.doesNotMatch(renderRequest(r, ctx, true).value, /Redo with today/, "not while it's being worked on");
+    r.jobs["j-redo-run"] = { ...Object.values(r.jobs)[0], job: "j-redo-run", item: "i-annotations", endedAt: undefined };
+    assert.doesNotMatch(renderRequest(r, ctx, true).value, /Redo with today/, "not while one of its jobs runs");
   });
   it("doesn't offer to file the bug a report drafted without a patch to attach", () => {
     assert.doesNotMatch(h, /Workers start slowly|enter_bug|tofile/);

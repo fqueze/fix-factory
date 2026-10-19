@@ -308,7 +308,7 @@ function groupRow(r: RequestState, i: ItemView, ctx: RenderContext): Html {
       .map((p) => html`<div>Draft patch, its critical review hasn't passed yet: “${patchTitle(p)}” ${viewLink(r, p)}</div>`)}${patches
       .filter((p) => isDropped(r, p))
       .map((p) => html`<div>Dropped patch: “${patchTitle(p)}” ${viewLink(r, p)}</div>`)}${
-      i.id === ANNOTATIONS_ITEM && stateClass(i.state) === "closed" ? redoAnnotationsButton(r.id, requestUrl(r.id)) : null
+      i.id === ANNOTATIONS_ITEM && !Object.values(r.jobs).some((j) => j.item === i.id && j.endedAt === undefined) ? redoAnnotationsButton(r.id, requestUrl(r.id)) : null
     }${
       reopen ? html`<details class="reopen"><summary class="btn small">Reopen…</summary>${continueBox(r.id, i.id, requestUrl(r.id))}</details>` : null
     }${itemJobs(r, i, ctx)}`,
