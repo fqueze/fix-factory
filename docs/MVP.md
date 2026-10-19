@@ -130,6 +130,10 @@ can read them.
   permission prompts disabled). The factory appends `-p --output-format stream-json --session-id … --model …`.
   Transcripts end up in `~/.claude`. To check before building: `mozsb` passes those arguments through and lets
   us read stdout.
+- **Agents can't push:** only the factory's scripts push to try, after your approval, outside the sandbox. To do:
+  the agents' `mozsb` sandbox must not let them read the push credentials: the Lando token
+  (`~/.mozbuild/lando_auth0_user_token.json`) and the SSH key `hg.mozilla.org` accepts (see `~/.ssh/config`). The
+  `no-push.ts` hook only catches the commands it recognizes.
 
 ## Recovery ("Tell the factory…")
 
