@@ -476,6 +476,16 @@ describe("3. work list", () => {
     assert.deepEqual(Object.keys(sc.state().items), ["i-test-a", "i-test-b"]);
   });
 
+  it("runs early as soon as the push reports a failure, without waiting 2 h", () => {
+    const sc = new Scenario("try-push", { rev: "abc" });
+    sc.step();
+    sc.settle();
+    sc.now += HOUR / 2;
+    assert.deepEqual(sc.step(), []);
+    sc.add({ type: "try-progress", request: ID, push: "initial", done: 3, total: 50, failures: 1 });
+    assert.deepEqual(sc.step().sort(), ["collect:initial:early", "try-table:initial:early"]);
+  });
+
   it("triages the jobs fx-tests couldn't parse: new failures become items, the rest is noted", () => {
     const sc = tryPushFinished();
     sc.step();
@@ -1092,6 +1102,51 @@ describe("6. verify on try", () => {
     sc.complete(`try-table:${push}:final`, { output: table() });
     sc.settle();
     assert.equal(sc.state().step, "meta bug");
+  });
+});
+
+// A verify push whose early run told i-test-a about a/test_a.js on linux; the push then finishes with these rows.
+function earlyThenFinal(finalRows: unknown[]): { sc: Scenario; push: string } {
+  const sc = stacked();
+  const planKey = sc.view().jobs.find((j) => j.purpose.what === "plan-pushes")!.purpose.key;
+  sc.complete(planKey, { report: { pushes: [{ purpose: "verify", tryArgs: ["fuzzy", "-q", "x"], rebuild: 5 }], feedback: [] } });
+  const [dry] = sc.settle();
+  const push = sc.purpose(dry).push!;
+  sc.complete(dry, { output: { command: ["./mach", "try", "fuzzy"], taskCount: 5, tasks: [], tryTaskConfig: {}, commits: [], warnings: [] } });
+  sc.add({ type: "user-done", request: ID, key: `approve-push:${push}` });
+  sc.add({ type: "try-pushed", request: ID, push, rev: "fed", url: "u" });
+  sc.add({ type: "try-progress", request: ID, push, done: 1, total: 5, failures: 1 });
+  assert.ok(sc.settle().includes(`try-table:${push}:early`));
+  sc.complete(`try-table:${push}:early`, { output: table([{ test: "a/test_a.js", config: "linux", result: "fail", failures: ["boom"], taskIds: ["T1"] }]) });
+  assert.deepEqual(sc.settle(), [`author:i-test-a:try:${push}`]);
+  sc.add({ type: "try-finished", request: ID, push, result: "failures", summary: "s" });
+  sc.settle();
+  sc.complete(`try-table:${push}:final`, { output: table(finalRows) });
+  // A resume waits for the author's previous run to end.
+  assert.ok(!sc.settle().includes(`author:i-test-a:try:${push}:final`));
+  sc.complete(`author:i-test-a:try:${push}`, { report: fixed([sha("1")]) });
+  sc.settle();
+  const author = sc.view().byKey.get(`author:i-test-a:try:${push}`)![0].job;
+  sc.complete(`import:${author}`, { output: imported(sha("1"), "Bug XXXXXXX - Fix a/test_a.js, r=smaug.", ["a/test_a.js"]) });
+  return { sc, push };
+}
+
+describe("6. verify on try, early then final", () => {
+  const old = { test: "a/test_a.js", config: "linux", result: "fail", failures: ["boom"], taskIds: ["T1"] };
+  it("the final run resumes the author with only the rows the early one didn't have", () => {
+    const { sc, push } = earlyThenFinal([old, { test: "a/test_a.js", config: "mac", result: "fail", failures: ["bang"], taskIds: ["T2"] }]);
+    const started = sc.settle();
+    assert.ok(started.includes(`author:i-test-a:try:${push}:final`));
+    assert.ok(!started.some((k) => k.startsWith("author:i-test-b")));
+    const message = sc.plan(`author:i-test-a:try:${push}:final`).agent?.message ?? "";
+    assert.match(message, /a\/test_a.js on mac: bang/);
+    assert.doesNotMatch(message, /on linux/);
+  });
+
+  it("the final run doesn't resume the author when nothing is new", () => {
+    const { sc, push } = earlyThenFinal([old]);
+    assert.ok(!sc.settle().includes(`author:i-test-a:try:${push}:final`));
+    assert.ok(!sc.view().byKey.has(`author:i-test-a:try:${push}:final`));
   });
 });
 
