@@ -120,7 +120,7 @@ export function rowsOf(jobs: TryJob[]): Row[] {
 
 // What a planned try push would run, from its dry run, laid out like Treeherder's job view: loaded into its row
 // when you open it. Each task appears once per run; builds are B, or Ba when they become artifact builds.
-export function pushTasks(d: DryRunResult): Html {
+export function pushTasks(d: DryRunResult, commits: { sha: string; subject: string }[] = d.commits.map((sha) => ({ sha, subject: "" }))): Html {
   const config = d.tryTaskConfig;
   const artifact = config["use-artifact-builds"] === true;
   const rebuild = (config.rebuild as number | Record<string, number> | undefined) ?? 1;
@@ -134,7 +134,7 @@ export function pushTasks(d: DryRunResult): Html {
     return join(Array.from({ length: runsOf(j) }, () => s), " ");
   };
   const tier = (g: Group) => (g.tier > 1 ? html`<span class="tier">[tier ${g.tier}]</span>` : null);
-  return html`<table class="jobs">${rowsOf(jobs).map(
+  return html`<ul class="pcommits" title="The commits it would push, newest first">${commits.map((c) => html`<li><span class="mono">${c.sha.slice(0, 12)}</span> ${c.subject}</li>`)}</ul><table class="jobs">${rowsOf(jobs).map(
     (row) =>
       html`<tr><th>${row.name} <span class="btype">${row.collection}</span></th><td>${join(
         row.groups.map((g) =>

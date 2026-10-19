@@ -252,6 +252,8 @@ export async function dryRun(cwd: string, args: string[], opts: { pending?: Pend
   const jobs = dryRunJobs(cwd, args, parsed.tryTaskConfig);
   if (jobs) {
     result.jobs = jobs;
+    // The chunks are known: the count isn't a lower bound anymore.
+    result.warnings = result.warnings.filter((w) => !w.includes("labels are chunk patterns"));
   }
   const duplicateOf = opts.pending ? findDuplicate(result, opts.pending) : undefined;
   if (duplicateOf !== undefined) {

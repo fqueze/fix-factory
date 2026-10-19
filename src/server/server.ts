@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { createRequire } from "node:module";
@@ -79,6 +80,7 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
   const page = (text: string) => text.replace("<body>", `<body data-boot="${bootId}">`);
   // The jobs of dry runs that didn't record them, by dry run job: reading a task set takes a while.
   const pushJobs = new Map<string, TryJob[] | undefined>();
+  const pushCommits = new Map<string, { sha: string; subject: string }[]>();
   const sseClients = new Set<ServerResponse>();
   const broadcast = (data: string) => {
     for (const res of sseClients) {
@@ -375,7 +377,12 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
         }
         d.jobs = pushJobs.get(dry.job);
       }
-      return send(res, 200, "text/html; charset=utf-8", pushTasks(d).value);
+      // What it would push, newest first: read from the worktree, which still has the commits.
+      if (!pushCommits.has(dry.job)) {
+        const log = d.commits.length ? spawnSync("git", ["log", "--no-walk=unsorted", "--format=%H%x09%s", ...d.commits], { cwd: dry.cwd, encoding: "utf8" }) : undefined;
+        pushCommits.set(dry.job, log?.status === 0 ? log.stdout.split("\n").filter(Boolean).map((l) => ({ sha: l.slice(0, 40), subject: l.slice(41) })) : d.commits.map((sha) => ({ sha, subject: "" })));
+      }
+      return send(res, 200, "text/html; charset=utf-8", pushTasks(d, pushCommits.get(dry.job)!).value);
     }
     if ((m = path.match(/^\/requests\/([^/]+)\/items\/([^/]+)\/files\/([a-z]+)$/))) {
       const request = opts.state.getRequest(decodeURIComponent(m[1]));

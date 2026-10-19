@@ -292,14 +292,19 @@ function rowClass(r: RequestState, i: ItemView, ctx: RenderContext): StateClass 
 function groupRow(r: RequestState, i: ItemView, ctx: RenderContext): Html {
   const sentence = itemSentence(r, i, ctx);
   const patches = Object.values(r.patches).filter((p) => p.item === i.id);
-  const reopen = stateClass(i.state) === "closed" && hasAuthorSession(r, i.id) && !r.needsUser.some((n) => n.item === i.id);
+  // Its author can't be resumed once its worktree was removed to free the disk.
+  const removed = Object.values(r.jobs).some((j) => j.item === i.id && j.name === "worktree.ts remove" && j.exitCode === 0);
+  const reopen = stateClass(i.state) === "closed" && hasAuthorSession(r, i.id) && !removed && !r.needsUser.some((n) => n.item === i.id);
   return row({
     anchor: html`id="item-${i.id}" data-item="${i.id}"`,
     fold: `item-${i.id}`,
     cls: rowClass(r, i, ctx),
     name: html`${groupLabel(r, i)}`,
     title: [...i.group.tests, i.group.configs.join(", ")].join("\n"),
-    end: costLabel(itemCost(r, i)),
+    // Redo is on the top line: the group's patches are in its folded body, and it's what you'd want of it.
+    end: i.id === ANNOTATIONS_ITEM && !Object.values(r.jobs).some((j) => j.item === i.id && j.endedAt === undefined)
+      ? html`${redoAnnotationsButton(r.id, requestUrl(r.id))} ${costLabel(itemCost(r, i))}`
+      : costLabel(itemCost(r, i)),
     state: stateText(r, i, ctx),
     trust: trustLine(r, i, ctx),
     ask: askBlock(r, i, ctx, patches.filter((p) => isDraft(r, p))),
@@ -308,8 +313,6 @@ function groupRow(r: RequestState, i: ItemView, ctx: RenderContext): Html {
       .map((p) => html`<div>Draft patch, its critical review hasn't passed yet: “${patchTitle(p)}” ${viewLink(r, p)}</div>`)}${patches
       .filter((p) => isDropped(r, p))
       .map((p) => html`<div>Dropped patch: “${patchTitle(p)}” ${viewLink(r, p)}</div>`)}${
-      i.id === ANNOTATIONS_ITEM && !Object.values(r.jobs).some((j) => j.item === i.id && j.endedAt === undefined) ? redoAnnotationsButton(r.id, requestUrl(r.id)) : null
-    }${
       reopen ? html`<details class="reopen"><summary class="btn small">Reopen…</summary>${continueBox(r.id, i.id, requestUrl(r.id))}</details>` : null
     }${itemJobs(r, i, ctx)}`,
   });

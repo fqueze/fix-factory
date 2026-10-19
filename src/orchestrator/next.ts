@@ -231,6 +231,7 @@ class Planner {
       this.cleanup();
       return;
     }
+    this.pruneWorktrees();
     this.computeStacks();
     this.staleFileBugs();
     this.request();
@@ -1810,6 +1811,20 @@ class Planner {
       }
       const n = o.landable.filter((pid) => !landed(this.s.patches[pid])).length;
       this.raise(`land:${st.id}:${h}`, { action: `Reorg ready: ${n} landable ${n === 1 ? "patch" : "patches"} at the bottom`, detail: `${o.flippedSoftDeps.length} soft dependencies adapted`, stack: st.id });
+    }
+  }
+
+  // Each worktree is ~6 GB: those of groups closed without a fix, and the signal worktrees a redo replaced, go
+  // right away, once nothing runs in them.
+  private pruneWorktrees(): void {
+    for (const j of this.view.jobs.filter((j) => j.purpose.what === "worktree" && succeeded(j))) {
+      const { name, path } = this.out<{ name: string; path: string }>(j);
+      const item = j.purpose.item === undefined ? undefined : this.s.items[j.purpose.item];
+      const closed = item !== undefined && (item.state === "left as-is" || item.state === "handed back");
+      const replaced = j.purpose.key.startsWith("wt:signal") && j.purpose.key !== `wt:signal${this.annotationsEpoch()}`;
+      if (!closed && !replaced) continue;
+      if (this.view.jobs.some((r) => r.end === undefined && (r.cwd === path || r.cwd?.startsWith(`${path}/`)))) continue;
+      this.want(`remove:${name}`, () => this.cli("remove", "worktree.ts", ["remove", name], { cwd: this.config.firefoxRepo, ...(item ? { item: item.id, purpose: { item: item.id } } : {}) }));
     }
   }
 

@@ -801,7 +801,9 @@ describe("4. investigate and fix", () => {
     investigating(sc, "i-test-b");
     sc.complete("author:i-test-a:initial", { report: { ...fixed([]), state: "left as-is", summary: "fixed on central" } });
     sc.complete("author:i-test-b:initial", { report: { ...fixed([]), state: "blocked", summary: "needs a mac" } });
-    assert.deepEqual(sc.settle(), []);
+    // The closed group's worktree goes right away; the blocked one's stays for you.
+    assert.deepEqual(sc.settle(), ["remove:r-20261015-test-i-test-a"]);
+    assert.deepEqual(sc.plan("remove:r-20261015-test-i-test-a").cli?.args, ["remove", "r-20261015-test-i-test-a"]);
     assert.equal(sc.state().items["i-test-a"].state, "left as-is");
     assert.equal(sc.state().items["i-test-b"].state, "blocked");
     assert.equal(sc.state().needsUser.find((n) => n.item === "i-test-b")?.detail, "needs a mac");

@@ -277,3 +277,5 @@ h3.stackhead { display: flex; justify-content: space-between; align-items: cente
 h3.stackhead .btn { font-weight: normal; }
 .stack-submit { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; align-items: center; padding: 8px 0 4px; }
 .stack-submit .checks { margin: 0; }
+.pcommits { margin: 0.3em 0 0.5em; padding-left: 1.2em; }
+.pcommits .mono { color: #666; }
