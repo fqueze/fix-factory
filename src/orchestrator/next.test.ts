@@ -255,7 +255,7 @@ describe("try pushes, failing", () => {
     const job = sc.complete("push:A", { exitCode: 1, error: "not pushed: commits changed since the approved dry run: expected a, found b" });
     assert.deepEqual(sc.settle(), []);
     assert.deepEqual(sc.open(), [`failed:${job}`]);
-    assert.match(sc.state().needsUser[0].action, /^Push A not made: the stack changed since its dry run/);
+    assert.match(sc.state().needsUser[0].action, /^Push A not made: the stack's code changed since its dry run/);
   });
 });
 

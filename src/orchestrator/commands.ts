@@ -2,7 +2,7 @@
 // caps: you asked for them. Recovery commands come from an approved plan and run exactly as written.
 import { isDeepStrictEqual } from "node:util";
 import type { EventInput } from "../state/events.ts";
-import { canDismiss, isPushJob, reviewLimitFlag } from "../state/flags.ts";
+import { canDismiss, canRetry, isPushJob, reviewLimitFlag } from "../state/flags.ts";
 import type { Command, FactoryConfig, ItemId, JobId, PlannedCommand, RequestId, RequestState } from "../types.ts";
 import { ANNOTATIONS_ITEM, authorJobsOf, CANCELLED, itemEpochOf, resumeAuthorPlan } from "./next.ts";
 import { requestDir, sessionIdFor, slug, type JobPlan } from "./plan.ts";
@@ -204,8 +204,9 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
         done(false, "that job is unknown");
         break;
       }
-      // Like next(), never again on its own: the push may have happened. A recovery plan can still ask for it.
-      if (c.cmd === "retry" && job.purpose.what === "push") {
+      // Like next(), never again on its own: the push may have happened, unless it refused to. A recovery plan can
+      // still ask for it.
+      if (c.cmd === "retry" && !canRetry({ name: job.name, purpose: job.purpose, error: job.end?.error })) {
         done(false, "a try push isn't retried from its ⚑ (it may have been made): ask the factory to plan it again");
         break;
       }

@@ -15,8 +15,8 @@ import type { ReviewerSuggestion } from "../cli/phab.ts";
 import type { ImportedCommit } from "../cli/stack/import.ts";
 import type { OrderOutput } from "../cli/stack/order.ts";
 import type { DryRunResult } from "../cli/try.ts";
-import { COMMITS_CHANGED } from "../cli/try.ts";
 import { REQUEST_STEPS } from "../server/commands.ts";
+import { COMMITS_CHANGED } from "../state/flags.ts";
 import type { EventInput } from "../state/events.ts";
 import type {
   AddressReviewReport,
@@ -322,7 +322,7 @@ class Planner {
   private blocked(last: JobRecord): void {
     const detail = (last.end?.error ?? `exit code ${last.end?.exitCode}`).slice(0, 500);
     if (last.purpose.what === "push" && detail.startsWith(COMMITS_CHANGED)) {
-      this.raise(`failed:${last.job}`, { action: `Push ${last.purpose.push} not made: the stack changed since its dry run. Ask the factory to plan it again (redo-step)`, detail, job: last.job });
+      this.raise(`failed:${last.job}`, { action: `Push ${last.purpose.push} not made: the stack's code changed since its dry run. Ask the factory to plan it again (redo-step)`, detail, job: last.job });
       return;
     }
     if (last.purpose.what === "route") {

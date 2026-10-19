@@ -15,6 +15,14 @@ export function isPushJob(job: Pick<JobView, "name" | "purpose">): boolean {
   return job.purpose?.what === "push" || job.name === "try.ts push";
 }
 
+// The start of try.ts push's error when the stack's code changed since the dry run: nothing was pushed.
+export const COMMITS_CHANGED = "not pushed: commits changed";
+
+// You can retry any job but a push that may have been made.
+export function canRetry(job: Pick<JobView, "name" | "purpose" | "error">): boolean {
+  return !isPushJob(job) || job.error?.startsWith(COMMITS_CHANGED) === true;
+}
+
 // The ⚑ next() raises when the critical review still has must-fix findings after its round limit: a failed:<job>
 // for a review that ran fine (a crashed review is a failed:<job> too, which Retry answers).
 export function reviewLimitFlag(r: RequestState, item: ItemId): NeedsUser | undefined {

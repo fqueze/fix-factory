@@ -531,3 +531,35 @@ test("push refuses a stack that differs from the approved dry run's commits", as
   await assert.rejects(push("/wt", ["fuzzy", "-q", "x"], opts("bbb\naaa\n")), /mach try exited with 1/);
   assert.equal(ran, true);
 });
+
+test("push accepts a stack whose commits were only reworded since the dry run (bug numbers)", async () => {
+  const trees: Record<string, string> = { bbb: "t2", aaa: "t1", "bbb'": "t2", "aaa'": "t1", ccc: "t3" };
+  const opts = (stack: string[]) => ({
+    dryRun: false,
+    expectCommits: ["bbb", "aaa"],
+    exec: async (cmd: string[]) => ({ code: 0, stdout: (cmd[1] === "rev-parse" ? cmd.slice(2).map((c) => trees[c.replace("^{tree}", "")]) : stack).join("\n") + "\n", stderr: "" }),
+    run: async () => ({ code: 1, stdout: "", stderr: "stop here" }),
+  });
+  await assert.rejects(push("/wt", ["fuzzy", "-q", "x"], opts(["bbb'", "aaa'"])), /mach try exited with 1/);
+  await assert.rejects(push("/wt", ["fuzzy", "-q", "x"], opts(["ccc", "aaa'"])), /not pushed: commits changed/);
+});
+
+test("push checks out the approved commits for the push, then puts the worktree back", async () => {
+  const calls: string[] = [];
+  let head = "other-branch";
+  const exec = async (cmd: string[]) => {
+    calls.push(cmd.slice(1).join(" "));
+    if (cmd[1] === "symbolic-ref") return { code: 0, stdout: `${head}\n`, stderr: "" };
+    if (cmd[1] === "checkout") head = cmd.at(-1)!;
+    if (cmd[1] === "rev-list") return { code: 0, stdout: head === "bbb" ? "bbb\naaa\n" : "ccc\n", stderr: "" };
+    return { code: 0, stdout: "", stderr: "" };
+  };
+  let pushedFrom = "";
+  await assert.rejects(
+    push("/wt", ["fuzzy", "-q", "x"], { dryRun: false, expectCommits: ["bbb", "aaa"], exec, run: async () => ((pushedFrom = head), { code: 1, stdout: "", stderr: "stop here" }) }),
+    /mach try exited with 1/,
+  );
+  assert.equal(pushedFrom, "bbb");
+  assert.equal(head, "other-branch");
+  assert.deepEqual(calls.filter((c) => c.startsWith("checkout")), ["checkout --quiet --detach bbb", "checkout --quiet other-branch"]);
+});
