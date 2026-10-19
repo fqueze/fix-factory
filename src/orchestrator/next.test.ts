@@ -1155,6 +1155,63 @@ describe("6. verify on try, again", () => {
     assert.equal(sc.state().step, "meta bug");
   });
 
+  it("plans again, alone, a push you declined asking for another, from what you wrote; and its replacement too", () => {
+    const sc = stacked();
+    const planKey = sc.view().jobs.find((j) => j.purpose.what === "plan-pushes")!.purpose.key;
+    const two = [1, 2].map((n) => ({ purpose: `p${n}`, tryArgs: ["fuzzy", "-q", `x${n}`], rebuild: 5 }));
+    sc.complete(planKey, { report: { pushes: two, feedback: [] } });
+    const dryOut = { command: ["./mach", "try", "fuzzy"], taskCount: 5, tasks: [], tryTaskConfig: {}, commits: [], warnings: [] };
+    const dries = sc.settle();
+    for (const d of dries) sc.complete(d, { output: dryOut });
+    sc.settle();
+    const [keep, drop] = dries.map((d) => sc.purpose(d).push!);
+    sc.add({ type: "try-declined", request: ID, push: drop, text: "on mac instead", replan: true });
+    assert.deepEqual(sc.settle(), [`${planKey}:r1`]);
+    const goal = String(sc.plan(`${planKey}:r1`).agent?.vars?.goal);
+    assert.ok(goal.startsWith(String(sc.plan(planKey).agent?.vars?.goal)), goal);
+    assert.ok(goal.includes(`The user declined push ${drop} (\`./mach try fuzzy\`), saying “on mac instead”. Plan only what replaces it`), goal);
+    assert.deepEqual(sc.open(), [`approve-push:${keep}`], "the plan's other push still waits for you");
+
+    sc.complete(`${planKey}:r1`, { report: { pushes: [{ purpose: "mac", tryArgs: ["fuzzy", "-q", "mac"], rebuild: 5 }], feedback: [] } });
+    const [dry1] = sc.settle();
+    const r1 = sc.purpose(dry1).push!;
+    assert.equal(r1, `${keep}-r1`);
+    sc.complete(dry1, { output: dryOut });
+    sc.settle();
+    assert.deepEqual(sc.open().sort(), [`approve-push:${keep}`, `approve-push:${r1}`].sort());
+
+    // Its replacement declined the same way: a second round, the earlier ones standing.
+    sc.add({ type: "try-declined", request: ID, push: r1, text: "fewer jobs", replan: true });
+    assert.deepEqual(sc.settle(), [`${planKey}:r2`]);
+    assert.match(String(sc.plan(`${planKey}:r2`).agent?.vars?.goal), new RegExp(`push ${r1} .*“fewer jobs”`));
+    const two2 = [1, 2].map((n) => ({ purpose: `q${n}`, tryArgs: ["fuzzy", "-q", `y${n}`], rebuild: 5 }));
+    sc.complete(`${planKey}:r2`, { report: { pushes: two2, feedback: [] } });
+    const dries2 = sc.settle();
+    assert.deepEqual(dries2.map((d) => sc.purpose(d).push), [`${keep}-r2-1`, `${keep}-r2-2`]);
+  });
+
+  it("verifies nothing while an un-skip push that you didn't decline has no result", () => {
+    const sc = stacked();
+    sc.add({ type: "try-planned", request: ID, push: "unskip", purpose: "reproduce", command: ["./mach", "try"] });
+    sc.add({ type: "try-pushed", request: ID, push: "unskip", rev: "def", url: "u" });
+    sc.settle();
+    const planKey = sc.view().jobs.find((j) => j.purpose.what === "plan-pushes")!.purpose.key;
+    sc.complete(planKey, { report: { pushes: [{ purpose: "verify", tryArgs: ["fuzzy", "-q", "x"], rebuild: 5 }], feedback: [] } });
+    assert.ok(!sc.settle().some((k) => k.startsWith("dry-run:")), "waits for the un-skip push's results");
+    sc.add({ type: "try-finished", request: ID, push: "unskip", result: "green", summary: "green" });
+    assert.ok(sc.settle().some((k) => k.startsWith("dry-run:")));
+  });
+
+  it("an un-skip push you declined doesn't hold verification back", () => {
+    const sc = stacked();
+    sc.add({ type: "try-planned", request: ID, push: "unskip", purpose: "reproduce", command: ["./mach", "try"] });
+    sc.add({ type: "try-declined", request: ID, push: "unskip", text: "no" });
+    sc.settle();
+    const planKey = sc.view().jobs.find((j) => j.purpose.what === "plan-pushes")!.purpose.key;
+    sc.complete(planKey, { report: { pushes: [{ purpose: "verify", tryArgs: ["fuzzy", "-q", "x"], rebuild: 5 }], feedback: [] } });
+    assert.ok(sc.settle().some((k) => k.startsWith("dry-run:")));
+  });
+
   it("with nothing left to push, counts the stack's pushes already made, and asks you when there are none", () => {
     const sc = stacked();
     const planKey = sc.view().jobs.find((j) => j.purpose.what === "plan-pushes")!.purpose.key;

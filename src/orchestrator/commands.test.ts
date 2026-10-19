@@ -53,6 +53,35 @@ describe("commands", () => {
     assert.deepEqual(executed(sc).map((e) => e.ok), [true, false]);
   });
 
+  it("change-push asks for another in place of a push waiting for you, or one you declined, once", () => {
+    const sc = withPatch();
+    sc.add({ type: "needs-user", request: ID, key: "approve-push:A", action: "Approve", detail: "", push: "A" });
+    sc.add({ type: "try-planned", request: ID, push: "A", purpose: "p", command: ["./mach", "try"] });
+    run(sc, cmd({ cmd: "change-push", push: "A", text: "on mac" }));
+    assert.deepEqual([sc.state().pushes.A.declined, sc.state().pushes.A.replan], ["on mac", true]);
+    assert.deepEqual(sc.open(), []);
+    run(sc, cmd({ cmd: "change-push", push: "A", text: "again" }));
+
+    // Declined first, then asked for another.
+    sc.add({ type: "try-planned", request: ID, push: "B", purpose: "p", command: ["./mach", "try"] });
+    sc.add({ type: "try-declined", request: ID, push: "B", text: "too slow" });
+    run(sc, cmd({ cmd: "change-push", push: "B", text: "fewer jobs" }));
+    assert.equal(sc.state().pushes.B.replan, true);
+
+    // Not one the factory withdrew, one made, or one never waiting for you.
+    sc.add({ type: "try-planned", request: ID, push: "C", purpose: "p", command: ["./mach", "try"] });
+    sc.add({ type: "try-declined", request: ID, push: "C", text: "not needed anymore", by: "factory" });
+    run(sc, cmd({ cmd: "change-push", push: "C", text: "x" }));
+    sc.add({ type: "try-planned", request: ID, push: "D", purpose: "p", command: ["./mach", "try"] });
+    sc.add({ type: "try-pushed", request: ID, push: "D", rev: "fed", url: "u" });
+    run(sc, cmd({ cmd: "change-push", push: "D", text: "x" }));
+    sc.add({ type: "try-planned", request: ID, push: "E", purpose: "p", command: ["./mach", "try"] });
+    run(sc, cmd({ cmd: "change-push", push: "E", text: "x" }));
+    run(sc, cmd({ cmd: "change-push", push: "nope", text: "x" }));
+    assert.deepEqual(executed(sc).map((e) => e.ok), [true, false, true, false, false, false, false]);
+    assert.equal(sc.state().pushes.C.replan, undefined);
+  });
+
   it("approve-push, take-it and hand-back answer their needs-user", () => {
     const sc = withPatch();
     run(sc, cmd({ cmd: "approve-push", push: "A" }));

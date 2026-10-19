@@ -147,6 +147,15 @@ describe("forms", () => {
     ]);
   });
 
+  it("turns the decline box's Ask for another button into change-push", () => {
+    const template = JSON.stringify({ cmd: "decline-push", request: R, push: "A" });
+    assert.deepEqual(commandsFromForm(new URLSearchParams({ command: template, text: "on mac" })), [{ cmd: "decline-push", request: R, push: "A", text: "on mac" }]);
+    assert.deepEqual(commandsFromForm(new URLSearchParams({ command: template, text: "on mac", as: "change-push" })), [{ cmd: "change-push", request: R, push: "A", text: "on mac" }]);
+    const other = JSON.stringify({ cmd: "approve-push", request: R, push: "A" });
+    assert.deepEqual(commandsFromForm(new URLSearchParams({ command: other, as: "change-push" })), [{ cmd: "approve-push", request: R, push: "A" }]);
+    assert.ok(validateCommand({ cmd: "change-push", request: R, push: "A", text: "on mac" }, get).ok);
+  });
+
   it("fills the typed text in, and keeps every checked command", () => {
     const form = new URLSearchParams();
     form.append("command", JSON.stringify({ cmd: "retry-job", job: "a", reason: "x" }));

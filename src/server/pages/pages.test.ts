@@ -125,6 +125,25 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.equal(itemBucket(r, i, ctx), "working");
   });
 
+  it("2. first signal: Ask for another, in the decline box and on a push you declined", () => {
+    const R = "r-20261014-extensions-xpcshell";
+    assert.match(rowOf(expanded(R), "push-unskip"), /<form class="cmd decline"[^]*<button class="btn small" name="as" value="change-push"[^>]*>Ask for another<\/button><\/form>/);
+    const r = structuredClone(source.getRequest(R)!);
+    r.needsUser = r.needsUser.filter((n) => n.key !== "approve-push:unskip");
+    r.pushes.unskip.declined = "on mac";
+    let row = rowOf(renderRequest(r, ctx, true).value, "push-unskip");
+    assert.match(row, /<span class="state">you declined it: on mac<\/span>/);
+    assert.ok(row.includes(cmd({ cmd: "change-push", request: R, push: "unskip", text: "on mac" })));
+    assert.match(row, />Ask for another<\/button>/);
+    r.pushes.unskip.replan = true;
+    row = rowOf(renderRequest(r, ctx, true).value, "push-unskip");
+    assert.match(row, /<span class="state">you declined it, asking for another: on mac<\/span>/);
+    assert.doesNotMatch(row, /change-push|Ask for another/);
+    r.pushes.unskip.replan = undefined;
+    r.pushes.unskip.withdrawn = true;
+    assert.doesNotMatch(rowOf(renderRequest(r, ctx, true).value, "push-unskip"), /change-push|Ask for another/);
+  });
+
   it("2. first signal: an approved push says it's pushing on its row, not above the pushes", () => {
     const r = structuredClone(source.getRequest("r-20261014-extensions-xpcshell")!);
     r.needsUser = r.needsUser.filter((n) => n.key !== "approve-push:unskip");
