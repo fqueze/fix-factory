@@ -43,10 +43,12 @@ export type AgentCommandOptions = {
 // agents run them in the background, and a headless session ends before they finish. no-push.ts
 // refuses any push: an instruction alone isn't enough.
 // It reads the one-push allowances you give (allow-push/<session> in the state directory).
+// The hook command is a shell line; paths may have spaces.
+const shellQuote = (s: string) => `'${s.replaceAll("'", "'\\''")}'`;
 const agentSettings = (stateDir: string) =>
   JSON.stringify({
     env: { BASH_DEFAULT_TIMEOUT_MS: "7200000", BASH_MAX_TIMEOUT_MS: "7200000" },
-    hooks: { PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: `${process.execPath} ${join(import.meta.dirname, "no-push.ts")} ${stateDir}` }] }] },
+    hooks: { PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: [process.execPath, join(import.meta.dirname, "no-push.ts"), stateDir].map(shellQuote).join(" ") }] }] },
   });
 
 export function buildAgentCommand(config: Pick<FactoryConfig, "claudeCommand" | "stateDir">, opts: AgentCommandOptions): string[] {

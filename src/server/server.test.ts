@@ -454,3 +454,27 @@ describe("GET /requests/:id/patches/:patch/view", () => {
     assert.equal((await fetch(`${base}/requests/nope/patches/p-prefs/view`)).status, 404);
   });
 });
+
+describe("agent files: symlinks and script", () => {
+  it("refuses a symlink out of the worktree and serves the page sandboxed, without script", async () => {
+    const ID = "r-20261015-enterprisepolicies";
+    const r = structuredClone(state.getRequest(ID)!);
+    const wt = mkdtempSync(join(tmpdir(), "ff-wt-"));
+    const outside = mkdtempSync(join(tmpdir(), "ff-outside-"));
+    writeFileSync(join(outside, "secret.md"), "secret\n");
+    mkdirSync(join(wt, "artifacts"));
+    writeFileSync(join(wt, "artifacts", "evidence.md"), "<script>fetch('/api/commands', { method: 'POST' })</script>\n");
+    symlinkSync(join(outside, "secret.md"), join(wt, "artifacts", "reproduction.md"));
+    const i = r.items["i-browser-policy-trackingprotection"];
+    r.jobs["j-inv-tp"].cwd = wt;
+    i.investigation = { state: "fix verified locally", summary: "s", cause: "c", verification: "v", commits: [], landsAfter: [], feedback: [], files: { evidence: "artifacts/evidence.md", reproduction: "artifacts/reproduction.md" } };
+    state.set(r);
+    const url = (which: string) => `${base}/requests/${ID}/items/${i.id}/files/${which}`;
+    const evidence = await fetch(url("evidence"));
+    assert.equal(evidence.status, 200);
+    assert.match(evidence.headers.get("content-security-policy")!, /^sandbox; default-src 'none'; /);
+    assert.equal((await fetch(url("reproduction"))).status, 404, "symlink out of the worktree");
+    rmSync(wt, { recursive: true, force: true });
+    rmSync(outside, { recursive: true, force: true });
+  });
+});

@@ -14,7 +14,7 @@ import { renderMain, renderOverview, renderStrip } from "./pages/overview.ts";
 import { renderRequest } from "./pages/request.ts";
 import { buildRequestProfile } from "./request-profile.ts";
 import { buildPatchView, buildStackReview, isRevName } from "./stack-review.ts";
-import { AGENT_FILES, agentFilePath, renderAgentFile, type AgentFile } from "./agent-files.ts";
+import { AGENT_FILE_CSP, AGENT_FILES, agentFilePath, renderAgentFile, type AgentFile } from "./agent-files.ts";
 import { pushTasks } from "./pages/tasks.ts";
 import type { DryRunResult } from "../cli/try.ts";
 import { dryRunJobs, type TryJob } from "../cli/task-set.ts";
@@ -389,6 +389,7 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
       } catch (e) {
         throw new HttpError(502, errorMessage(e));
       }
+      res.setHeader("Content-Security-Policy", AGENT_FILE_CSP);
       return send(res, 200, "text/html; charset=utf-8", page);
     }
     const file = STATIC[path];

@@ -52,7 +52,9 @@ test("buildAgentCommand with a new session", () => {
   // Every agent's Bash commands go through no-push.ts first.
   const [hook] = settings.hooks.PreToolUse;
   assert.equal(hook.matcher, "Bash");
-  assert.match(hook.hooks[0].command, /^\S+node\S* \S+\/src\/agents\/no-push\.ts \/state$/);
+  assert.match(hook.hooks[0].command, /^'\S+node\S*' '\S+\/src\/agents\/no-push\.ts' '\/state'$/);
+  const spaced = JSON.parse(buildAgentCommand({ claudeCommand: ["claude"], stateDir: "/my state/it's" }, { model: "opus", schema, sessionId: "s1" }).at(-1)!);
+  assert.match(spaced.hooks.PreToolUse[0].hooks[0].command, / '\/my state\/it'\\''s'$/);
 });
 
 test("buildAgentCommand resuming a session", () => {
