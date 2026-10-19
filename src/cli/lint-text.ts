@@ -2,7 +2,8 @@
 //
 //   node src/cli/lint-text.ts --kind commit|bug|reply <file or ->
 //     → {ok, violations: [{rule, line?, text}]}
-//     commit: the full commit message. bug: a BugDraft as JSON. reply: a review reply.
+//     commit: the full commit message, its r= names checked against Phabricator. bug: a BugDraft as JSON.
+//     reply: a review reply.
 //     line is 1-based within the commit message, the bug description or the reply. Exit code 0 even when
 //     ok is false.
 //
@@ -13,6 +14,7 @@
 import { readFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 import type { BugDraft } from "../types.ts";
+import { unknownReviewers } from "./phab.ts";
 
 export interface Violation {
   rule: string;
@@ -193,8 +195,22 @@ export function lint(kind: string, text: string): LintResult {
   }
 }
 
+// The r= names Phabricator doesn't know, which moz-phab would refuse. Phabricator unreachable (no ~/.arcrc, no
+// network) doesn't fail the lint: the factory checks again before submitting.
+export async function unknownReviewerViolations(message: string, unknown: (names: string[]) => Promise<string[]>): Promise<Violation[]> {
+  const names = /, r=([^\s,=]+(?:,\s*[^\s,=]+)*)\.$/.exec(message.split("\n")[0])?.[1].split(/,\s*/) ?? [];
+  if (!names.length) return [];
+  let bad: string[];
+  try {
+    bad = await unknown(names);
+  } catch {
+    return [];
+  }
+  return bad.map((n) => ({ rule: "unknownReviewer", line: 1, text: `Phabricator has no user or group ${n}: follow the find-reviewer skill (\`./mach file-info reviewers <your files>\`)` }));
+}
+
 // No subcommand here, so this doesn't go through runCli; same output and exit code conventions.
-function main() {
+async function main() {
   let kind: string | undefined;
   let file: string | undefined;
   try {
@@ -209,7 +225,12 @@ function main() {
   }
   try {
     const text = readFileSync(file === "-" ? 0 : file!, "utf8");
-    process.stdout.write(JSON.stringify(lint(kind!, text)) + "\n");
+    const result = lint(kind!, text);
+    if (kind === "commit") {
+      result.violations.push(...(await unknownReviewerViolations(text, unknownReviewers)));
+      result.ok = result.violations.length === 0;
+    }
+    process.stdout.write(JSON.stringify(result) + "\n");
   } catch (e) {
     process.stdout.write(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }) + "\n");
     process.exitCode = 1;
@@ -217,5 +238,5 @@ function main() {
 }
 
 if (import.meta.main) {
-  main();
+  await main();
 }

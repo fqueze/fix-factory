@@ -167,7 +167,10 @@ export function submitChecks(r: RequestState, s: StackView): Check[] {
   const wip = patches.filter((p) => /^(WIP|DEBUG)\b/i.test(p.title) || /DO NOT LAND/i.test(p.title)).length;
   const noReviewer = patches.filter((p) => !/\br=\S/.test(p.title)).length;
   const noBug = patches.filter((p) => !hasBug(p)).length;
-  const pushes = Object.values(r.pushes);
+  // The stack's verification pushes that were made: not the initial, un-skip or repro pushes, nor another stack's,
+  // nor those declined.
+  const otherStack = (p: PushView) => Object.values(r.jobs).some((j) => j.purpose?.push === p.id && j.purpose.stack !== undefined && j.purpose.stack !== s.id);
+  const pushes = Object.values(r.pushes).filter((p) => p.rev && !/^(initial|unskip|repro-)/.test(p.id) && !otherStack(p));
   const tryDone = pushes.length > 0 && pushes.every((p) => p.result === "green");
   return [
     { ok: wip === 0, text: wip === 0 ? "no WIP/DEBUG" : `${wip} WIP/DEBUG patches` },
@@ -194,6 +197,7 @@ export function needsYou(r: RequestState): boolean {
 export const COMMAND_LABELS: Record<Command["cmd"], string> = {
   "approve-push": "try push approval",
   "decline-push": "declining a try push",
+  "copied-submit": "copying the moz-phab command",
   presence: "presence",
   "set-bug": "bug number",
   "comment-bug-draft": "comment on the bug draft",

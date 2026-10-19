@@ -165,6 +165,7 @@ export type Event =
   | (EventBase & { type: "meta-bug"; bug: number | null; draft?: BugDraft })
   | (EventBase & { type: "try-planned"; push: PushId; purpose: string; command: string[]; taskCount?: number })
   | (EventBase & { type: "try-declined"; push: PushId; text: string; by?: "factory" }) // you said no, or the factory withdrew it
+  | (EventBase & { type: "submit-copied"; stack: string })
   | (EventBase & { type: "try-pushed"; push: PushId; rev: string; url: string })
   | (EventBase & { type: "try-progress"; push: PushId; done: number; total: number; failures: number })
   | (EventBase & { type: "try-job-failed"; push: PushId; taskId: string; retryId?: number; jobName: string; platform: string; tier?: number; result: string })
@@ -193,6 +194,7 @@ interface CommandBase {
 export type Command =
   | (CommandBase & { cmd: "approve-push"; push: PushId })
   | (CommandBase & { cmd: "decline-push"; push: PushId; text: string })
+  | (CommandBase & { cmd: "copied-submit"; stack: string }) // you copied its moz-phab command
   | (CommandBase & { cmd: "set-bug"; patch: PatchId; bug: number })
   | (CommandBase & { cmd: "comment-bug-draft"; patch: PatchId | "meta"; text: string })
   | (CommandBase & { cmd: "stack-comments"; stack: string; comments: { patch: PatchId; text: string }[] })
@@ -315,6 +317,7 @@ export interface StackView {
   base?: string;
   order: PatchId[];
   summary?: string;
+  submitCopied?: Iso; // when you last copied its moz-phab command: the factory looks for its revisions for a while
 }
 
 export interface PushView {
@@ -406,6 +409,7 @@ export interface JobPurpose {
   cwd?: string; // the worktree a dry-run ran in, reused by the push
   purpose?: string; // a planned push's one-line purpose
   edits?: Record<PatchId, number>; // bug numbers a rewrite puts in commit messages
+  titles?: Record<PatchId, string>; // first lines a rewrite gives commit messages (reviewers)
   patches?: Record<string, PatchId>; // 12-character sha prefix → patch, for the shas a stack.ts job gets
   comments?: number[]; // review comment ids an address-review run handles
   reason?: string; // why an author is resumed: "lint", "review", "try", "comment", ...; what you told recover

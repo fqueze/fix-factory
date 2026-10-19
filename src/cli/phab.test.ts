@@ -4,7 +4,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
-import { arcToken, makeConduit, parseFileInfoReviewers, parseRevision, poll, reviewerStatus, reviewersCommand, stripBadge, type Conduit } from "./phab.ts";
+import { arcToken, makeConduit, parseFileInfoReviewers, parseRevision, poll, reviewerStatus, reviewersCommand, stripBadge, unknownReviewers, type Conduit } from "./phab.ts";
 
 const fixtures = new URL("../../test/fixtures/phab/", import.meta.url);
 
@@ -119,5 +119,19 @@ test("reviewers: mach file-info reviewers --format json", () => {
   assert.deepEqual(recent.suggestions, [
     { name: "#dom-core", source: "recent", count: 3 },
     { name: "smaug", source: "recent", count: 2 },
+  ]);
+});
+
+test("unknownReviewers: names Phabricator doesn't know, groups by slug, blocking ! ignored", async () => {
+  const asked: unknown[] = [];
+  const conduit: Conduit = async (method, params) => {
+    asked.push([method, params]);
+    const data = method === "user.search" ? [{ fields: { username: "mkaply" } }] : [{ fields: { slug: "xpcshell-reviewers" } }];
+    return { data, cursor: { after: null } };
+  };
+  assert.deepEqual(await unknownReviewers(["mkaply!", "nobody", "#xpcshell-reviewers", "#testing-reviewers"], conduit), ["nobody", "#testing-reviewers"]);
+  assert.deepEqual(asked, [
+    ["user.search", { constraints: { usernames: ["mkaply", "nobody"] } }],
+    ["project.search", { constraints: { slugs: ["xpcshell-reviewers", "testing-reviewers"] } }],
   ]);
 });

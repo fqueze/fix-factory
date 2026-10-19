@@ -87,9 +87,9 @@ can read them.
 ### 7. Meta bug (before submission: every patch needs a number)
 | Step | Who | How |
 |---|---|---|
-| Meta-bug draft from the stack summary, shown as "Bug to file" on the request | S | `stack.ts summary`, `bugzilla.ts enter-url` |
+| Meta-bug draft from the stack summary, shown as "Bug to file" on the request, required only when a patch has no bug of its own (annotation cleanups); otherwise offered, optional, blocked by the stack's bugs | S | `stack.ts summary`, `bugzilla.ts enter-url` |
 | File it and paste the number. It replaces the placeholder in every test-only patch | 👤 | `stack.ts rewrite` |
-| Pre-submit checks block submission while any `Bug XXXXXXX` is left | S | `stack.ts check` |
+| Each drafted bug filed, its number pasted; the step waits while any `Bug XXXXXXX` is left | 👤 | `stack.ts rewrite` |
 
 ### 8. Submit
 | Step | Who | How |
@@ -97,7 +97,7 @@ can read them.
 | Reviewers | S | `phab.ts reviewers` |
 | Pre-submit checks: no WIP/DEBUG, real public bugs, `r=`, try complete and green | S | `stack.ts check` |
 | Review in stack-viewer. Comments go to each patch's author | 👤 → O | |
-| Copy the `moz-phab submit` command (with the `cd` to the stack's worktree), run it yourself, then copy the meta-bug comment. The next poll reads the new `Differential Revision:` trailers | 👤 | `stack.ts import`, `phab.ts poll` |
+| Copy the `moz-phab submit` command (with the `cd` to the stack's worktree and the switch to its branch), on the stack at any time, the checks shown next to it, run it yourself, then copy the meta-bug comment if there is one. Copying it makes the factory read the new `Differential Revision:` trailers every 2 min for an hour; unknown reviewers are replaced from the stack step on | 👤 | `stack.ts import`, `phab.ts poll` |
 
 ### 9. Review comments (highest priority)
 | Step | Who | How |

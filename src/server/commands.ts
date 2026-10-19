@@ -58,6 +58,7 @@ type Field =
 const SPECS: Record<Command["cmd"], Record<string, Field>> = {
   "approve-push": { push: "string" },
   "decline-push": { push: "string", text: "string" },
+  "copied-submit": { stack: "string" },
   presence: { visible: "boolean" },
   "set-bug": { patch: "string", bug: "int" },
   "comment-bug-draft": { patch: "string", text: "string" },
@@ -88,6 +89,7 @@ const SPECS: Record<Command["cmd"], Record<string, Field>> = {
 const NEEDS_REQUEST = new Set<string>([
   "approve-push",
   "decline-push",
+  "copied-submit",
   "set-bug",
   "comment-bug-draft",
   "stack-comments",

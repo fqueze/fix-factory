@@ -63,7 +63,10 @@ test("a try-push request goes from the request to a planned verification push", 
     await tickUntil(orchestrator, () => {
       const [id] = listRequests(config.stateDir);
       events = id ? readEvents(config.stateDir, id) : [];
-      return events.some((e) => e.type === "needs-user" && e.key.startsWith("approve-push:"));
+      // Waiting for you, with nothing left running (the reviewers checks run alongside).
+      const started = events.filter((e) => e.type === "job-started").length;
+      const finished = events.filter((e) => e.type === "job-finished").length;
+      return events.some((e) => e.type === "needs-user" && e.key.startsWith("approve-push:")) && started === finished;
     });
     const s = foldEvents(events);
     const of = <T extends Event["type"]>(type: T) => events.filter((e): e is Extract<Event, { type: T }> => e.type === type);
@@ -132,7 +135,7 @@ test("a try-push request goes from the request to a planned verification push", 
     // Every agent run got a prompt rendered from its template, on stdin, and nothing failed.
     const claude = calls(join(root, "claude.json.calls.jsonl"));
     assert.ok(claude.every((c) => !c.prompt.includes("{")));
-    assert.ok(Object.values(s.jobs).every((j) => j.exitCode === 0 && j.error === undefined));
+    assert.deepEqual(Object.values(s.jobs).filter((j) => j.endedAt !== undefined && (j.exitCode !== 0 || j.error !== undefined)).map((j) => [j.name, j.error]), []);
     assert.ok(Object.values(s.jobs).every((j) => j.endedAt !== undefined));
     const cli = calls(join(root, "cli.json.calls.jsonl"));
     assert.ok(cli.some((c) => c.argv[0] === "worktree.ts" && c.argv[1] === "create" && c.argv.includes("origin/main")));

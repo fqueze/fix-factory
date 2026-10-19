@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
   blankSecondLine,
+  unknownReviewerViolations,
   bodyLength,
   descriptionLength,
   firstLineFormat,
@@ -154,4 +155,14 @@ test("replies", () => {
   assert.equal(replyLength("x".repeat(801)).length, 1);
   assert.deepEqual(rules(lintReply("  ")), ["replyLength"]);
   assert.throws(() => lint("poem", "x"), /unknown kind/);
+});
+
+test("unknownReviewerViolations: names Phabricator doesn't know; unreachable, no violation", async () => {
+  const msg = "Bug 1 - Fix it, r=mkaply, #testing-reviewers.\n\nBody.\n";
+  let asked: string[] = [];
+  const v = await unknownReviewerViolations(msg, async (names) => ((asked = names), ["#testing-reviewers"]));
+  assert.deepEqual(asked, ["mkaply", "#testing-reviewers"]);
+  assert.deepEqual(v.map((x) => [x.rule, x.line]), [["unknownReviewer", 1]]);
+  assert.match(v[0].text, /no user or group #testing-reviewers/);
+  assert.deepEqual(await unknownReviewerViolations(msg, async () => { throw new Error("no token"); }), []);
 });

@@ -173,7 +173,6 @@ export function handleFinished(input: HandlerInput): HandlerResult {
     case "rewrite": {
       const o = json<{ commits?: { sha: string; newSha: string }[]; mapping?: Record<string, string> }>();
       const pairs = [...(o.commits ?? []).map((c) => [c.sha, c.newSha] as const), ...Object.entries(o.mapping ?? {})];
-      const reviewer = purpose.reason?.startsWith("r=") ? purpose.reason.slice(2) : undefined;
       for (const [old, sha] of pairs) {
         const p = byShaPrefix(old);
         if (!p) continue;
@@ -183,7 +182,7 @@ export function handleFinished(input: HandlerInput): HandlerResult {
           changes.bug = bug;
           changes.title = p.title.replace(/^Bug X+\b/i, `Bug ${bug}`);
         }
-        if (reviewer && !/\br=\S/.test(p.title)) changes.title = `${(changes.title ?? p.title).replace(/\.\s*$/, "")}, r=${reviewer}.`;
+        if (purpose.titles?.[p.id]) changes.title = purpose.titles[p.id];
         patchEvent(p, changes);
       }
       break;

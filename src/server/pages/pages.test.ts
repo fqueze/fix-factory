@@ -373,8 +373,9 @@ describe("one fixture per step of docs/MVP.md", () => {
     const h = expanded("r-20261007-focus");
     assert.doesNotMatch(h, /class="bad"/);
     assert.match(h, /Open in stack-viewer ↗/);
-    assert.match(h, /<textarea hidden id="mozphab-r-20261007-focus-focus">cd [^<]+ &amp;&amp; moz-phab submit<\/textarea>/);
+    assert.match(h, /<textarea hidden id="mozphab-r-20261007-focus-focus">cd [^<]+ &amp;&amp; git switch [^<]+ &amp;&amp; moz-phab submit<\/textarea>/);
     assert.match(h, /data-copy="mozphab-r-20261007-focus-focus">Copy the moz-phab command<\/button>/);
+    assert.ok(h.includes(cmd({ cmd: "copied-submit", request: "r-20261007-focus", stack: "focus" })), "copying it tells the factory to look for the revisions");
     assert.doesNotMatch(h, /run-moz-phab/);
   });
 

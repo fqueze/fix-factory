@@ -990,21 +990,23 @@ describe("7. meta bug", () => {
     assert.equal(sc.state().step, "submit");
   });
 
-  it("asks you to file each patch's drafted bug only now, with the meta bug", () => {
+  it("asks you to file each patch's drafted bug only now; no meta bug when every patch has its own", () => {
     const draft = { product: "Core", component: "XPCOM", summary: "s", description: "d" };
     const sc = verified({ bugDraft: draft });
     assert.equal(sc.state().step, "meta bug");
     const step7 = sc.events.findIndex((e) => e.type === "step" && e.step === "meta bug");
     assert.deepEqual(sc.events.flatMap((e, i) => (e.type === "needs-user" && e.key.startsWith("file-bug:") ? [i > step7] : [])), [true]);
-    assert.deepEqual(sc.open().sort(), ["file-bug:p-test-a:meta-bug-step", "meta-bug:a"]);
+    assert.deepEqual(sc.open().sort(), ["file-bug:p-test-a:meta-bug-step"]);
+    assert.equal(sc.state().metaBug, undefined);
     const n = sc.state().needsUser.find((x) => x.key.startsWith("file-bug:"))!;
     assert.equal(n.patch, "p-test-a");
     assert.equal(n.item, "i-test-a");
     // The bug number arrives some other way than set-bug (e.g. a rewrite): the ⚑ goes.
     const { deps: _d, review: _r, replyDrafts: _rd, id, ...p } = sc.state().patches["p-test-a"];
-    sc.add({ type: "patch", request: ID, patch: id, ...p, bug: 555 });
+    sc.add({ type: "patch", request: ID, patch: id, ...p, bug: 555, title: p.title.replace(/^Bug X+/, "Bug 555") });
     sc.settle();
-    assert.deepEqual(sc.open(), ["meta-bug:a"]);
+    assert.deepEqual(sc.open(), []);
+    assert.equal(sc.state().step, "submit");
   });
 });
 
@@ -1024,7 +1026,7 @@ describe("file-bug raised before step 7 by an earlier version", () => {
     const sc = verified({ bugDraft: { product: "Core", component: "XPCOM", summary: "s", description: "d" } });
     sc.add({ type: "needs-user", request: ID, key: "file-bug:p-test-a", action: "File the bug", detail: "", patch: "p-test-a", item: "i-test-a" });
     sc.settle();
-    assert.deepEqual(sc.open().sort(), ["file-bug:p-test-a:meta-bug-step", "meta-bug:a"]);
+    assert.deepEqual(sc.open().sort(), ["file-bug:p-test-a:meta-bug-step"]);
   });
 });
 
@@ -1048,8 +1050,31 @@ function submitting(): Scenario {
   sc.settle();
   const rewrite = sc.view().jobs.find((j) => j.purpose.key.startsWith("rewrite-bugs:"))!.purpose.key;
   sc.complete(rewrite, { output: { mapping: { [sha("c")]: sha("e"), [sha("d")]: sha("f") } } });
-  sc.settle();
+  reviewersChecked(sc);
   return sc;
+}
+
+// Since the stack, its branch is read back from git and its reviewers checked: git as the state has it, every
+// reviewer known (unless unknown says otherwise).
+function reviewersChecked(sc: Scenario, unknown: string[] = []): void {
+  for (;;) {
+    sc.settle();
+    const jobs = sc.view().jobs.filter((x) => !x.end && (x.purpose.key.startsWith("sync:") || x.purpose.what === "check-reviewers"));
+    if (!jobs.length) return;
+    for (const j of jobs) {
+      if (j.purpose.what === "check-reviewers") {
+        sc.complete(j.purpose.key, { output: { unknown } });
+        continue;
+      }
+      const s = sc.state();
+      sc.complete(j.purpose.key, {
+        output: s.stacks[j.purpose.stack!].order.map((pid) => {
+          const p = s.patches[pid];
+          return { sha: p.sha, title: p.title, bug: p.bug, reviewers: [], files: [], insertions: 1, deletions: 0, testOnly: true, ...(p.revision !== undefined ? { revision: p.revision } : {}) };
+        }),
+      });
+    }
+  }
 }
 
 describe("8. submit", () => {
@@ -1062,9 +1087,10 @@ describe("8. submit", () => {
     assert.match(check, /^check:a:/);
     assert.deepEqual(JSON.parse(sc.plan(check).files![0].content).map((p: { result: string }) => p.result), ["green"]);
     sc.complete(check, { output: { ok: true, failures: [] } });
-    const started = sc.settle();
-    assert.deepEqual(started, ["import-submit:a:0"]);
+    assert.deepEqual(sc.settle(), [], "nothing looks for revisions before you copy the moz-phab command");
     assert.deepEqual(sc.open(), ["submit:a"]);
+    sc.add({ type: "submit-copied", request: ID, stack: "a" });
+    assert.deepEqual(sc.settle(), ["import-submit:a:0"]);
     sc.complete("import-submit:a:0", { output: imported(sha("e"), "Bug 22 - Fix test_b, r=smaug.", [], 22).concat(imported(sha("f"), "Bug 999 - Fix a, r=smaug.", [], 999)) });
     assert.deepEqual(sc.settle(), []);
     sc.now += 2 * 60_000;
@@ -1081,19 +1107,41 @@ describe("8. submit", () => {
     assert.equal(sc.state().step, "review comments");
   });
 
+  it("replaces a reviewer Phabricator doesn't know with the suggested one", () => {
+    const sc = submitting();
+    const { deps: _d, review: _r, replyDrafts: _rd, id, ...p } = sc.state().patches["p-test-a"];
+    sc.add({ type: "patch", request: ID, patch: id, ...p, title: "Bug 999 - Fix a, r=#testing-reviewers." });
+    const [known] = sc.settle();
+    assert.deepEqual(sc.plan(known).cli?.args, ["check-reviewers", "smaug", "#testing-reviewers"]);
+    sc.complete(known, { output: { unknown: ["#testing-reviewers"] } });
+    sc.complete("reviewers:a", { output: { files: [], suggestions: [{ name: "#dom-core", source: "mots" }] } });
+    const [own] = sc.settle();
+    assert.deepEqual(sc.plan(own).cli?.args, ["reviewers", "a/test_a.js", "--repo", `/wt/${ID}-a`], "the suggestion for its own files");
+    sc.complete(own, { output: { files: [], suggestions: [{ name: "#xpcshell-reviewers", source: "mots" }] } });
+    const [rewrite] = sc.settle();
+    assert.equal(JSON.parse(sc.plan(rewrite).files![0].content)[sha("f")].message, "Bug 999 - Fix a, r=#xpcshell-reviewers.\n\nBody.\n");
+    sc.complete(rewrite, { output: { mapping: { [sha("f")]: sha("9") } } });
+    assert.equal(sc.state().patches["p-test-a"].title, "Bug 999 - Fix a, r=#xpcshell-reviewers.", "the page shows the new reviewer");
+    reviewersChecked(sc);
+    assert.equal(sc.view().jobs.filter((j) => j.purpose.key.startsWith("rewrite-reviewers:")).length, 1, "rewritten once");
+  });
+
   it("adds the suggested reviewer to patches without r=, then shows failed checks to you", () => {
     const sc = submitting();
     const s = sc.state();
     const { deps: _d, review: _r, replyDrafts: _rd, id, ...p } = s.patches["p-test-a"];
     sc.add({ type: "patch", request: ID, patch: id, ...p, title: "Bug 999 - Fix a" });
     sc.complete("reviewers:a", { output: { files: [], suggestions: [{ name: "#dom-core", source: "mots" }] } });
+    sc.complete(sc.settle()[0], { output: { files: [], suggestions: [] } });
     const [rewrite] = sc.settle();
-    assert.match(rewrite, /^rewrite-reviewers:a:/);
+    assert.match(rewrite, /^rewrite-reviewers:a:/, "without a suggestion for its own files, the stack's");
     const edits = JSON.parse(sc.plan(rewrite).files![0].content);
     assert.equal(edits[sha("f")].message, "Bug 999 - Fix a, r=#dom-core.\n\nBody.\n");
     sc.complete(rewrite, { output: { mapping: { [sha("f")]: sha("9") } } });
     assert.equal(sc.state().patches["p-test-a"].title, "Bug 999 - Fix a, r=#dom-core.");
-    const [check] = sc.settle();
+    reviewersChecked(sc);
+    assert.deepEqual(sc.plan(sc.view().jobs.filter((j) => j.purpose.what === "check-reviewers").at(-1)!.purpose.key).cli?.args, ["check-reviewers", "smaug", "#dom-core"]);
+    const check = sc.view().jobs.find((j) => !j.end && j.purpose.key.startsWith("check:a:"))!.purpose.key;
     const job = sc.complete(check, { output: { ok: false, failures: [{ rule: "try", message: "try isn't green" }] } });
     sc.settle();
     assert.deepEqual(sc.open(), [`failed:${job}`]);
@@ -1105,6 +1153,7 @@ function inReview(): Scenario {
   sc.complete("reviewers:a", { output: { files: [], suggestions: [] } });
   const [check] = sc.settle();
   sc.complete(check, { output: { ok: true, failures: [] } });
+  sc.add({ type: "submit-copied", request: ID, stack: "a" });
   sc.settle();
   sc.complete("import-submit:a:0", {
     output: [
@@ -1326,8 +1375,11 @@ describe("burndown verification", () => {
     sc.complete(`review-stack:a:${hash}`, { report: { findings: [], addDeps: [], removeDeps: [], feedback: [] } });
     sc.settle();
     sc.complete(`summary:a:${hash}`, { output: { markdown: "t", metaComment: "m" } });
-    const [tryBranch] = sc.settle();
+    const [sync, tryBranch] = sc.settle();
     assert.equal(sc.state().step, "verify on try");
+    assert.match(sync, /^sync:a:/, "its reviewers are right before you may submit");
+    reviewersChecked(sc);
+    sc.complete("reviewers:a", { output: { files: [], suggestions: [] } });
 
     // The stack branch plus the DEBUG commit, on a branch of its own: that's what try gets.
     assert.equal(tryBranch, `try-branch:a:${hash}`);
@@ -1355,11 +1407,12 @@ describe("burndown verification", () => {
 
     // Before submitting, the stack's own branch, without the DEBUG commit, is checked out again.
     assert.equal(sc.state().step, "submit");
-    assert.deepEqual(sc.view().jobs.filter((j) => !j.end).map((j) => j.purpose.key), ["checkout:a"]);
+    assert.deepEqual(sc.view().jobs.filter((j) => !j.end && !j.purpose.key.startsWith("sync:")).map((j) => j.purpose.key), ["checkout:a"]);
     const checkout = sc.plan("checkout:a");
     assert.deepEqual([checkout.cli, checkout.cwd], [{ tool: "git", args: ["checkout", `${ID}-a`] }, `/wt/${ID}-a`]);
     sc.complete("checkout:a", { output: "" });
-    assert.deepEqual(sc.settle(), ["reviewers:a"]);
+    reviewersChecked(sc);
+    assert.ok(sc.view().jobs.some((j) => !j.end && j.purpose.key.startsWith("check:a:")));
   });
 });
 

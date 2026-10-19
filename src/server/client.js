@@ -200,6 +200,9 @@
     event.preventDefault();
     var area = document.getElementById(button.dataset.copy);
     if (!area) return;
+    // The moz-phab command's form tells the factory you copied it.
+    var form = button.closest("form.cmd");
+    if (form) form.requestSubmit();
     var done = function () {
       var label = button.textContent;
       button.textContent = "Copied";

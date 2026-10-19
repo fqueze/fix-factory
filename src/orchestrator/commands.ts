@@ -118,6 +118,10 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
       ev({ type: "user-done", key: `approve-push:${c.push}` });
       done(true);
       break;
+    case "copied-submit":
+      ev({ type: "submit-copied", stack: c.stack });
+      done(true);
+      break;
     case "decline-push":
       if (s.pushes[c.push]?.rev || !s.needsUser.some((n) => n.key === `approve-push:${c.push}`)) {
         done(false, `push ${c.push} isn't waiting for your approval`);

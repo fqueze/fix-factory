@@ -36,6 +36,13 @@ describe("commands", () => {
     assert.equal(newRequestId({ t, text: "!!!" }, () => false), "r-20261015-request");
   });
 
+  it("copied-submit records when you copied a stack's moz-phab command", () => {
+    const sc = withPatch();
+    sc.add({ type: "stack", request: ID, stack: "a", folder: "a", branch: "b", worktree: "/wt", order: ["p-a"] });
+    run(sc, cmd({ cmd: "copied-submit", stack: "a" }));
+    assert.equal(sc.state().stacks.a.submitCopied, sc.of("submit-copied")[0].t);
+  });
+
   it("decline-push declines a push waiting for you, with your reason", () => {
     const sc = withPatch();
     sc.add({ type: "needs-user", request: ID, key: "approve-push:A", action: "Approve", detail: "", push: "A" });

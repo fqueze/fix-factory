@@ -191,15 +191,17 @@ export function stackViewerLink(stack: StackView): Html {
 }
 
 // The factory never runs moz-phab: you copy the command and run it yourself.
+// On the stack's branch: its worktree may have its try branch checked out.
 export function mozPhabCommand(stack: StackView): string {
-  return `cd ${stack.worktree} && moz-phab submit`;
+  return `cd ${stack.worktree} && git switch ${stack.branch} && moz-phab submit`;
 }
 
+// Copying it tells the factory to look for the revisions moz-phab creates.
 function mozPhabButton(request: string, stack: StackView, disabled: boolean): Html {
   const id = `mozphab-${request}-${stack.id}`;
-  return html`<textarea hidden id="${id}">${mozPhabCommand(stack)}</textarea><button type="button" class="btn small primary" data-copy="${id}"${
+  return html`<form class="inline cmd" method="post" action="/api/commands">${commandFields([{ cmd: "copied-submit", request, stack: stack.id }], requestUrl(request))}<textarea hidden id="${id}">${mozPhabCommand(stack)}</textarea><button type="button" class="btn small primary" data-copy="${id}"${
     disabled ? html` disabled` : null
-  }>Copy the moz-phab command</button>`;
+  }>Copy the moz-phab command</button></form>`;
 }
 
 // A planned command in plain words.

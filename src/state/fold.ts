@@ -174,7 +174,11 @@ export function foldEvents(events: readonly Event[]): RequestState {
           base: e.base,
           order: e.order,
           summary: e.summary,
+          submitCopied: s.stacks[e.stack]?.submitCopied,
         };
+        break;
+      case "submit-copied":
+        if (s.stacks[e.stack]) s.stacks[e.stack].submitCopied = e.t;
         break;
       case "try-planned": {
         const p = push(e.push);

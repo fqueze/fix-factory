@@ -14,6 +14,9 @@
 //     →{files, suggestions: [{name, source: "mots"|"herald"|"recent", blocking?, modules?, count?}]}
 //     from `./mach file-info reviewers --format json`, in the order mach suggests them (mots groups first).
 //
+//   node src/cli/phab.ts check-reviewers <name...>   ("#group" or user name, as in r=)
+//     → {unknown: [name...]}: those Phabricator doesn't know, which moz-phab would refuse.
+//
 // Token: ~/.arcrc. Suggested edits come from transaction.search, which now exposes hasSuggestion and
 // suggestionText, so the changeset AJAX scraping of phab-suggestions.py is no longer needed.
 
@@ -122,6 +125,18 @@ async function names(conduit: Conduit, phids: string[]): Promise<Map<string, str
     }
   }
   return map;
+}
+
+// The names of an r= that Phabricator doesn't know, as written: "#group" is a project slug, the rest user names; a
+// blocking "!" doesn't count.
+export async function unknownReviewers(names: string[], conduit: Conduit = makeConduit()): Promise<string[]> {
+  const bare = (n: string) => n.replace(/!$/, "").toLowerCase();
+  const users = names.map(bare).filter((n) => !n.startsWith("#"));
+  const groups = names.map(bare).filter((n) => n.startsWith("#")).map((n) => n.slice(1));
+  const known = new Set<string>();
+  if (users.length) for (const u of await searchAll(conduit, "user.search", { constraints: { usernames: users } })) known.add(u.fields.username.toLowerCase());
+  if (groups.length) for (const p of await searchAll(conduit, "project.search", { constraints: { slugs: groups } })) known.add(`#${p.fields.slug.toLowerCase()}`);
+  return names.filter((n) => !known.has(bare(n)));
 }
 
 export async function poll(revisions: number[], conduit: Conduit = makeConduit()): Promise<PollResult[]> {
@@ -245,6 +260,10 @@ async function main() {
           throw new UsageError((e as Error).message);
         }
         return poll(revisions);
+      },
+      "check-reviewers": async (args) => {
+        if (!args.length) throw new UsageError("usage: check-reviewers <name...>");
+        return { unknown: await unknownReviewers(args) };
       },
       reviewers: async (args, values) => {
         const repo = repoArg(values.repo);

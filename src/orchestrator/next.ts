@@ -17,6 +17,7 @@ import type { OrderOutput } from "../cli/stack/order.ts";
 import type { DryRunResult } from "../cli/try.ts";
 import { REQUEST_STEPS } from "../server/commands.ts";
 import { COMMITS_CHANGED } from "../state/flags.ts";
+import { needsMetaBug } from "../state/meta-bug.ts";
 import type { EventInput } from "../state/events.ts";
 import type {
   AddressReviewReport,
@@ -37,6 +38,7 @@ import type {
   RequestState,
   RequestStep,
   ReviewPatchReport,
+  StackView,
 } from "../types.ts";
 import {
   artifactsDir,
@@ -86,6 +88,7 @@ export type Action = { type: "event"; event: EventInput } | { type: "start"; pla
 export const HOUR = 3600_000;
 export const EARLY_WORK_LIST_MS = 2 * HOUR;
 export const SUBMIT_IMPORT_MS = 2 * 60_000;
+export const SUBMIT_WATCH_MS = 60 * 60_000; // after you copy the moz-phab command
 export const ANNOTATIONS_ITEM = "i-annotations";
 export const LINT_ROUNDS = 2;
 export const REVIEW_ROUNDS = 3;
@@ -239,6 +242,7 @@ class Planner {
     this.verify();
     this.metaBug();
     this.submit();
+    this.submitted();
     this.reviewComments();
     this.landing();
   }
@@ -1347,7 +1351,8 @@ class Planner {
   private metaBug(): void {
     if (this.s.step !== "meta bug") return;
     const stacks = Object.values(this.s.stacks);
-    if (!this.s.metaBug) {
+    const needsMeta = needsMetaBug(stacks.flatMap((st) => st.order).map((pid) => this.s.patches[pid]));
+    if (needsMeta && !this.s.metaBug) {
       const firstDraft = Object.values(this.s.patches).find((p) => p.bugDraft)?.bugDraft;
       const draft: BugDraft = {
         product: firstDraft?.product ?? "Testing",
@@ -1359,14 +1364,14 @@ class Planner {
       };
       this.event(this.ev("meta-bug", { bug: null, draft }));
     }
-    for (const st of stacks) this.raise(`meta-bug:${st.id}`, { action: "File the meta bug, then review and submit", detail: "the meta-bug comment lists the stack in review order, with effort, value and repro", stack: st.id });
+    if (needsMeta) for (const st of stacks) this.raise(`meta-bug:${st.id}`, { action: "File the meta bug, then review and submit", detail: "the meta-bug comment lists the stack in review order, with effort, value and repro", stack: st.id });
     for (const p of stacks.flatMap((st) => st.order).map((pid) => this.s.patches[pid])) {
       if (!p.bugDraft) continue;
       const key = fileBugKey(p.id, this.stepEpoch("meta bug"));
       if (p.bug !== null) this.clear(key);
       else this.raise(key, { action: `File the bug for ${p.title.replace(/^Bug X+\s*-\s*/i, "")}`, detail: `${p.bugDraft.product}::${p.bugDraft.component}, checked by lint-text.ts`, patch: p.id, ...(p.item ? { item: p.item } : {}) });
     }
-    if (!this.s.metaBug?.bug) return;
+    if (needsMeta && !this.s.metaBug?.bug) return;
     for (const st of stacks) this.clear(`meta-bug:${st.id}`);
     const waiting = stacks.flatMap((st) => st.order).filter((pid) => /^Bug X+\b/i.test(this.s.patches[pid]?.title ?? ""));
     if (waiting.length === 0) this.setStep("submit");
@@ -1374,6 +1379,72 @@ class Planner {
 
   // -------------------------------------------------------------------------
   // 8. Submit
+
+  // You may submit any time once there is a stack: its reviewers are fixed from then on, so the moz-phab command
+  // works whenever you copy it. After you copy it, stack.ts import looks for the Differential Revision trailers
+  // moz-phab adds, every few minutes for a while, until each patch has its revision.
+  private submitted(): void {
+    if (at(this.s.step) < at("stack") || at(this.s.step) > at("submit")) return;
+    for (const info of this.stackInfos.values()) {
+      const st = this.s.stacks[info.id];
+      if (!st || !info.ready || st.order.every((pid) => this.s.patches[pid].revision !== undefined)) continue;
+      if (this.s.step !== "submit") this.reviewers(st, this.stepEpoch("stack"));
+      if (!st.submitCopied || this.ctx.now - Date.parse(st.submitCopied) > SUBMIT_WATCH_MS) continue;
+      const imports = this.view.jobs.filter((j) => j.purpose.what === "import-submit" && j.purpose.stack === st.id);
+      const last = imports.at(-1);
+      if (!last || (last.end && this.ctx.now - last.startedAt >= SUBMIT_IMPORT_MS)) {
+        this.want(`import-submit:${st.id}:${imports.length}`, () =>
+          this.cli("import-submit", "stack.ts", ["import", "--cwd", st.worktree, `${st.base ?? this.config.baseRef}..${st.branch}`], { cwd: st.worktree, purpose: { stack: st.id } }),
+        );
+      }
+    }
+  }
+
+  // Every patch gets a reviewer Phabricator knows: a missing r=, or one naming someone unknown (moz-phab refuses
+  // those), becomes mach's suggestion for the stack's files. The suggestion, once its r= are right.
+  private reviewers(st: StackView, e: string): { reviewer?: string } | undefined {
+    const patches = st.order.map((pid) => this.s.patches[pid]);
+    const contentKey = shortHash(patches.map((p) => p.sha));
+    // The branch first, as git has it: an author told to reword its commit may have moved it.
+    if (!this.want(`sync:${st.id}:${contentKey}`, () => this.cli("refresh", "stack.ts", ["import", "--cwd", st.worktree, `${st.base ?? this.config.baseRef}..${st.branch}`], { cwd: st.worktree, purpose: { stack: st.id } }))) return undefined;
+    const names = (p: PatchView) => /, r=([^\s,=]+(?:,\s*[^\s,=]+)*)\.$/.exec(p.title)?.[1].split(/,\s*/) ?? [];
+    const all = [...new Set(patches.flatMap(names))];
+    const known = all.length ? this.want(`check-reviewers:${st.id}:${shortHash(all)}`, () => this.cli("check-reviewers", "phab.ts", ["check-reviewers", ...all], { cwd: st.worktree, purpose: { stack: st.id } })) : undefined;
+    if (all.length && !known) return undefined;
+    const unknown = known ? this.out<{ unknown: string[] }>(known).unknown : [];
+    const files = [...new Set(patches.flatMap((p) => this.patchFiles(p)))];
+    const rv = this.want(`reviewers:${st.id}${e}`, () => this.cli("reviewers", "phab.ts", ["reviewers", ...files, "--repo", st.worktree], { cwd: st.worktree, purpose: { stack: st.id } }));
+    if (!rv) return undefined;
+    const reviewer = this.out<{ suggestions: ReviewerSuggestion[] }>(rv).suggestions[0]?.name;
+    const missing = patches.filter((p) => !/\br=\S/.test(p.title) || names(p).some((n) => unknown.includes(n)));
+    if (missing.length > 0 && reviewer) {
+      // Each patch gets the suggestion for its own files (the find-reviewer skill): a stack's patches can be in
+      // unrelated modules.
+      const own = missing.map((p) => this.want(`reviewers:${p.id}:${p.sha}`, () => this.cli("reviewers", "phab.ts", ["reviewers", ...this.patchFiles(p), "--repo", st.worktree], { cwd: st.worktree, purpose: { stack: st.id, patch: p.id } })));
+      if (own.some((j) => !j)) return undefined;
+      const suggested = new Map(missing.map((p, i) => [p.id, this.out<{ suggestions: ReviewerSuggestion[] }>(own[i]!).suggestions[0]?.name ?? reviewer]));
+      const messages = missing.map((p) => ({ p, msg: this.sourceMessage(p) }));
+      if (messages.some((m) => m.msg === undefined)) return undefined;
+      const titles = Object.fromEntries(missing.map((p) => [p.id, `${p.title.replace(/,\s*r=.*$/, "").replace(/\.\s*$/, "")}, r=${suggested.get(p.id)}.`]));
+      const file = dataPath(this.config, this.s.id, `reviewers-${st.id}-${contentKey}.json`);
+      const edits = Object.fromEntries(
+        messages.map(({ p, msg }) => {
+          const lines = msg!.split("\n");
+          lines[0] = titles[p.id];
+          return [p.sha, { message: lines.join("\n"), ...(p.bug !== null ? { bug: p.bug } : {}) }];
+        }),
+      );
+      this.want(`rewrite-reviewers:${st.id}:${contentKey}`, () =>
+        this.cli("rewrite", "stack.ts", ["rewrite", "--cwd", st.worktree, "--base", st.base ?? this.config.baseRef, "--branch", st.branch, "--order", patches.map((p) => p.sha).join(","), "--edits", file], {
+          cwd: st.worktree,
+          purpose: { stack: st.id, reason: `r=${[...new Set(suggested.values())].join(", ")}`, titles, patches: Object.fromEntries(patches.map((p) => [p.sha.slice(0, 12), p.id])) },
+          files: [{ path: file, content: JSON.stringify(edits) + "\n" }],
+        }),
+      );
+      return undefined;
+    }
+    return { reviewer };
+  }
 
   private submit(): void {
     if (this.s.step !== "submit") return;
@@ -1395,31 +1466,8 @@ class Planner {
       if (this.s.kind === "burndown" && this.debugCommit()) {
         if (!this.want(`checkout:${st.id}${e}`, () => this.cli("checkout", "git", ["checkout", st.branch], { cwd: st.worktree, purpose: { stack: st.id } }))) continue;
       }
-      const files = [...new Set(patches.flatMap((p) => this.patchFiles(p)))];
-      const rv = this.want(`reviewers:${st.id}${e}`, () => this.cli("reviewers", "phab.ts", ["reviewers", ...files, "--repo", st.worktree], { cwd: st.worktree, purpose: { stack: st.id } }));
+      const rv = this.reviewers(st, e);
       if (!rv) continue;
-      const reviewer = this.out<{ suggestions: ReviewerSuggestion[] }>(rv).suggestions[0]?.name;
-      const missing = patches.filter((p) => !/\br=\S/.test(p.title));
-      if (missing.length > 0 && reviewer) {
-        const messages = missing.map((p) => ({ p, msg: this.sourceMessage(p) }));
-        if (messages.some((m) => m.msg === undefined)) continue;
-        const file = dataPath(this.config, this.s.id, `reviewers-${st.id}-${contentKey}.json`);
-        const edits = Object.fromEntries(
-          messages.map(({ p, msg }) => {
-            const lines = msg!.split("\n");
-            lines[0] = `${p.title.replace(/\.\s*$/, "")}, r=${reviewer}.`;
-            return [p.sha, { message: lines.join("\n"), ...(p.bug !== null ? { bug: p.bug } : {}) }];
-          }),
-        );
-        this.want(`rewrite-reviewers:${st.id}:${contentKey}`, () =>
-          this.cli("rewrite", "stack.ts", ["rewrite", "--cwd", st.worktree, "--base", st.base ?? this.config.baseRef, "--branch", st.branch, "--order", patches.map((p) => p.sha).join(","), "--edits", file], {
-            cwd: st.worktree,
-            purpose: { stack: st.id, reason: `r=${reviewer}`, patches: Object.fromEntries(patches.map((p) => [p.sha.slice(0, 12), p.id])) },
-            files: [{ path: file, content: JSON.stringify(edits) + "\n" }],
-          }),
-        );
-        continue;
-      }
       const pushes = Object.values(this.s.pushes).filter((p) => this.view.byKey.get(`dry-run:${p.id}`)?.some((j) => j.purpose.stack === st.id));
       const latestPlan = this.view.jobs.filter((j) => j.purpose.what === "plan-pushes" && j.purpose.stack === st.id).at(-1);
       const planned = pushes.filter((p) => latestPlan && (this.view.byKey.get(`dry-run:${p.id}`)?.[0].startedAt ?? 0) >= latestPlan.startedAt);
@@ -1440,15 +1488,9 @@ class Planner {
         this.raise(`failed:${check.job}`, { action: "Pre-submit checks fail", detail: c.failures.map((f) => f.message).join("; ").slice(0, 500), job: check.job, stack: st.id });
         continue;
       }
-      this.raise(`submit:${st.id}`, { action: "Review in stack-viewer, then submit", detail: `pre-submit checks pass${reviewer ? ` · reviewers: ${reviewer}` : ""}`, stack: st.id });
-      // While the submit waits for you, stack.ts import picks up the Differential Revision trailers.
-      const imports = this.view.jobs.filter((j) => j.purpose.what === "import-submit" && j.purpose.stack === st.id);
-      const last = imports.at(-1);
-      if (!last || (last.end && this.ctx.now - last.startedAt >= SUBMIT_IMPORT_MS)) {
-        this.want(`import-submit:${st.id}:${imports.length}`, () =>
-          this.cli("import-submit", "stack.ts", ["import", "--cwd", st.worktree, `${st.base ?? this.config.baseRef}..${st.branch}`], { cwd: st.worktree, purpose: { stack: st.id } }),
-        );
-      }
+      // Earlier checks' failures are answered by this one.
+      for (const n of this.s.needsUser) if (n.key.startsWith("failed:") && n.stack === st.id && this.view.jobs.find((j) => j.job === n.job)?.purpose.what === "check") this.clear(n.key);
+      this.raise(`submit:${st.id}`, { action: "Review in stack-viewer, then submit", detail: "", stack: st.id });
     }
     if (submitted && Object.keys(this.s.stacks).length > 0) this.setStep("review comments");
   }
