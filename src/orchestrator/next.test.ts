@@ -979,6 +979,28 @@ function verified(reportA?: object): Scenario {
   return sc;
 }
 
+describe("review fixes", () => {
+  it("a fix made without reproducing the failure waits for you: no import, no review", () => {
+    const sc = workList([group("ka", "a/test_a.js", "boom")]);
+    investigating(sc, "i-test-a");
+    sc.complete("author:i-test-a:initial", { report: fixed([sha("1")], { reproduction: { reproduced: false } }) });
+    assert.equal(sc.state().items["i-test-a"].state, "blocked");
+    assert.ok(!sc.settle().some((k) => k.startsWith("import:")));
+  });
+
+  it("asks you for a reviewer when mach's suggestion is the one Phabricator doesn't know", () => {
+    const sc = submitting();
+    const { deps: _d, review: _r, replyDrafts: _rd, id, ...p } = sc.state().patches["p-test-a"];
+    sc.add({ type: "patch", request: ID, patch: id, ...p, title: "Bug 999 - Fix a, r=#gone-reviewers." });
+    reviewersChecked(sc, ["#gone-reviewers"]);
+    sc.complete("reviewers:a", { output: { files: [], suggestions: [{ name: "#gone-reviewers", source: "recent" }] } });
+    const [own] = sc.settle();
+    sc.complete(own, { output: { files: [], suggestions: [{ name: "#gone-reviewers", source: "recent" }] } });
+    assert.ok(!sc.settle().some((k) => k.startsWith("rewrite-reviewers:")), "no rewrite that can't help");
+    assert.ok(sc.open().includes("reviewers:a"));
+  });
+});
+
 describe("6. verify on try, again", () => {
   it("leaves out a push you declined, without planning again; the plan's others still count", () => {
     const sc = stacked();
@@ -1001,11 +1023,28 @@ describe("6. verify on try, again", () => {
     assert.equal(sc.state().step, "meta bug");
   });
 
-  it("moves on when the planner finds nothing left to push", () => {
+  it("with nothing left to push, counts the stack's pushes already made, and asks you when there are none", () => {
     const sc = stacked();
     const planKey = sc.view().jobs.find((j) => j.purpose.what === "plan-pushes")!.purpose.key;
     assert.match(String(sc.plan(planKey).files?.[1].content), /^\[/);
     sc.complete(planKey, { report: { pushes: [], feedback: [] } });
+    sc.settle();
+    assert.equal(sc.state().step, "verify on try", "nothing verified it");
+    assert.deepEqual(sc.open(), ["unverified:a"]);
+
+    // Planned again (the step redone): a push made and green, then a plan with nothing more to push.
+    sc.add({ type: "step", request: ID, step: "verify on try" });
+    const plan2 = sc.settle().find((k) => k.startsWith("plan:verify:"))!;
+    sc.complete(plan2, { report: { pushes: [{ purpose: "verify", tryArgs: ["fuzzy", "-q", "x"], rebuild: 5 }], feedback: [] } });
+    const [dry] = sc.settle();
+    const push = sc.purpose(dry).push!;
+    sc.complete(dry, { output: { command: ["./mach", "try", "fuzzy"], taskCount: 5, tasks: [], tryTaskConfig: {}, commits: [], warnings: [] } });
+    sc.add({ type: "user-done", request: ID, key: `approve-push:${push}` });
+    sc.add({ type: "try-pushed", request: ID, push, rev: "fed", url: "u" });
+    sc.add({ type: "try-finished", request: ID, push, result: "green", summary: "green" });
+    sc.add({ type: "step", request: ID, step: "verify on try" });
+    const plan3 = sc.settle().find((k) => k.startsWith("plan:verify:"))!;
+    sc.complete(plan3, { report: { pushes: [], feedback: [] } });
     sc.settle();
     assert.equal(sc.state().step, "meta bug");
   });

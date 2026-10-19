@@ -8,7 +8,7 @@
 // Keys carry what makes the work different: an author round names the job it answers, a stack
 // assembly names a hash of the commits it assembles. redo-step bumps an epoch that ends up in the
 // keys of that step (step events per step) or of that item (item-state "not started" events).
-import { basename, dirname } from "node:path";
+import { basename, dirname, resolve } from "node:path";
 import type { Annotation } from "../cli/annotations.ts";
 import type { ClusterGroup, CollectedFailure, TryRow, TryTable } from "../cli/failures.ts";
 import type { ReviewerSuggestion } from "../cli/phab.ts";
@@ -597,7 +597,8 @@ class Planner {
   // 3. Work list
 
   private signalPushes(): PushId[] {
-    return Object.keys(this.s.pushes).filter((id) => id === "initial" || id.startsWith("unskip"));
+    // A declined un-skip push gives no signal: the work list then comes from the folder's history.
+    return Object.keys(this.s.pushes).filter((id) => (id === "initial" || id.startsWith("unskip")) && this.s.pushes[id].declined === undefined);
   }
 
   private workList(): void {
@@ -801,8 +802,9 @@ class Planner {
     if (!this.want(latest.purpose.key)) return;
     const author = this.authorReport(item.id)!;
     if (author.commits.length === 0) return;
-    // Its author didn't do what you said: nothing goes on until you answer.
-    if (this.s.needsUser.some((n) => n.key === `disagrees:${author.job.job}`)) return;
+    // A ⚑ on its author's last run (it disagrees with you, it fixed without reproducing…): nothing goes on until you
+    // answer.
+    if (this.s.needsUser.some((n) => n.job === author.job.job && (n.key.startsWith("disagrees:") || n.key.startsWith("failed:")))) return;
     this.checkAndReview(item, author.job, author.commits);
   }
 
@@ -930,7 +932,8 @@ class Planner {
         const author = this.authorJobs(item.id).filter(succeeded).at(-1)!;
         return { item, author, commits: this.rep<InvestigateReport>(author).commits };
       });
-      const hash = shortHash(debug.map((d) => `${d.item.id}=${d.commits.join(",")}`));
+      // Its author's run too: one asking again with the same commits gets another push.
+      const hash = shortHash(debug.map((d) => `${d.item.id}=${d.author.job}:${d.commits.join(",")}`));
       const short = hash.slice(0, 6);
       const wtJob = this.want(`wt:repro:${hash}`, () => this.worktree(`${this.s.id}-repro-${short}`));
       if (!wtJob) continue;
@@ -940,8 +943,11 @@ class Planner {
       );
       if (!branch) continue;
       const conflict = this.out<{ conflict?: { sha: string; files: string[] } }>(branch).conflict;
+      // On each waiting group's row, where you can tell its author what to do instead.
       if (conflict) {
-        this.raise(`failed:${branch.job}`, { action: "The DEBUG commits for the try repro conflict", detail: `${conflict.sha.slice(0, 12)} in ${conflict.files.join(", ")}`.slice(0, 500), job: branch.job });
+        for (const d of debug) {
+          this.raise(`repro-conflict:${d.item.id}:${hash}`, { action: "Its DEBUG commit conflicts with another group's in the try repro", detail: `${conflict.sha.slice(0, 12)} in ${conflict.files.join(", ")}`.slice(0, 500), item: d.item.id });
+        }
         continue;
       }
       const failuresFile = dataPath(this.config, this.s.id, `repro-${short}.json`);
@@ -956,7 +962,7 @@ class Planner {
       }, {
         cwd: wt.path,
         files: [
-          { path: failuresFile, content: JSON.stringify(debug.map((d) => ({ item: d.item.id, debugCommits: d.commits, reproduction: this.rep<InvestigateReport>(d.author).files?.reproduction, ...d.item.group })), null, 2) + "\n" },
+          { path: failuresFile, content: JSON.stringify(debug.map((d) => ({ item: d.item.id, debugCommits: d.commits, reproduction: this.authorFile(d.author, this.rep<InvestigateReport>(d.author).files?.reproduction), ...d.item.group })), null, 2) + "\n" },
           { path: noInitial, content: '{"note": "none"}\n' },
         ],
       }, (i, count) => `repro-${short}${count === 1 ? "" : `-${i + 1}`}`, wt.path);
@@ -964,14 +970,10 @@ class Planner {
       const pushed = planned.made;
       if (pushed.some((id) => this.s.pushes[id]?.result === undefined)) continue;
       const results = pushed.map((id) => `${this.s.pushes[id].rev} (${this.s.pushes[id].result === "green" ? "green" : (this.s.pushes[id].summary ?? "failures")})`).join(", ");
-      for (const d of debug) {
-        this.resumeAuthor(
-          d.item.id,
-          `author:${d.item.id}${this.itemEpoch(d.item.id)}:repro:${hash}`,
-          "repro",
-          `The factory pushed your DEBUG commits to try, with those of the folder's other groups: ${results}. Read the results with fx-tests (fx-tests try <rev>); the failed jobs' logs are under ${artifactsDir(this.config)}/<task id>. Say in your reproduction file whether it reproduced, and how often. Then drop your DEBUG commits and fix it as usual, with the reproduction "on try"; or, if it didn't reproduce, report "not reproduced". End with the JSON report again.`,
-        );
-      }
+      const message = pushed.length
+        ? `The factory pushed your DEBUG commits to try, with those of the folder's other groups: ${results}. Read the results with fx-tests (fx-tests try <rev>); the failed jobs' logs are under ${artifactsDir(this.config)}/<task id>. Say in your reproduction file whether it reproduced, and how often. Then drop your DEBUG commits and fix it as usual, with the reproduction "on try"; or, if it didn't reproduce, report "not reproduced". End with the JSON report again.`
+        : `The user declined the try push of your DEBUG commits${planned.ids.map((id) => this.s.pushes[id]?.declined).filter(Boolean).map((t) => `: “${t}”`)[0] ?? ""}. Drop your DEBUG commits; fix it from what you know if you can show the cause locally, or report "not reproduced". End with the JSON report again.`;
+      for (const d of debug) this.resumeAuthor(d.item.id, `author:${d.item.id}${this.itemEpoch(d.item.id)}:repro:${hash}`, "repro", message);
     }
   }
 
@@ -982,6 +984,14 @@ class Planner {
   private stackFolder(i: ItemView): string {
     const f = this.s.kind === "burndown" ? this.s.folder : undefined;
     return f !== undefined && (i.folder === f || i.folder.startsWith(`${f}/`)) ? f : i.folder;
+  }
+
+  // Its stacks, but those of a burndown's subfolders made before it got one stack for its whole folder: their
+  // patches are in that one.
+  private liveStacks(): StackView[] {
+    const f = this.s.kind === "burndown" ? this.s.folder : undefined;
+    const whole = f !== undefined && Object.values(this.s.stacks).some((st) => st.folder === f);
+    return Object.values(this.s.stacks).filter((st) => !whole || !st.folder.startsWith(`${f}/`));
   }
 
   private computeStacks(): void {
@@ -1034,7 +1044,9 @@ class Planner {
     // The ⚑s of an earlier version of this stack (its patches changed since) ask nothing anymore.
     for (const n of this.s.needsUser) {
       const job = n.job === undefined ? undefined : this.view.jobs.find((j) => j.job === n.job);
-      if (job?.purpose.stack === id && /:[0-9a-f]{10}/.test(job.purpose.key) && !job.purpose.key.includes(`:${hash}`) && !job.purpose.key.includes(`:${code}`)) this.clear(n.key);
+      // Only the jobs keyed by the stack's hash or code: effort, sync, reviewers… have keys of their own.
+      const versioned = job?.purpose.stack === id && new RegExp(`^(assemble|deps|order|reorder|resolve|review-stack|summary|plan:verify):${id}:[0-9a-f]{10}`).test(job.purpose.key);
+      if (versioned && !job.purpose.key.includes(`:${hash}`) && !job.purpose.key.includes(`:${code}`)) this.clear(n.key);
     }
     if (!this.want(`wt:${id}`, () => this.worktree(info.branch))) return;
     const wt = info.wt!;
@@ -1204,7 +1216,7 @@ class Planner {
   private bugEdits(): void {
     if (at(this.s.step) < at("stack")) return;
     const meta = this.s.metaBug?.bug ?? null;
-    for (const stack of Object.values(this.s.stacks)) {
+    for (const stack of this.liveStacks()) {
       const info = this.stackInfos.get(stack.id);
       if (at(this.s.step) <= at("verify on try") && !info?.ready) continue;
       const edits: Record<PatchId, number> = {};
@@ -1239,6 +1251,11 @@ class Planner {
     return this.out<ImportedCommit[]>(imp)[index]?.patchId || undefined;
   }
 
+  // A file an author named, relative to its worktree: readable from anywhere.
+  private authorFile(author: JobRecord, file: string | undefined): string | undefined {
+    return file === undefined ? undefined : resolve(author.cwd, file);
+  }
+
   private patchFiles(p: PatchView): string[] {
     if (!p.item) return [];
     const author = this.authorReport(p.item);
@@ -1257,6 +1274,19 @@ class Planner {
         return folder !== undefined && (folderOf(test) === folder || test.startsWith(`${folder}/`));
       })
     );
+  }
+
+  // Verified by the current plan's pushes; with none to make (you declined them, or the planner found the earlier ones
+  // enough), by the stack's pushes already made, which must exist and be green.
+  private stackGreen(info: StackInfo, made: PushId[]): boolean {
+    const pushes = made.length ? made : this.madePushes(info.id);
+    if (!pushes.length) this.raise(`unverified:${info.id}`, { action: "Nothing verifies this stack on try", detail: "every planned push was declined, and none was made before: tell the factory what to do", stack: info.id });
+    else this.clear(`unverified:${info.id}`);
+    return pushes.length > 0 && pushes.every((push) => this.s.pushes[push]?.result === "green");
+  }
+
+  private madePushes(stack: string): PushId[] {
+    return Object.values(this.s.pushes).filter((p) => p.rev && this.view.byKey.get(`dry-run:${p.id}`)?.[0].purpose.stack === stack).map((p) => p.id);
   }
 
   // The ids of the verification pushes of the stack's current code.
@@ -1344,16 +1374,16 @@ class Planner {
     let green = this.stackInfos.size > 0;
     for (const info of this.stackInfos.values()) {
       const plan = info.ready ? this.verifyPushes(info) : undefined;
-      // Pushes not made that aren't in the current plan (planned for code the stack no longer has, or by an earlier
-      // version of the factory) ask nothing anymore.
+      // Pushes still waiting for your approval that aren't in the current plan (planned for code the stack no longer
+      // has, or by an earlier version of the factory) ask nothing anymore. An approved one may be being pushed.
       for (const push of Object.values(this.s.pushes)) {
         const stack = this.view.byKey.get(`dry-run:${push.id}`)?.[0].purpose.stack;
         const current = plan ? plan.ids.includes(push.id) : push.id.startsWith(`${this.verifyPrefix(info)}-`);
-        if (stack === info.id && !push.rev && push.declined === undefined && !current) {
+        if (stack === info.id && this.s.needsUser.some((n) => n.key === `approve-push:${push.id}`) && !current) {
           this.event(this.ev("try-declined", { push: push.id, text: "not needed anymore: the stack changed since it was planned", by: "factory" }));
         }
       }
-      if (!plan || plan.made.some((push) => this.s.pushes[push]?.result !== "green")) green = false;
+      if (!plan || !this.stackGreen(info, plan.made)) green = false;
     }
     if (green) {
       // Verified: no longer "on try".
@@ -1412,7 +1442,7 @@ class Planner {
 
   private metaBug(): void {
     if (this.s.step !== "meta bug") return;
-    const stacks = Object.values(this.s.stacks);
+    const stacks = this.liveStacks();
     const needsMeta = needsMetaBug(stacks.flatMap((st) => st.order).map((pid) => this.s.patches[pid]));
     if (needsMeta && !this.s.metaBug) {
       const firstDraft = Object.values(this.s.patches).find((p) => p.bugDraft)?.bugDraft;
@@ -1467,8 +1497,10 @@ class Planner {
   private reviewers(st: StackView, e: string): { reviewer?: string } | undefined {
     const patches = st.order.map((pid) => this.s.patches[pid]);
     const contentKey = shortHash(patches.map((p) => p.sha));
-    // The branch first, as git has it: an author told to reword its commit may have moved it.
-    if (!this.want(`sync:${st.id}:${contentKey}`, () => this.cli("refresh", "stack.ts", ["import", "--cwd", st.worktree, `${st.base ?? this.config.baseRef}..${st.branch}`], { cwd: st.worktree, purpose: { stack: st.id } }))) return undefined;
+    // The branch first, as git has it: an author told to reword its commit may have moved it. Read again after any of
+    // its authors' runs.
+    const authors = shortHash([contentKey, ...patches.map((p) => (p.item ? (this.latestAuthor(p.item)?.job ?? "") : ""))]);
+    if (!this.want(`sync:${st.id}:${authors}`, () => this.cli("refresh", "stack.ts", ["import", "--cwd", st.worktree, `${st.base ?? this.config.baseRef}..${st.branch}`], { cwd: st.worktree, purpose: { stack: st.id } }))) return undefined;
     const names = (p: PatchView) => /, r=([^\s,=]+(?:,\s*[^\s,=]+)*)\.$/.exec(p.title)?.[1].split(/,\s*/) ?? [];
     const all = [...new Set(patches.flatMap(names))];
     const known = all.length ? this.want(`check-reviewers:${st.id}:${shortHash(all)}`, () => this.cli("check-reviewers", "phab.ts", ["check-reviewers", ...all], { cwd: st.worktree, purpose: { stack: st.id } })) : undefined;
@@ -1485,6 +1517,12 @@ class Planner {
       const own = missing.map((p) => this.want(`reviewers:${p.id}:${p.sha}`, () => this.cli("reviewers", "phab.ts", ["reviewers", ...this.patchFiles(p), "--repo", st.worktree], { cwd: st.worktree, purpose: { stack: st.id, patch: p.id } })));
       if (own.some((j) => !j)) return undefined;
       const suggested = new Map(missing.map((p, i) => [p.id, this.out<{ suggestions: ReviewerSuggestion[] }>(own[i]!).suggestions[0]?.name ?? reviewer]));
+      // mach's suggestion is the name Phabricator doesn't know (a former reviewer, an alias): only you can pick.
+      const stuck = missing.filter((p) => names(p).includes(suggested.get(p.id)!));
+      if (stuck.length) {
+        this.raise(`reviewers:${st.id}`, { action: "Pick a reviewer Phabricator knows", detail: stuck.map((p) => `${p.title}: ${suggested.get(p.id)} is unknown`).join("; ").slice(0, 500), stack: st.id });
+        return undefined;
+      }
       const messages = missing.map((p) => ({ p, msg: this.sourceMessage(p) }));
       if (messages.some((m) => m.msg === undefined)) return undefined;
       const titles = Object.fromEntries(missing.map((p) => [p.id, `${p.title.replace(/,\s*r=.*$/, "").replace(/\.\s*$/, "")}, r=${suggested.get(p.id)}.`]));
@@ -1512,7 +1550,7 @@ class Planner {
     if (this.s.step !== "submit") return;
     const e = this.stepEpoch("submit");
     let submitted = true;
-    for (const st of Object.values(this.s.stacks)) {
+    for (const st of this.liveStacks()) {
       const patches = st.order.map((pid) => this.s.patches[pid]);
       const contentKey = shortHash(patches.map((p) => p.sha));
       if (patches.every((p) => p.revision !== undefined)) {
@@ -1532,8 +1570,8 @@ class Planner {
       if (!rv) continue;
       const pushes = Object.values(this.s.pushes).filter((p) => this.view.byKey.get(`dry-run:${p.id}`)?.some((j) => j.purpose.stack === st.id));
       const latestPlan = this.view.jobs.filter((j) => j.purpose.what === "plan-pushes" && j.purpose.stack === st.id).at(-1);
-      const planned = pushes.filter((p) => latestPlan && (this.view.byKey.get(`dry-run:${p.id}`)?.[0].startedAt ?? 0) >= latestPlan.startedAt);
-      // A latest plan with nothing to push left it to the pushes already made.
+      const planned = pushes.filter((p) => p.declined === undefined && latestPlan && (this.view.byKey.get(`dry-run:${p.id}`)?.[0].startedAt ?? 0) >= latestPlan.startedAt);
+      // A latest plan with nothing left to push (declined, or none needed) left it to the pushes already made.
       const current = planned.length ? planned : pushes.filter((p) => p.rev);
       const tryFile = dataPath(this.config, this.s.id, `try-${st.id}-${contentKey}.json`);
       const tryKey = current.length ? `:${shortHash(current.map((p) => `${p.id}=${p.result ?? ""}`)).slice(0, 6)}` : "";
@@ -1679,7 +1717,7 @@ class Planner {
     }
     if (patches.some(accepted)) this.setStep("landing");
     if (this.s.step !== "landing") return;
-    for (const st of Object.values(this.s.stacks)) {
+    for (const st of this.liveStacks()) {
       const ps = st.order.map((pid) => this.s.patches[pid]);
       const fresh = (p: PatchView) => p.review?.comments.some((c) => !c.done) ?? false;
       // What makes patches landable, not their order or shas: the reorder below changes those.
