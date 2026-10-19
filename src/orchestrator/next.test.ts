@@ -1093,9 +1093,9 @@ describe("6. verify on try", () => {
       ]),
     });
     const started = sc.settle();
-    assert.deepEqual(started.sort(), [`author:i-test-a:try:${push}`, `triage:${push}:final`].sort());
+    assert.deepEqual(started.sort(), [`author:i-test-a:try:${push}`, `triage:${push}:final:v2`].sort());
     assert.match(sc.plan(`author:i-test-a:try:${push}`).agent?.message ?? "", /a\/test_a.js on linux: still boom/);
-    sc.complete(`triage:${push}:final`, { report: { cells: [{ test: "z/test_z.js", verdict: "broken by patch", patch: sha("c"), evidence: "TypeError" }], feedback: [] } });
+    sc.complete(`triage:${push}:final:v2`, { report: { cells: [{ test: "z/test_z.js", verdict: "broken by patch", patch: sha("c"), evidence: "TypeError" }], feedback: [] } });
     assert.deepEqual(sc.settle(), [`author:i-test-b:try:${push}`]);
     assert.equal(sc.state().step, "verify on try");
   });

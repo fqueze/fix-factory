@@ -1498,10 +1498,11 @@ class Planner {
       if (unmatched.length === 0 && t.unparsed.length === 0) continue;
       const file = dataPath(this.config, this.s.id, `triage-${push}-${run}.json`);
       // Rows an author handed back come after the first triage of the run: a triage of their own.
-      const key = rejected ? `triage:${push}:${run}:${shortHash(unmatched.map((r) => `${r.test} ${r.config}`)).slice(0, 6)}` : `triage:${push}:${run}`;
+      // v2: with the stack's patches, and pre-existing only when shown on central.
+      const key = rejected ? `triage:${push}:${run}:v2:${shortHash(unmatched.map((r) => `${r.test} ${r.config}`)).slice(0, 6)}` : `triage:${push}:${run}:v2`;
       const triage = this.wantAgent(key, "triage", "triage-try", { rev: p.rev!, goal: p.purpose || "verify the stack", tableFile: file, logsDir: artifactsDir(this.config) }, {
         purpose: { push },
-        files: [{ path: file, content: JSON.stringify({ rev: p.rev, rows: unmatched, unparsed: t.unparsed }, null, 2) + "\n" }],
+        files: [{ path: file, content: JSON.stringify({ rev: p.rev, patches: patches.map((x) => ({ sha: x.sha, title: x.title, files: this.patchFiles(x) })), rows: unmatched, unparsed: t.unparsed }, null, 2) + "\n" }],
       });
       if (!triage) continue;
       const report = this.rep<TriageTryReport>(triage);
