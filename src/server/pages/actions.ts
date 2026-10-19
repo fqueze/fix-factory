@@ -44,7 +44,7 @@ export function flagControls(r: RequestState, n: NeedsUser, ctx: RenderContext):
   const back = requestUrl(r.id);
   const job = n.job === undefined ? undefined : r.jobs[n.job];
   const item = n.item ?? job?.item;
-  const retry = job && canRetry(job) ? retryButton(r.id, job, back) : null;
+  const retry = job && canRetry(r, job) ? retryButton(r.id, job, back) : null;
   const talk = item !== undefined && hasAuthorSession(r, item) ? continueBox(r.id, item, back) : null;
   const handBack = item === undefined ? null : handBackButton(r.id, item, back);
   let controls: Html | null = null;

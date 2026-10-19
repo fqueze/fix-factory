@@ -150,7 +150,7 @@ function stalledText(r: RequestState, i: ItemView): string {
 function stalledControls(r: RequestState, i: ItemView): Html {
   const back = requestUrl(r.id);
   const last = i.jobs.map((j) => r.jobs[j]).at(-1);
-  const retry = last && last.exitCode !== 0 && canRetry(last) ? retryButton(r.id, last, back) : null;
+  const retry = last && last.exitCode !== 0 && canRetry(r, last) ? retryButton(r.id, last, back) : null;
   const talk = hasAuthorSession(r, i.id) ? continueBox(r.id, i.id, back) : null;
   return html`${retry}${talk}${handBackButton(r.id, i.id, back)}`;
 }

@@ -9,7 +9,7 @@ import { appendEvent, listRequests, readEvents, type EventInput } from "../state
 import { foldEvents } from "../state/fold.ts";
 import { groupMembers, readPidFile, startJob } from "../state/jobs.ts";
 import type { Event, FactoryConfig } from "../types.ts";
-import { Orchestrator, withDryRun } from "./main.ts";
+import { Orchestrator, withDryRun, worktreeLock } from "./main.ts";
 
 const fixtures = fileURLToPath(new URL("../../test/fixtures/orchestrator/", import.meta.url));
 
@@ -276,5 +276,22 @@ describe("Orchestrator", () => {
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
+  });
+
+  it("starts one job at a time in a worktree; agents and other directories don't wait", () => {
+    const config = { worktreesDir: "/wt" } as FactoryConfig;
+    const push = { kind: "script" as const, cwd: "/wt/stack-a" };
+    const rewrite = { kind: "script" as const, cwd: "/wt/stack-a" };
+    // Two starts in the same tick: the first starts, the second waits.
+    const tick1 = worktreeLock(config, []);
+    assert.equal(tick1(push), true);
+    assert.equal(tick1(rewrite), false);
+    assert.equal(tick1({ kind: "build", cwd: "/wt/stack-b" }), true);
+    assert.equal(tick1({ kind: "agent", cwd: "/wt/stack-a" }), true);
+    assert.equal(tick1({ kind: "build", cwd: "/repo" }), true);
+    // While the push runs, it still waits; once it's finished, it starts.
+    assert.equal(worktreeLock(config, [push])(rewrite), false);
+    assert.equal(worktreeLock(config, [{ kind: "agent", cwd: "/wt/stack-a" }])(rewrite), true);
+    assert.equal(worktreeLock(config, [])(rewrite), true);
   });
 });

@@ -532,16 +532,33 @@ test("push refuses a stack that differs from the approved dry run's commits", as
   assert.equal(ran, true);
 });
 
-test("push accepts a stack whose commits were only reworded since the dry run (bug numbers)", async () => {
-  const trees: Record<string, string> = { bbb: "t2", aaa: "t1", "bbb'": "t2", "aaa'": "t1", ccc: "t3" };
-  const opts = (stack: string[]) => ({
-    dryRun: false,
-    expectCommits: ["bbb", "aaa"],
-    exec: async (cmd: string[]) => ({ code: 0, stdout: (cmd[1] === "rev-parse" ? cmd.slice(2).map((c) => trees[c.replace("^{tree}", "")]) : stack).join("\n") + "\n", stderr: "" }),
-    run: async () => ({ code: 1, stdout: "", stderr: "stop here" }),
-  });
-  await assert.rejects(push("/wt", ["fuzzy", "-q", "x"], opts(["bbb'", "aaa'"])), /mach try exited with 1/);
-  await assert.rejects(push("/wt", ["fuzzy", "-q", "x"], opts(["ccc", "aaa'"])), /not pushed: commits changed/);
+test("push refuses approved commits it can't check out, and pushes nothing", async () => {
+  const calls: string[] = [];
+  let ran = false;
+  const exec = async (cmd: string[]) => {
+    calls.push(cmd.slice(1).join(" "));
+    if (cmd[1] === "symbolic-ref") return { code: 0, stdout: "other-branch\n", stderr: "" };
+    if (cmd[1] === "checkout") return { code: 1, stdout: "", stderr: "fatal: reference is not a tree: bbb" };
+    return { code: 0, stdout: "bbb\naaa\n", stderr: "" };
+  };
+  await assert.rejects(
+    push("/wt", ["fuzzy", "-q", "x"], { dryRun: false, expectCommits: ["bbb", "aaa"], exec, run: async () => ((ran = true), { code: 0, stdout: "", stderr: "" }) }),
+    /^Error: not pushed: commits changed since the approved dry run: can't check out bbb: fatal: reference is not a tree/,
+  );
+  assert.equal(ran, false);
+  assert.deepEqual(calls.filter((c) => c.startsWith("checkout")), ["checkout --quiet --detach bbb"]);
+});
+
+test("push says when it can't put the worktree back", async () => {
+  const exec = async (cmd: string[]) => {
+    if (cmd[1] === "symbolic-ref") return { code: 0, stdout: "other-branch\n", stderr: "" };
+    if (cmd[1] === "checkout") return cmd.includes("--detach") ? { code: 0, stdout: "", stderr: "" } : { code: 1, stdout: "", stderr: "error: local changes" };
+    return { code: 0, stdout: "bbb\naaa\n", stderr: "" };
+  };
+  await assert.rejects(
+    push("/wt", ["fuzzy", "-q", "x"], { dryRun: false, expectCommits: ["bbb", "aaa"], exec, run: async () => ({ code: 1, stdout: "", stderr: "stop here" }) }),
+    /mach try exited with 1: stop here; the worktree couldn't be put back on other-branch: error: local changes/,
+  );
 });
 
 test("push checks out the approved commits for the push, then puts the worktree back", async () => {

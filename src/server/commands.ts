@@ -230,7 +230,7 @@ function checkIds(c: Record<string, unknown>, state: RequestState): string | nul
       return "a try push isn't stopped (it may already have been made)";
     }
   }
-  if (c.cmd === "retry" && !canRetry(state.jobs[c.job as string])) {
+  if (c.cmd === "retry" && !canRetry(state, state.jobs[c.job as string])) {
     return "a try push isn't retried (it may have been made): ask the factory to plan it again";
   }
   if (c.cmd === "accept-review" && !reviewLimitFlag(state, c.item as string)) {

@@ -334,6 +334,21 @@ describe("commands", () => {
     assert.match(executed(sc).at(-1)!.detail!, /try push isn't retried/);
   });
 
+  it("retries a refused try push once: not while it runs again, nor once it's made", () => {
+    const sc = withPatch();
+    sc.startJob({ purpose: { key: "push:A", what: "push", push: "A" }, kind: "script", name: "try.ts push", cwd: "/r", cli: { tool: "try.ts", args: ["push"] } });
+    const refused = sc.complete("push:A", { exitCode: 1, error: "not pushed: commits changed since the approved dry run" });
+    run(sc, cmd({ cmd: "retry", job: refused }));
+    sc.running("push:A");
+    const effects = run(sc, cmd({ cmd: "retry", job: refused }));
+    assert.ok(!effects.some((e) => e.type === "start"));
+    assert.match(executed(sc).at(-1)!.detail!, /try push isn't retried/);
+    // The retry pushed, though it failed after: the push is made.
+    sc.complete("push:A", { exitCode: 1, error: "lando timeout" });
+    sc.add({ type: "try-pushed", request: ID, push: "A", rev: "r1", url: "u1" });
+    assert.ok(!run(sc, cmd({ cmd: "retry", job: refused })).some((e) => e.type === "start"));
+  });
+
   it("stop cancels a running job, blocks its item and raises a ⚑ that continue answers", () => {
     const sc = withPatch();
     const resume = cmd({ cmd: "comment-fix", patch: "p-a", text: "x" });

@@ -186,16 +186,6 @@ export async function stackCommits(cwd: string, run = exec): Promise<string[]> {
   return out.split("\n").filter(Boolean);
 }
 
-// Commit messages may change after a dry run (bug numbers), not the code: each commit keeps its tree.
-async function sameCode(cwd: string, commits: string[], expected: string[], run: typeof exec): Promise<boolean> {
-  if (commits.length !== expected.length) return false;
-  if (commits.join() === expected.join()) return true;
-  const r = await run(["git", "rev-parse", ...[...commits, ...expected].map((c) => `${c}^{tree}`)], { cwd });
-  if (r.code !== 0) return false;
-  const trees = r.stdout.trim().split("\n");
-  return commits.every((_, i) => trees[i] === trees[commits.length + i]);
-}
-
 const NATIVE_FILE = /\.(c|cc|cpp|cxx|h|hh|hpp|m|mm|rs|idl|webidl)$|(^|\/)Cargo\.(toml|lock)$/;
 
 async function nativeFiles(cwd: string, run: typeof exec): Promise<string[]> {
@@ -341,25 +331,26 @@ export async function push(
   }
   const ex = opts.exec ?? exec;
   // What was approved is the dry run's commits: they are what's pushed, checked out for the push even if another
-  // job checked out something else in this worktree since, then the worktree is put back as it was. A stack whose
-  // code changed since is a different push.
+  // job checked out something else in this worktree since, then the worktree is put back as it was. Commits that
+  // can't be checked out, or a stack that isn't exactly them, are a different push.
   let back: string | undefined;
   if (opts.expectCommits?.length) {
     const ref = await ex(["git", "symbolic-ref", "--quiet", "--short", "HEAD"], { cwd });
     back = ref.code === 0 ? ref.stdout.trim() : (await runOk(ex, ["git", "rev-parse", "HEAD"], cwd)).trim();
-    if ((await ex(["git", "checkout", "--quiet", "--detach", opts.expectCommits[0]], { cwd })).code !== 0) back = undefined;
-  }
-  if (opts.expectCommits) {
-    const commits = await stackCommits(cwd, ex);
-    if (!(await sameCode(cwd, commits, opts.expectCommits, ex))) {
-      if (back) await ex(["git", "checkout", "--quiet", back], { cwd });
-      throw new Error(`${COMMITS_CHANGED} since the approved dry run: expected ${opts.expectCommits.join(",") || "no commits"}, found ${commits.join(",") || "no commits"}`);
-    }
+    const detach = await ex(["git", "checkout", "--quiet", "--detach", opts.expectCommits[0]], { cwd });
+    if (detach.code !== 0) throw new Error(`${COMMITS_CHANGED} since the approved dry run: can't check out ${opts.expectCommits[0]}: ${detach.stderr.trim()}`);
   }
   const run = opts.run ?? runStreaming;
-  // "y" answers the large push prompt; the dry run already warned about it.
+  let restoreError = "";
   let r: Awaited<ReturnType<typeof runStreaming>>;
   try {
+    if (opts.expectCommits) {
+      const commits = await stackCommits(cwd, ex);
+      if (commits.join() !== opts.expectCommits.join()) {
+        throw new Error(`${COMMITS_CHANGED} since the approved dry run: expected ${opts.expectCommits.join(",") || "no commits"}, found ${commits.join(",") || "no commits"}`);
+      }
+    }
+    // "y" answers the large push prompt; the dry run already warned about it.
     r = await run(command, cwd, "y\n", (line) => {
       const login = /navigate to: (\S+)/.exec(line);
       if (login) {
@@ -367,10 +358,16 @@ export async function push(
       }
     });
   } finally {
-    if (back) await ex(["git", "checkout", "--quiet", back], { cwd });
+    if (back) {
+      const c = await ex(["git", "checkout", "--quiet", back], { cwd });
+      if (c.code !== 0) {
+        restoreError = `; the worktree couldn't be put back on ${back}: ${c.stderr.trim()}`;
+        log(restoreError.slice(2));
+      }
+    }
   }
   if (r.code !== 0) {
-    throw new Error(`mach try exited with ${r.code}: ${(r.stdout + r.stderr).trim().slice(-2000)}`);
+    throw new Error(`mach try exited with ${r.code}: ${(r.stdout + r.stderr).trim().slice(-2000)}${restoreError}`);
   }
   const { landoJobId, treeherderUrl } = parsePushOutput(r.stdout);
   const result: PushResult = { landoJobId, landoUrl: `${LANDO}/landings/${landoJobId}`, treeherderUrl };

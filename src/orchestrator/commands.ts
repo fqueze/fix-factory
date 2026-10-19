@@ -222,7 +222,7 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
       }
       // Like next(), never again on its own: the push may have happened, unless it refused to. A recovery plan can
       // still ask for it.
-      if (c.cmd === "retry" && !canRetry({ name: job.name, purpose: job.purpose, error: job.end?.error })) {
+      if (c.cmd === "retry" && !canRetry(s!, s!.jobs[job.job])) {
         done(false, "a try push isn't retried from its ⚑ (it may have been made): ask the factory to plan it again");
         break;
       }

@@ -16,7 +16,7 @@ import { processNewCommands, readCommands } from "../state/commands.ts";
 import { listRequests, readEvents } from "../state/events.ts";
 import { foldEvents } from "../state/fold.ts";
 import { cancelJob, jobDir, jobStatus, reconcile, type ExitInfo } from "../state/jobs.ts";
-import type { Command, FactoryConfig, JobId, RequestId, RequestState } from "../types.ts";
+import type { Command, FactoryConfig, JobId, JobView, RequestId, RequestState } from "../types.ts";
 import { commandEffects } from "./commands.ts";
 import { appendEventSafe } from "./event-data.ts";
 import { handleWatchLines } from "./handlers.ts";
@@ -51,6 +51,7 @@ export class Orchestrator {
   private readonly dryRun: boolean;
   private readonly watchOffsets = new Map<JobId, number>();
   private presenceTimes: number[] = [];
+  private readonly deferred: { request: RequestId; plan: JobPlan }[] = []; // commands' jobs waiting for their worktree
   private readonly planErrors = new Set<string>(); // failed:plan:<hash> keys raised by this process // visible=true presence commands, in order
   private ticking: Promise<void> | undefined;
   private again = false;
@@ -197,8 +198,9 @@ export class Orchestrator {
         case "event":
           appendEventSafe(this.config.stateDir, e.event.type === "request-created" ? { ...e.event, t: c.t } : e.event);
           break;
+        // A retry waits like any job for its worktree to be free.
         case "start":
-          this.start(loaded!.s.id, e.plan);
+          this.deferred.push({ request: loaded!.s.id, plan: e.plan });
           break;
         case "cancel": {
           const exit = await cancelJob(this.config.stateDir, e.job);
@@ -305,9 +307,17 @@ export class Orchestrator {
       }
       if (!wrote) break;
     }
+    // Commands' jobs (a retry…) first; they skip the caps but not the worktree lock.
+    const deferred = this.deferred.filter((d) => !only || d.request === only);
     const running = this.requests().flatMap((id) => Object.values(this.load(id).s.jobs).filter((j) => j.endedAt === undefined));
     let agents = running.filter((j) => j.kind === "agent").length;
     let builds = running.filter((j) => j.kind === "build").length;
+    const lock = worktreeLock(this.config, running);
+    for (const d of deferred) {
+      if (!lock(d.plan)) continue;
+      this.deferred.splice(this.deferred.indexOf(d), 1);
+      this.start(d.request, d.plan);
+    }
     starts.sort((a, b) => (a.plan.priority ?? DEFAULT_PRIORITY) - (b.plan.priority ?? DEFAULT_PRIORITY));
     for (const { request, plan } of starts) {
       if (!only && plan.kind === "agent" && agents >= this.config.maxAgents) continue;
@@ -317,6 +327,7 @@ export class Orchestrator {
         }
         continue;
       }
+      if (!lock(plan)) continue;
       if (plan.kind === "agent") agents++;
       if (plan.kind === "build") builds++;
       this.start(request, plan);
@@ -341,6 +352,20 @@ export class Orchestrator {
     this.watchers = [];
     clearInterval(this.timer);
   }
+}
+
+// One job at a time changes or reads a worktree's checkout (a push detaches it at the approved commits): the
+// returned function takes a plan's worktree, or says it's busy and the plan waits for a later tick. Authors work
+// in their own worktrees.
+export function worktreeLock(config: FactoryConfig, running: Pick<JobView, "kind" | "cwd">[]): (plan: Pick<JobPlan, "kind" | "cwd">) => boolean {
+  const inWorktree = (j: { kind: string; cwd: string }) => j.kind !== "agent" && j.cwd.startsWith(join(config.worktreesDir, "/"));
+  const busy = new Set(running.filter(inWorktree).map((j) => j.cwd));
+  return (plan) => {
+    if (!inWorktree(plan)) return true;
+    if (busy.has(plan.cwd)) return false;
+    busy.add(plan.cwd);
+    return true;
+  };
 }
 
 // The CLIs that go through runCli take --dry-run, before any "--" (after it, try.ts passes

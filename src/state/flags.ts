@@ -18,9 +18,15 @@ export function isPushJob(job: Pick<JobView, "name" | "purpose">): boolean {
 // The start of try.ts push's error when the stack's code changed since the dry run: nothing was pushed.
 export const COMMITS_CHANGED = "not pushed: commits changed";
 
-// You can retry any job but a push that may have been made.
-export function canRetry(job: Pick<JobView, "name" | "purpose" | "error">): boolean {
-  return !isPushJob(job) || job.error?.startsWith(COMMITS_CHANGED) === true;
+// You can retry any job but a push that may have been made: a refused one only while its push isn't made,
+// declined, or being (or already) pushed by another job.
+export function canRetry(r: RequestState, job: Pick<JobView, "job" | "name" | "purpose" | "error">): boolean {
+  if (!isPushJob(job)) return true;
+  if (job.error?.startsWith(COMMITS_CHANGED) !== true) return false;
+  const id = job.purpose?.push;
+  const push = id === undefined ? undefined : r.pushes[id];
+  if (push?.rev !== undefined || push?.declined !== undefined) return false;
+  return !Object.values(r.jobs).some((j) => j.job !== job.job && isPushJob(j) && j.purpose?.push === id && (j.endedAt === undefined || j.exitCode === 0));
 }
 
 // The ⚑ next() raises when the critical review still has must-fix findings after its round limit: a failed:<job>
