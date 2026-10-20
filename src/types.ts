@@ -203,6 +203,7 @@ export type Command =
   | (CommandBase & { cmd: "decline-push"; push: PushId; text: string })
   | (CommandBase & { cmd: "revise-push"; push: PushId; text: string }) // the agent that planned it plans what replaces it, from your text
   | (CommandBase & { cmd: "copied-submit"; stack: string }) // you copied its moz-phab command
+  | (CommandBase & { cmd: "copied-reorg"; key: string }) // you copied the moz-phab reorg command of that land ⚑
   | (CommandBase & { cmd: "set-bug"; patch: PatchId; bug: number })
   | (CommandBase & { cmd: "comment-bug-draft"; patch: PatchId | "meta"; text: string })
   | (CommandBase & { cmd: "stack-comments"; stack: string; comments: { patch: PatchId; text: string }[] })

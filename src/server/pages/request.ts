@@ -99,7 +99,10 @@ export function renderRequestBody(r: RequestState, ctx: RenderContext): Html {
   const stackedItems = new Set(stacks.flatMap((s) => stackPatches(r, s).map((p) => p.item)));
   // Patches without a group (annotation patches) get a row of their own.
   const loose = Object.values(r.patches).filter((p) => !stacked.has(p.id) && itemOf(r, p) === undefined);
-  const items = Object.values(r.items).filter((i) => !stackedItems.has(i.id));
+  const unstacked = Object.values(r.items).filter((i) => !stackedItems.has(i.id));
+  // Groups whose patches landed have left their stack.
+  const landed = unstacked.filter((i) => i.state === "landed");
+  const items = unstacked.filter((i) => i.state !== "landed");
   const pushes = Object.values(r.pushes);
   const planned = pushes.filter((p) => isWaiting(r, p));
   const declined = pushes.filter((p) => !p.rev && p.declined !== undefined);
@@ -119,6 +122,7 @@ export function renderRequestBody(r: RequestState, ctx: RenderContext): Html {
     ${stacks.map((s) => stackSection(r, s, ctx))}
     ${loose.length ? html`<h3>Patches</h3><div class="rows">${loose.map((p) => patchRow(r, p, ctx))}</div>` : null}
     ${items.length ? html`${stacks.length || loose.length ? html`<h3>Not in a stack yet</h3>` : null}${groupRows(r, items, ctx)}` : null}
+    ${landed.length ? html`<h3>Landed</h3>${groupRows(r, landed, ctx)}` : null}
     ${requestJobs(r, ctx)}
     ${notesFold(r, plans)}
     <form class="ask cmd reqask" method="post" action="/api/commands">${commandFields([{ cmd: "tell-factory", request: r.id }], back)}<input type="text" name="text" required placeholder="Tell the factory about this request…"><button class="btn">Send</button></form>

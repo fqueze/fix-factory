@@ -118,6 +118,14 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
       ev({ type: "user-done", key: `approve-push:${c.push}` });
       done(true);
       break;
+    case "copied-reorg":
+      if (!c.key.startsWith("land:")) {
+        done(false, `${c.key} isn't a reorg to run`);
+        break;
+      }
+      ev({ type: "user-done", key: c.key });
+      done(true);
+      break;
     case "copied-submit":
       ev({ type: "submit-copied", stack: c.stack });
       done(true);

@@ -1847,6 +1847,8 @@ class Planner {
       );
       if (!ord) continue;
       const o = this.out<OrderOutput>(ord);
+      // One reorg to ask for at a time: an earlier one's order is moot.
+      for (const n of this.s.needsUser) if (n.key.startsWith(`land:${st.id}:`) && n.key !== `land:${st.id}:${h}`) this.clear(n.key);
       if (!o.landable?.length || o.landable.every((pid) => landed(this.s.patches[pid]))) continue;
       if (o.order.join() !== st.order.join() || this.view.byKey.has(`rewrite-land:${st.id}:${h}`)) {
         const rw = this.want(`rewrite-land:${st.id}:${h}`, () =>
@@ -1871,8 +1873,15 @@ class Planner {
         if (adapts.some((a) => !a)) continue;
         if (adapts.length > 0 && !this.want(`refresh:${st.id}:${h}`, () => this.cli("refresh", "stack.ts", ["import", "--cwd", st.worktree, `${st.base ?? this.config.baseRef}..${st.branch}`], { cwd: st.worktree, purpose: { stack: st.id } }))) continue;
       }
+      // Only when the stack was reordered: landable patches already at the bottom need nothing on Phabricator.
+      if (!this.view.byKey.has(`rewrite-land:${st.id}:${h}`)) {
+        this.clear(`land:${st.id}:${h}`);
+        continue;
+      }
       const n = o.landable.filter((pid) => !landed(this.s.patches[pid])).length;
-      this.raise(`land:${st.id}:${h}`, { action: `Reorg ready: ${n} landable ${n === 1 ? "patch" : "patches"} at the bottom`, detail: `${o.flippedSoftDeps.length} soft dependencies adapted`, stack: st.id });
+      const k = o.flippedSoftDeps.length;
+      const adapted = k ? ` (${k} soft ${k === 1 ? "dependency" : "dependencies"} adapted)` : "";
+      this.raise(`land:${st.id}:${h}`, { action: `Stack reordered: ${n} landable ${n === 1 ? "patch" : "patches"} moved to the bottom`, detail: `Run moz-phab reorg so Phabricator has the new order${adapted}.`, stack: st.id });
     }
   }
 

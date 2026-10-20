@@ -81,10 +81,14 @@ export function flagControls(r: RequestState, n: NeedsUser, ctx: RenderContext):
       controls = stack ? html`${stackViewerLink(r, stack)}${mozPhabButton(r.id, stack, !submitChecks(r, stack)[0].ok)}` : null;
       break;
     }
-    case "resubmit":
-    case "land": {
+    case "resubmit": {
       const stack = findStack(r, n);
       controls = stack ? mozPhabButton(r.id, stack, false) : null;
+      break;
+    }
+    case "land": {
+      const stack = findStack(r, n);
+      controls = stack ? reorgButton(r.id, stack, n.key) : null;
       break;
     }
     case "failed": {
@@ -232,6 +236,12 @@ export function mozPhabCommand(stack: StackView): string {
 }
 
 // Copying it tells the factory to look for the revisions moz-phab creates.
+// Copying it answers the ⚑.
+function reorgButton(request: string, stack: StackView, key: string): Html {
+  const id = `mozphab-reorg-${request}-${stack.id}`;
+  return html`<form class="inline cmd" method="post" action="/api/commands">${commandFields([{ cmd: "copied-reorg", request, key }], requestUrl(request))}<textarea hidden id="${id}">cd ${stack.worktree} && git switch ${stack.branch} && moz-phab reorg</textarea><button type="button" class="btn small primary" data-copy="${id}">Copy the moz-phab reorg command</button></form>`;
+}
+
 function mozPhabButton(request: string, stack: StackView, disabled: boolean): Html {
   const id = `mozphab-${request}-${stack.id}`;
   return html`<form class="inline cmd" method="post" action="/api/commands">${commandFields([{ cmd: "copied-submit", request, stack: stack.id }], requestUrl(request))}<textarea hidden id="${id}">${mozPhabCommand(stack)}</textarea><button type="button" class="btn small primary" data-copy="${id}"${

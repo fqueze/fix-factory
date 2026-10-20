@@ -208,6 +208,7 @@ export const COMMAND_LABELS: Record<Command["cmd"], string> = {
   "approve-push": "try push approval",
   "decline-push": "declining a try push",
   "copied-submit": "copying the moz-phab command",
+  "copied-reorg": "copying the moz-phab reorg command",
   presence: "presence",
   "set-bug": "bug number",
   "comment-bug-draft": "comment on the bug draft",
