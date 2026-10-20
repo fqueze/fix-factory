@@ -103,7 +103,8 @@ export function renderRequestBody(r: RequestState, ctx: RenderContext): Html {
   // Groups whose patches landed have left their stack.
   const landed = unstacked.filter((i) => i.state === "landed");
   const items = unstacked.filter((i) => i.state !== "landed");
-  const pushes = Object.values(r.pushes);
+  // Newest first, as on Treeherder; those waiting for you are the newest anyway.
+  const pushes = Object.values(r.pushes).reverse();
   const planned = pushes.filter((p) => isWaiting(r, p));
   const declined = pushes.filter((p) => !p.rev && p.declined !== undefined);
   const rest = pushes.filter((p) => !planned.includes(p) && !declined.includes(p));
