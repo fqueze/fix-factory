@@ -1535,12 +1535,25 @@ class Planner {
       const theirs = stacks.length
         ? `The stack's fix patches may already remove some of these skips along with their fix: see \`git diff ${stacks[0].base ?? this.config.baseRef}..${stacks[0].branch} -- '*.toml' '*.ini'\` (run it in ${stacks[0].worktree}). Those skips are theirs: leave them out of your commit, and don't mention their tests in its message.`
         : "";
-      this.resumeAuthor(
-        ANNOTATIONS_ITEM,
-        key,
-        "removal",
-        `The stack was verified on try with your DEBUG commit ${debug.slice(0, 12)} on top: ${list}. Read them with fx-tests (fx-tests try <rev>). Drop the DEBUG commit. ${theirs}${theirs ? " " : ""}For each other skip-if it removed whose test passed in the configs the skip covered, remove that skip for real in one commit: \`Bug XXXXXXX - Remove skip-if annotations that no longer fail in ${this.s.folder}, r=<reviewer>.\`, its reviewer from the find-reviewer skill, its body naming each skip's old bug and the push that shows it passing (the bug number is the meta bug's, given later). Leave the skips whose test still failed. The classifications you were given stand: never turn a flakiness skip into a run-if. A skip whose configs no push ran (an artifact build, say) isn't kept for that: put the push that would cover them in \`tryRequest\`, and the factory resumes you with its results. Keep your run-if commit, if any, as it is. Report the new commit as \`removal\` (and \`runIf\` again), without \`debug\`.`,
-      );
+      // On top of the stack, the DEBUG commit lost the skips the fix patches remove: what's left is what try verified.
+      // All green, that commit is the patch, under a landable message.
+      const tb = this.view.jobs.filter((j) => j.purpose.what === "try-branch" && succeeded(j)).at(-1);
+      const top = tb && this.out<{ head: string; branch: string }>(tb);
+      if (top && pushes.every((p) => p.result === "green")) {
+        this.resumeAuthor(
+          ANNOTATIONS_ITEM,
+          key,
+          "removal",
+          `The stack was verified on try with your DEBUG commit on top: ${list}, all green. On top of the stack it became ${top.head.slice(0, 12)} (branch ${top.branch}): it only removes the skips the fix patches don't, and try showed them passing. In your branch, replace your DEBUG commit with it (\`git reset --hard HEAD~1 && git cherry-pick ${top.head}\`), then reword only its message: \`Bug XXXXXXX - Remove skip-if annotations that no longer fail in ${this.s.folder}, r=<reviewer>.\`, its reviewer from the find-reviewer skill, its body naming each skip's old bug and the push that shows it passing (the bug number is the meta bug's, given later). Change no code. Report it as \`removal\` (and \`runIf\` again), without \`debug\`.`,
+        );
+      } else {
+        this.resumeAuthor(
+          ANNOTATIONS_ITEM,
+          key,
+          "removal",
+          `The stack was verified on try with your DEBUG commit ${debug.slice(0, 12)} on top: ${list}. Read them with fx-tests (fx-tests try <rev>). Drop the DEBUG commit. ${theirs}${theirs ? " " : ""}For each other skip-if it removed whose test passed in the configs the skip covered, remove that skip for real in one commit: \`Bug XXXXXXX - Remove skip-if annotations that no longer fail in ${this.s.folder}, r=<reviewer>.\`, its reviewer from the find-reviewer skill, its body naming each skip's old bug and the push that shows it passing (the bug number is the meta bug's, given later). Leave the skips whose test still failed. The classifications you were given stand: never turn a flakiness skip into a run-if. A skip whose configs no push ran (an artifact build, say) isn't kept for that: put the push that would cover them in \`tryRequest\`, and the factory resumes you with its results. Keep your run-if commit, if any, as it is. Report the new commit as \`removal\` (and \`runIf\` again), without \`debug\`.`,
+        );
+      }
     }
     // The meta bug waits for the removal to be in the stack: it's the patch that needs one.
     this.removing = true;
