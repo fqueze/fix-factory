@@ -65,6 +65,10 @@
         ],
         "additionalProperties": false
       }
+    },
+    "tryRequest": {
+      "type": "string",
+      "description": "A try push you need (a platform you don't have, or a reviewer asks for one): what it should run and why. The factory plans it, the user approves it, and you're resumed with the results."
     }
   },
   "required": [

@@ -255,6 +255,7 @@ export interface InvestigateReport {
   files?: { evidence: string; reproduction: string; widening?: string }; // relative to the worktree
   commits: string[]; // shas in the agent's worktree, oldest first
   bugDraft?: BugDraft; // when the fix needs its own bug
+  tryRequest?: string; // a try push it needs: what to run and why; the factory plans it and asks you
   landsAfter: { what: string; reason: string }[];
   feedback: Feedback[];
 }
@@ -407,6 +408,7 @@ export interface AddressReviewReport {
   summary: string;
   commits: string[]; // the amended commit(s), oldest first
   replies: { commentId: number; text: string }[]; // only where the code doesn't speak for itself
+  tryRequest?: string; // as InvestigateReport's
   feedback: Feedback[];
 }
 

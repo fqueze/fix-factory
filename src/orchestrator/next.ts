@@ -818,6 +818,12 @@ class Planner {
 
   resumeAuthor(item: ItemId, key: string, reason: string, message: string, state: ItemState = "investigating"): JobRecord | undefined {
     if (this.view.byKey.has(key)) return this.want(key);
+    // Its own commit has no Differential Revision line (the stack's has): without the revision it can't read the reviews.
+    const revs = Object.values(this.s.patches).filter((p) => p.item === item && p.revision !== undefined);
+    if (revs.length) {
+      const list = revs.map((p) => `D${p.revision} (https://phabricator.services.mozilla.com/D${p.revision})`).join(", ");
+      message = `Your patch is on Phabricator as ${list}: read its reviews with the read-phabricator-comments skill. Your own commit doesn't carry its Differential Revision line; the factory keeps it in the stack.\n\n${message}`;
+    }
     const plan = resumeAuthorPlan(this.s.id, this.view, item, reason, { message }, state);
     return plan === "busy" || plan === undefined ? undefined : this.want(key, () => plan);
   }
@@ -886,6 +892,7 @@ class Planner {
     if (!latest) return;
     if (!this.want(latest.purpose.key)) return;
     const author = this.authorReport(item.id)!;
+    if (this.askedPush(item, author.job)) return;
     if (author.commits.length === 0) return;
     // A ⚑ on its author's last run (it disagrees with you, it fixed without reproducing…): nothing goes on until you
     // answer.
@@ -894,6 +901,36 @@ class Planner {
   }
 
   // Undefined until every skip-if is listed and classified: a redone group exists before they are.
+  // A try push its author asked for (it never pushes): planned from what it asked, approved by you, then the author
+  // is resumed with the results, before any critical review: one would only ask for that verification.
+  private askedPush(item: ItemView, author: JobRecord): boolean {
+    const asked = this.rep<{ tryRequest?: string }>(author).tryRequest;
+    if (!asked) return false;
+    const e = this.itemEpoch(item.id);
+    const wt = this.view.byKey.get(`wt:${item.id}${e}`)?.find(succeeded);
+    if (!wt) return false;
+    const { path, branch } = this.out<{ path: string; branch: string }>(wt);
+    const h = shortHash([author.job]).slice(0, 4);
+    const groupFile = dataPath(this.config, this.s.id, `items/${item.id}${e}.json`);
+    const none = dataPath(this.config, this.s.id, "no-initial-push.json");
+    const planned = this.planPushes(
+      `plan:asked:${item.id}${e}:${author.job}`,
+      { goal: `what the author of ${item.group.tests[0]} asked for: ${asked}`, failuresFile: groupFile, initialPushFile: none, branch, worktree: path, base: this.config.baseRef },
+      { cwd: path, item: item.id, purpose: { item: item.id }, files: [{ path: none, content: '{"note": "none"}\n' }] },
+      (i, count) => `${item.id.replace(/^i-/, "").slice(0, 24)}-ask-${h}${count === 1 ? "" : `-${i + 1}`}`,
+      path,
+    );
+    if (!planned) return true;
+    if (planned.made.some((id) => this.s.pushes[id]?.result === undefined)) return true;
+    const results = planned.made.map((id) => `${this.s.pushes[id].rev} (${this.s.pushes[id].result === "green" ? "green" : (this.s.pushes[id].summary ?? "failures")})`).join(", ");
+    const declined = planned.ids.map((id) => this.s.pushes[id]?.declined).filter((t) => t !== undefined && t !== "discarded");
+    const message = planned.made.length
+      ? `The try push you asked for ran: ${results}. Read the results with fx-tests (fx-tests try <rev>); the failed jobs' logs are under ${artifactsDir(this.config)}/<task id>. Act on them, then end with the JSON report again, without a tryRequest unless you need another push.`
+      : `The user didn't make the try push you asked for${declined.length ? `: “${declined[0]}”` : ""}. Go on without it, then end with the JSON report again, without a tryRequest.`;
+    this.resumeAuthor(item.id, `author:${item.id}${e}:asked:${author.job}`, "asked push", message);
+    return true;
+  }
+
   private annotationsInput(wt: string): unknown[] | undefined {
     const skips = this.skipIfs(wt);
     const input = skips?.map(({ a, index }) => {
@@ -963,6 +1000,15 @@ class Planner {
     const jobs = this.authorJobs(item.id);
     if (jobs.slice(0, jobs.indexOf(author) + 1).findLast((j) => j.purpose.reason !== "lint")?.purpose.reason === "nits") {
       reviewed();
+      return;
+    }
+    // The same commits a critical review already found problems in: another review would say the same. You decide.
+    const prior = patches.map((p) => this.view.jobs.filter((j) => j.purpose.what === "review" && j.purpose.patch === p.id && j.purpose.sha === p.sha && j.purpose.key !== `review:${p.id}:${author.job}` && succeeded(j)).at(-1));
+    if (!this.view.byKey.has(`review:${patches[0].id}:${author.job}`) && prior.every((j) => j && this.rep<ReviewPatchReport>(j).verdict === "findings")) {
+      const last = prior.at(-1)!.job;
+      if (this.view.done.has(`failed:${last}`)) return;
+      this.raise(`failed:${last}`, { action: "Its author left the patch unchanged after the critical review", detail: report.summary.slice(0, 500), job: last, item: item.id });
+      this.setItem(item.id, "blocked", "critical review");
       return;
     }
     const reviews = patches.map((p) =>

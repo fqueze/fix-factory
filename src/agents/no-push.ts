@@ -152,7 +152,7 @@ function main(): void {
   const push = pushIn(input.tool_input?.command ?? "");
   if (!push || (push.tryPush && useAllowance(stateDir, input.session_id))) return;
   process.stderr.write(
-    `Blocked: agents never push (${push.command.slice(0, 200)}). Add --no-push to see what a try push would run. Don't work around a push you need: say so in your report (with the command and why); the user can allow you one try push. To reproduce on another platform, read the factory's un-skip push results (fx-tests), or hand back a DEBUG commit with state "needs a try repro".\n`,
+    `Blocked: agents never push (${push.command.slice(0, 200)}). Add --no-push to see what a try push would run. Don't work around a push you need: put what it should run and why in your report's \`tryRequest\`; the factory plans it, the user approves it, and you're resumed with the results. To reproduce on another platform, read the factory's un-skip push results (fx-tests), or hand back a DEBUG commit with state "needs a try repro".\n`,
   );
   process.exit(2);
 }

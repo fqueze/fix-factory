@@ -52,19 +52,23 @@
     "match": "^stack\\.ts import --cwd \\S+ b{40}\\^\\.\\.b{40}",
     "out": [{ "sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "title": "Bug 1234567 - Null-check x after the reflow in test_b.html, r=smaug.", "bug": 1234567, "reviewers": ["smaug"], "files": ["dom/base/test/test_b.html"], "insertions": 2, "deletions": 0, "testOnly": true }]
   },
+  {
+    "match": "^stack\\.ts import --cwd \\S+ e{40}\\^\\.\\.e{40}",
+    "out": [{ "sha": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "title": "Bug 1234567 - Wait for the reflow in test_b.html, r=smaug.", "bug": 1234567, "reviewers": ["smaug"], "files": ["dom/base/test/test_b.html"], "insertions": 2, "deletions": 0, "testOnly": true }]
+  },
   { "match": "^phab\\.ts check-reviewers ", "out": { "unknown": [] } },
   { "match": "^stack\\.ts import --cwd \\S+ origin/main\\.\\.", "out": [] },
   { "match": "^phab\\.ts reviewers ", "out": { "files": [], "suggestions": [] } },
   { "match": "^git log -1 --format=%B (\\w+)", "out": "Bug XXXXXXX - Fix the test, r=smaug.\n\nThe test checked too early.\n" },
   { "match": "^lint-text\\.ts --kind (commit|bug) ", "out": { "ok": true, "violations": [] } },
   {
-    "match": "^stack\\.ts assemble --cwd \\S+ --branch (\\S+) --base origin/main --leave-conflict a{40} b{40}$",
+    "match": "^stack\\.ts assemble --cwd \\S+ --branch (\\S+) --base origin/main --leave-conflict a{40} e{40}$",
     "out": {
       "branch": "$1",
       "head": "dddddddddddddddddddddddddddddddddddddddd",
       "commits": [
         { "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "newSha": "cccccccccccccccccccccccccccccccccccccccc" },
-        { "sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "newSha": "dddddddddddddddddddddddddddddddddddddddd" }
+        { "sha": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "newSha": "dddddddddddddddddddddddddddddddddddddddd" }
       ],
       "skipped": [],
       "empty": []
