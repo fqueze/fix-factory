@@ -84,6 +84,7 @@ const reviewSample: ReviewPatchReport = {
 };
 
 const recoverSample: RecoverReport = {
+  answer: "I'll retry the stuck jobs and restart the investigation.",
   plan: [
     { cmd: "retry-job", job: "j1", reason: "network" },
     { cmd: "cancel-job", job: "j2", reason: "stuck" },
@@ -144,4 +145,6 @@ test("recover schema rejects common mistakes", () => {
   assert.ok(plan({ cmd: "delete-everything", reason: "r" }).length > 0);
   assert.deepEqual(plan({ cmd: "shell", command: "ls", reason: "r" }), ["$.plan[0].cwd: required"]);
   assert.deepEqual(validateReport(recover, { ...recoverSample, cannot_do: [] }), ["$.cannot_do: unexpected property"]);
+  const { answer: _a, ...noAnswer } = recoverSample;
+  assert.deepEqual(validateReport(recover, noAnswer), ["$.answer: required"]);
 });

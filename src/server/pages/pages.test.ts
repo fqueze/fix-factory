@@ -200,33 +200,57 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.equal(boxes.length, 8);
     assert.match(boxes[0], / checked>$/);
     assert.doesNotMatch(boxes[7], /checked/, "shell commands are opt-in");
-    assert.match(h, /Run checked/);
+    assert.match(h, /<button class="btn small primary">Do these<\/button>/);
     assert.ok(h.includes(cmd({ cmd: "reply-recovery", request: "r-20261013-tab-failures", job: "j-recover" })));
-    assert.match(h, /Can't do: Read the profile/);
-    assert.match(h, /Should the next attempt use a debug build\?/);
+    assert.match(h, /<details class="fold"><summary>1 thing it can't do<\/summary><ul class="plan-notes"><li>Read the profile/);
+    assert.match(h, /<li>❓ Should the next attempt use a debug build\?<\/li>/);
+    assert.match(h, /placeholder="Answer it, or say what to change…"/);
   });
-  it("4. investigate and fix: one plain-words line per planned command, its reason under it, notes after the list", () => {
+  it("4. investigate and fix: what you asked, then one short line per planned command with its reason, an agent's instructions folded, notes after the list", () => {
     const h = expanded("r-20261013-tab-failures");
-    const labels = [...h.matchAll(/<li><label title="([^"]*)"><input type="checkbox"[^>]*> (.*?)<\/label><span class="reason">/g)].map((m) => [m[1], m[2]]);
+    assert.match(h, /<div class="action reply" data-key="recovery:j-recover"><span class="flag">You asked<\/span> <span class="said clamp1" data-expand title="the browser_tabSpinner agent has been at it for 6 hours">“the browser_tabSpinner agent has been at it for 6 hours”<\/span><form/, "a plan recorded without an answer still renders, without an empty answer");
+    assert.doesNotMatch(h, /<p class="answer">/);
+    const items = [...h.matchAll(/<li><label><input type="checkbox"[^>]*> (.*?)<\/label> <span class="reason">[^<]*<\/span>(.*?)<\/li>/g)].map((m) => [m[1], m[2]]);
     assert.deepEqual(
-      labels.map(([title]) => title),
+      items.map(([label]) => label),
       [
-        "tell browser_tabSpinner.js’s author: “Stop and report what you have.”",
-        "restart the investigation of browser_pinnedTabs.js: “Start over from the worktree as it is; the profile of task Zx3 is gone.”",
+        "tell browser_tabSpinner.js’s author",
+        "restart the investigation of browser_pinnedTabs.js",
         "mark browser_mute.js as left as-is",
         "retry fetch test artifacts of browser_tab_drag_drop.js",
         "stop the investigation of browser_tabSpinner.js",
         "redo step work list",
-        "change the request config: {&quot;platforms&quot;:[&quot;linux64/debug&quot;]}",
-        "run in /build/worktrees/spinner: git stash list",
+        "change the request config <code>{&quot;platforms&quot;:[&quot;linux64/debug&quot;]}</code>",
+        "run in <code>/build/worktrees/spinner</code>: <code>git stash list</code>",
       ],
     );
-    assert.equal(labels[7][1], "run in <code>/build/worktrees/spinner</code>: <code>git stash list</code>");
+    assert.equal(items[0][1], '<details class="fold"><summary>its instructions</summary><div class="sub">Stop and report what you have.</div></details>');
+    assert.equal(items[1][1], '<details class="fold"><summary>its instructions</summary><div class="sub">Start over from the worktree as it is; the profile of task Zx3 is gone.</div></details>');
+    assert.ok(items.slice(2).every(([, rest]) => rest === ""), "only agents get instructions");
     assert.match(h, /<span class="reason">Taskcluster answered 503 at 07:00; it is back up\.<\/span>/);
     const list = h.indexOf('<ul class="plan">');
     const notes = h.indexOf('<ul class="plan-notes">');
-    assert.ok(list >= 0 && notes > h.indexOf("</ul>", list), "Can't do and questions come after the list");
-    assert.match(h, /<span class="why clamp1" title="You said: “the browser_tabSpinner agent has been at it for 6 hours”">/);
+    assert.ok(list >= 0 && notes > h.indexOf("</ul>", list), "questions and what it can't do come after the list");
+  });
+
+  it("4. investigate and fix: its answer to you comes right after what you asked; one command says Do it, none has no button", () => {
+    const r = structuredClone(get("r-20261013-tab-failures"));
+    const plan = r.recoveryPlans.find((p) => p.job === "j-recover")!;
+    plan.answer = "I'll stop the <spinner> agent & restart it.";
+    plan.plan = plan.plan.slice(4, 5);
+    plan.questions = [];
+    plan.cannotDo = [];
+    let h = renderRequest(r, ctx, true).value;
+    assert.match(h, /“the browser_tabSpinner agent has been at it for 6 hours”<\/span><p class="answer">I&#39;ll stop the &lt;spinner&gt; agent &amp; restart it\.<\/p><form/);
+    assert.match(h, /<button class="btn small primary">Do it<\/button>/);
+    assert.doesNotMatch(h, /plan-notes|it can't do/);
+    assert.match(h, /placeholder="Say what to change…"/);
+
+    plan.plan = [];
+    h = renderRequest(r, ctx, true).value;
+    const flag = h.slice(h.indexOf('data-key="recovery:j-recover"'), h.indexOf("</div>", h.indexOf('data-key="recovery:j-recover"')));
+    assert.doesNotMatch(flag, /<ul class="plan">|Do it|Do these/);
+    assert.match(flag, /<p class="answer">[^]*reply-recovery/);
   });
 
   it("4. investigate and fix: a running recovery agent is named in the summary line, not counted with the groups, and shown right above the box you typed in", () => {

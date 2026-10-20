@@ -297,6 +297,15 @@ test("recovery plans and notes accumulate; command-executed changes nothing else
   assert.equal(s.updatedAt, done.t);
 });
 
+test("a recovery plan keeps its answer; one recorded before answers existed has none", () => {
+  const s = fold(
+    ev({ type: "recovery-plan", job: "j1", text: "t", answer: "I'll retry it.", plan: [], cannotDo: [], questions: [] }),
+    ev({ type: "recovery-plan", job: "j2", text: "t", plan: [], cannotDo: [], questions: [] }),
+  );
+  assert.equal(s.recoveryPlans[0].answer, "I'll retry it.");
+  assert.ok(!("answer" in s.recoveryPlans[1]));
+});
+
 test("doesn't mutate its input, and the result shares no objects with it", () => {
   const events = [
     ev({ type: "request-created", kind: "burndown", text: "x" }),

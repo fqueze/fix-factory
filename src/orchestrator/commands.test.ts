@@ -189,15 +189,17 @@ describe("commands", () => {
     assert.equal(plan.cwd, "/state");
     assert.deepEqual(plan.agent?.vars, { text: "Lando was down, re-push", id: ID, stateDir: `/state/requests/${ID}` });
     const retry: PlannedCommand = { cmd: "retry-job", job: "j-1", reason: "Lando error" };
-    const job = sc.complete(`recover:${c.id}`, { report: { plan: [retry], cannotDo: [], questions: ["which push?"], feedback: [] } });
+    const job = sc.complete(`recover:${c.id}`, { report: { answer: "I'll retry the push.", plan: [retry], cannotDo: [], questions: ["which push?"], feedback: [] } });
     const s = sc.state();
     assert.deepEqual(s.recoveryPlans[0].plan, [retry]);
+    assert.equal(s.recoveryPlans[0].answer, "I'll retry the push.");
+    assert.equal(s.needsUser[0].action, "Its answer to you");
     assert.deepEqual(s.needsUser.map((x) => [x.key, x.job]), [[`recovery:${job}`, job]]);
 
     const reply = cmd({ cmd: "reply-recovery", job, text: "push A" });
     run(sc, reply);
     assert.equal(sc.plan(`recover:${reply.id}`).agent?.resume, true);
-    const second = sc.complete(`recover:${reply.id}`, { report: { plan: [], cannotDo: [], questions: [], feedback: [] } });
+    const second = sc.complete(`recover:${reply.id}`, { report: { answer: "Done.", plan: [], cannotDo: [], questions: [], feedback: [] } });
     assert.deepEqual(sc.open(), [`recovery:${second}`]);
   });
 
@@ -206,7 +208,7 @@ describe("commands", () => {
     const c = cmd({ cmd: "tell-factory", text: "it's fixed on central" });
     run(sc, c);
     const planned: PlannedCommand = { cmd: "set-state", item: "i-a", state: "left as-is", reason: "fixed on central" };
-    const job = sc.complete(`recover:${c.id}`, { report: { plan: [planned], cannotDo: [], questions: [], feedback: [] } });
+    const job = sc.complete(`recover:${c.id}`, { report: { answer: "Done.", plan: [planned], cannotDo: [], questions: [], feedback: [] } });
     sc.add({ type: "needs-user", request: ID, key: "failed:j-9", action: "failed", detail: "d", job: "j-9", item: "i-a" });
     assert.deepEqual(sc.open(), [`recovery:${job}`, "failed:j-9"]);
     run(sc, cmd({ ...planned }));
