@@ -2163,7 +2163,7 @@ describe("burndown stack", () => {
 
 describe("burndown verification", () => {
   // A burndown whose stack was verified on try with the DEBUG commit on top, waiting for its meta bug.
-  const verified = (check = false, bug: number | null = null) => {
+  const verified = (check = false, bug: number | null = null, result: "green" | "failures" = "green") => {
     const sc = new Scenario("burndown", { folder: "a" });
     sc.step();
     sc.settle();
@@ -2226,7 +2226,7 @@ describe("burndown verification", () => {
     sc.complete(dry, { output: { command: ["./mach", "try", "fuzzy"], taskCount: 5, tasks: [], tryTaskConfig: {}, commits: [sha("b"), sha("a")], warnings: [] } });
     sc.add({ type: "user-done", request: ID, key: `approve-push:${push}` });
     sc.add({ type: "try-pushed", request: ID, push, rev: "fed", url: "u" });
-    sc.add({ type: "try-finished", request: ID, push, result: "green", summary: "green" });
+    sc.add({ type: "try-finished", request: ID, push, result, summary: result });
     sc.settle();
     sc.complete(`try-table:${push}:final`, { output: table() });
     sc.settle();
@@ -2261,7 +2261,7 @@ describe("burndown verification", () => {
     const open = () => sc.view().jobs.filter((j) => !j.end).map((j) => j.purpose.key);
     assert.deepEqual(open(), [key]);
     const message = sc.plan(key).agent!.message!;
-    assert.match(message, /DEBUG commit 999999999999 on top: fed \(green\)/);
+    assert.match(message, /DEBUG commit on top: fed \(green\), all green/);
     assert.match(message, /Bug XXXXXXX - Remove skip-if annotations that no longer fail in a/);
     sc.complete(key, { report: { removal: sha("7"), summary: "removed one skip", feedback: [] } });
     sc.settle();
@@ -2311,6 +2311,27 @@ describe("burndown verification", () => {
     assert.match(rewrite, /^rewrite-bugs:a:/);
     assert.deepEqual(sc.purpose(rewrite).edits, { "p-annotations": 999 });
     assert.equal(sc.view().jobs.filter((j) => j.purpose.reason === "removal").length, 1, "not resumed again");
+  });
+  it("all green, has the author cherry-pick the commit try ran on top of the stack and only reword it", () => {
+    const { sc } = verified(false, 22);
+    const message = sc.plan("author:i-annotations:removal").agent!.message!;
+    assert.match(message, new RegExp(`git cherry-pick ${sha("b")}`));
+    assert.match(message, new RegExp(`it became ${sha("b").slice(0, 12)} \\(branch ${ID}-a-try-`));
+    assert.match(message, /Change no code/);
+    assert.doesNotMatch(message, /tryRequest|fx-tests|Drop the DEBUG commit/);
+  });
+  it("with failures, has the author drop the DEBUG commit and write the removal from the pushes", () => {
+    const { sc } = verified(false, 22, "failures");
+    // Its failures pointed at no patch: you move the request on.
+    assert.equal(sc.state().step, "verify on try");
+    sc.add({ type: "step", request: ID, step: "meta bug" });
+    sc.settle();
+    const message = sc.plan("author:i-annotations:removal").agent!.message!;
+    assert.match(message, /DEBUG commit 999999999999 on top: fed \(failures\)/);
+    assert.match(message, /Drop the DEBUG commit/);
+    assert.match(message, /git diff .*\.\.r-.*-a -- '\*\.toml' '\*\.ini'/);
+    assert.match(message, /tryRequest/);
+    assert.doesNotMatch(message, /cherry-pick|Change no code/);
   });
 });
 
