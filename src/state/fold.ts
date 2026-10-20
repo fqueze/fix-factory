@@ -163,6 +163,7 @@ export function foldEvents(events: readonly Event[]): RequestState {
           worktree: e.worktree,
           title: e.title,
           bug: e.bug,
+          ...(e.bugFromYou ? { bugFromYou: true } : {}),
           bugDraft: e.bugDraft,
           revision: e.revision,
           effort: e.effort,

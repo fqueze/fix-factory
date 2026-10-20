@@ -160,7 +160,7 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
         for (const n of s.needsUser.filter((x) => x.key.startsWith("meta-bug:"))) ev({ type: "user-done", key: n.key });
       } else {
         const { deps: _d, review: _r, replyDrafts: _rd, id, ...p } = s.patches[c.patch];
-        ev({ type: "patch", patch: id, ...p, bug: c.bug });
+        ev({ type: "patch", patch: id, ...p, bug: c.bug, bugFromYou: true });
         for (const n of s.needsUser.filter((x) => x.key.startsWith("file-bug:") && x.patch === c.patch)) ev({ type: "user-done", key: n.key });
       }
       done(true);

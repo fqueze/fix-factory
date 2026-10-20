@@ -159,6 +159,7 @@ export type Event =
       worktree: string;
       title: string; // first line of the commit message
       bug: number | null; // null while the message says Bug XXXXXXX
+      bugFromYou?: boolean; // the bug number you gave: kept when its author's commit still says Bug XXXXXXX
       bugDraft?: BugDraft;
       revision?: number; // D-number once submitted
       effort?: number; // 1-5
@@ -319,6 +320,7 @@ export interface PatchView {
   worktree: string;
   title: string;
   bug: number | null;
+  bugFromYou?: boolean; // the bug number you gave
   bugDraft?: BugDraft;
   revision?: number;
   submittedAt?: Iso; // when its revision first showed up
