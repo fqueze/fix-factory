@@ -533,9 +533,8 @@ function itemJobs(r: RequestState, i: ItemView, ctx: RenderContext): Html | null
 function requestJobs(r: RequestState, ctx: RenderContext): Html | null {
   const jobs = Object.values(r.jobs)
     .filter((j) => j.item === undefined && j.endedAt !== undefined)
-    .sort((a, b) => b.startedAt.localeCompare(a.startedAt))
-    .slice(0, 8);
-  return jobs.length ? html`<details class="fold" data-fold="jobs"><summary>Tasks</summary><div class="jobs">${jobs.map((j) => jobLine(r, j, ctx))}</div></details>` : null;
+    .sort((a, b) => b.startedAt.localeCompare(a.startedAt));
+  return jobs.length ? html`<details class="fold" data-fold="jobs"><summary>${plural(jobs.length, "task")}</summary><div class="jobs">${jobs.map((j) => jobLine(r, j, ctx))}</div></details>` : null;
 }
 
 function bugDraftBox(r: RequestState, p: PatchView, back: string): Html {
