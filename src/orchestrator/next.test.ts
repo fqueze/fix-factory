@@ -2,7 +2,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { InvalidReport } from "./handlers.ts";
-import { resumeAuthorPlan, stackId } from "./next.ts";
+import { resumeAuthorPlan, similarMessages, stackId } from "./next.ts";
 import { config, HOUR, ID, Scenario, sha } from "./testkit.ts";
 import { shortHash } from "./plan.ts";
 
@@ -68,6 +68,22 @@ function reviewed(sc: Scenario, item: string, commit: string, test: string, opts
   sc.complete(`review:${patch}:${author}`, { report: ok });
   sc.settle();
 }
+
+describe("similarMessages", () => {
+  it("is true when 3/4 of the smaller message's words are shared, ignoring the harness's wording", () => {
+    const bf = "Waiting for * entry is in BFCache";
+    assert.ok(similarMessages(bf, "Waiting for example.org entry is in BFCache"));
+    assert.ok(similarMessages(`Uncaught exception in test - ${bf} - timed out after 50 tries.`, "Waiting for example.org entry is in BFCache"));
+    assert.ok(!similarMessages(bf, "Waiting for workers to respond"));
+    assert.ok(!similarMessages(bf, "sw-error: registration failed"));
+  });
+
+  it("is false when either message has no word", () => {
+    assert.ok(!similarMessages("", ""));
+    assert.ok(!similarMessages("* 12", "* 12"));
+    assert.ok(!similarMessages("", "Waiting for workers"));
+  });
+});
 
 describe("1. request", () => {
   const routed = (fields: object) => ({ config: { folders: [], tests: [], platforms: [], constraints: [] }, questions: [], feedback: [], ...fields });
@@ -512,6 +528,35 @@ describe("3. work list", () => {
     assert.deepEqual(items["i-test-a"].group.taskIds, ["T1", "T2"]);
     // One named cluster exists: only it counts.
     assert.deepEqual(items["i-test-b"].group.configs, ["linux/opt-xpcshell", "mac/opt-xpcshell"]);
+  });
+
+  it("takes a merged group naming no existing cluster from those of its tests whose message is alike", () => {
+    const sc = tryPushFinished();
+    sc.step();
+    sc.complete("try-table:initial:final", { output: table() });
+    sc.complete("collect:initial:final", { output: [failure("a/test_a.js", "x")] });
+    sc.step();
+    sc.complete("cluster:initial:final", {
+      output: {
+        groups: [
+          { ...group("k1", "a/test_a.js", "Waiting for example.org entry is in BFCache", 2), configs: ["win/debug-xpcshell"], taskIds: ["T1"] },
+          { ...group("k2", "a/test_a.js", "sw-error: registration failed", 5), configs: ["mac/opt-xpcshell"], taskIds: ["T2"] },
+        ],
+        singles: [],
+      },
+    });
+    sc.step();
+    const job = sc.running("merge:initial:final");
+    // Recorded before unknown keys were rejected.
+    const report = { groups: [{ message: "Waiting for * entry is in BFCache", tests: ["a/test_a.js"], configs: ["every/folder-config"], from: ["gone"], reason: "r" }], feedback: [] };
+    sc.reports.set(job, report);
+    sc.add({ type: "agent-report", request: ID, job, prompt: "merge-clusters", report });
+    sc.add({ type: "job-finished", request: ID, job, exitCode: 0, durationMs: 1 });
+    sc.settle();
+    const g = sc.state().items["i-test-a"].group;
+    assert.deepEqual(g.configs, ["win/debug-xpcshell"]);
+    assert.equal(g.ratePerWeek, 2);
+    assert.deepEqual(g.taskIds, ["T1"]);
   });
 
   it("runs at 2 h when the push hasn't finished, then again when it finishes, adding only new groups", () => {
