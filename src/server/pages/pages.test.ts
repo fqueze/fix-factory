@@ -7,7 +7,7 @@ import type { RequestState } from "../../types.ts";
 import { jobLabel, pushStatus, type RenderContext } from "./common.ts";
 import { renderOverview, renderRecentPushes } from "./overview.ts";
 import { IDLE, itemBucket, runningSentence } from "./progress.ts";
-import { renderRequest } from "./request.ts";
+import { configTable, parseConfig, renderRequest } from "./request.ts";
 import { conversationOf, renderActivity } from "./activity.ts";
 import { ITEM_STATES } from "../commands.ts";
 
@@ -468,7 +468,9 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.match(h, /<span class="bug none" title="Goes under the meta bug">meta bug<\/span> Save the prefs file of test_libPrefs\.js in the temp dir, r=gstoll\./);
     assert.match(h, /⛔ hard: needs “Make nsLocalFile::CopyDirectoryTo/);
     assert.match(h, /🔗 soft: needs a newer sqlite on the try builders \(the vacuum test is slow without it\)/);
-    assert.match(h, /<summary>40 failures\/week, on \d+ configs?<\/summary>/);
+    assert.match(rowOf(h, "patch-p-prefs"), /<h4 class="part">The failure<\/h4><div class="failure">Test wrote into its own directory<\/div><div class="sub">linux64\/debug, windows11-64\/opt<\/div><div class="sub">2 configs · 31 failures\/week · <a href="https:\/\/tests\.firefox\.dev\/test\.html\?test=storage%2Ftest%2Funit%2Ftest_libPrefs\.js"[^>]*>rates on tests\.firefox\.dev ↗<\/a><\/div><h4 class="part">The fix<\/h4><div class="sub">review effort 1\/5<\/div>/);
+    assert.match(h, /<div class="sub">\d+ configs? · 40 failures\/week · /);
+    assert.doesNotMatch(h, /Allow one try push/);
     assert.match(h, /href="\/requests\/r-20261010-xpcshell-cwd\/stacks\/storage-unit\/review"/);
   });
   it("6. verify on try: one row per push, planned ones with Approve and Approve both, finished ones with their result", () => {
@@ -634,7 +636,7 @@ describe("a burndown with closed groups, running agents and a dropped patch", ()
     const row = rowOf(h, "item-i-browser-policy-trackingprotection");
     assert.match(row, /<span class="name" title="browser\/components\/enterprisepolicies\/tests\/browser\/trackingprotection\/browser_policy_trackingprotection\.js\n[^"]*">trackingprotection\/browser_policy_trackingprotection\.js<\/span>/);
     assert.match(h, />browser_policy_sitepolicies_jit\.js<\/span>/);
-    assert.match(row, /<div class="failure"><span class="sub">Failure:<\/span> leaked 1 window\(s\) until shutdown \[url = about:preferences#etp\]<\/div>/);
+    assert.match(row, /<div class="rowbody"><h4 class="part">The failure<\/h4><div class="failure">leaked 1 window\(s\) until shutdown \[url = about:preferences#etp\]<\/div>/);
   });
   it("shows running work in the group rows, with the group's cost at the end of its line", () => {
     assert.match(h, /<span class="end"><span class="cost" title="Agent cost of this group so far">\$0\.40<\/span><\/span><span class="state"><span class="working">investigating · <span data-since="2026-10-15T08:53:00.000Z">7 min<\/span><\/span><\/span>/);
@@ -756,6 +758,15 @@ describe("a burndown with closed groups, running agents and a dropped patch", ()
     );
     assert.doesNotMatch(t, /Ask its author/);
   });
+  it("shows a group's cause under The fix, its verification folded", () => {
+    const r = structuredClone(get(ID));
+    const i = r.items["i-browser-policy-trackingprotection"];
+    assert.doesNotMatch(rowOf(renderRequest(r, ctx, true).value, `item-${i.id}`), /The fix/, "nothing to show before a cause");
+    i.investigation = { state: "fix verified locally", summary: "s", cause: "the query holds the window", verification: "ran it 50 times", commits: [], landsAfter: [], feedback: [] };
+    const row = rowOf(renderRequest(r, ctx, true).value, `item-${i.id}`);
+    assert.match(row, /<\/h4><div class="failure">[^]*<h4 class="part">The fix<\/h4><div class="why"><p><span class="sub">Cause:<\/span> the query holds the window<\/p><details class="fold" data-fold="verified-i-browser-policy-trackingprotection"><summary>How it was verified<\/summary><p>ran it 50 times<\/p><\/details><\/div>/);
+    assert.doesNotMatch(row, /Allow one try push|allow-push/);
+  });
 
 
 
@@ -763,7 +774,8 @@ describe("a burndown with closed groups, running agents and a dropped patch", ()
     const h = expanded("r-20261013-tab-failures");
     const patch = rowOf(h, "patch-p-close");
     assert.match(patch, /review effort \d\/5/);
-    assert.match(patch, /<summary>[\d.]+ failures\/week, on/);
+    assert.match(patch, /<div class="sub">\d+ configs? · [\d.]+ failures\/week · /);
+    assert.match(patch, /<h4 class="part">The failure<\/h4>[^]*<h4 class="part">The fix<\/h4>[^]*<h4 class="part">What the factory did<\/h4>/, "in that order");
     const r = structuredClone(get("r-20261013-tab-failures"));
     delete r.patches["p-close"].effort;
     delete r.items["i-close"].group.ratePerWeek;
@@ -884,5 +896,40 @@ describe("push status", () => {
     const p = { id: "initial", purpose: "verify", progress: { done: 30, total: 50, failures: 2 } } as unknown as Parameters<typeof pushStatus>[0];
     assert.equal(pushStatus(p), "30/50, 2 failures");
     assert.equal(pushStatus({ ...p, progress: { ...p.progress!, tests: { done: 7, total: 20 } } }), "7/20 test tasks, 2 failures");
+  });
+});
+
+describe("failure table", () => {
+  it("parses a job name into its OS, build and suite", () => {
+    assert.deepEqual(parseConfig("test-linux2404-64-shippable/opt-mochitest-browser-chrome-swr"), { os: "Linux", build: "opt", suite: "browser-chrome-swr" });
+    assert.deepEqual(parseConfig("test-linux2404-64-asan/opt-xpcshell"), { os: "Linux", build: "asan", suite: "xpcshell" });
+    assert.deepEqual(parseConfig("test-linux1804-64-tsan-qr/opt-mochitest-plain"), { os: "Linux", build: "tsan", suite: "plain" });
+    assert.deepEqual(parseConfig("test-linux2404-64-ccov/opt-xpcshell"), { os: "Linux", build: "ccov", suite: "xpcshell" });
+    assert.deepEqual(parseConfig("test-windows11-64-24h2/debug-mochitest-devtools-chrome"), { os: "Windows", build: "debug", suite: "devtools-chrome" });
+    assert.deepEqual(parseConfig("test-macosx1500-aarch64-shippable/opt-xpcshell"), { os: "macOS", build: "opt", suite: "xpcshell" });
+    assert.deepEqual(parseConfig("test-android-em-7.0-x86_64-qr/debug-geckoview-junit"), { os: "Android", build: "debug", suite: "geckoview-junit" });
+    assert.deepEqual(parseConfig("linux/opt-xpcshell"), { os: "Linux", build: "opt", suite: "xpcshell" }, "test- is optional");
+    assert.equal(parseConfig("linux64/debug"), undefined, "no suite");
+    assert.equal(parseConfig("source-test-foo/opt-x"), undefined, "unknown OS");
+    assert.equal(parseConfig("xpcshell"), undefined);
+  });
+
+  it("lays configs out as job × OS, builds in order opt, debug, asan, tsan, ccov, and lists the others under it", () => {
+    const t = configTable([
+      "test-linux2404-64-ccov/opt-xpcshell",
+      "test-windows11-64-24h2/debug-xpcshell",
+      "test-linux2404-64-tsan/opt-xpcshell",
+      "test-linux2404-64-asan/opt-xpcshell",
+      "test-linux2404-64/debug-xpcshell",
+      "test-linux2404-64-shippable/opt-xpcshell",
+      "test-linux2404-64-shippable-qr/opt-xpcshell",
+      "linux64/debug",
+    ]).value;
+    assert.match(t, /^<table class="ptable"><thead><tr><th>Job<\/th><th>Linux<\/th><th>Windows<\/th><\/tr><\/thead>/, "only the OSes it failed on, in a fixed order");
+    assert.deepEqual([...t.matchAll(/<td class="mono">([^<]*)<\/td>/g)].map((m) => m[1]), ["opt xpcshell", "debug xpcshell", "asan xpcshell", "tsan xpcshell", "ccov xpcshell"]);
+    assert.match(t, /<tr><td class="mono">opt xpcshell<\/td><td><span class="failbadge" title="test-linux2404-64-shippable\/opt-xpcshell\ntest-linux2404-64-shippable-qr\/opt-xpcshell">FAIL<\/span><\/td><td class="none">—<\/td><\/tr>/);
+    assert.match(t, /<tr><td class="mono">debug xpcshell<\/td><td><span class="failbadge" title="test-linux2404-64\/debug-xpcshell">FAIL<\/span><\/td><td><span class="failbadge" title="test-windows11-64-24h2\/debug-xpcshell">FAIL<\/span><\/td><\/tr>/);
+    assert.match(t, /<\/table><div class="sub">linux64\/debug<\/div>$/);
+    assert.equal(configTable(["linux64/debug", "windows11-64/opt"]).value, '<div class="sub">linux64/debug, windows11-64/opt</div>', "no table when nothing parses");
   });
 });

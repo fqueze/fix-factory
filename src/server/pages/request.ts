@@ -363,7 +363,7 @@ export function parseConfig(config: string): { os: string; build: string; suite:
   return { os, build: variant ?? m[2], suite: m[3].replace(/^mochitest-/, "") };
 }
 
-function configTable(configs: string[]): Html {
+export function configTable(configs: string[]): Html {
   const parsed = configs.map((c) => ({ c, p: parseConfig(c) }));
   const known = parsed.filter((x) => x.p);
   const oses = OSES.map(([, os]) => os).filter((os) => known.some((x) => x.p!.os === os));
