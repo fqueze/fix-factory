@@ -187,7 +187,7 @@ function metaBugLine(r: RequestState, back: string, ctx: RenderContext): Html {
       ? html`· <span class="sub">to file once the stack's ${plural(unfiled, "other bug")} ${unfiled === 1 ? "is" : "are"} filed</span>`
       : html`· <a class="bug tofile" href="${enterBugUrl({ ...m.draft, dependsOn: stackBugs(r) }, ctx)}" target="_blank" rel="noopener">Bug to file</a>`;
   return html`<div class="box"><h4>Meta bug${required ? null : html` <span class="sub">(optional)</span>`} ${link} ${m.draft ? html`· “${m.draft.summary}”` : null}</h4>${
-    m.draft ? html`<details><summary>Description</summary><div class="desc">${m.draft.description}</div></details>${revisions(r, "meta")}` : null
+    m.draft ? html`<details data-fold="desc-meta"><summary>Description</summary><div class="desc">${m.draft.description}</div></details>${revisions(r, "meta")}` : null
   }${bugBox(r.id, "meta", back, "row")}</div>`;
 }
 
@@ -336,7 +336,7 @@ function groupRow(r: RequestState, i: ItemView, ctx: RenderContext): Html {
       .map((p) => html`<div>Draft patch, its critical review hasn't passed yet: “${patchTitle(p)}” ${viewLink(r, p)}</div>`)}${patches
       .filter((p) => isDropped(r, p))
       .map((p) => html`<div>Dropped patch: “${patchTitle(p)}” ${viewLink(r, p)}</div>`)}${
-      reopen ? html`<details class="reopen"><summary class="btn small">Reopen…</summary>${continueBox(r.id, i.id, requestUrl(r.id))}</details>` : null
+      reopen ? html`<details class="reopen" data-fold="reopen-${i.id}"><summary class="btn small">Reopen…</summary>${continueBox(r.id, i.id, requestUrl(r.id))}</details>` : null
     }${itemJobs(r, i, ctx)}`,
   });
 }
@@ -525,7 +525,7 @@ function bugDraftBox(r: RequestState, p: PatchView, back: string): Html {
   const d = p.bugDraft!;
   return html`<div class="box tofile">
     <h4>${d.product}::${d.component} · “${d.summary}”</h4>
-    <details><summary>Description</summary><div class="desc">${d.description}</div></details>
+    <details data-fold="desc-${p.id}"><summary>Description</summary><div class="desc">${d.description}</div></details>
     ${revisions(r, p.id)}${bugBox(r.id, p.id, back, "row")}
   </div>`;
 }

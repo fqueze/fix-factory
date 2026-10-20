@@ -135,6 +135,17 @@
   }
 
   var latest = {};
+  var shown = {}; // the last fragment text put on the page, per request
+  // Changes come in bursts (a try push's progress, an agent's events): one refresh per request a second at most,
+  // and none when what the server renders hasn't changed.
+  var queued = {};
+  function scheduleRefresh(id) {
+    if (queued[id]) return;
+    queued[id] = setTimeout(function () {
+      delete queued[id];
+      refreshRequest(id);
+    }, 1000);
+  }
   function refreshRequest(id) {
     var el = requestElement(id);
     // Queued and finished requests are one-line rows of the main fragment.
@@ -151,10 +162,21 @@
         if (s !== latest[id] || s < mainShown) return;
         el = requestElement(id);
         if (!el) return;
+        if (shown[id] === text) return;
         var fresh = parse(text).firstElementChild;
         // A request that moved between active, queued and finished needs the whole list.
         if (!fresh || fresh.dataset.section !== el.dataset.section) return refreshMain();
+        shown[id] = text;
         fresh.dataset.seq = s;
+        // An agent's conversation already on the page carries over, rather than blanking until it reloads.
+        fresh.querySelectorAll("details[data-watch] .activity").forEach(function (box) {
+          var fold = box.closest("details[data-watch]").dataset.fold;
+          var old = el.querySelector('details[data-watch][data-fold="' + CSS.escape(fold) + '"] .activity');
+          if (old) {
+            box.innerHTML = old.innerHTML;
+            box.dataset.text = old.dataset.text || "";
+          }
+        });
         el.replaceWith(fresh);
         reopenFolds(fresh);
       })
@@ -209,6 +231,9 @@
       })
       .then(function (text) {
         var box = d.querySelector(".activity");
+        // Unchanged: left alone (replacing it would reset its scrollbars and selection).
+        if (box.dataset.text === text) return;
+        box.dataset.text = text;
         // Its folded parts (tool calls, the prompt) stay as you left them.
         var open = Array.prototype.map.call(box.querySelectorAll("details[data-more][open]"), function (x) {
           return x.dataset.more;
@@ -413,7 +438,7 @@
       connectedOnce = true;
     });
     source.addEventListener("changed", function (event) {
-      refreshRequest(JSON.parse(event.data));
+      scheduleRefresh(JSON.parse(event.data));
       refreshStrip();
     });
   }

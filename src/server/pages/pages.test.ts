@@ -202,7 +202,7 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.doesNotMatch(boxes[7], /checked/, "shell commands are opt-in");
     assert.match(h, /<button class="btn small primary">Do these<\/button>/);
     assert.ok(h.includes(cmd({ cmd: "reply-recovery", request: "r-20261013-tab-failures", job: "j-recover" })));
-    assert.match(h, /<details class="fold"><summary>1 thing it can't do<\/summary><ul class="plan-notes"><li>Read the profile/);
+    assert.match(h, /<details class="fold" data-fold="cannot-j-recover"><summary>1 thing it can't do<\/summary><ul class="plan-notes"><li>Read the profile/);
     assert.match(h, /<li>❓ Should the next attempt use a debug build\?<\/li>/);
     assert.match(h, /placeholder="Answer it, or say what to change…"/);
   });
@@ -224,8 +224,8 @@ describe("one fixture per step of docs/MVP.md", () => {
         "run in <code>/build/worktrees/spinner</code>: <code>git stash list</code>",
       ],
     );
-    assert.equal(items[0][1], '<details class="fold"><summary>its instructions</summary><div class="sub">Stop and report what you have.</div></details>');
-    assert.equal(items[1][1], '<details class="fold"><summary>its instructions</summary><div class="sub">Start over from the worktree as it is; the profile of task Zx3 is gone.</div></details>');
+    assert.equal(items[0][1], '<details class="fold" data-fold="plan-j-recover-0"><summary>its instructions</summary><div class="sub">Stop and report what you have.</div></details>');
+    assert.equal(items[1][1], '<details class="fold" data-fold="plan-j-recover-1"><summary>its instructions</summary><div class="sub">Start over from the worktree as it is; the profile of task Zx3 is gone.</div></details>');
     assert.ok(items.slice(2).every(([, rest]) => rest === ""), "only agents get instructions");
     assert.match(h, /<span class="reason">Taskcluster answered 503 at 07:00; it is back up\.<\/span>/);
     const list = h.indexOf('<ul class="plan">');
