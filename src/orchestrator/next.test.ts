@@ -1612,6 +1612,19 @@ describe("7. meta bug", () => {
     assert.equal(sc.state().step, "submit");
   });
 
+  it("a patch already on Phabricator gets its Differential Revision line along with its bug", () => {
+    const sc = verified();
+    const { deps: _d, review: _r, replyDrafts: _rd, id, ...p } = sc.state().patches["p-test-a"];
+    sc.add({ type: "patch", request: ID, patch: id, ...p, revision: 7 });
+    sc.add({ type: "meta-bug", request: ID, bug: 999 });
+    sc.add({ type: "user-done", request: ID, key: "meta-bug:a" });
+    const [rewrite] = sc.settle();
+    assert.match(rewrite, /^rewrite-bugs:a:/);
+    const plan = sc.plan(rewrite);
+    assert.deepEqual(plan.cli?.args.slice(-2), ["--edits", plan.files![0].path]);
+    assert.deepEqual(JSON.parse(plan.files![0].content), { [sha("d")]: { bug: 999, revision: "https://phabricator.services.mozilla.com/D7" } });
+  });
+
   it("asks you to file each patch's drafted bug only now; no meta bug when every patch has its own", () => {
     const draft = { product: "Core", component: "XPCOM", summary: "s", description: "d" };
     const sc = verified({ bugDraft: draft });
@@ -1748,6 +1761,20 @@ describe("8. submit", () => {
     assert.equal(sc.view().jobs.filter((j) => j.purpose.key.startsWith("rewrite-reviewers:")).length, 1, "rewritten once");
   });
 
+  it("a reviewer rewrite gives a submitted patch its Differential Revision line, merged with its new message", () => {
+    const sc = submitting();
+    const { deps: _d, review: _r, replyDrafts: _rd, id, ...p } = sc.state().patches["p-test-a"];
+    sc.add({ type: "patch", request: ID, patch: id, ...p, title: "Bug 999 - Fix a", revision: 101 });
+    sc.complete("reviewers:a", { output: { files: [], suggestions: [{ name: "#dom-core", source: "mots" }] } });
+    const own = sc.settle().find((k) => k.startsWith("reviewers:"))!;
+    sc.complete(own, { output: { files: [], suggestions: [] } });
+    const [rewrite] = sc.settle();
+    assert.match(rewrite, /^rewrite-reviewers:a:/);
+    assert.deepEqual(JSON.parse(sc.plan(rewrite).files![0].content), {
+      [sha("f")]: { message: "Bug 999 - Fix a, r=#dom-core.\n\nBody.\n", bug: 999, revision: "https://phabricator.services.mozilla.com/D101" },
+    });
+  });
+
   it("adds the suggested reviewer to patches without r=, then shows failed checks to you", () => {
     const sc = submitting();
     const s = sc.state();
@@ -1871,7 +1898,13 @@ describe("9. review comments", () => {
     assert.equal(sc.plan(`review:p-test-a:${job}`).priority, 0);
     sc.complete(`review:p-test-a:${job}`, { report: ok });
     assert.deepEqual(sc.settle(), [`rewrite-review:a:${job}`]);
-    assert.deepEqual(sc.plan(`rewrite-review:a:${job}`).cli?.args.slice(-2), ["--order", `${sha("e")},${sha("7")}`]);
+    // Its commit lost its Differential Revision line: the rewrite gives every submitted patch its own back.
+    const rw = sc.plan(`rewrite-review:a:${job}`);
+    assert.deepEqual(rw.cli?.args.slice(-4), ["--order", `${sha("e")},${sha("7")}`, "--edits", rw.files![0].path]);
+    assert.deepEqual(JSON.parse(rw.files![0].content), {
+      [sha("e")]: { revision: "https://phabricator.services.mozilla.com/D100" },
+      [sha("7")]: { revision: "https://phabricator.services.mozilla.com/D101" },
+    });
     sc.complete(`rewrite-review:a:${job}`, { output: { mapping: { [sha("e")]: sha("e"), [sha("7")]: sha("8") } } });
     assert.deepEqual(sc.settle(), [`interdiff:p-test-a:${job}`]);
     assert.deepEqual(sc.plan(`interdiff:p-test-a:${job}`).cli?.args, ["interdiff", "--cwd", `/wt/${ID}-a`, sha("1"), sha("8")]);
@@ -1917,6 +1950,76 @@ describe("9. review comments", () => {
   });
 });
 
+describe("9. changes after submission", () => {
+  // Its author runs for reason with a new commit, imported, linted and reviewed; started before or after the submission.
+  function changed(reason: string, before = false): { sc: Scenario; job: string } {
+    let sc: Scenario;
+    const key = `author:i-test-a:${reason.replace(/\s+/g, "-")}:c-1`;
+    const start = () => {
+      const plan = resumeAuthorPlan(ID, sc.view(), "i-test-a", reason, { message: "m" }, "investigating");
+      assert.ok(plan && plan !== "busy");
+      plan.purpose.key = key;
+      sc.startJob(plan);
+    };
+    if (before) {
+      sc = submitting();
+      sc.complete("reviewers:a", { output: { files: [], suggestions: [] } });
+      const [check] = sc.settle();
+      sc.complete(check, { output: { ok: true, failures: [] } });
+      sc.add({ type: "submit-copied", request: ID, stack: "a" });
+      sc.settle();
+      // While you submit.
+      start();
+      sc.complete("import-submit:a:0", {
+        output: [
+          { ...imported(sha("e"), "Bug 22 - Fix test_b, r=smaug.", [], 22)[0], revision: 100 },
+          { ...imported(sha("f"), "Bug 999 - Fix a, r=smaug.", [], 999)[0], revision: 101 },
+        ],
+      });
+      sc.settle();
+    } else {
+      sc = inReview();
+      start();
+    }
+    sc.complete("poll:0", { output: polled("needs-review", [], "pending") });
+    const job = sc.complete(key, { report: fixed([sha("7")]) });
+    sc.settle();
+    sc.complete(`import:${job}`, { output: imported(sha("7"), "Bug 999 - Fix a, r=smaug.", ["a/test_a.js"], 999).map((c) => ({ ...c, revision: 101 })) });
+    sc.settle();
+    sc.complete(`msg:p-test-a:${sha("7")}`, { output: "m" });
+    sc.settle();
+    sc.complete(`lint:p-test-a:${sha("7")}`, { output: lintOk });
+    sc.settle();
+    sc.complete(`review:p-test-a:${job}`, { report: ok });
+    return { sc, job };
+  }
+
+  for (const reason of ["continue", "comment", "stack comments", "asked push", "try"]) {
+    it(`an author run for ${reason} after the submission is put in the stack, and asks you to resubmit`, () => {
+      const { sc, job } = changed(reason);
+      assert.deepEqual(sc.settle(), [`rewrite-review:a:${job}`]);
+      const rw = sc.plan(`rewrite-review:a:${job}`);
+      assert.deepEqual(JSON.parse(rw.files![0].content)[sha("7")], { revision: "https://phabricator.services.mozilla.com/D101" });
+      sc.complete(`rewrite-review:a:${job}`, { output: { mapping: { [sha("e")]: sha("e"), [sha("7")]: sha("8") } } });
+      const [inter] = sc.settle();
+      assert.equal(inter, `interdiff:p-test-a:${job}`);
+      sc.complete(inter, { output: { diff: "-a\n+b\n", method: "same-parent" } });
+      sc.settle();
+      const n = sc.state().needsUser.find((x) => x.key.startsWith("resubmit:"))!;
+      assert.equal(n.action, "Resubmit D101");
+      assert.equal(n.detail, "changed by its author since you submitted it and re-reviewed (Opus) · interdiff below");
+      assert.equal(sc.state().items["i-test-a"].state, "waiting for review");
+    });
+  }
+
+  it("an author run that started before the submission is neither rewritten nor resubmitted", () => {
+    const { sc } = changed("continue", true);
+    assert.ok(!sc.settle().some((k) => k.startsWith("rewrite-review:")));
+    assert.ok(!sc.open().some((k) => k.startsWith("resubmit:")));
+    assert.equal(sc.state().items["i-test-a"].state, "reviewed");
+  });
+});
+
 describe("10. landing", () => {
   it("moves accepted patches to the bottom and asks you to land; done once everything has landed", () => {
     const sc = inReview();
@@ -1928,6 +2031,7 @@ describe("10. landing", () => {
     sc.complete(key, { output: { order: ["p-test-a", "p-test-b"], flippedSoftDeps: [{ patch: "p-test-b", needs: "p-test-a", kind: "soft", reason: "shares a helper", source: "agent" }], landable: ["p-test-a", "p-test-b"] } });
     const [rewrite] = sc.settle();
     assert.match(rewrite, /^rewrite-land:a:/);
+    assert.deepEqual(JSON.parse(sc.plan(rewrite).files![0].content), { [sha("e")]: { revision: "https://phabricator.services.mozilla.com/D100" }, [sha("f")]: { revision: "https://phabricator.services.mozilla.com/D101" } });
     sc.complete(rewrite, { output: { mapping: { [sha("f")]: sha("5"), [sha("e")]: sha("6") } } });
     const [adapt] = sc.settle();
     assert.equal(sc.plan(adapt).name, "adapt-soft-dep");

@@ -30,6 +30,15 @@ test("message edits replace the placeholder and keep the trailer", () => {
   assert.equal(editMessage("Bug 1 - X, r=a.\n", { bug: 2 }), "Bug 2 - X, r=a.\n");
 });
 
+test("a revision edit adds the trailer a message lacks, and never replaces one it has", () => {
+  const url = "https://phabricator.services.mozilla.com/D9";
+  assert.equal(editMessage("Bug 1 - X, r=a.\n\nBody.\n", { revision: url }), `Bug 1 - X, r=a.\n\nBody.\n\nDifferential Revision: ${url}\n`);
+  assert.equal(editMessage("Bug XXXXXXX - X, r=a.\n", { bug: 3, revision: url }), `Bug 3 - X, r=a.\n\nDifferential Revision: ${url}\n`);
+  assert.equal(editMessage("Bug 1 - X, r=a.\n", { message: "Bug 1 - Y, r=a.", revision: url }), `Bug 1 - Y, r=a.\n\nDifferential Revision: ${url}\n`);
+  const msg = "Bug 1 - X, r=a.\n\nDifferential Revision: https://phabricator.services.mozilla.com/D5\n";
+  assert.equal(editMessage(msg, { revision: url }), msg);
+});
+
 test("summary table and meta-bug comment in stack order", () => {
   const out = summary({
     folder: "dom/base/test",

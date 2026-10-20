@@ -123,6 +123,7 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.match(row, /data-tasks="\/api\/requests\/r-20261014-extensions-xpcshell\/pushes\/unskip\/tasks"/);
     assert.match(top, /<span>186 tasks<\/span>/);
     assert.match(row, /<div class="ptasks">Loading…<\/div>/);
+    assert.doesNotMatch(row, /pushjobs-unskip/, "not folded while it waits for you");
 
   });
 
@@ -896,6 +897,55 @@ describe("push status", () => {
     const p = { id: "initial", purpose: "verify", progress: { done: 30, total: 50, failures: 2 } } as unknown as Parameters<typeof pushStatus>[0];
     assert.equal(pushStatus(p), "30/50, 2 failures");
     assert.equal(pushStatus({ ...p, progress: { ...p.progress!, tests: { done: 7, total: 20 } } }), "7/20 test tasks, 2 failures");
+  });
+});
+
+describe("a made push's row", () => {
+  const ID = "r-20261013-dom-indexeddb";
+  const job = (id: string, item: string, reason: string, key: string, extra = {}) =>
+    ({ job: id, kind: "agent", name: "investigate-and-fix", item, purpose: { key, what: "author", item, reason }, startedAt: "2026-10-15T08:00:00.000Z", ...extra }) as unknown as RequestState["jobs"][string];
+  // Tests named relative to the request's folder.
+  const made = () => ({ ...structuredClone(get(ID)), folder: "dom/indexedDB/test/unit" });
+  const stateOf = (row: string) => /<span class="state">(.*?)<\/span>/.exec(row)?.[1];
+  const cell = (test: string, verdict: string, config = "linux") => ({ test: `dom/indexedDB/test/unit/${test}`, config, verdict, evidence: `why ${test}` }) as NonNullable<RequestState["pushes"][string]["analysis"]>[number];
+
+  it("says what the factory made of its failures: verdict counts, then the list, its jobs and command folded", () => {
+    const r = made();
+    r.pushes.initial.analysis = [cell("test_a.js", "infra"), cell("test_b.js", "infra", "mac"), cell("test_c.js", "pre-existing")];
+    const row = rowOf(renderRequest(r, ctx, true).value, "push-initial");
+    assert.equal(stateOf(row), "14 failures, 2 groups · 2 infra · 1 pre-existing");
+    assert.match(row, /<h4 class="part">What the factory made of its failures<\/h4><ul class="analysis"><li><b>infra<\/b>: test_a\.js <span class="sub">on linux<\/span><div class="sub clamp1"[^>]*>why test_a\.js<\/div><\/li>/);
+    assert.match(row, /<details class="fold" data-fold="pushjobs-initial"><summary>Its jobs, commits and command<\/summary><pre class="mono command">/);
+  });
+
+  it("names the groups whose authors got its failures", () => {
+    const r = made();
+    r.jobs["j-a"] = job("j-a", "i-idb-quota", "try", "author:i-idb-quota:try:initial");
+    r.jobs["j-b"] = job("j-b", "i-idb-quota", "try", "author:i-idb-quota:try:initial:final");
+    r.jobs["j-other"] = job("j-other", "i-idb-upgrade", "try", "author:i-idb-upgrade:try:initial-2");
+    assert.equal(stateOf(rowOf(renderRequest(r, ctx, true).value, "push-initial")), "14 failures, 2 groups · sent to the author of test_quota.js");
+    r.jobs["j-other"] = job("j-other", "i-idb-upgrade", "try", "author:i-idb-upgrade:try:initial");
+    assert.equal(stateOf(rowOf(renderRequest(r, ctx, true).value, "push-initial")), "14 failures, 2 groups · sent to the authors of test_quota.js, test_upgrade.js, test_upgrade_v2.js");
+  });
+
+  it("a push its author asked for: what that author made of it", () => {
+    const r = made();
+    r.pushes["idb-quota-ask-0a1b"] = { ...r.pushes.initial, id: "idb-quota-ask-0a1b" };
+    delete (r.pushes as Record<string, unknown>).initial;
+    const state = () => stateOf(rowOf(renderRequest(r, ctx, true).value, "push-idb-quota-ask-0a1b"));
+    assert.equal(state(), "14 failures, 2 groups · results go to its author");
+    r.jobs["j-ask"] = job("j-ask", "i-idb-quota", "asked push", "author:i-idb-quota:asked:j-1");
+    assert.equal(state(), "14 failures, 2 groups · its author is reading the results");
+    r.jobs["j-ask"] = job("j-ask", "i-idb-quota", "asked push", "author:i-idb-quota:asked:j-1", { endedAt: "2026-10-15T08:30:00.000Z", outcome: "fix verified locally: not its patch" });
+    assert.equal(state(), "14 failures, 2 groups · its author: fix verified locally: not its patch");
+  });
+
+  it("a green push says only that", () => {
+    const r = made();
+    r.pushes.initial = { ...r.pushes.initial, result: "green", summary: "green" };
+    const row = rowOf(renderRequest(r, ctx, true).value, "push-initial");
+    assert.equal(stateOf(row), "green");
+    assert.doesNotMatch(row, /What the factory made/);
   });
 });
 

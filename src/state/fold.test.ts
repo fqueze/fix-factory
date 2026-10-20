@@ -120,11 +120,12 @@ test("jobs: started and finished, linked to their item, last report kept", () =>
 });
 
 test("patches: the latest event per id wins, deps and review survive rewrites", () => {
+  const submitted = ev({ type: "patch", patch: "p1", sha: "b", worktree: "/wt", title: "Bug 1 - x", bug: 1, revision: 5 });
   const s = fold(
     ev({ type: "patch", patch: "p1", sha: "a", worktree: "/wt", title: "Bug XXXXXXX - x", bug: null, bugDraft: { product: "P", component: "C", summary: "s", description: "d" } }),
     ev({ type: "dep", dep: { patch: "p1", needs: "p0", kind: "hard", reason: "r", source: "agent" } }),
     ev({ type: "review-status", patch: "p1", revision: 5, status: "needs-review", reviewers: [{ name: "a", status: "pending" }], comments: [] }),
-    ev({ type: "patch", patch: "p1", sha: "b", worktree: "/wt", title: "Bug 1 - x", bug: 1, revision: 5 }),
+    submitted,
     ev({ type: "patch", patch: "p2", sha: "c", worktree: "/wt", title: "Bug 2 - y", bug: 2 }),
   );
   assert.deepEqual(s.patches.p1, {
@@ -134,11 +135,48 @@ test("patches: the latest event per id wins, deps and review survive rewrites", 
     title: "Bug 1 - x",
     bug: 1,
     revision: 5,
+    submittedAt: submitted.t,
     deps: [{ patch: "p1", needs: "p0", kind: "hard", reason: "r", source: "agent" }],
     review: { revision: 5, status: "needs-review", reviewers: [{ name: "a", status: "pending" }], comments: [] },
     replyDrafts: [],
   });
   assert.deepEqual(Object.keys(s.patches), ["p1", "p2"]);
+});
+
+test("patches: submittedAt is when a revision first showed up, kept by later events with it", () => {
+  const first = ev({ type: "patch", patch: "p1", sha: "b", worktree: "/wt", title: "t", bug: 1, revision: 5 });
+  const s = fold(
+    ev({ type: "patch", patch: "p1", sha: "a", worktree: "/wt", title: "t", bug: 1 }),
+    first,
+    ev({ type: "patch", patch: "p1", sha: "c", worktree: "/wt", title: "t", bug: 1, revision: 5 }),
+    ev({ type: "patch", patch: "p2", sha: "d", worktree: "/wt", title: "t", bug: 2 }),
+  );
+  assert.equal(s.patches.p1.submittedAt, first.t);
+  assert.equal(s.patches.p1.sha, "c");
+  assert.equal("submittedAt" in s.patches.p2, false);
+});
+
+test("pushes: triage-try reports of a push's jobs are its analysis, a re-triaged cell replacing the earlier one", () => {
+  const triage = (job: string, push: string | undefined) =>
+    ev({ type: "job-started", job, kind: "agent", name: "triage-try", pid: 1, pidStartTime: 1, cmd: ["claude"], cwd: "/", codeVersion: "sha", purpose: { key: job, what: "triage", ...(push ? { push } : {}) } });
+  const cell = (test: string, verdict: "infra" | "pre-existing", config = "linux") => ({ test, config, verdict, evidence: `${test} ${verdict}` });
+  const s = fold(
+    ev({ type: "try-planned", push: "p", purpose: "p", command: [] }),
+    triage("j1", "p"),
+    ev({ type: "agent-report", job: "j1", prompt: "triage-try", report: { cells: [cell("a.js", "infra"), cell("b.js", "infra")], feedback: [] } }),
+    triage("j2", "p"),
+    ev({ type: "agent-report", job: "j2", prompt: "triage-try", report: { cells: [cell("a.js", "pre-existing"), cell("a.js", "infra", "mac")], feedback: [] } }),
+    triage("j3", undefined),
+    ev({ type: "agent-report", job: "j3", prompt: "triage-try", report: { cells: [cell("c.js", "infra")], feedback: [] } }),
+  );
+  assert.deepEqual(
+    s.pushes.p.analysis?.map((c) => [c.test, c.config, c.verdict]),
+    [
+      ["b.js", "linux", "infra"],
+      ["a.js", "linux", "pre-existing"],
+      ["a.js", "mac", "infra"],
+    ],
+  );
 });
 
 test("deps: added before the patch exists, replaced by needs, removed", () => {
