@@ -160,7 +160,7 @@ export function commitsOf(name: string, report: unknown): string[] {
     }
     case "write-annotation-patches": {
       const r = report as WriteAnnotationPatchesReport;
-      return r.runIf ? [r.runIf] : [];
+      return [r.runIf, r.removal].filter((sha) => sha !== undefined);
     }
     case "address-review": {
       const r = report as AddressReviewReport;
@@ -257,6 +257,7 @@ class Planner {
     this.stacks();
     this.bugEdits();
     this.verify();
+    this.skipRemoval();
     this.metaBug();
     this.submit();
     this.submitted();
@@ -1504,6 +1505,24 @@ class Planner {
       ],
     }, (i) => `${this.verifyPrefix(info)}-${i + 1}`, info.wt, info.id);
     return planned && { ids: planned.ids, made: planned.made };
+  }
+
+  // Once the stack is verified with the DEBUG commit on top, the skips it removed whose tests passed are removed for
+  // real, in a patch that lands under the meta bug; the others stay, their failures being the work list's.
+  private skipRemoval(): void {
+    if (this.s.kind !== "burndown" || at(this.s.step) <= at("verify on try") || this.s.step === "done" || !this.s.items[ANNOTATIONS_ITEM]) return;
+    const debug = this.debugCommit();
+    if (!debug) return;
+    const pushes = Object.values(this.s.pushes).filter((p) => p.rev && p.result && this.view.byKey.get(`dry-run:${p.id}`)?.[0].purpose.stack !== undefined);
+    if (!pushes.length) return;
+    const e = this.itemEpoch(ANNOTATIONS_ITEM);
+    const list = pushes.map((p) => `${p.rev} (${p.result === "green" ? "green" : (p.summary ?? "failures")})`).join(", ");
+    this.resumeAuthor(
+      ANNOTATIONS_ITEM,
+      `author:${ANNOTATIONS_ITEM}${e}:removal${this.stepEpoch("verify on try")}`,
+      "removal",
+      `The stack was verified on try with your DEBUG commit ${debug.slice(0, 12)} on top: ${list}. Read them with fx-tests (fx-tests try <rev>). Drop the DEBUG commit. For each skip-if it removed whose test passed in the configs the skip covered, remove that skip for real in one commit: \`Bug XXXXXXX - Remove skip-if annotations that no longer fail in ${this.s.folder}, r=<reviewer>.\`, its reviewer from the find-reviewer skill, its body naming each skip's old bug and the push that shows it passing (the bug number is the meta bug's, given later). Leave the skips whose test still failed. Keep your run-if commit, if any, as it is. Report the new commit as \`removal\` (and \`runIf\` again), without \`debug\`.`,
+    );
   }
 
   private debugCommit(): string | undefined {

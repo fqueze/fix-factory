@@ -43,6 +43,10 @@
     "disagreement": {
       "type": "string",
       "description": "Only when resumed with a message from the user that you didn't follow: why."
+    },
+    "removal": {
+      "type": "string",
+      "description": "Sha of the commit removing the skip-ifs whose tests passed on try, once the factory asks for it."
     }
   },
   "required": [
