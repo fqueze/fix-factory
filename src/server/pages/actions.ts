@@ -49,6 +49,13 @@ export function flagControls(r: RequestState, n: NeedsUser, ctx: RenderContext):
   const talk = item !== undefined && hasAuthorSession(r, item) ? continueBox(r.id, item, back) : null;
   const handBack = item === undefined ? null : handBackButton(r.id, item, back);
   let controls: Html | null = null;
+  // Skips whose tests still fail: yes puts them back; anything else, say it to the author (fix them, say).
+  if (n.key.startsWith("keep-skips:") && item !== undefined) {
+    return buttons(
+      commandButton(r.id, { cmd: "continue", item, text: "Yes, keep them: put exactly those skip-ifs back in your removal commit, change nothing else, and report it as `removal`." }, "Keep them", back, true, "Those failures stay unfixed, skipped as before"),
+      talk,
+    );
+  }
   switch (actionKind(n, r)) {
     case "approve-push": {
       const push = n.push === undefined ? undefined : r.pushes[n.push];

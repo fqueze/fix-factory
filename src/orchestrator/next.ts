@@ -922,6 +922,13 @@ class Planner {
     if (!this.want(latest.purpose.key)) return;
     const author = this.authorReport(item.id)!;
     if (this.askedPush(item, author.job)) return;
+    // Skips whose tests still fail: leaving those failures unfixed is your call.
+    const keep = item.id === ANNOTATIONS_ITEM ? this.rep<WriteAnnotationPatchesReport>(author.job).keepSkips : undefined;
+    for (const n of this.s.needsUser) if (n.key.startsWith("keep-skips:") && n.job !== author.job.job) this.clear(n.key);
+    if (keep?.length) {
+      this.raise(`keep-skips:${author.job.job}`, { action: `Keep ${keep.length === 1 ? "this skip-if" : `these ${keep.length} skip-ifs`}? Their tests still fail on try`, detail: keep.map((k) => `${k.skip}: ${k.failure}`).join("\n").slice(0, 1500), job: author.job.job, item: item.id });
+      return;
+    }
     if (author.commits.length === 0) return;
     // A ⚑ on its author's last run (it disagrees with you, it fixed without reproducing…): nothing goes on until you
     // answer.
@@ -1529,31 +1536,21 @@ class Planner {
         return dry && this.out<DryRunResult>(dry).tryTaskConfig["use-artifact-builds"] === true ? ", artifact builds" : "";
       };
       const list = pushes.map((p) => `${p.rev} (${p.result === "green" ? "green" : (p.summary ?? "failures")}${artifact(p)})`).join(", ");
-      // Fix patches often remove their test's skip with the fix: those skips are theirs, and this worktree doesn't
-      // have the stack's patches to show it.
-      const stacks = Object.values(this.s.stacks).filter((st) => st.order.length);
-      const theirs = stacks.length
-        ? `The stack's fix patches may already remove some of these skips along with their fix: see \`git diff ${stacks[0].base ?? this.config.baseRef}..${stacks[0].branch} -- '*.toml' '*.ini'\` (run it in ${stacks[0].worktree}). Those skips are theirs: leave them out of your commit, and don't mention their tests in its message.`
-        : "";
       // On top of the stack, the DEBUG commit lost the skips the fix patches remove: what's left is what try verified.
-      // All green, that commit is the patch, under a landable message.
+      // That commit is the patch, under a landable message; a skip whose test still failed comes back only once you
+      // agree to leave that failure unfixed.
       const tb = this.view.jobs.filter((j) => j.purpose.what === "try-branch" && succeeded(j)).at(-1);
-      const top = tb && this.out<{ head: string; branch: string }>(tb);
-      if (top && pushes.every((p) => p.result === "green")) {
-        this.resumeAuthor(
-          ANNOTATIONS_ITEM,
-          key,
-          "removal",
-          `The stack was verified on try with your DEBUG commit on top: ${list}, all green. On top of the stack it became ${top.head.slice(0, 12)} (branch ${top.branch}): it only removes the skips the fix patches don't, and try showed them passing. In your branch, replace your DEBUG commit with it (\`git rebase --onto ${debug}^ ${debug} && git cherry-pick ${top.head}\`), then reword only its message: \`Bug XXXXXXX - Remove skip-if annotations that no longer fail in ${this.s.folder}, r=<reviewer>.\`, its reviewer from the find-reviewer skill, its body naming each skip's old bug and the push that shows it passing (the bug number is the meta bug's, given later). Change no code. Report it as \`removal\` (and \`runIf\` again), without \`debug\`.`,
-        );
-      } else {
-        this.resumeAuthor(
-          ANNOTATIONS_ITEM,
-          key,
-          "removal",
-          `The stack was verified on try with your DEBUG commit ${debug.slice(0, 12)} on top: ${list}. Read them with fx-tests (fx-tests try <rev>). Drop the DEBUG commit. ${theirs}${theirs ? " " : ""}For each other skip-if it removed whose test passed in the configs the skip covered, remove that skip for real in one commit: \`Bug XXXXXXX - Remove skip-if annotations that no longer fail in ${this.s.folder}, r=<reviewer>.\`, its reviewer from the find-reviewer skill, its body naming each skip's old bug and the push that shows it passing (the bug number is the meta bug's, given later). Leave the skips whose test still failed. The classifications you were given stand: never turn a flakiness skip into a run-if. A skip whose configs no push ran (an artifact build, say) isn't kept for that: put the push that would cover them in \`tryRequest\`, and the factory resumes you with its results. Keep your run-if commit, if any, as it is. Report the new commit as \`removal\` (and \`runIf\` again), without \`debug\`.`,
-        );
-      }
+      if (!tb) return;
+      const top = this.out<{ head: string; branch: string }>(tb);
+      const failures = pushes.some((p) => p.result !== "green")
+        ? ` Some pushes had failures: read them with fx-tests (fx-tests try <rev>). For each skip your commit removes whose test failed on them in the configs the skip covered, and that no fix patch of the stack fixes, don't put it back yet: list it in \`keepSkips\` with the failure that shows it, and report without \`removal\`. The user decides whether to leave that failure unfixed; you'll be resumed with the answer.`
+        : "";
+      this.resumeAuthor(
+        ANNOTATIONS_ITEM,
+        key,
+        "removal",
+        `The stack was verified on try with your DEBUG commit on top: ${list}. On top of the stack it became ${top.head.slice(0, 12)} (branch ${top.branch}): it only removes the skips the fix patches don't. In your branch, replace your DEBUG commit with it (\`git rebase --onto ${debug}^ ${debug} && git cherry-pick ${top.head}\`), then reword its message: \`Bug XXXXXXX - Remove skip-if annotations that no longer fail in ${this.s.folder}, r=<reviewer>.\`, its reviewer from the find-reviewer skill, its body naming each skip's old bug and the push that shows it passing (the bug number is the meta bug's, given later). Change no code.${failures} Otherwise report it as \`removal\` (and \`runIf\` again), without \`debug\`.`,
+      );
     }
     // The meta bug waits for the removal to be in the stack: it's the patch that needs one.
     this.removing = true;
@@ -1561,12 +1558,14 @@ class Planner {
     if (!job) return;
     const item = this.s.items[ANNOTATIONS_ITEM];
     // From its latest report: a review round may have amended it.
-    const removal = this.rep<WriteAnnotationPatchesReport>(this.authorJobs(ANNOTATIONS_ITEM).filter(succeeded).at(-1)!).removal;
+    const latest = this.rep<WriteAnnotationPatchesReport>(this.authorJobs(ANNOTATIONS_ITEM).filter(succeeded).at(-1)!);
+    const removal = latest.removal;
     const info = [...this.stackInfos.values()].find((i) => i.patches.some((p) => p.source === removal));
     const pid = info?.patches.find((p) => p.source === removal)?.id;
     const inStack = info?.ready && pid !== undefined && this.s.stacks[info.id]?.order.includes(pid);
     // Ended without a patch (left as-is, handed back): the stack goes on without it.
-    this.removing = removal !== undefined && !inStack && !(SETTLED.includes(item.state) && !WITH_PATCHES.includes(item.state));
+    const asking = (latest.keepSkips?.length ?? 0) > 0 && item.state !== "handed back";
+    this.removing = asking || (removal !== undefined && !inStack && !(SETTLED.includes(item.state) && !WITH_PATCHES.includes(item.state)));
   }
 
   private debugCommit(): string | undefined {

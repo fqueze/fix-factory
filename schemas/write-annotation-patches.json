@@ -51,6 +51,28 @@
     "tryRequest": {
       "type": "string",
       "description": "A try push you need (configs no push ran yet): what it should run and why. The factory plans it, the user approves it, and you're resumed with the results."
+    },
+    "keepSkips": {
+      "type": "array",
+      "description": "Skips your removal commit drops whose tests still failed on try and that no fix patch fixes: the user decides whether they come back.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "skip": {
+            "type": "string",
+            "description": "The manifest, test and condition."
+          },
+          "failure": {
+            "type": "string",
+            "description": "The failure on try that shows it, with the push."
+          }
+        },
+        "required": [
+          "skip",
+          "failure"
+        ],
+        "additionalProperties": false
+      }
     }
   },
   "required": [

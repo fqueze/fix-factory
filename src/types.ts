@@ -471,6 +471,7 @@ export interface WriteAnnotationPatchesReport {
   debug?: string; // sha of the DEBUG un-skip commit, absent when no skip was flakiness
   removal?: string; // sha of the commit removing the skips that no longer fail, once try showed it
   tryRequest?: string; // as InvestigateReport's
+  keepSkips?: { skip: string; failure: string }[]; // skips whose tests still fail: put back only once you agree
   summary: string;
   feedback: Feedback[];
 }
