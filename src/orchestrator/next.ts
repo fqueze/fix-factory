@@ -1300,7 +1300,8 @@ class Planner {
               JSON.stringify({
                 patches: inStack.map((p) => {
                   const pv = this.s.patches[p.id];
-                  return { id: p.id, effort: pv.effort, value: value(p.id), testOnly: pv.testOnly };
+                  // Skip-if annotation changes are the easiest to review: they come first.
+                  return { id: p.id, effort: pv.item === ANNOTATIONS_ITEM ? 1 : pv.effort, value: value(p.id), testOnly: pv.testOnly };
                 }),
                 deps: inStack.flatMap((p) => this.s.patches[p.id].deps),
                 previous: prev?.order,
@@ -1695,7 +1696,8 @@ class Planner {
     const info = st && this.stackInfos.get(st.id);
     if (!info?.ready) return;
     const ps = st.order.map((pid) => this.s.patches[pid]);
-    const h = shortHash([info.code, ...ps.map((p) => `${p.id}:${p.bug}`)]).slice(0, 10);
+    // The prompt's version too: a better prompt writes it again.
+    const h = shortHash(["v2", info.code, ...ps.map((p) => `${p.id}:${p.bug}`)]).slice(0, 10);
     const file = dataPath(this.config, this.s.id, `meta-${st.id}-${h}.json`);
     const first = ps.find((p) => p.bugDraft)?.bugDraft;
     const draft: BugDraft = {
@@ -1711,6 +1713,7 @@ class Planner {
       const item = p.item === undefined ? undefined : this.s.items[p.item];
       const inv = item?.investigation;
       return {
+        sha: p.sha,
         bug: p.bug ?? (p.bugDraft ? "its own, to file" : "the meta bug"),
         title: p.title.replace(/^Bug (\d+|X+)\s*-\s*/i, "").replace(/,?\s*r[=?]\S+$/, ""),
         testOnly: p.testOnly,
@@ -1721,7 +1724,8 @@ class Planner {
         summary: inv?.summary ?? (item?.lastReport?.report as { summary?: string } | undefined)?.summary,
       };
     });
-    this.wantAgent(`meta-draft:${st.id}:${h}`, "meta-draft", "write-meta-bug", { folder: this.s.folder ?? st.folder, stackFile: file }, {
+    this.wantAgent(`meta-draft:${st.id}:${h}`, "meta-draft", "write-meta-bug", { folder: this.s.folder ?? st.folder, stackFile: file, worktree: st.worktree }, {
+      cwd: st.worktree,
       files: [{ path: file, content: JSON.stringify(patches, null, 2) + "\n" }],
       purpose: { stack: st.id, draft },
     });

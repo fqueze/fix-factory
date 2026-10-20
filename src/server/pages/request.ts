@@ -12,6 +12,7 @@ import {
   commandFields,
   elapsed,
   enterBugUrl,
+  metaBugUrl,
   formatCost,
   formatDate,
   groupLabel,
@@ -185,7 +186,7 @@ function metaBugLine(r: RequestState, back: string, ctx: RenderContext): Html {
     ? null
     : unfiled
       ? html`· <span class="sub">to file once the stack's ${plural(unfiled, "other bug")} ${unfiled === 1 ? "is" : "are"} filed</span>`
-      : html`· <a class="bug tofile" href="${enterBugUrl({ ...m.draft, dependsOn: stackBugs(r) }, ctx)}" target="_blank" rel="noopener">Bug to file</a>`;
+      : html`· <a class="bug tofile" href="${metaBugUrl(r, m.draft, ctx)}" target="_blank" rel="noopener">Bug to file</a>`;
   return html`<div class="box"><h4>Meta bug${required ? null : html` <span class="sub">(optional)</span>`} ${link} ${m.draft ? html`· “${m.draft.summary}”` : null}</h4>${
     m.draft ? html`<details data-fold="desc-meta"><summary>Description</summary><div class="desc">${m.draft.description}</div></details>${revisions(r, "meta")}` : null
   }${bugBox(r.id, "meta", back, "row")}</div>`;

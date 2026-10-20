@@ -77,6 +77,12 @@ export function bugUrl(bug: number): string {
   return `${BUGZILLA}/show_bug.cgi?id=${bug}`;
 }
 
+// The meta bug's form: it depends on every bug of the stacks' patches.
+export function metaBugUrl(r: RequestState, draft: BugDraft, ctx: RenderContext): string {
+  const bugs = [...new Set(Object.values(r.stacks).flatMap((s) => stackPatches(r, s)).flatMap((p) => (p.bug !== null && p.bug !== 0 ? [p.bug] : [])))];
+  return enterBugUrl({ ...draft, dependsOn: bugs }, ctx);
+}
+
 // Assigned to you when you have a Bugzilla email: its patches are yours.
 export function enterBugUrl(d: BugDraft, ctx: RenderContext): string {
   const p = new URLSearchParams({ product: d.product, component: d.component, short_desc: d.summary, comment: d.description });

@@ -1,7 +1,7 @@
 import type { JobView, NeedsUser, PlannedCommand, PushView, RefusedCommand, RequestState, StackView } from "../../types.ts";
 import { canDismiss, canRetry, reviewLimitFlag } from "../../state/flags.ts";
 import { html, join, type Html } from "../html.ts";
-import { actionKind, COMMAND_LABELS, commandFields, enterBugUrl, groupLabel, jobLabel, pushName, jobNoun, refusedOf, needsMetaBug, plural, requestUrl, stackOfPatch, submitChecks, type RenderContext } from "./common.ts";
+import { actionKind, COMMAND_LABELS, commandFields, enterBugUrl, metaBugUrl, groupLabel, jobLabel, pushName, jobNoun, refusedOf, needsMetaBug, plural, requestUrl, stackOfPatch, submitChecks, type RenderContext } from "./common.ts";
 
 // The ⚑ area of one open needs-user entry: what you're asked, why, and the buttons.
 export function renderAction(r: RequestState, n: NeedsUser, ctx: RenderContext): Html {
@@ -80,7 +80,7 @@ export function flagControls(r: RequestState, n: NeedsUser, ctx: RenderContext):
     case "meta-bug": {
       const draft = r.metaBug?.draft;
       const stack = findStack(r, n);
-      controls = html`${draft ? html`<a class="btn small" href="${enterBugUrl(draft, ctx)}" target="_blank" rel="noopener">Meta: Bug to file ↗</a>` : null}${bugBox(r.id, "meta", back)}${stack ? submitControls(r, stack, back) : null}`;
+      controls = html`${draft ? html`<a class="btn small" href="${metaBugUrl(r, draft, ctx)}" target="_blank" rel="noopener">Meta: Bug to file ↗</a>` : null}${bugBox(r.id, "meta", back)}${stack ? submitControls(r, stack, back) : null}`;
       break;
     }
     // What it asks, in its buttons; the checks are on the stack, below.
