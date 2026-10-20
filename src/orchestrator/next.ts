@@ -1697,7 +1697,7 @@ class Planner {
     if (!info?.ready) return;
     const ps = st.order.map((pid) => this.s.patches[pid]);
     // The prompt's version too: a better prompt writes it again.
-    const h = shortHash(["v2", info.code, ...ps.map((p) => `${p.id}:${p.bug}`)]).slice(0, 10);
+    const h = shortHash(["v3", info.code, ...ps.map((p) => `${p.id}:${p.bug}`)]).slice(0, 10);
     const file = dataPath(this.config, this.s.id, `meta-${st.id}-${h}.json`);
     const first = ps.find((p) => p.bugDraft)?.bugDraft;
     const draft: BugDraft = {
