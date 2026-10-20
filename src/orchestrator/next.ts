@@ -623,6 +623,13 @@ class Planner {
   // Try pushes, in any step: push once approved, watch, fetch the failed jobs' artifacts.
 
   private pushes(): void {
+    // A dry run that failed before later pushes went ahead asks nothing anymore: it becomes a note.
+    for (const n of this.s.needsUser) {
+      const j = n.key.startsWith("failed:") ? this.view.jobs.find((x) => x.job === n.job) : undefined;
+      if (!j?.purpose.key.startsWith("dry-run:") || ![...this.view.pushedAt.values()].some((t) => t > j.startedAt)) continue;
+      this.clear(n.key);
+      this.note(`A try dry run failed, then later pushes went ahead: ${n.detail.slice(0, 300)}`);
+    }
     for (const push of Object.values(this.s.pushes)) {
       const dry = this.view.byKey.get(`dry-run:${push.id}`)?.find(succeeded);
       if (!push.rev && !push.declined && dry && this.view.done.has(`approve-push:${push.id}`)) {

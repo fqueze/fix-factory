@@ -98,6 +98,8 @@ export function flagControls(r: RequestState, n: NeedsUser, ctx: RenderContext):
         accept ? commandButton(r.id, { cmd: "accept-review", item }, "Accept the patch as it is", back, true, "Takes the patch without another critical review") : retry,
         job?.kind === "agent" && !isAuthorJob(job) ? null : talk,
         accept ? null : handBack,
+        // A script of the request's own (a try dry run, say) that later work made moot: a note, not a question.
+        item === undefined && job?.kind !== "agent" ? dismissButton(r.id, n.key, back) : null,
       );
       break;
     }
