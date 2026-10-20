@@ -1203,8 +1203,9 @@ class Planner {
 
   private stacks(): void {
     const step = at(this.s.step);
-    // At the meta bug, a burndown's stack may still get its skip-if removal.
-    if (step < at("investigate and fix") || step > at("meta bug")) return;
+    // At the meta bug, a burndown's stack may still get its skip-if removal; until it's submitted, its order may change.
+    const submitted = Object.values(this.s.patches).some((p) => p.revision !== undefined);
+    if (step < at("investigate and fix") || step > at(submitted ? "meta bug" : "submit")) return;
     for (const info of this.stackInfos.values()) this.buildStack(info);
     const items = Object.values(this.s.items);
     if (this.s.step === "investigate and fix" && this.newItems.size === 0 && items.every((i) => SETTLED.includes(i.state))) {
@@ -1289,23 +1290,25 @@ class Planner {
     );
     if (!deps || efforts.some((x) => !x)) return;
     const value = (pid: PatchId) => this.s.items[this.s.patches[pid].item ?? ""]?.group.ratePerWeek;
-    const orderFile = dataPath(this.config, this.s.id, `order-${id}-${hash}.json`);
-    const ord = this.want(`order:${id}:${hash}`, () =>
+    const orderInput = {
+      patches: inStack.map((p) => {
+        const pv = this.s.patches[p.id];
+        // Skip-if annotation changes are the easiest to review: they come first.
+        return { id: p.id, effort: pv.item === ANNOTATIONS_ITEM ? 1 : pv.effort, value: value(p.id), testOnly: pv.testOnly };
+      }),
+      deps: inStack.flatMap((p) => this.s.patches[p.id].deps),
+    };
+    // Ordered again when what it's ordered by changes (an effort, a dep, how the factory ranks them).
+    const oh = shortHash([JSON.stringify(orderInput)]).slice(0, 6);
+    const orderFile = dataPath(this.config, this.s.id, `order-${id}-${hash}-${oh}.json`);
+    const ord = this.want(`order:${id}:${hash}:${oh}`, () =>
       this.cli("order", "stack.ts", ["order", orderFile], {
         purpose: { stack: id },
         files: [
           {
             path: orderFile,
             content:
-              JSON.stringify({
-                patches: inStack.map((p) => {
-                  const pv = this.s.patches[p.id];
-                  // Skip-if annotation changes are the easiest to review: they come first.
-                  return { id: p.id, effort: pv.item === ANNOTATIONS_ITEM ? 1 : pv.effort, value: value(p.id), testOnly: pv.testOnly };
-                }),
-                deps: inStack.flatMap((p) => this.s.patches[p.id].deps),
-                previous: prev?.order,
-              }) + "\n",
+              JSON.stringify({ ...orderInput, previous: prev?.order }) + "\n",
           },
         ],
       }),
@@ -1314,7 +1317,7 @@ class Planner {
     const order = this.out<OrderOutput>(ord).order;
     const assembled = sources.map((sha) => bySource.get(sha)!.id).filter((pid) => order.includes(pid));
     if (order.join() !== assembled.join()) {
-      const re = this.want(`reorder:${id}:${hash}`, () =>
+      const re = this.want(`reorder:${id}:${hash}:${oh}`, () =>
         this.cli("rewrite", "stack.ts", ["rewrite", "--cwd", wt, "--base", this.config.baseRef, "--branch", info.branch, "--order", order.map((pid) => this.s.patches[pid].sha).join(",")], {
           cwd: wt,
           purpose: { stack: id, patches: shaToPatch },
@@ -1697,7 +1700,7 @@ class Planner {
     if (!info?.ready) return;
     const ps = st.order.map((pid) => this.s.patches[pid]);
     // The prompt's version too: a better prompt writes it again.
-    const h = shortHash(["v3", info.code, ...ps.map((p) => `${p.id}:${p.bug}`)]).slice(0, 10);
+    const h = shortHash(["v4", info.code, ...ps.map((p) => `${p.id}:${p.bug}`)]).slice(0, 10);
     const file = dataPath(this.config, this.s.id, `meta-${st.id}-${h}.json`);
     const first = ps.find((p) => p.bugDraft)?.bugDraft;
     const draft: BugDraft = {
