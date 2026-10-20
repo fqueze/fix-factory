@@ -2402,12 +2402,12 @@ describe("burndown verification", () => {
     sc.settle();
   };
 
-  it("ranks the skip-if removal with effort 1, whatever its estimate", () => {
+  it("ranks the skip-if removal before every fix (effort 0), whatever its estimate", () => {
     const { sc } = verified(false, 22);
     withRemoval(sc, 3);
     assert.equal(sc.state().patches["p-annotations"].effort, 3);
     const input = JSON.parse(sc.plan(keyOf(sc, "order:a:")).files![0].content);
-    assert.equal(input.patches.find((p: { id: string }) => p.id === "p-annotations").effort, 1);
+    assert.equal(input.patches.find((p: { id: string }) => p.id === "p-annotations").effort, 0);
   });
   const draftKeys = (sc: Scenario) => sc.view().jobs.filter((j) => j.purpose.what === "meta-draft").map((j) => j.purpose.key);
 

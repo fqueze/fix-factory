@@ -1293,8 +1293,8 @@ class Planner {
     const orderInput = {
       patches: inStack.map((p) => {
         const pv = this.s.patches[p.id];
-        // Skip-if annotation changes are the easiest to review: they come first.
-        return { id: p.id, effort: pv.item === ANNOTATIONS_ITEM ? 1 : pv.effort, value: value(p.id), testOnly: pv.testOnly };
+        // Skip-if annotation changes are the easiest to review: they come first, before the easiest fix.
+        return { id: p.id, effort: pv.item === ANNOTATIONS_ITEM ? 0 : pv.effort, value: value(p.id), testOnly: pv.testOnly };
       }),
       deps: inStack.flatMap((p) => this.s.patches[p.id].deps),
     };
