@@ -113,6 +113,11 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
     for (const n of s.needsUser.filter((x) => x.key.startsWith("failed:") && x.item === c.item)) ev({ type: "user-done", key: n.key });
   }
 
+  // Telling the skip-ifs' author what to do (Keep them, or anything else) answers its question about them.
+  if (c.cmd === "continue") {
+    for (const n of s.needsUser.filter((x) => x.key.startsWith("keep-skips:") && x.item === c.item)) ev({ type: "user-done", key: n.key });
+  }
+
   switch (c.cmd) {
     case "approve-push":
       ev({ type: "user-done", key: `approve-push:${c.push}` });
