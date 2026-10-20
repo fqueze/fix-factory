@@ -24,6 +24,7 @@ import type {
 import { patchId } from "./next.ts";
 import { dataPath } from "./plan.ts";
 import type {
+  BugDraft,
   ClassifyReviewCommentsReport,
   EstimateReviewEffortReport,
   MergeClustersReport,
@@ -31,6 +32,7 @@ import type {
   ResolveConflictReport,
   ReviewStackReport,
   ReviseBugDraftReport,
+  WriteMetaBugReport,
   TriageTryReport,
   WriteAnnotationPatchesReport,
 } from "../types.ts";
@@ -285,6 +287,12 @@ export function handleFinished(input: HandlerInput): HandlerResult {
       const path = dataPath(config, s.id, `interdiff-${purpose.patch}-${job.job}.diff`);
       files.push({ path, content: o.diff });
       if (p) patchEvent(p, { interdiffFile: relative(config.stateDir, path) });
+      break;
+    }
+    case "meta-draft": {
+      // The meta bug's text, rewritten as the stack changes, until it's filed.
+      const d = input.report as WriteMetaBugReport;
+      if (!s.metaBug?.bug) ev("meta-bug", { bug: null, draft: { ...(purpose.draft as BugDraft), description: d.description } });
       break;
     }
     case "revise-draft": {

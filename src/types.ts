@@ -26,6 +26,7 @@ export interface FactoryConfig {
   diffViewerCommand?: string[]; // default ["diff-viewer"], for their widening patches
   profilerOrigin: string; // e.g. "http://localhost:4242" (a local profiler front end), for request profiles
   bugzillaEmail?: string; // the bugs to file are assigned to it, ASSIGNED: you attach their patches
+  metaBugBlocks?: number[]; // what a burndown's meta bug blocks, e.g. the flakiness tracker
   maxAgents: number;
   maxBuilds: number;
   dryRun: boolean; // refuse every external side effect (try, Phabricator, Bugzilla, agents)
@@ -429,6 +430,7 @@ export interface JobPurpose {
   what: string;
   item?: ItemId;
   patch?: PatchId;
+  draft?: BugDraft; // a meta-bug draft without its description, which the job writes
   push?: PushId;
   pushes?: PushId[]; // the pushes a plan-pushes revision replaces
   stack?: string;
@@ -499,6 +501,11 @@ export interface PriorArtVerdictReport {
   verdict: "active" | "reuse" | "none";
   bug?: number;
   quote: string;
+  feedback: Feedback[];
+}
+
+export interface WriteMetaBugReport {
+  description: string;
   feedback: Feedback[];
 }
 

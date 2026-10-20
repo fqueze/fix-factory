@@ -220,11 +220,7 @@ export function bugBox(request: string, patch: string, back: string, cls = "inli
 export function submitControls(r: RequestState, stack: StackView, back: string): Html {
   const checks = submitChecks(r, stack);
   const failing = checks.filter((c) => !c.ok);
-  return html`${failing.length ? html`<span class="checks">${failing.map((c) => html`<span class="bad">${c.text}</span>`)}</span>` : null}${mozPhabButton(r.id, stack, !checks[0].ok)}${
-    stack.summary && needsMetaBug(r, stack)
-      ? html`<textarea hidden id="${summaryId(r.id, stack.id)}">${stack.summary}</textarea>${copyButton(summaryId(r.id, stack.id), "Copy the meta-bug comment")}`
-      : null
-  }`;
+  return html`${failing.length ? html`<span class="checks">${failing.map((c) => html`<span class="bad">${c.text}</span>`)}</span>` : null}${mozPhabButton(r.id, stack, !checks[0].ok)}`;
 }
 
 export function summaryId(request: string, stack: string): string {

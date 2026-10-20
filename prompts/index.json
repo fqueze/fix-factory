@@ -15,5 +15,6 @@
   "classify-review-comments": { "model": "haiku", "step": "9. Review comments", "purpose": "Classify each inline review comment." },
   "address-review": { "model": "opus", "step": "9. Review comments", "purpose": "Resume the author to address review comments, returning replies only where code doesn't speak for itself." },
   "adapt-soft-dep": { "model": "haiku", "step": "10. Landing", "purpose": "Adjust two patches whose soft dependency was flipped by a reorder (Sonnet if not trivial)." },
-  "recover": { "model": "opus", "step": "Recovery", "purpose": "Turn your free text into a plan of factory commands." }
+  "recover": { "model": "opus", "step": "Recovery", "purpose": "Turn your free text into a plan of factory commands." },
+  "write-meta-bug": { "model": "sonnet", "step": "7. Meta bug", "purpose": "Write the meta bug's description for the stack's reviewers." }
 }

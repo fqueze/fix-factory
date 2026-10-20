@@ -260,6 +260,7 @@ class Planner {
     this.bugEdits();
     this.verify();
     this.skipRemoval();
+    this.metaDraft();
     this.metaBug();
     this.submit();
     this.submitted();
@@ -1686,23 +1687,53 @@ class Planner {
     }
   }
 
+  // The meta bug's text, written by an agent from the stack for its reviewers; written again when the stack or its
+  // bugs change, until it's filed. One per request: a burndown has one stack.
+  private metaDraft(): void {
+    if (this.s.kind !== "burndown" || at(this.s.step) < at("stack") || this.s.step === "done" || this.s.metaBug?.bug) return;
+    const st = this.liveStacks()[0];
+    const info = st && this.stackInfos.get(st.id);
+    if (!info?.ready) return;
+    const ps = st.order.map((pid) => this.s.patches[pid]);
+    const h = shortHash([info.code, ...ps.map((p) => `${p.id}:${p.bug}`)]).slice(0, 10);
+    const file = dataPath(this.config, this.s.id, `meta-${st.id}-${h}.json`);
+    const first = ps.find((p) => p.bugDraft)?.bugDraft;
+    const draft: BugDraft = {
+      product: first?.product ?? "Testing",
+      component: first?.component ?? "General",
+      summary: `[meta] Fix the flakiness in ${this.s.folder ?? st.folder}`,
+      description: "",
+      bugType: "task",
+      keywords: ["meta"],
+      ...(this.config.metaBugBlocks?.length ? { blocks: this.config.metaBugBlocks } : {}),
+    };
+    const patches = ps.map((p) => {
+      const item = p.item === undefined ? undefined : this.s.items[p.item];
+      const inv = item?.investigation;
+      return {
+        bug: p.bug ?? (p.bugDraft ? "its own, to file" : "the meta bug"),
+        title: p.title.replace(/^Bug (\d+|X+)\s*-\s*/i, "").replace(/,?\s*r[=?]\S+$/, ""),
+        testOnly: p.testOnly,
+        reviewEffort1to5: p.effort,
+        tests: item?.group.tests,
+        failure: item?.group.message,
+        cause: inv?.cause,
+        summary: inv?.summary ?? (item?.lastReport?.report as { summary?: string } | undefined)?.summary,
+      };
+    });
+    this.wantAgent(`meta-draft:${st.id}:${h}`, "meta-draft", "write-meta-bug", { folder: this.s.folder ?? st.folder, stackFile: file }, {
+      files: [{ path: file, content: JSON.stringify(patches, null, 2) + "\n" }],
+      purpose: { stack: st.id, draft },
+    });
+  }
+
   private metaBug(): void {
     if (this.s.step !== "meta bug" || this.removing) return;
     const stacks = this.liveStacks();
     const needsMeta = needsMetaBug(stacks.flatMap((st) => st.order).map((pid) => this.s.patches[pid]));
-    if (needsMeta && !this.s.metaBug) {
-      const firstDraft = Object.values(this.s.patches).find((p) => p.bugDraft)?.bugDraft;
-      const draft: BugDraft = {
-        product: firstDraft?.product ?? "Testing",
-        component: firstDraft?.component ?? "General",
-        summary: `[meta] Intermittent failures in ${this.s.folder ?? stacks.map((st) => st.folder).join(", ")}`,
-        description: stacks.map((st) => st.summary ?? "").join("\n\n").trim() || this.s.text,
-        bugType: "task",
-        keywords: ["meta"],
-      };
-      this.event(this.ev("meta-bug", { bug: null, draft }));
-    }
-    if (needsMeta) for (const st of stacks) this.raise(`meta-bug:${st.id}`, { action: "File the meta bug, then review and submit", detail: "the meta-bug comment lists the stack in review order, with effort, value and repro", stack: st.id });
+    // Filed last: it depends on every other bug of the stack, so those are filed first.
+    const unfiled = stacks.flatMap((st) => st.order).some((pid) => this.s.patches[pid]?.bugDraft && this.s.patches[pid].bug === null);
+    if (needsMeta && this.s.metaBug?.draft && !unfiled) for (const st of stacks) this.raise(`meta-bug:${st.id}`, { action: "File the meta bug, then review and submit", detail: "it tells reviewers what the stack fixes, patch by patch, in review order", stack: st.id });
     for (const p of stacks.flatMap((st) => st.order).map((pid) => this.s.patches[pid])) {
       if (!p.bugDraft) continue;
       const key = fileBugKey(p.id, this.stepEpoch("meta bug"));

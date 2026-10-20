@@ -5,6 +5,7 @@
   "worktreesDir": "/build/worktrees",
   "baseRef": "origin/main",
   "phabPollMinutes": 10,
+  "metaBugBlocks": [2063593],
   "phabPollHours": 3,
   "claudeCommand": ["mozsb", "claude"],
   "stackViewerCommand": ["stack-viewer"],

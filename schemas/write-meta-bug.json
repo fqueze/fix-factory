@@ -1,0 +1,41 @@
+{
+  "type": "object",
+  "properties": {
+    "description": {
+      "type": "string",
+      "description": "The meta bug's description, in Markdown."
+    },
+    "feedback": {
+      "type": "array",
+      "description": "Problems with the tools or inputs you used, one entry per problem.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "target": {
+            "type": "string",
+            "enum": [
+              "fx-tests",
+              "profiler-cli",
+              "searchfox-cli",
+              "factory",
+              "inputs"
+            ]
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "target",
+          "text"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "description",
+    "feedback"
+  ],
+  "additionalProperties": false
+}

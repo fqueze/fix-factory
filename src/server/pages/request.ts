@@ -1,3 +1,4 @@
+import { needsMetaBug as stackNeedsMetaBug } from "../../state/meta-bug.ts";
 import { REQUEST_STEPS } from "../commands.ts";
 import type { BugDraft, ItemView, JobView, PatchView, PushView, RequestState, StackView } from "../../types.ts";
 import { html, join, type Html } from "../html.ts";
@@ -177,7 +178,15 @@ function metaBugLine(r: RequestState, back: string, ctx: RenderContext): Html {
   if (hasBug(m)) {
     return html`<div class="sub" style="margin-top:8px">Meta bug: <a class="bug" href="${bugUrl(m.bug)}">Bug ${m.bug}</a></div>`;
   }
-  return html`<div class="box"><h4>Meta bug ${m.draft ? html`· <a class="bug tofile" href="${enterBugUrl({ ...m.draft, dependsOn: stackBugs(r) }, ctx)}" target="_blank" rel="noopener">Bug to file</a> · “${m.draft.summary}”` : null}</h4>${
+  // Filed last: it depends on the stack's other bugs.
+  const unfiled = Object.values(r.stacks).flatMap((s) => stackPatches(r, s)).filter((p) => !isDropped(r, p) && p.bugDraft && !hasBug(p)).length;
+  const required = Object.values(r.stacks).some((s) => stackNeedsMetaBug(stackPatches(r, s)));
+  const link = !m.draft
+    ? null
+    : unfiled
+      ? html`· <span class="sub">to file once the stack's ${plural(unfiled, "other bug")} ${unfiled === 1 ? "is" : "are"} filed</span>`
+      : html`· <a class="bug tofile" href="${enterBugUrl({ ...m.draft, dependsOn: stackBugs(r) }, ctx)}" target="_blank" rel="noopener">Bug to file</a>`;
+  return html`<div class="box"><h4>Meta bug${required ? null : html` <span class="sub">(optional)</span>`} ${link} ${m.draft ? html`· “${m.draft.summary}”` : null}</h4>${
     m.draft ? html`<details><summary>Description</summary><div class="desc">${m.draft.description}</div></details>${revisions(r, "meta")}` : null
   }${bugBox(r.id, "meta", back, "row")}</div>`;
 }
@@ -189,11 +198,7 @@ function stackSection(r: RequestState, s: StackView, ctx: RenderContext): Html {
   const patches = stackPatches(r, s);
   const dropped = patches.filter((p) => isDropped(r, p));
   return html`<h3 class="stackhead"><span title="Branch ${s.branch}; patches in review order: easy and valuable first, each after its hard deps">${s.folder}</span>${stackViewerLink(r, s)}</h3>
-    ${optionalMetaBug(r, s, ctx)}${
-      s.summary && needsMetaBug(r, s)
-        ? html`<details class="fold" data-fold="summary-${s.id}"><summary>Meta-bug comment</summary><textarea readonly rows="6" id="${summaryId(r.id, s.id)}-body">${s.summary}</textarea></details>`
-        : null
-    }
+    ${optionalMetaBug(r, s, ctx)}
     <div class="rows">${patches.filter((p) => !isDropped(r, p)).map((p) => patchRow(r, p, ctx))}${
       dropped.length ? html`<details class="fold" data-fold="dropped-${s.id}"><summary>${dropped.length} dropped</summary><div class="rows">${dropped.map((p) => patchRow(r, p, ctx))}</div></details>` : null
     }</div>
@@ -211,7 +216,8 @@ function stackBugs(r: RequestState): number[] {
 
 // When nothing needs a meta bug, filing one to track the stack's bugs is up to you; it doesn't hold back submitting.
 function optionalMetaBug(r: RequestState, s: StackView, ctx: RenderContext): Html | null {
-  if (r.metaBug) return null;
+  // A burndown's meta bug is drafted by an agent: shown with the meta bug's box once written.
+  if (r.metaBug || r.kind === "burndown") return null;
   const first = stackPatches(r, s).find((p) => p.bugDraft)?.bugDraft;
   const draft: BugDraft = {
     product: first?.product ?? "Testing",
