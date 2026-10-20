@@ -174,6 +174,7 @@ export type Event =
   | (EventBase & { type: "submit-copied"; stack: string })
   | (EventBase & { type: "try-pushed"; push: PushId; rev: string; url: string })
   | (EventBase & { type: "poll-requested" })
+  | (EventBase & { type: "item-group"; item: ItemId; group: FailureGroup }) // its group, corrected
   | (EventBase & { type: "try-progress"; push: PushId; done: number; total: number; failures: number; tests?: { done: number; total: number } })
   | (EventBase & { type: "try-job-failed"; push: PushId; taskId: string; retryId?: number; jobName: string; platform: string; tier?: number; result: string })
   | (EventBase & { type: "try-finished"; push: PushId; result: "green" | "failures"; summary: string })

@@ -83,6 +83,9 @@ export function foldEvents(events: readonly Event[]): RequestState {
         }
         break;
       }
+      case "item-group":
+        if (s.items[e.item]) s.items[e.item].group = e.group;
+        break;
       case "item-state": {
         const item = s.items[e.item];
         if (!item) continue;

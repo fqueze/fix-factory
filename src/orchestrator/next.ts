@@ -133,6 +133,17 @@ export function stackId(folder: string): string {
   return slug(parts.join("-")) || "root";
 }
 
+// Most of their words in common: the same failure, worded with different names or numbers.
+export function similarMessages(a: string, b: string): boolean {
+  // The harness's wording around the failure says nothing about which failure it is.
+  const core = (m: string) => m.replace(/^uncaught exception in test - /i, "").replace(/ - timed out after \d+ tries\.?$/i, "");
+  const words = (m: string) => new Set(core(m).toLowerCase().split(/[^a-z]+/).filter((w) => w.length > 2));
+  const x = words(a);
+  const y = words(b);
+  const common = [...x].filter((w) => y.has(w)).length;
+  return x.size > 0 && y.size > 0 && common * 4 >= Math.min(x.size, y.size) * 3;
+}
+
 export function folderOf(test: string): string {
   return dirname(test);
 }
@@ -745,7 +756,9 @@ class Planner {
       // Where it failed comes from the clusters it merges, never from the agent: one gave every group the folder's
       // configs, and cluster keys that matched none. Those then come from the clusters of its tests.
       const named = g.from.map((k) => byKey.get(k)).filter((x) => x !== undefined);
-      const sources = named.length ? named : groups.filter((x) => x.tests.some((t) => g.tests.includes(t)));
+      const sharing = groups.filter((x) => x.tests.some((t) => g.tests.includes(t)));
+      const alike = sharing.filter((x) => similarMessages(x.message, g.message));
+      const sources = named.length ? named : alike.length ? alike : sharing;
       const rates = sources.map((x) => x.ratePerWeek).filter((x) => x !== undefined);
       const taskIds = [...new Set(sources.flatMap((x) => x.taskIds ?? []))];
       return {
@@ -770,6 +783,11 @@ class Planner {
     const pair = (message: string, test: string) => `${message}\n${test}`;
     const known = new Set([...Object.values(this.s.items).map((i) => i.group), ...this.newItems.values()].flatMap((g) => g.tests.map((t) => pair(g.message, t))));
     for (const group of groups) {
+      // Groups made from an agent's configs (merge-clusters once gave each the whole folder's): corrected.
+      const same = Object.values(this.s.items).find((i) => i.group.message === group.message && i.group.tests.join() === group.tests.join());
+      if (same && (same.group.configs.join() !== group.configs.join() || same.group.ratePerWeek !== group.ratePerWeek)) {
+        this.event(this.ev("item-group", { item: same.id, group }));
+      }
       if (group.tests.length === 0 || group.tests.some((t) => known.has(pair(group.message, t)))) continue;
       this.createItem(group);
       for (const t of group.tests) known.add(pair(group.message, t));
