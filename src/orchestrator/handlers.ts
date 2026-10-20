@@ -348,7 +348,7 @@ function authorReport(input: HandlerInput, ev: <T extends EventInput["type"]>(ty
     }
     case "write-annotation-patches": {
       const r = input.report as WriteAnnotationPatchesReport;
-      ev("item-state", { item, state: r.runIf ? "fix verified locally" : "left as-is", detail: r.summary.slice(0, 300) });
+      ev("item-state", { item, state: r.runIf || r.removal ? "fix verified locally" : "left as-is", detail: r.summary.slice(0, 300) });
       return;
     }
     case "address-review": {

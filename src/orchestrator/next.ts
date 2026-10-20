@@ -225,6 +225,7 @@ class Planner {
   private readonly newItems = new Map<ItemId, FailureGroup>();
   private stepSet = false;
   private readonly stackInfos = new Map<string, StackInfo>();
+  private removing = false; // a burndown's skip-if removal isn't in its stack yet
   readonly s: RequestState;
   readonly ctx: Ctx;
 
@@ -1185,7 +1186,8 @@ class Planner {
 
   private stacks(): void {
     const step = at(this.s.step);
-    if (step < at("investigate and fix") || step > at("verify on try")) return;
+    // At the meta bug, a burndown's stack may still get its skip-if removal.
+    if (step < at("investigate and fix") || step > at("meta bug")) return;
     for (const info of this.stackInfos.values()) this.buildStack(info);
     const items = Object.values(this.s.items);
     if (this.s.step === "investigate and fix" && this.newItems.size === 0 && items.every((i) => SETTLED.includes(i.state))) {
@@ -1511,18 +1513,34 @@ class Planner {
   // real, in a patch that lands under the meta bug; the others stay, their failures being the work list's.
   private skipRemoval(): void {
     if (this.s.kind !== "burndown" || at(this.s.step) <= at("verify on try") || this.s.step === "done" || !this.s.items[ANNOTATIONS_ITEM]) return;
-    const debug = this.debugCommit();
-    if (!debug) return;
-    const pushes = Object.values(this.s.pushes).filter((p) => p.rev && p.result && this.view.byKey.get(`dry-run:${p.id}`)?.[0].purpose.stack !== undefined);
-    if (!pushes.length) return;
     const e = this.itemEpoch(ANNOTATIONS_ITEM);
-    const list = pushes.map((p) => `${p.rev} (${p.result === "green" ? "green" : (p.summary ?? "failures")})`).join(", ");
-    this.resumeAuthor(
-      ANNOTATIONS_ITEM,
-      `author:${ANNOTATIONS_ITEM}${e}:removal${this.stepEpoch("verify on try")}`,
-      "removal",
-      `The stack was verified on try with your DEBUG commit ${debug.slice(0, 12)} on top: ${list}. Read them with fx-tests (fx-tests try <rev>). Drop the DEBUG commit. For each skip-if it removed whose test passed in the configs the skip covered, remove that skip for real in one commit: \`Bug XXXXXXX - Remove skip-if annotations that no longer fail in ${this.s.folder}, r=<reviewer>.\`, its reviewer from the find-reviewer skill, its body naming each skip's old bug and the push that shows it passing (the bug number is the meta bug's, given later). Leave the skips whose test still failed. Keep your run-if commit, if any, as it is. Report the new commit as \`removal\` (and \`runIf\` again), without \`debug\`.`,
-    );
+    const key = `author:${ANNOTATIONS_ITEM}${e}:removal${this.stepEpoch("verify on try")}`;
+    // Once asked, its report has no DEBUG commit anymore.
+    if (!this.view.byKey.has(key)) {
+      const debug = this.debugCommit();
+      if (!debug) return;
+      const pushes = Object.values(this.s.pushes).filter((p) => p.rev && p.result && this.view.byKey.get(`dry-run:${p.id}`)?.[0].purpose.stack !== undefined);
+      if (!pushes.length) return;
+      const list = pushes.map((p) => `${p.rev} (${p.result === "green" ? "green" : (p.summary ?? "failures")})`).join(", ");
+      this.resumeAuthor(
+        ANNOTATIONS_ITEM,
+        key,
+        "removal",
+        `The stack was verified on try with your DEBUG commit ${debug.slice(0, 12)} on top: ${list}. Read them with fx-tests (fx-tests try <rev>). Drop the DEBUG commit. For each skip-if it removed whose test passed in the configs the skip covered, remove that skip for real in one commit: \`Bug XXXXXXX - Remove skip-if annotations that no longer fail in ${this.s.folder}, r=<reviewer>.\`, its reviewer from the find-reviewer skill, its body naming each skip's old bug and the push that shows it passing (the bug number is the meta bug's, given later). Leave the skips whose test still failed. Keep your run-if commit, if any, as it is. Report the new commit as \`removal\` (and \`runIf\` again), without \`debug\`.`,
+      );
+    }
+    // The meta bug waits for the removal to be in the stack: it's the patch that needs one.
+    this.removing = true;
+    const job = this.want(key);
+    if (!job) return;
+    const item = this.s.items[ANNOTATIONS_ITEM];
+    // From its latest report: a review round may have amended it.
+    const removal = this.rep<WriteAnnotationPatchesReport>(this.authorJobs(ANNOTATIONS_ITEM).filter(succeeded).at(-1)!).removal;
+    const info = [...this.stackInfos.values()].find((i) => i.patches.some((p) => p.source === removal));
+    const pid = info?.patches.find((p) => p.source === removal)?.id;
+    const inStack = info?.ready && pid !== undefined && this.s.stacks[info.id]?.order.includes(pid);
+    // Ended without a patch (left as-is, handed back): the stack goes on without it.
+    this.removing = removal !== undefined && !inStack && !(SETTLED.includes(item.state) && !WITH_PATCHES.includes(item.state));
   }
 
   private debugCommit(): string | undefined {
@@ -1637,7 +1655,7 @@ class Planner {
   }
 
   private metaBug(): void {
-    if (this.s.step !== "meta bug") return;
+    if (this.s.step !== "meta bug" || this.removing) return;
     const stacks = this.liveStacks();
     const needsMeta = needsMetaBug(stacks.flatMap((st) => st.order).map((pid) => this.s.patches[pid]));
     if (needsMeta && !this.s.metaBug) {
@@ -1759,7 +1777,8 @@ class Planner {
       submitted = false;
       // Verified before this step (requests from before 2026-10-19 kept "in try").
       for (const p of patches) if (p.item && this.s.items[p.item]?.state === "in try") this.setItem(p.item, "in stack");
-      if (this.s.kind === "burndown" && this.debugCommit()) {
+      // A try branch (the stack plus the DEBUG commit) was checked out in its worktree.
+      if (this.view.jobs.some((j) => j.purpose.what === "try-branch" && j.purpose.stack === st.id)) {
         if (!this.want(`checkout:${st.id}${e}`, () => this.cli("checkout", "git", ["checkout", st.branch], { cwd: st.worktree, purpose: { stack: st.id } }))) continue;
       }
       const rv = this.reviewers(st, e);
