@@ -742,13 +742,16 @@ class Planner {
     if (!merge) return undefined;
     const byKey = new Map(groups.map((g) => [g.key, g]));
     const merged = this.rep<MergeClustersReport>(merge).groups.map((g) => {
-      const sources = g.from.map((k) => byKey.get(k)).filter((x) => x !== undefined);
+      // Where it failed comes from the clusters it merges, never from the agent: one gave every group the folder's
+      // configs, and cluster keys that matched none. Those then come from the clusters of its tests.
+      const named = g.from.map((k) => byKey.get(k)).filter((x) => x !== undefined);
+      const sources = named.length ? named : groups.filter((x) => x.tests.some((t) => g.tests.includes(t)));
       const rates = sources.map((x) => x.ratePerWeek).filter((x) => x !== undefined);
       const taskIds = [...new Set(sources.flatMap((x) => x.taskIds ?? []))];
       return {
         message: g.message,
         tests: g.tests,
-        configs: g.configs,
+        configs: [...new Set(sources.flatMap((x) => x.configs))].sort(),
         ...(rates.length ? { ratePerWeek: Math.round(rates.reduce((a, b) => a + b, 0) * 10) / 10 } : {}),
         ...(taskIds.length ? { taskIds } : {}),
       };

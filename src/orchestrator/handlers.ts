@@ -100,12 +100,21 @@ export function handleFinished(input: HandlerInput): HandlerResult {
       // Merging and splitting moves tests between groups, never adds or drops one: a dropped test
       // would never get an item.
       const cluster = input.view.byKey.get(purpose.key.replace(/^merge:/, "cluster:"))!.findLast(succeeded)!;
-      const given = new Set((JSON.parse(input.outputOf(cluster.job)) as { groups: ClusterGroup[] }).groups.flatMap((g) => g.tests));
-      const got = new Set((input.report as MergeClustersReport).groups.flatMap((g) => g.tests));
+      const clusters = (JSON.parse(input.outputOf(cluster.job)) as { groups: ClusterGroup[] }).groups;
+      const given = new Set(clusters.flatMap((g) => g.tests));
+      const keys = new Set(clusters.map((g) => g.key));
+      const report = input.report as MergeClustersReport;
+      const got = new Set(report.groups.flatMap((g) => g.tests));
       const missing = [...given].filter((t) => !got.has(t));
       const extra = [...got].filter((t) => !given.has(t));
-      if (missing.length || extra.length) {
-        const problems = [missing.length ? `tests missing from your groups: ${missing.join(", ")}` : "", extra.length ? `tests that weren't in the input groups: ${extra.join(", ")}` : ""];
+      // Where each group failed comes from the clusters it names: an unknown key would lose it.
+      const unknown = [...new Set(report.groups.flatMap((g) => g.from).filter((k) => !keys.has(k)))];
+      if (missing.length || extra.length || unknown.length) {
+        const problems = [
+          missing.length ? `tests missing from your groups: ${missing.join(", ")}` : "",
+          extra.length ? `tests that weren't in the input groups: ${extra.join(", ")}` : "",
+          unknown.length ? `\`from\` names clusters that don't exist: ${unknown.join(", ")} (use the input groups' \`key\` values)` : "",
+        ];
         throw new InvalidReport(`${problems.filter(Boolean).join("; ")}. Every test of the input groups must be in your groups, and only those.`);
       }
       break;
