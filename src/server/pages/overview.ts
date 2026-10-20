@@ -77,22 +77,20 @@ export function renderMain(requests: RequestState[], ctx: RenderContext): Html {
   </details>` : null}`;
 }
 
+// The pushes still running, one line each: what's on try right now, and which request it's for.
 export function renderRecentPushes(requests: RequestState[]): Html | null {
-  const pushes = [...requests]
-    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
-    .flatMap((r) =>
-      Object.values(r.pushes)
-        .filter((p) => p.rev)
-        .reverse()
-        .map((p) => ({ r, p })),
-    )
-    .slice(0, 10);
+  const pushes = requests.flatMap((r) =>
+    Object.values(r.pushes)
+      .filter((p) => p.rev && p.result === undefined)
+      .reverse()
+      .map((p) => ({ r, p })),
+  );
   if (!pushes.length) {
     return null;
   }
-  return html`<h2>Recent try pushes</h2>
-  <div class="simple scroll" id="recent-pushes"><table><tbody>${pushes.map(
+  return html`<h2>On try now</h2>
+  <div class="simple" id="recent-pushes">${pushes.map(
     ({ r, p }) =>
-      html`<tr><td class="mono"><a href="${pushUrl(p)}" target="_blank" rel="noopener">${p.rev!.slice(0, 12)}</a></td><td class="hide-sm"><a href="${requestUrl(r.id)}">${shortName(r)}</a></td><td>${p.purpose}</td><td class="res ${pushResultClass(p)}">${pushStatus(p)}</td></tr>`,
-  )}</tbody></table></div>`;
+      html`<div class="row tryrow"><a class="mono" href="${pushUrl(p)}" target="_blank" rel="noopener">${p.rev!.slice(0, 12)}</a><span class="res ${pushResultClass(p)}">${pushStatus(p)}</span><a class="grow ellipsis" href="${requestUrl(r.id)}#push-${p.id}" title="${p.purpose}">${requestName(r).replace(/^Flakiness burndown: /, "")}: ${p.purpose}</a></div>`,
+  )}</div>`;
 }

@@ -281,3 +281,5 @@ h3.stackhead .btn { font-weight: normal; }
 .stack-submit .checks { margin: 0; }
 .pcommits { margin: 0.3em 0 0.5em; padding-left: 1.2em; }
 .pcommits .mono { color: #666; }
+.tryrow { display: flex; gap: 10px; align-items: baseline; white-space: nowrap; }
+.tryrow .ellipsis { overflow: hidden; text-overflow: ellipsis; min-width: 0; }

@@ -5,7 +5,7 @@ import { describe, it } from "node:test";
 import { FixtureStateSource } from "../state-source.ts";
 import type { RequestState } from "../../types.ts";
 import { jobLabel, pushStatus, type RenderContext } from "./common.ts";
-import { renderOverview } from "./overview.ts";
+import { renderOverview, renderRecentPushes } from "./overview.ts";
 import { IDLE, itemBucket, runningSentence } from "./progress.ts";
 import { renderRequest } from "./request.ts";
 import { conversationOf, renderActivity } from "./activity.ts";
@@ -81,9 +81,14 @@ describe("overview", () => {
     assert.match(page, /<b>hmm<\/b> <span class="sub">· Superseded by r-20261015-sessionstore<\/span>/);
   });
 
-  it("lists recent try pushes across requests", () => {
-    assert.match(page, /<h2>Recent try pushes<\/h2>/);
-    assert.match(page, /dbfcf15fdf1f<\/a><\/td><td class="hide-sm"><a href="\/requests\/r-20261005-newtab">newtab<\/a>/);
+  it("lists the try pushes still running across requests, each linked to its row in its request", () => {
+    const h = renderRecentPushes(source.listRequests())?.value ?? "";
+    const running = source.listRequests().flatMap((r) => Object.values(r.pushes).filter((p) => p.rev && p.result === undefined).map((p) => ({ r, p })));
+    const done = source.listRequests().flatMap((r) => Object.values(r.pushes).filter((p) => p.rev && p.result !== undefined));
+    assert.ok(running.length > 0 && done.length > 0, "the fixtures have both");
+    for (const { r, p } of running) assert.ok(h.includes(`href="/requests/${r.id}#push-${p.id}"`), p.id);
+    for (const p of done) assert.ok(!h.includes(`>${p.rev!.slice(0, 12)}<`), p.id);
+    assert.match(h, /<h2>On try now<\/h2>/);
   });
 
   it("renders collapsed requests without their body", () => {
