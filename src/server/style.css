@@ -302,3 +302,5 @@ ul.analysis li { margin: 2px 0; }
 .rbody > details.fold > summary { padding: 6px 0; }
 /* Between a request's try pushes, its stacks and the rest. */
 hr.part { border: 0; border-top: 3px solid var(--border); margin: 10px -12px 0; }
+/* Right after rows, the line takes the place of the last row's border. */
+.rows + hr.part { margin-top: -1px; }

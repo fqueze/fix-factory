@@ -130,10 +130,11 @@ export function renderRequestBody(r: RequestState, ctx: RenderContext): Html {
       declined.length ? html`<details class="fold" data-fold="declined-pushes"><summary>${declined.length} declined or withdrawn</summary><div class="rows">${declined.map((p) => pushRowOf(r, p, ctx))}</div></details>` : null
     }</div><hr class="part">` : null}
     ${r.metaBug && !(hasBug(r.metaBug) && stacks.length) ? metaBugLine(r, back, ctx) : null}
-    ${stacks.map((s) => html`${stackSection(r, s, ctx)}<hr class="part">`)}
+    ${stacks.map((s) => stackSection(r, s, ctx))}
     ${loose.length ? html`<h3>Patches</h3><div class="rows">${loose.map((p) => patchRow(r, p, ctx))}</div>` : null}
     ${items.length ? html`${(stacks.length || loose.length) && items.some((i) => itemBucket(r, i, ctx) !== "closed") ? html`<h3>Not in a stack yet</h3>` : null}${groupRows(r, items, ctx)}` : null}
     ${landed.length ? html`<h3>Landed</h3>${groupRows(r, landed, ctx)}` : null}
+    ${stacks.length || loose.length || items.length || landed.length ? html`<hr class="part">` : null}
     ${requestJobs(r, ctx)}
     ${notesFold(r, plans)}
     ${recoveryAnswers(r, ctx)}
