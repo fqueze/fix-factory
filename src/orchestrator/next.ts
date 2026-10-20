@@ -1551,7 +1551,7 @@ class Planner {
         ANNOTATIONS_ITEM,
         key,
         "removal",
-        `The stack was verified on try with your DEBUG commit on top: ${list}. On top of the stack it became ${top.head.slice(0, 12)} (branch ${top.branch}): it only removes the skips the fix patches don't. In your branch, replace your DEBUG commit with it (\`git rebase --onto ${debug}^ ${debug} && git cherry-pick ${top.head}\`), then reword its message: \`Bug XXXXXXX - Remove skip-if annotations that no longer fail in ${this.s.folder}, r=<reviewer>.\`, its reviewer from the find-reviewer skill, its body naming each skip's old bug and the push that shows it passing (the bug number is the meta bug's, given later). Change no code.${failures} Otherwise report it as \`removal\` (and \`runIf\` again), without \`debug\`.`,
+        `The stack was verified on try with your DEBUG commit on top: ${list}. On top of the stack it became ${top.head.slice(0, 12)} (branch ${top.branch}): it only removes the skips the fix patches don't. In your branch, replace your DEBUG commit with it (\`git rebase --onto ${debug}^ ${debug} && git cherry-pick ${top.head}\`), then reword its message: \`Bug XXXXXXX - Remove skip-if annotations that no longer fail in ${this.s.folder}, r=<reviewer>.\`, its reviewer from the find-reviewer skill, its body naming each skip's old bug, without try links or run counts (the bug number is the meta bug's, given later). Change no code.${failures} Otherwise report it as \`removal\` (and \`runIf\` again), without \`debug\`.`,
       );
     }
     // The meta bug waits for the removal to be in the stack: it's the patch that needs one.
