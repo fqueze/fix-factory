@@ -7,7 +7,7 @@ import type { RequestState } from "../../types.ts";
 import { jobLabel, pushStatus, type RenderContext } from "./common.ts";
 import { renderOverview, renderRecentPushes } from "./overview.ts";
 import { IDLE, itemBucket, runningSentence } from "./progress.ts";
-import { configTable, parseConfig, renderRequest } from "./request.ts";
+import { configTable, parseConfig, renderRequest, requestSummary } from "./request.ts";
 import { conversationOf, renderActivity } from "./activity.ts";
 import { ITEM_STATES } from "../commands.ts";
 
@@ -59,19 +59,20 @@ function cmd(c: object): string {
 describe("overview", () => {
   const page = renderOverview(source.listRequests(), ctx);
 
-  it("splits requests into active, queued and a collapsed archive", () => {
+  it("splits requests into active, queued and finished, each with its count", () => {
     const active = page.indexOf("<h2>Active");
     const queued = page.indexOf("<h2>Queued");
     const finished = page.indexOf("<h2>Finished");
     assert.ok(active >= 0 && active < queued && queued < finished);
-    assert.match(page, /<details class="archive">/);
-    assert.ok(page.indexOf("r-20260930-errorsummary") > finished, "done requests are in the archive");
+    assert.match(page, /<h2>Finished <span class="count">3<\/span><\/h2>\n  <div id="section-finished">/, "not folded");
+    assert.doesNotMatch(page, /class="archive"/);
+    assert.ok(page.indexOf("r-20260930-errorsummary") > finished, "done requests are under Finished");
     assert.ok(page.indexOf("r-20261016-popups") > queued && page.indexOf("r-20261016-popups") < finished);
     assert.ok(page.includes(cmd({ cmd: "start-now", request: "r-20261016-popups" })));
   });
 
   it("shows one line per active request with its cost and Profile button", () => {
-    assert.equal((page.match(/<details class="req/g) ?? []).length, 11);
+    assert.equal((page.match(/<details class="req/g) ?? []).length, 12, "11 active, 1 finished");
     assert.doesNotMatch(page, /class="step"/, "no internal step names");
     assert.match(page, /\$[\d.]+ spent/);
     const url = encodeURIComponent("http://factory:4300/api/requests/r-20261005-newtab/profile");
@@ -80,23 +81,35 @@ describe("overview", () => {
 
   it("has the header strip and the global Tell the factory box", () => {
     assert.match(page, /agents <b>10\/10<\/b>/);
-    assert.match(page, /<span class="progress"><span class="pbar">(<span class="[a-z-]+" style="flex-grow:\d+"><\/span>){5}<\/span><span class="needs-you">19 need you<\/span> · <span class="working">8 working<\/span> · <span class="ready">14 ready<\/span> · <span class="pending">3 pending<\/span> · <span class="closed">6 closed<\/span><\/span>/);
+    assert.match(page, /<span class="progress"><span class="pbar">(<span class="[a-z-]+" style="flex-grow:\d+"><\/span>){6}<\/span><span class="needs-you">19 need you<\/span> · <span class="working">8 working<\/span> · <span class="ready">12 ready<\/span> · <span class="pending">3 pending<\/span> · <span class="landed">2 landed<\/span> · <span class="closed">6 closed<\/span><\/span>/);
     assert.ok(page.includes(cmd({ cmd: "tell-factory" })));
     assert.doesNotMatch(page, /New request|new-request/);
     assert.match(page, /<link rel="icon" href="data:image\/svg\+xml,[^"]*🏭/);
   });
   it("archives text from the main box that was forwarded, or rephrased after it couldn't be routed, with what became of it", () => {
     assert.ok(page.indexOf("r-20261015-lando-was-down-re-push") > page.indexOf("<h2>Finished"));
-    assert.match(page, /<b>Lando was down this morning, re-push what failed<\/b><\/a> <span class="sub">· Forwarded to r-20261013-tab-failures<\/span>/);
+    assert.match(page, /<b>Lando was down this morning, re-push what failed<\/b> <span class="sub">· Forwarded to r-20261013-tab-failures<\/span>/);
     assert.ok(page.indexOf("r-20261015-hmm") > page.indexOf("<h2>Finished"));
-    assert.match(page, /<b>hmm<\/b><\/a> <span class="sub">· Superseded by r-20261015-sessionstore<\/span>/);
+    assert.match(page, /<b>hmm<\/b> <span class="sub">· Superseded by r-20261015-sessionstore<\/span>/);
+    const simple = page.slice(page.indexOf('<div class="simple">'));
+    assert.ok(simple.includes('data-request="r-20261015-hmm"') && !simple.includes("r-20260930-errorsummary"), "one line each, in their own div");
   });
-  it("links each finished request to its page, where it's shown whole", () => {
-    assert.match(page, /<a href="\/requests\/r-20261015-hmm" title="Its patches, pushes, agents and costs"><b>hmm<\/b><\/a>/);
-    const done = source.listRequests().find((r) => r.step === "done" && Object.keys(r.patches).length > 0)!;
-    const opened = String(renderOverview(source.listRequests(), { ...ctx, open: done.id }));
-    assert.match(opened, new RegExp(`<details class="req[^"]*" id="req-${done.id}"[^>]* open>`));
+  it("opens finished requests in place like active ones: collapsed, or whole when opened", () => {
+    const id = "r-20260930-errorsummary";
+    assert.match(page, new RegExp(`<div id="section-finished"><details class="req" id="req-${id}" data-request="${id}" data-section="finished">`));
+    assert.doesNotMatch(page, new RegExp(`id="req-${id}"[^>]* open>`));
+    assert.doesNotMatch(page, /title="Its patches, pushes, agents and costs"/, "no link");
+    const opened = String(renderOverview(source.listRequests(), { ...ctx, open: id }));
+    assert.match(opened, new RegExp(`<details class="req[^"]*" id="req-${id}"[^>]* open>`));
     assert.ok(opened.includes('<div class="rbody">'), "its body, not a lazy one");
+  });
+
+  it("says a done request's groups landed, without where they stand on Phabricator", () => {
+    const r = get("r-20260930-errorsummary");
+    assert.equal(requestSummary(r), "");
+    const head = page.slice(page.indexOf('id="req-r-20260930-errorsummary"'));
+    assert.match(head.slice(0, head.indexOf("</summary>")), /<span class="rsum"><span class="rprog"><span class="pbar"><span class="landed" style="flex-grow:1"><\/span><\/span><span class="landed">1 landed<\/span><\/span><\/span>/);
+    assert.match(requestSummary({ ...r, step: "landing" }), /on Phabricator/, "before done, it does");
   });
 
   it("lists the try pushes still running across requests, each linked to its row in its request", () => {
@@ -215,7 +228,8 @@ describe("one fixture per step of docs/MVP.md", () => {
   });
   it("4. investigate and fix: what you asked, then one short line per planned command with its reason, an agent's instructions folded, notes after the list", () => {
     const h = expanded("r-20261013-tab-failures");
-    assert.match(h, /<div class="action reply" data-key="recovery:j-recover"><span class="flag">You asked<\/span> <span class="said clamp1" data-expand title="the browser_tabSpinner agent has been at it for 6 hours">“the browser_tabSpinner agent has been at it for 6 hours”<\/span><form/, "a plan recorded without an answer still renders, without an empty answer");
+    assert.match(h, /<div class="action reply" data-key="recovery:j-recover"><span class="flag">You asked<\/span> <form class="inline cmd"[^>]*>.*?Dismiss<\/button><\/form><span class="said clamp1" data-expand title="the browser_tabSpinner agent has been at it for 6 hours">“the browser_tabSpinner agent has been at it for 6 hours”<\/span><form/, "a plan recorded without an answer still renders, without an empty answer");
+    assert.ok(h.includes(cmd({ cmd: "dismiss", key: "recovery:j-recover", request: "r-20261013-tab-failures" })), "dismissed when done another way");
     assert.doesNotMatch(h, /<p class="answer">/);
     const items = [...h.matchAll(/<li><label><input type="checkbox"[^>]*> (.*?)<\/label> <span class="reason">[^<]*<\/span>(.*?)<\/li>/g)].map((m) => [m[1], m[2]]);
     assert.deepEqual(
@@ -686,6 +700,18 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.ok(notYet >= 0 && notYet < h.indexOf('data-item="i-new"') && h.indexOf('data-item="i-new"') < landed && landed < h.indexOf('data-item="i-gone"'));
     assert.doesNotMatch(expanded("r-20260930-errorsummary"), /Not in a stack yet/);
     assert.match(expanded("r-20260930-errorsummary"), /<h3>Landed<\/h3>/);
+  });
+
+  it("a landed patch leaves its stack; a stack with no patch left isn't shown, its groups are under Landed", () => {
+    const r = structuredClone(get("r-20261001-mouse-button"));
+    const before = renderRequest(r, ctx, true).value;
+    assert.match(before, /<h3 class="stackhead">/);
+    // i-m2 landed; p-m1 lands on Phabricator while its group still waits for review.
+    r.patches["p-m1"].review!.status = "published";
+    const h = renderRequest(r, ctx, true).value;
+    assert.doesNotMatch(h, /<h3 class="stackhead">/);
+    const landed = h.indexOf("<h3>Landed</h3>");
+    assert.ok(landed >= 0 && landed < h.indexOf('id="patch-p-m1"') && landed < h.indexOf('id="patch-p-m2"'));
   });
 
   it("landable needs every hard dep landed or landable", () => {

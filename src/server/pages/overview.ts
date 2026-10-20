@@ -68,15 +68,12 @@ export function renderMain(requests: RequestState[], ctx: RenderContext): Html {
 
   ${renderRecentPushes(requests)}
 
-  ${finished.length ? html`<h2>Finished</h2>
-  <details class="archive"${finished.some((r) => r.id === ctx.open) ? html` open` : null}>
-    <summary>${plural(finished.length, "request")}</summary>
-    <div id="section-finished">${finished.filter((r) => r.kind !== "unrouted").map((r) => renderRequest(r, ctx, r.id === ctx.open))}</div>
-    <div class="simple">${finished.filter((r) => r.kind === "unrouted").map(
-      (r) =>
-        html`<div class="row" data-request="${r.id}" data-section="finished"><span class="grow"><b>${requestName(r)}</b> <span class="sub">· ${routeOutcome(r)}</span></span><a class="btn small" href="${profileUrl(ctx, r.id)}" target="_blank" rel="noopener">Profile</a></div>`,
-    )}</div>
-  </details>` : null}`;
+  ${finished.length ? html`<h2>Finished <span class="count">${finished.length}</span></h2>
+  <div id="section-finished">${finished.filter((r) => r.kind !== "unrouted").map((r) => renderRequest(r, ctx, r.id === ctx.open))}</div>
+  <div class="simple">${finished.filter((r) => r.kind === "unrouted").map(
+    (r) =>
+      html`<div class="row" data-request="${r.id}" data-section="finished"><span class="grow"><b>${requestName(r)}</b> <span class="sub">· ${routeOutcome(r)}</span></span><a class="btn small" href="${profileUrl(ctx, r.id)}" target="_blank" rel="noopener">Profile</a></div>`,
+  )}</div>` : null}`;
 }
 
 // The pushes still running, one line each: what's on try right now, and which request it's for.

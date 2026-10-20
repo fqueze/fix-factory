@@ -291,7 +291,7 @@ function askBlock(r: RequestState, i: ItemView, ctx: RenderContext, patches: Pat
 }
 
 // What needs you first, then what runs, what's ready and what waits; the closed ones folded under one line.
-const ORDER: Bucket[] = ["needs you", "working", "ready", "pending"];
+const ORDER: Bucket[] = ["needs you", "working", "ready", "pending", "landed"];
 
 function groupRows(r: RequestState, items: ItemView[], ctx: RenderContext): Html {
   const bucket = new Map(items.map((i) => [i.id, itemBucket(r, i, ctx)]));
