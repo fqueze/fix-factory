@@ -1,6 +1,6 @@
 import type { BugDraft, Command, ItemState, ItemView, NeedsUser, PatchView, PushView, RefusedCommand, RequestState, StackView } from "../../types.ts";
 import { REQUEST_STEPS } from "../commands.ts";
-import { html, type Html } from "../html.ts";
+import { html, join, type Html } from "../html.ts";
 import { needsMetaBug as stackNeedsMetaBug } from "../../state/meta-bug.ts";
 
 // What the pages need besides the state.
@@ -382,6 +382,22 @@ export function groupLabel(r: RequestState, i: ItemView): string {
   }
   const folder = i.folder === r.folder ? "" : relativePath(i.folder, r.folder);
   return `${folder ? `${folder}, ` : ""}${tests.length} tests`;
+}
+
+// The same, each test linked to its dashboard on tests.firefox.dev (manifests aren't tests).
+export function groupLinks(r: RequestState, i: ItemView): Html {
+  const tests = i.group.tests;
+  if (tests.length > 3) {
+    return html`${groupLabel(r, i)}`;
+  }
+  return join(
+    tests.map((t) =>
+      /\.(toml|ini)$/.test(t)
+        ? html`${relativePath(t, r.folder)}`
+        : html`<a href="https://tests.firefox.dev/test.html?test=${encodeURIComponent(t)}" target="_blank" rel="noopener" title="Its failures on tests.firefox.dev">${relativePath(t, r.folder)}</a>`,
+    ),
+    ", ",
+  );
 }
 
 // Job names are a tool and its first argument, or a prompt name.

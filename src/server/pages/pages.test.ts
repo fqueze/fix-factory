@@ -712,9 +712,12 @@ describe("a burndown with closed groups, running agents and a dropped patch", ()
     assert.match(row, />Send to its author</);
   });
 
-  it("names the test a patch fixes on its second line", () => {
+  it("names the test a patch fixes on its second line, linked to its tests.firefox.dev dashboard", () => {
     const h = expanded("r-20261013-tab-failures");
-    assert.match(rowOf(h, "patch-p-close"), /<span class="state">fixes <b>browser\/base\/content\/test\/tabs\/browser_tabCloseSpacer\.js<\/b> · reviewed: waiting for the rest of the stack<\/span>/);
+    assert.match(
+      rowOf(h, "patch-p-close"),
+      /<span class="state">fixes <b><a href="https:\/\/tests\.firefox\.dev\/test\.html\?test=browser%2Fbase%2Fcontent%2Ftest%2Ftabs%2Fbrowser_tabCloseSpacer\.js" target="_blank" rel="noopener" title="Its failures on tests\.firefox\.dev">browser\/base\/content\/test\/tabs\/browser_tabCloseSpacer\.js<\/a><\/b> · reviewed: waiting for the rest of the stack<\/span>/,
+    );
   });
 
   it("shows earlier recovery plans as history, without buttons", () => {
