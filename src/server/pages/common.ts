@@ -438,7 +438,7 @@ const JOB_LABELS: Record<string, string> = {
   "merge-clusters": "merge clusters",
   "plan-try-pushes": "plan try pushes",
   "prior-art-verdict": "judge prior art",
-  recover: "recovery plan",
+  recover: "answering you",
   "resolve-conflict": "resolve conflict",
   "review-patch": "critical review",
   "review-stack": "review stack",

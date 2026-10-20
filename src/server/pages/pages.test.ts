@@ -257,8 +257,11 @@ describe("one fixture per step of docs/MVP.md", () => {
     const h = expanded("r-20261013-tab-failures");
     const said = "restart the browser_pinnedTabs.js item, it has been waiting for a build slot since this morning";
     const summary = h.slice(0, h.indexOf("</summary>"));
-    assert.match(summary, /<span class="needs-you">2 need you<\/span> · <span class="working">1 working<\/span> · <span class="ready">1 ready<\/span> · <span class="pending">1 pending<\/span> · <span class="closed">1 closed<\/span><\/span> · recovery plan<\/span>/);
+    assert.match(summary, /<span class="needs-you">2 need you<\/span> · <span class="working">1 working<\/span> · <span class="ready">1 ready<\/span> · <span class="pending">1 pending<\/span> · <span class="closed">1 closed<\/span><\/span> · answering you<\/span>/);
+    assert.ok(!summary.includes('data-key="recovery:j-recover"'), "its answer isn't in the summary");
     const body = h.slice(h.indexOf('<div class="rbody">'));
+    const answer = body.indexOf('<div class="action reply" data-key="recovery:j-recover">');
+    assert.ok(answer > 0 && answer < body.indexOf('<form class="ask cmd reqask"'), "its answer is in the body, above the box");
     const line = `<div class="jobs"><details class="job" data-fold="job-j-recover-2" data-watch="/api/requests/r-20261013-tab-failures/jobs/j-recover-2/activity" data-live><summary><span class="res run">working on <span class="said" title="${said}">“${said}”</span></span> <span class="sub">Opus · running <span data-since="2026-10-15T08:59:00.000Z">1 min</span></span> <form`;
     const at = body.indexOf(line);
     assert.ok(at > 0 && at < body.indexOf('<form class="ask cmd reqask"') && body.indexOf("</details></div>", at) < body.indexOf('<form class="ask cmd reqask"'));
@@ -266,7 +269,7 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.ok(body.includes(cmd({ cmd: "stop", job: "j-recover-2", request: "r-20261013-tab-failures" })));
     const old = structuredClone(get("r-20261013-tab-failures"));
     delete old.jobs["j-recover-2"].purpose;
-    assert.match(renderRequest(old, ctx, true).value, /<span class="res run">recovery plan<\/span>/, "without a purpose");
+    assert.match(renderRequest(old, ctx, true).value, /<span class="res run">answering you<\/span>/, "without a purpose");
   });
   it("4. investigate and fix: a group's jobs under it, Stop on the running ones, an agent's opening on its activity, Reopen on closed groups", () => {
     const h = expanded("r-20261013-tab-failures");
@@ -281,7 +284,7 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.ok(rowOf(c, "item-i-spinner").includes(cmd({ cmd: "continue", request: "r-20261013-tab-failures", item: "i-spinner" })));
     assert.ok(!c.includes(cmd({ cmd: "continue", request: "r-20261013-tab-failures", item: "i-mute" })), "no author session to talk to");
     const jobs = h.slice(h.indexOf('data-fold="jobs"'));
-    assert.match(jobs, /<span class="res ok">recovery plan<\/span> <span class="sub">Opus · 4 min · \$0\.88<\/span>/);
+    assert.match(jobs, /<span class="res ok">answering you<\/span> <span class="sub">Opus · 4 min · \$0\.88<\/span>/);
     assert.ok(!jobs.includes(cmd({ cmd: "stop", job: "j-recover", request: "r-20261013-tab-failures" })), "finished jobs can't be stopped");
   });
   it("every ⚑ has a way out: accept after the review limit, retry a failed or stopped job, continue with its author, dismiss the rest", () => {
@@ -594,7 +597,7 @@ describe("one fixture per step of docs/MVP.md", () => {
 
     const t = structuredClone(get("r-20261013-tab-failures"));
     t.recoveryPlans.push({ ...t.recoveryPlans[0], job: "j-later", text: "a later plan", plan: [] });
-    assert.match(renderRequest(t, ctx).value, /the browser_tabSpinner agent/, "the plan of the entry's job, not the latest");
+    assert.match(renderRequest(t, ctx, true).value, /the browser_tabSpinner agent/, "the plan of the entry's job, not the latest");
   });
 
   it("reports an interdiff that can't be read", () => {

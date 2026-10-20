@@ -2,7 +2,7 @@ import { REQUEST_STEPS } from "../commands.ts";
 import type { BugDraft, ItemView, JobView, PatchView, PushView, RequestState, StackView } from "../../types.ts";
 import { html, join, type Html } from "../html.ts";
 import { ANNOTATIONS_ITEM } from "../../orchestrator/next.ts";
-import { actionsSummary, pollPhabButton, redoAnnotationsButton, approvePushControls, bugBox, continueBox, copyButton, flagControls, flagItemOf, flagText, plannedLabel, recoveryPlanFor, hasAuthorSession, stackViewerLink, submitControls, summaryId } from "./actions.ts";
+import { actionsSummary, recoveryAnswers, pollPhabButton, redoAnnotationsButton, approvePushControls, bugBox, continueBox, copyButton, flagControls, flagItemOf, flagText, plannedLabel, recoveryPlanFor, hasAuthorSession, stackViewerLink, submitControls, summaryId } from "./actions.ts";
 import { groupJobs, jobLine } from "./activity.ts";
 import { flagAsk, itemBucket, itemSentence, progressLine, requestProgress, type Bucket } from "./progress.ts";
 import {
@@ -130,6 +130,7 @@ export function renderRequestBody(r: RequestState, ctx: RenderContext): Html {
     ${landed.length ? html`<h3>Landed</h3>${groupRows(r, landed, ctx)}` : null}
     ${requestJobs(r, ctx)}
     ${notesFold(r, plans)}
+    ${recoveryAnswers(r, ctx)}
     ${recovering.length ? html`<div class="jobs">${recovering.map((j) => jobLine(r, j, ctx))}</div>` : null}
     <form class="ask cmd reqask" method="post" action="/api/commands">${commandFields([{ cmd: "tell-factory", request: r.id }], back)}<input type="text" name="text" required placeholder="Tell the factory about this request…"><button class="btn">Send</button></form>
   </div>`;

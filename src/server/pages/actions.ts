@@ -343,7 +343,12 @@ function instructions(c: PlannedCommand): string | undefined {
 // A group's ⚑ is handled on its row, a try push's on its row too; the request's own ⚑s (recovery plans,
 // meta bug, submit…) here, under its name.
 export function actionsSummary(r: RequestState, ctx: RenderContext): Html {
-  return join([...r.needsUser.filter((n) => flagItemOf(r, n) === undefined && !isPushApproval(r, n)).map((n) => renderAction(r, n, ctx)), ...refusedOf(r).map((x) => renderRefused(r, x))], "");
+  return join([...r.needsUser.filter((n) => flagItemOf(r, n) === undefined && !isPushApproval(r, n) && !recoveryPlanFor(r, n)).map((n) => renderAction(r, n, ctx)), ...refusedOf(r).map((x) => renderRefused(r, x))], "");
+}
+
+// Answers to what you typed in the request's box go right above that box, in its body: folds there open.
+export function recoveryAnswers(r: RequestState, ctx: RenderContext): Html {
+  return join(r.needsUser.filter((n) => recoveryPlanFor(r, n)).map((n) => renderAction(r, n, ctx)), "");
 }
 
 // A planned push is approved on its row of the request's try pushes.
