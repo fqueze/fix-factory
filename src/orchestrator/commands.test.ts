@@ -43,6 +43,17 @@ describe("commands", () => {
     assert.equal(sc.state().stacks.a.submitCopied, sc.of("submit-copied")[0].t);
   });
 
+  it("copied-reorg answers a land ⚑, and only a land ⚑", () => {
+    const sc = withPatch();
+    sc.add({ type: "needs-user", request: ID, key: "land:a:h", action: "Stack reordered", detail: "", stack: "a" });
+    run(sc, cmd({ cmd: "copied-reorg", key: "land:a:h" }));
+    assert.deepEqual(sc.open(), []);
+    sc.add({ type: "needs-user", request: ID, key: "resubmit:a", action: "Resubmit", detail: "", stack: "a" });
+    run(sc, cmd({ cmd: "copied-reorg", key: "resubmit:a" }));
+    assert.deepEqual(sc.open(), ["resubmit:a"]);
+    assert.deepEqual(executed(sc), [{ ok: true, detail: undefined }, { ok: false, detail: "resubmit:a isn't a reorg to run" }]);
+  });
+
   it("decline-push declines a push waiting for you, with your reason", () => {
     const sc = withPatch();
     sc.add({ type: "needs-user", request: ID, key: "approve-push:A", action: "Approve", detail: "", push: "A" });

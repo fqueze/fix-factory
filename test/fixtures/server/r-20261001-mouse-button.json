@@ -126,7 +126,7 @@
   "needsUser": [
     {
       "key": "land:mouse-button",
-      "action": "Reorg ready: 1 landable patch moved to the bottom",
+      "action": "Stack reordered: 1 landable patch moved to the bottom",
       "detail": "1 text conflict resolved (Sonnet) · 1 revision changed",
       "since": "2026-10-15T07:30:00.000Z",
       "stack": "mouse-button"

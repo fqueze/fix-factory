@@ -26,6 +26,7 @@ describe("validateCommand", () => {
       { cmd: "retry", request: "r-20261013-tab-failures", job: "j-artifacts" },
       { cmd: "stop", request: "r-20261013-tab-failures", job: "j-recover-2" },
       { cmd: "dismiss", request: "r-20261013-tab-failures", key: "recovery:j-recover" },
+      { cmd: "copied-reorg", request: "r-20261001-mouse-button", key: "land:mouse-button" },
     ];
     for (const c of ok) {
       const v = validateCommand(c, get);
@@ -47,6 +48,7 @@ describe("validateCommand", () => {
       [{ cmd: "continue", request: T, item: "i-nope", text: "x" }, /unknown item/],
       [{ cmd: "continue", request: T, item: "i-pin", text: " " }, /text must be a non-empty string/],
       [{ cmd: "accept-review", item: "i-pin" }, /needs a request/],
+      [{ cmd: "copied-reorg", key: "land:a:h" }, /needs a request/],
     ];
     for (const [c, error] of bad) {
       const v = validateCommand(c, getT);

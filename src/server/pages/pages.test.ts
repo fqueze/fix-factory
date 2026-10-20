@@ -572,8 +572,23 @@ describe("one fixture per step of docs/MVP.md", () => {
   it("10. landing: landable patches and the moz-phab command", () => {
     const h = expanded("r-20261001-mouse-button");
     assert.match(h, /<span class="landable">landable<\/span>/);
-    assert.match(h, /Reorg ready/);
-    assert.match(h, />Copy the moz-phab command</);
+    assert.match(h, /Stack reordered: 1 landable patch moved to the bottom/);
+    assert.ok(h.includes(cmd({ cmd: "copied-reorg", request: "r-20261001-mouse-button", key: "land:mouse-button" })), "copying it answers the ⚑");
+    assert.match(h, /<textarea hidden id="mozphab-reorg-r-20261001-mouse-button-mouse-button">cd \/build\/worktrees\/mouse-button && git switch ff\/mouse-button && moz-phab reorg<\/textarea>/);
+    assert.match(h, /data-copy="mozphab-reorg-r-20261001-mouse-button-mouse-button">Copy the moz-phab reorg command</);
+  });
+
+  it("groups that landed outside a stack are under Landed, after those not in a stack yet", () => {
+    const r = structuredClone(get("r-20261001-mouse-button"));
+    const [first] = Object.values(r.items);
+    r.items["i-gone"] = { ...first, id: "i-gone", state: "landed" };
+    r.items["i-new"] = { ...first, id: "i-new", state: "waiting for review" };
+    const h = renderRequest(r, ctx, true).value;
+    const notYet = h.indexOf("<h3>Not in a stack yet</h3>");
+    const landed = h.indexOf("<h3>Landed</h3>");
+    assert.ok(notYet >= 0 && notYet < h.indexOf('data-item="i-new"') && h.indexOf('data-item="i-new"') < landed && landed < h.indexOf('data-item="i-gone"'));
+    assert.doesNotMatch(expanded("r-20260930-errorsummary"), /Not in a stack yet/);
+    assert.match(expanded("r-20260930-errorsummary"), /<h3>Landed<\/h3>/);
   });
 
   it("landable needs every hard dep landed or landable", () => {

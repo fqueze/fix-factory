@@ -1726,7 +1726,11 @@ describe("10. landing", () => {
     const [refresh] = sc.settle();
     sc.complete(refresh, { output: [{ ...imported(sha("5"), "Bug 999 - Fix a, r=smaug.", [], 999)[0], revision: 101 }, { ...imported(sha("4"), "Bug 22 - Fix test_b, r=smaug.", [], 22)[0], revision: 100 }] });
     sc.settle();
-    assert.ok(sc.open().some((k) => k.startsWith("land:a:")));
+    const flag = sc.state().needsUser.find((n) => n.key.startsWith("land:a:"))!;
+    assert.equal(flag.key, `land:a:${key.split(":").at(-1)}`);
+    assert.equal(flag.action, "Stack reordered: 2 landable patches moved to the bottom");
+    assert.equal(flag.detail, "Run moz-phab reorg so Phabricator has the new order (1 soft dependency adapted).");
+    assert.equal(flag.stack, "a");
 
     sc.now += 3 * HOUR;
     sc.settle();
@@ -1739,6 +1743,39 @@ describe("10. landing", () => {
     const removes = sc.view().jobs.filter((j) => j.purpose.what === "remove");
     assert.deepEqual(removes.map((j) => j.purpose.key).sort(), [`remove:${ID}-a`, `remove:${ID}-i-test-a`, `remove:${ID}-i-test-b`].sort());
     assert.ok(removes.every((j) => j.cwd === config.firefoxRepo));
+  });
+});
+
+describe("10. landing: the reorg flag", () => {
+  const accepted = () => {
+    const sc = inReview();
+    sc.complete("poll:0", { output: polled("accepted") });
+    sc.settle();
+    return { sc, key: sc.view().jobs.find((j) => j.purpose.key.startsWith("order-landable:"))!.purpose.key };
+  };
+
+  it("asks for nothing when the landable patches are already at the bottom, and clears an earlier reorg flag", () => {
+    const { sc, key } = accepted();
+    sc.add({ type: "needs-user", request: ID, key: "land:a:old", action: "Stack reordered", detail: "", stack: "a" });
+    sc.complete(key, { output: { order: sc.state().stacks.a.order, flippedSoftDeps: [], landable: ["p-test-b"] } });
+    assert.deepEqual(sc.settle(), []);
+    assert.ok(!sc.view().jobs.some((j) => j.purpose.key.startsWith("rewrite-land:")));
+    assert.deepEqual(sc.open().filter((k) => k.startsWith("land:")), []);
+  });
+
+  it("says nothing about soft dependencies when none was adapted, and stays answered once you copied the reorg", () => {
+    const { sc, key } = accepted();
+    const order = [...sc.state().stacks.a.order].reverse();
+    sc.complete(key, { output: { order, flippedSoftDeps: [], landable: [order[0]] } });
+    const [rewrite] = sc.settle();
+    sc.complete(rewrite, { output: { mapping: { [sha("f")]: sha("5"), [sha("e")]: sha("6") } } });
+    sc.settle();
+    const flag = sc.state().needsUser.find((n) => n.key.startsWith("land:a:"))!;
+    assert.equal(flag.action, "Stack reordered: 1 landable patch moved to the bottom");
+    assert.equal(flag.detail, "Run moz-phab reorg so Phabricator has the new order.");
+    sc.add({ type: "user-done", request: ID, key: flag.key });
+    sc.settle();
+    assert.deepEqual(sc.open().filter((k) => k.startsWith("land:")), [], "not raised again");
   });
 });
 
