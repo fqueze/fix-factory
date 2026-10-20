@@ -2,6 +2,8 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { InvalidReport } from "./handlers.ts";
+import { commandEffects } from "./commands.ts";
+import type { Command } from "../types.ts";
 import { resumeAuthorPlan, similarMessages, stackId } from "./next.ts";
 import { config, HOUR, ID, Scenario, sha } from "./testkit.ts";
 import { shortHash } from "./plan.ts";
@@ -2253,7 +2255,7 @@ describe("burndown verification", () => {
     reviewersChecked(sc);
     assert.ok(sc.view().jobs.some((j) => !j.end && j.purpose.key.startsWith("check:a:")));
   });
-  it("then has the skip-ifs' author drop the DEBUG commit and write the removal, a patch that needs the meta bug", () => {
+  it("then has the skip-ifs' author replace the DEBUG commit and write the removal, a patch that needs the meta bug", () => {
     // Its own patch has a bug: nothing needs the meta bug until the removal.
     const { sc } = verified(false, 22);
     assert.equal(sc.state().step, "meta bug", "waits for the removal before going on");
@@ -2261,7 +2263,7 @@ describe("burndown verification", () => {
     const open = () => sc.view().jobs.filter((j) => !j.end).map((j) => j.purpose.key);
     assert.deepEqual(open(), [key]);
     const message = sc.plan(key).agent!.message!;
-    assert.match(message, /DEBUG commit on top: fed \(green\), all green/);
+    assert.match(message, /DEBUG commit on top: fed \(green\)\. On top of the stack it became/);
     assert.match(message, /Bug XXXXXXX - Remove skip-if annotations that no longer fail in a/);
     sc.complete(key, { report: { removal: sha("7"), summary: "removed one skip", feedback: [] } });
     sc.settle();
@@ -2320,18 +2322,68 @@ describe("burndown verification", () => {
     assert.match(message, /Change no code/);
     assert.doesNotMatch(message, /tryRequest|fx-tests|Drop the DEBUG commit/);
   });
-  it("with failures, has the author drop the DEBUG commit and write the removal from the pushes", () => {
+  it("with failures, has the author cherry-pick the same commit and list the skips whose tests still fail", () => {
     const { sc } = verified(false, 22, "failures");
     // Its failures pointed at no patch: you move the request on.
     assert.equal(sc.state().step, "verify on try");
     sc.add({ type: "step", request: ID, step: "meta bug" });
     sc.settle();
     const message = sc.plan("author:i-annotations:removal").agent!.message!;
-    assert.match(message, /DEBUG commit 999999999999 on top: fed \(failures\)/);
-    assert.match(message, /Drop the DEBUG commit/);
-    assert.match(message, /git diff .*\.\.r-.*-a -- '\*\.toml' '\*\.ini'/);
-    assert.match(message, /tryRequest/);
-    assert.doesNotMatch(message, /cherry-pick|Change no code/);
+    assert.match(message, /DEBUG commit on top: fed \(failures\)/);
+    assert.match(message, new RegExp(`git rebase --onto ${sha("9")}\\^ ${sha("9")} && git cherry-pick ${sha("b")}`));
+    assert.match(message, /Change no code/);
+    assert.match(message, /fx-tests try <rev>/);
+    assert.match(message, /`keepSkips`[^]*report without `removal`/);
+  });
+
+  // The removal's author listed a skip whose test still fails: you decide.
+  const asking = () => {
+    const { sc } = verified(false, 22, "failures");
+    sc.add({ type: "step", request: ID, step: "meta bug" });
+    sc.settle();
+    const keepSkips = [{ skip: "a/xpcshell.toml test_a.js os == 'win'", failure: "boom on fed" }];
+    const job = sc.complete("author:i-annotations:removal", { report: { summary: "one still fails", keepSkips, feedback: [] } });
+    sc.settle();
+    return { sc, job };
+  };
+  const runCommand = (sc: Scenario, c: Record<string, unknown>) => {
+    const command = { v: 1, id: "c-keep", t: "2026-10-15T09:00:00.000Z", request: ID, ...c } as Command;
+    for (const e of commandEffects(command, { config, state: sc.state(), view: sc.view(), exists: () => false, plan: (j) => sc.plans.get(j) })) {
+      if (e.type === "event") sc.add(e.event);
+      if (e.type === "start") sc.startJob(e.plan);
+    }
+  };
+
+  it("a skip whose test still fails blocks the removal on your answer, and the meta bug waits", () => {
+    const { sc, job } = asking();
+    const s = sc.state();
+    assert.equal(s.items["i-annotations"].state, "blocked");
+    const flag = s.needsUser.find((n) => n.key === `keep-skips:${job}`);
+    assert.ok(flag);
+    assert.equal(flag.action, "Keep this skip-if? Their tests still fail on try");
+    assert.equal(flag.detail, "a/xpcshell.toml test_a.js os == 'win': boom on fed");
+    assert.equal(flag.item, "i-annotations");
+    assert.equal(s.step, "meta bug");
+    assert.ok(!s.needsUser.some((n) => n.key.startsWith("meta-bug:")), "the meta bug waits");
+    assert.deepEqual(sc.view().jobs.filter((j) => !j.end && !j.purpose.key.startsWith("sync:")).map((j) => j.purpose.key), []);
+  });
+
+  it("Keep them resumes its author, whose removal becomes the patch, and the question goes away", () => {
+    const { sc, job } = asking();
+    runCommand(sc, { cmd: "continue", item: "i-annotations", text: "Yes, keep them." });
+    sc.settle();
+    const key = "author:i-annotations:continue:c-keep";
+    assert.match(sc.plan(key).agent!.message!, /Yes, keep them\./);
+    sc.complete(key, { report: { removal: sha("7"), summary: "kept the failing skip", feedback: [] } });
+    sc.settle();
+    assert.equal(sc.state().items["i-annotations"].state, "fix verified locally");
+    assert.ok(!sc.state().needsUser.some((n) => n.key.startsWith("keep-skips:")), `${job}'s question is answered`);
+    const author = sc.view().byKey.get(key)![0].job;
+    sc.complete(`import:${author}`, { output: imported(sha("7"), "Bug XXXXXXX - Remove skip-if annotations that no longer fail in a, r=smaug.", ["a/xpcshell.toml"]) });
+    sc.settle();
+    assert.equal(sc.state().patches["p-annotations"].sha, sha("7"));
+    assert.equal(sc.state().step, "meta bug");
+    assert.ok(!sc.state().needsUser.some((n) => n.key.startsWith("meta-bug:")), "waits for the removal in the stack");
   });
 });
 

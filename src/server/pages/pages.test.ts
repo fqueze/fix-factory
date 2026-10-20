@@ -382,6 +382,18 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.match(ask, /<div class="ask-more" data-key="note:odd"><p><b>Also: Something odd<\/b><\/p><p>look at it<\/p><p>Fix it anyway, or leave it to them[^<]*<\/p><div class="jobctl"><form[^]*?>Fix it anyway<\/button>/, "the second ⚑ with its own buttons");
   });
 
+  it("asks whether to keep the skip-ifs whose tests still fail, with Keep them and the talk box", () => {
+    const D = "r-20261015-downloads-stuck";
+    const r = structuredClone(get(D));
+    r.needsUser.push({ key: "keep-skips:j-x", action: "Keep this skip-if? Their tests still fail on try", detail: "a/xpcshell.toml test_a.js os == 'win': boom on fed", job: "j-x", item: "i-idle", since: r.createdAt });
+    const row = rowOf(renderRequest(r, ctx, true).value, "item-i-idle");
+    const text = "Yes, keep them: put exactly those skip-ifs back in your removal commit, change nothing else, and report it as `removal`.";
+    assert.ok(row.includes(cmd({ cmd: "continue", item: "i-idle", text, request: D })), "Keep them sends its canned answer");
+    assert.match(row, /title="Those failures stay unfixed, skipped as before">Keep them</);
+    assert.ok(row.includes(cmd({ cmd: "continue", request: D, item: "i-idle" })), "or tell its author something else");
+    assert.doesNotMatch(row, />(Dismiss|Hand back)</);
+  });
+
   it("asks a flagged group's question once when it has two patches", () => {
     const T = "r-20261013-tab-failures";
     const r = structuredClone(get(T));

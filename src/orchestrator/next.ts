@@ -923,11 +923,13 @@ class Planner {
     const author = this.authorReport(item.id)!;
     if (this.askedPush(item, author.job)) return;
     // Skips whose tests still fail: leaving those failures unfixed is your call.
-    const keep = item.id === ANNOTATIONS_ITEM ? this.rep<WriteAnnotationPatchesReport>(author.job).keepSkips : undefined;
-    for (const n of this.s.needsUser) if (n.key.startsWith("keep-skips:") && n.job !== author.job.job) this.clear(n.key);
-    if (keep?.length) {
-      this.raise(`keep-skips:${author.job.job}`, { action: `Keep ${keep.length === 1 ? "this skip-if" : `these ${keep.length} skip-ifs`}? Their tests still fail on try`, detail: keep.map((k) => `${k.skip}: ${k.failure}`).join("\n").slice(0, 1500), job: author.job.job, item: item.id });
-      return;
+    if (item.id === ANNOTATIONS_ITEM) {
+      const keep = this.rep<WriteAnnotationPatchesReport>(author.job).keepSkips;
+      for (const n of this.s.needsUser) if (n.key.startsWith("keep-skips:") && n.job !== author.job.job) this.clear(n.key);
+      if (keep?.length) {
+        this.raise(`keep-skips:${author.job.job}`, { action: `Keep ${keep.length === 1 ? "this skip-if" : `these ${keep.length} skip-ifs`}? Their tests still fail on try`, detail: keep.map((k) => `${k.skip}: ${k.failure}`).join("\n").slice(0, 1500), job: author.job.job, item: item.id });
+        return;
+      }
     }
     if (author.commits.length === 0) return;
     // A ⚑ on its author's last run (it disagrees with you, it fixed without reproducing…): nothing goes on until you
