@@ -128,11 +128,11 @@ export function renderRequestBody(r: RequestState, ctx: RenderContext): Html {
     ${configLine(r)}
     ${pushes.length ? html`<h3>Try pushes${planned.length > 1 ? html` ${approvePushControls(r, planned, back)}` : null}</h3><div class="rows">${[...planned, ...rest].map((p) => pushRowOf(r, p, ctx))}${
       declined.length ? html`<details class="fold" data-fold="declined-pushes"><summary>${declined.length} declined or withdrawn</summary><div class="rows">${declined.map((p) => pushRowOf(r, p, ctx))}</div></details>` : null
-    }</div>` : null}
-    ${r.metaBug ? metaBugLine(r, back, ctx) : null}
-    ${stacks.map((s) => stackSection(r, s, ctx))}
+    }</div><hr class="part">` : null}
+    ${r.metaBug && !(hasBug(r.metaBug) && stacks.length) ? metaBugLine(r, back, ctx) : null}
+    ${stacks.map((s) => html`${stackSection(r, s, ctx)}<hr class="part">`)}
     ${loose.length ? html`<h3>Patches</h3><div class="rows">${loose.map((p) => patchRow(r, p, ctx))}</div>` : null}
-    ${items.length ? html`${stacks.length || loose.length ? html`<h3>Not in a stack yet</h3>` : null}${groupRows(r, items, ctx)}` : null}
+    ${items.length ? html`${(stacks.length || loose.length) && items.some((i) => itemBucket(r, i, ctx) !== "closed") ? html`<h3>Not in a stack yet</h3>` : null}${groupRows(r, items, ctx)}` : null}
     ${landed.length ? html`<h3>Landed</h3>${groupRows(r, landed, ctx)}` : null}
     ${requestJobs(r, ctx)}
     ${notesFold(r, plans)}
@@ -210,7 +210,10 @@ function livePatches(r: RequestState, s: StackView): PatchView[] {
 function stackSection(r: RequestState, s: StackView, ctx: RenderContext): Html {
   const patches = livePatches(r, s);
   const dropped = patches.filter((p) => isDropped(r, p));
-  return html`<h3 class="stackhead"><span title="Branch ${s.branch}; patches in review order: easy and valuable first, each after its hard deps">${s.folder}</span>${stackViewerLink(r, s)}</h3>
+  // Once the meta bug is filed, it names the stack.
+  const meta = r.metaBug && hasBug(r.metaBug) ? r.metaBug : undefined;
+  const title = meta ? html`<a class="bug" href="${bugUrl(meta.bug!)}" target="_blank" rel="noopener">Bug ${meta.bug}</a> ${r.metaBug?.draft?.summary ?? s.folder}` : html`${s.folder}`;
+  return html`<h3 class="stackhead"><span title="Branch ${s.branch}; patches in review order: easy and valuable first, each after its hard deps">${title}</span>${stackViewerLink(r, s)}</h3>
     ${optionalMetaBug(r, s, ctx)}
     <div class="rows">${patches.filter((p) => !isDropped(r, p)).map((p) => patchRow(r, p, ctx))}${
       dropped.length ? html`<details class="fold" data-fold="dropped-${s.id}"><summary>${dropped.length} dropped</summary><div class="rows">${dropped.map((p) => patchRow(r, p, ctx))}</div></details>` : null
@@ -531,7 +534,7 @@ function requestJobs(r: RequestState, ctx: RenderContext): Html | null {
     .filter((j) => j.item === undefined && j.endedAt !== undefined)
     .sort((a, b) => b.startedAt.localeCompare(a.startedAt))
     .slice(0, 8);
-  return jobs.length ? html`<details class="fold" data-fold="jobs"><summary>Jobs of the request</summary><div class="jobs">${jobs.map((j) => jobLine(r, j, ctx))}</div></details>` : null;
+  return jobs.length ? html`<details class="fold" data-fold="jobs"><summary>Tasks</summary><div class="jobs">${jobs.map((j) => jobLine(r, j, ctx))}</div></details>` : null;
 }
 
 function bugDraftBox(r: RequestState, p: PatchView, back: string): Html {

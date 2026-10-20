@@ -632,7 +632,10 @@ describe("one fixture per step of docs/MVP.md", () => {
     // Filed: its link.
     r.metaBug = { bug: 2079009, draft: r.metaBug!.draft };
     assert.equal(box(r), null);
-    assert.match(renderRequest(r, ctx, true).value, /Meta bug: <a class="bug" href="[^"]*2079009">Bug 2079009<\/a>/);
+    // Filed, it names the stack: one heading line instead of a meta bug line above the folder.
+    const filed = renderRequest(r, ctx, true).value;
+    assert.match(filed, /<h3 class="stackhead"><span [^>]*><a class="bug" href="[^"]*2079009" target="_blank" rel="noopener">Bug 2079009<\/a> /);
+    assert.doesNotMatch(filed, /Meta bug: <a/);
   });
 
   it("7. meta bug: a burndown's waits for its agent's draft; another request's, needed, says so", () => {

@@ -298,3 +298,7 @@ ul.analysis li { margin: 2px 0; }
 .action.reply .said { display: block; font-style: italic; }
 .action.reply p.answer { margin: 4px 0; }
 .action.reply > form.inline:first-of-type { float: right; }
+/* The folds right in a request's body line up with its headings. */
+.rbody > details.fold > summary { padding: 6px 0; }
+/* Between a request's try pushes, its stacks and the rest. */
+hr.part { border: 0; border-top: 1px solid var(--border); margin: 10px -12px 0; }
