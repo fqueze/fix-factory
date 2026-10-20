@@ -789,6 +789,7 @@ describe("4. investigate and fix", () => {
     const nits = `author:i-test-a:nits:${job}`;
     assert.deepEqual(sc.settle(), [nits]);
     assert.match(sc.plan(nits).agent?.message ?? "", /\[nit\] a.js:2 wordy comment[\s\S]*say in one line/);
+    assert.match(sc.plan(nits).agent?.message ?? "", /^A critical reviewer/, "no D number before it's submitted");
     assert.equal(sc.state().items["i-test-a"].state, "review findings");
     const second = linted(sc, nits, sha("2"));
     assert.ok(!sc.settle().some((k) => k.startsWith("review:") || k.startsWith("author:")), "no second review");
@@ -816,6 +817,101 @@ describe("4. investigate and fix", () => {
       assert.equal(sc.state().items["i-test-a"].state, "blocked");
       assert.ok(sc.open()[0].startsWith("failed:"));
     }
+  });
+
+  const dryOut = { command: ["./mach", "try", "fuzzy"], taskCount: 5, tasks: [], tryTaskConfig: {}, commits: [], warnings: [] };
+  // The author asks for a try push; returns its job and the push plan's key.
+  function asking(sc: Scenario): { job: string; planKey: string } {
+    sc.complete("author:i-test-a:initial", { report: fixed([sha("1")], { tryRequest: "test_a.js on linux debug, to see the race" }) });
+    const job = sc.view().byKey.get("author:i-test-a:initial")![0].job;
+    const planKey = `plan:asked:i-test-a:${job}`;
+    assert.deepEqual(sc.settle(), [planKey], "no import, no review: the push first");
+    return { job, planKey };
+  }
+
+  it("a try push its author asks for is planned in its worktree, approved by you, and its results resume the author before any review", () => {
+    const sc = workList([group("ka", "a/test_a.js", "boom")]);
+    investigating(sc, "i-test-a");
+    const { job, planKey } = asking(sc);
+    const plan = sc.plan(planKey);
+    assert.equal(plan.name, "plan-try-pushes");
+    assert.equal(plan.cwd, `/wt/${ID}-i-test-a`);
+    assert.equal(plan.agent?.vars?.branch, `${ID}-i-test-a`);
+    assert.equal(plan.agent?.vars?.worktree, `/wt/${ID}-i-test-a`);
+    assert.match(String(plan.agent?.vars?.goal), /what the author of a\/test_a.js asked for: test_a.js on linux debug, to see the race/);
+    sc.complete(planKey, { report: { pushes: [{ purpose: "p", tryArgs: ["fuzzy", "-q", "x"], rebuild: 5 }], feedback: [] } });
+    const push = `test-a-ask-${shortHash([job]).slice(0, 4)}`;
+    assert.deepEqual(sc.settle(), [`dry-run:${push}`]);
+    sc.complete(`dry-run:${push}`, { output: dryOut });
+    sc.settle();
+    assert.deepEqual(sc.open(), [`approve-push:${push}`]);
+    sc.add({ type: "user-done", request: ID, key: `approve-push:${push}` });
+    assert.deepEqual(sc.settle(), [`push:${push}`]);
+    sc.complete(`push:${push}`, { output: { rev: "fed" } });
+    sc.add({ type: "try-pushed", request: ID, push, rev: "fed", url: "u" });
+    const waiting = sc.settle();
+    assert.ok(!waiting.some((k) => k.startsWith("author:") || k.startsWith("review:") || k.startsWith("import:")), String(waiting));
+    sc.add({ type: "try-finished", request: ID, push, result: "failures", summary: "2 failures" });
+    const resumed = `author:i-test-a:asked:${job}`;
+    assert.ok(sc.settle().includes(resumed));
+    const r = sc.plan(resumed);
+    assert.equal(r.agent?.resume, true);
+    assert.equal(r.agent?.sessionId, sc.plan("author:i-test-a:initial").agent?.sessionId);
+    assert.match(r.agent?.message ?? "", /^The try push you asked for ran: fed \(2 failures\)\./);
+    assert.ok(!sc.view().byKey.has(`import:${job}`), "the asking run's commits are never reviewed");
+    // Its next report, without a tryRequest, goes on to import and review.
+    sc.complete(resumed, { report: fixed([sha("2")]) });
+    const next = sc.view().byKey.get(resumed)![0].job;
+    assert.ok(sc.settle().includes(`import:${next}`));
+  });
+
+  it("a try push its author asked for that you decline resumes it with your text; discarding one says nothing", () => {
+    for (const text of ["not worth it", "discarded"]) {
+      const sc = workList([group("ka", "a/test_a.js", "boom")]);
+      investigating(sc, "i-test-a");
+      const { job, planKey } = asking(sc);
+      sc.complete(planKey, { report: { pushes: [1, 2].map((n) => ({ purpose: `p${n}`, tryArgs: ["fuzzy", "-q", `x${n}`], rebuild: 5 })), feedback: [] } });
+      const h = shortHash([job]).slice(0, 4);
+      const dries = sc.settle();
+      assert.deepEqual(dries, [`dry-run:test-a-ask-${h}-1`, `dry-run:test-a-ask-${h}-2`]);
+      for (const d of dries) sc.complete(d, { output: dryOut });
+      sc.settle();
+      sc.add({ type: "try-declined", request: ID, push: `test-a-ask-${h}-1`, text });
+      assert.deepEqual(sc.settle(), []);
+      sc.add({ type: "try-declined", request: ID, push: `test-a-ask-${h}-2`, text: "discarded" });
+      const resumed = `author:i-test-a:asked:${job}`;
+      assert.deepEqual(sc.settle(), [resumed]);
+      const message = sc.plan(resumed).agent?.message ?? "";
+      if (text === "discarded") assert.match(message, /^The user didn't make the try push you asked for\. Go on without it/);
+      else assert.match(message, /^The user didn't make the try push you asked for: “not worth it”\./);
+    }
+  });
+
+  it("an author that leaves its patch unchanged after a review's findings comes to you instead of another review, once", () => {
+    const sc = workList([group("ka", "a/test_a.js", "boom")]);
+    investigating(sc, "i-test-a");
+    const job = linted(sc, "author:i-test-a:initial", sha("1"));
+    sc.settle();
+    const review = sc.complete(`review:p-test-a:${job}`, { report: { verdict: "findings", findings: [{ severity: "must-fix", text: "racy" }], feedback: [] } });
+    const again = `author:i-test-a:review:${job}`;
+    assert.deepEqual(sc.settle(), [again]);
+    sc.complete(again, { report: fixed([sha("1")], { summary: "the race can't happen" }) });
+    const second = sc.view().byKey.get(again)![0].job;
+    sc.settle();
+    sc.complete(`import:${second}`, { output: imported(sha("1"), "Bug 1 - Fix", ["a/test_a.js"], 1) });
+    assert.deepEqual(sc.settle(), [], "the same commit's lint stands; no new review");
+    assert.ok(!sc.view().byKey.has(`review:p-test-a:${second}`));
+    assert.deepEqual(sc.open(), [`failed:${review}`]);
+    const flag = sc.state().needsUser[0];
+    assert.equal(flag.action, "Its author left the patch unchanged after the critical review");
+    assert.equal(flag.detail, "the race can't happen");
+    assert.equal(flag.item, "i-test-a");
+    assert.equal(sc.state().items["i-test-a"].state, "blocked");
+    sc.add({ type: "item-state", request: ID, item: "i-test-a", state: "reviewed", detail: "accepted by you" });
+    sc.add({ type: "user-done", request: ID, key: `failed:${review}` });
+    assert.deepEqual(sc.settle(), ["wt:a"], "on to the stack, no review");
+    assert.deepEqual(sc.open(), [], "not raised again once answered");
+    assert.equal(sc.state().items["i-test-a"].state, "reviewed");
   });
 
   it("an author that leaves it as is ends the item; a blocked one comes to you", () => {
@@ -1696,6 +1792,10 @@ describe("9. review comments", () => {
     sc.complete(`review:p-test-a:${job}`, { report: { verdict: "findings", findings: [{ severity: "nit", text: "wordy" }], feedback: [] } });
     const nits = `author:i-test-a:nits:${job}`;
     assert.deepEqual(sc.settle(), [nits]);
+    assert.ok(
+      sc.plan(nits).agent?.message?.startsWith("Your patch is on Phabricator as D101 (https://phabricator.services.mozilla.com/D101): read its reviews with the read-phabricator-comments skill."),
+      "its own D number, not its stack neighbor's",
+    );
     const pass = sc.complete(nits, { report: fixed([sha("9")]) });
     sc.settle();
     sc.complete(`import:${pass}`, { output: imported(sha("9"), "Bug 999 - Fix a, r=smaug.", ["a/test_a.js"], 999).map((c) => ({ ...c, revision: 101 })) });
