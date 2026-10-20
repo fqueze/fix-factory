@@ -87,9 +87,16 @@ describe("overview", () => {
   });
   it("archives text from the main box that was forwarded, or rephrased after it couldn't be routed, with what became of it", () => {
     assert.ok(page.indexOf("r-20261015-lando-was-down-re-push") > page.indexOf("<h2>Finished"));
-    assert.match(page, /<b>Lando was down this morning, re-push what failed<\/b> <span class="sub">· Forwarded to r-20261013-tab-failures<\/span>/);
+    assert.match(page, /<b>Lando was down this morning, re-push what failed<\/b><\/a> <span class="sub">· Forwarded to r-20261013-tab-failures<\/span>/);
     assert.ok(page.indexOf("r-20261015-hmm") > page.indexOf("<h2>Finished"));
-    assert.match(page, /<b>hmm<\/b> <span class="sub">· Superseded by r-20261015-sessionstore<\/span>/);
+    assert.match(page, /<b>hmm<\/b><\/a> <span class="sub">· Superseded by r-20261015-sessionstore<\/span>/);
+  });
+  it("links each finished request to its page, where it's shown whole", () => {
+    assert.match(page, /<a href="\/requests\/r-20261015-hmm" title="Its patches, pushes, agents and costs"><b>hmm<\/b><\/a>/);
+    const done = source.listRequests().find((r) => r.step === "done" && Object.keys(r.patches).length > 0)!;
+    const opened = String(renderOverview(source.listRequests(), { ...ctx, open: done.id }));
+    assert.match(opened, new RegExp(`<details class="req[^"]*" id="req-${done.id}"[^>]* open>`));
+    assert.ok(opened.includes('<div class="rbody">'), "its body, not a lazy one");
   });
 
   it("lists the try pushes still running across requests, each linked to its row in its request", () => {

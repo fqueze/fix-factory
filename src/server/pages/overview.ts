@@ -1,6 +1,6 @@
 import type { RequestState } from "../../types.ts";
 import { html, type Html } from "../html.ts";
-import { commandFields, formatDate, isDraft, isDropped, needsYou, plural, profileUrl, pushResultClass, pushStatus, pushUrl, requestName, requestUrl, routeOutcome, sectionOf, shortName, type RenderContext } from "./common.ts";
+import { commandFields, formatDate, isDraft, isDropped, needsYou, plural, profileUrl, pushResultClass, pushStatus, pushUrl, requestCost, requestName, requestUrl, routeOutcome, sectionOf, shortName, type RenderContext } from "./common.ts";
 import { progressLine, requestProgress, sumProgress } from "./progress.ts";
 import { renderRequest } from "./request.ts";
 
@@ -72,7 +72,8 @@ export function renderMain(requests: RequestState[], ctx: RenderContext): Html {
     <summary>${plural(finished.length, "request")}</summary>
     <div class="simple" id="section-finished">${finished.map(
       (r) =>
-        html`<div class="row" data-request="${r.id}" data-section="finished"><span class="grow"><b>${requestName(r)}</b> <span class="sub">· ${r.kind === "unrouted" ? routeOutcome(r) : `${plural(Object.values(r.patches).filter((p) => !isDropped(r, p) && !isDraft(r, p)).length, "patch", "patches")}, done ${formatDate(r.updatedAt)}`}</span></span><a class="btn small" href="${profileUrl(ctx, r.id)}" target="_blank" rel="noopener">Profile</a></div>`,
+        // The one you opened, whole: its patches, pushes, agents and costs.
+        r.id === ctx.open ? renderRequest(r, ctx, true) : html`<div class="row" data-request="${r.id}" data-section="finished"><span class="grow"><a href="${requestUrl(r.id)}" title="Its patches, pushes, agents and costs"><b>${requestName(r)}</b></a> <span class="sub">· ${r.kind === "unrouted" ? routeOutcome(r) : `${plural(Object.values(r.patches).filter((p) => !isDropped(r, p) && !isDraft(r, p)).length, "patch", "patches")}, done ${formatDate(r.updatedAt)}, $${requestCost(r).toFixed(2)}`}</span></span><a class="btn small" href="${profileUrl(ctx, r.id)}" target="_blank" rel="noopener">Profile</a></div>`,
     )}</div>
   </details>` : null}`;
 }
