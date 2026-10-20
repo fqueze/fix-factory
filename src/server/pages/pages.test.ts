@@ -579,18 +579,48 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.ok(!renderRequest(r, ctx, true).value.includes(button), "not without revisions");
   });
 
-  it("8. submit: the meta-bug comment can be copied, from the ⚑ area and from the stack, when there is a meta bug", () => {
+  it("8. submit: no meta-bug comment to copy; without a meta bug, one is optional when every patch has its own bug", () => {
     const h = expanded("r-20261008-permissions");
-    assert.match(h, /<textarea hidden id="summary-r-20261008-permissions-permissions">/);
-    assert.match(h, /data-copy="summary-r-20261008-permissions-permissions">Copy the meta-bug comment</);
-    assert.match(h, /<textarea readonly rows="6" id="summary-r-20261008-permissions-permissions-body">/);
-    // Collapsed, the ⚑ area still has what it copies.
-    const closed = renderRequest(get("r-20261008-permissions"), ctx, false).value;
-    assert.match(closed, /id="summary-r-20261008-permissions-permissions"/);
-    // Every patch has its own bug: no meta-bug comment, and filing a meta bug is optional, depending on the stack's bugs.
+    assert.doesNotMatch(h, /summary-r-20261008-permissions-permissions|meta-bug comment/i);
     const focus = expanded("r-20261007-focus");
     assert.doesNotMatch(focus, /meta-bug comment/i);
     assert.match(focus, /A meta bug is optional here: <a href="https:\/\/bugzilla\.mozilla\.org\/enter_bug\.cgi\?[^"]*&amp;dependson=2080500&amp;bug_type=task/);
+  });
+
+  it("7. meta bug: its box says when it's optional, waits for the stack's other bugs, then links to file it", () => {
+    const box = (r: RequestState) => {
+      const h = renderRequest(r, ctx, true).value;
+      const i = h.indexOf('<div class="box"><h4>Meta bug');
+      return i < 0 ? null : h.slice(i, h.indexOf("</h4>", i));
+    };
+    const r = structuredClone(get("r-20261008-permissions"));
+    // Two patches go under it: required, and ready to file.
+    assert.doesNotMatch(box(r)!, /optional/);
+    assert.match(box(r)!, /<a class="bug tofile" href="[^"]*dependson=2079001/);
+    // A patch's own bug still to file: the meta bug, which depends on it, comes after.
+    r.patches["p-captive"].bugDraft = { product: "Core", component: "DOM", summary: "s", description: "d" };
+    assert.match(box(r)!, /to file once the stack's 1 other bug is filed/);
+    assert.doesNotMatch(box(r)!, /tofile/);
+    r.patches["p-webrtc"].bugDraft = { product: "Core", component: "DOM", summary: "s", description: "d" };
+    assert.match(box(r)!, /to file once the stack's 2 other bugs are filed/);
+    // Filed, every patch has its own bug: nothing needs the meta bug.
+    r.patches["p-captive"].bug = 2079002;
+    r.patches["p-webrtc"].bug = 2079003;
+    assert.match(box(r)!, /Meta bug <span class="sub">\(optional\)<\/span>/);
+    assert.match(box(r)!, /tofile" href="[^"]*dependson=2079003%2C2079002%2C2079001/);
+    // Filed: its link.
+    r.metaBug = { bug: 2079009, draft: r.metaBug!.draft };
+    assert.equal(box(r), null);
+    assert.match(renderRequest(r, ctx, true).value, /Meta bug: <a class="bug" href="[^"]*2079009">Bug 2079009<\/a>/);
+  });
+
+  it("7. meta bug: a burndown's waits for its agent's draft; another request's, needed, says so", () => {
+    const r = structuredClone(get("r-20261008-permissions"));
+    delete r.metaBug;
+    assert.match(renderRequest(r, ctx, true).value, /This stack needs a meta bug, for its patches without a bug of their own: <a href="https:\/\/bugzilla/);
+    r.kind = "burndown";
+    const h = renderRequest(r, ctx, true).value;
+    assert.doesNotMatch(h, /class="metabug|<h4>Meta bug/);
   });
 
   it("7. meta bug: the draft's bug type and keywords go into enter_bug.cgi", () => {

@@ -214,7 +214,8 @@ function stackBugs(r: RequestState): number[] {
   return [...new Set(Object.values(r.stacks).flatMap((s) => stackPatches(r, s)).flatMap((p) => (hasBug(p) ? [p.bug] : [])))];
 }
 
-// When nothing needs a meta bug, filing one to track the stack's bugs is up to you; it doesn't hold back submitting.
+// Outside burndowns, there's no drafted meta bug: when nothing needs one, filing one to track the stack's bugs is up to
+// you, and doesn't hold back submitting.
 function optionalMetaBug(r: RequestState, s: StackView, ctx: RenderContext): Html | null {
   // A burndown's meta bug is drafted by an agent: shown with the meta bug's box once written.
   if (r.metaBug || r.kind === "burndown") return null;
@@ -228,7 +229,8 @@ function optionalMetaBug(r: RequestState, s: StackView, ctx: RenderContext): Htm
     keywords: ["meta"],
     dependsOn: stackBugs(r),
   };
-  return html`<div class="metabug sub">A meta bug is optional here: <a href="${enterBugUrl(draft, ctx)}" target="_blank" rel="noopener" title="Opens a prefilled enter_bug.cgi, depending on the stack's bugs">file one ↗</a> to track the stack's bugs, then paste its number ${bugBox(r.id, "meta", requestUrl(r.id))}</div>`;
+  const lead = stackNeedsMetaBug(stackPatches(r, s)) ? "This stack needs a meta bug, for its patches without a bug of their own" : "A meta bug is optional here";
+  return html`<div class="metabug sub">${lead}: <a href="${enterBugUrl(draft, ctx)}" target="_blank" rel="noopener" title="Opens a prefilled enter_bug.cgi, depending on the stack's bugs">file one ↗</a> to track the stack's bugs, then paste its number ${bugBox(r.id, "meta", requestUrl(r.id))}</div>`;
 }
 
 // One line per group or patch: its name and cost, then where it stands. Opening it shows the rest

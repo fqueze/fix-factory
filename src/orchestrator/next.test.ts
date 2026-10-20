@@ -1596,14 +1596,12 @@ describe("6. verify on try, again", () => {
 });
 
 describe("7. meta bug", () => {
-  it("drafts the meta bug, and its number goes in every patch without a bug of its own", () => {
+  it("asks for the meta bug (no draft outside burndowns), and its number goes in every patch without a bug of its own", () => {
     const sc = verified();
-    const s = sc.state();
-    assert.equal(s.metaBug?.bug, null);
-    assert.deepEqual(s.metaBug?.draft?.keywords, ["meta"]);
-    assert.equal(s.metaBug?.draft?.description, "This stack fixes 2 failures.");
+    assert.equal(sc.state().metaBug, undefined);
+    assert.ok(!sc.view().jobs.some((j) => j.purpose.what === "meta-draft"));
     assert.deepEqual(sc.open(), ["meta-bug:a"]);
-    sc.add({ type: "meta-bug", request: ID, bug: 999, draft: s.metaBug!.draft });
+    sc.add({ type: "meta-bug", request: ID, bug: 999 });
     sc.add({ type: "user-done", request: ID, key: "meta-bug:a" });
     const [rewrite] = sc.settle();
     assert.match(rewrite, /^rewrite-bugs:a:/);
@@ -2163,6 +2161,14 @@ describe("burndown stack", () => {
   });
 });
 
+// Completes the running write-meta-bug agent, as the burndown's meta bug draft.
+function metaDrafted(sc: Scenario, description = "Reviewers: patch by patch."): string {
+  const key = sc.view().jobs.find((j) => !j.end && j.purpose.what === "meta-draft")!.purpose.key;
+  sc.complete(key, { report: { description, feedback: [] } });
+  sc.settle();
+  return key;
+}
+
 describe("burndown verification", () => {
   // A burndown whose stack was verified on try with the DEBUG commit on top, waiting for its meta bug.
   const verified = (check = false, bug: number | null = null, result: "green" | "failures" = "green") => {
@@ -2208,8 +2214,11 @@ describe("burndown verification", () => {
     sc.complete(`review-stack:a:${hash}`, { report: { findings: [], addDeps: [], removeDeps: [], feedback: [] } });
     sc.settle();
     sc.complete(`summary:a:${hash}`, { output: { markdown: "t", metaComment: "m" } });
-    const [sync, tryBranch] = sc.settle();
+    const started = sc.settle();
+    const sync = started.find((k) => k.startsWith("sync:"))!;
+    const tryBranch = started.find((k) => k.startsWith("try-branch:"))!;
     assert.equal(sc.state().step, "verify on try");
+    metaDrafted(sc);
     if (check) assert.match(sync, /^sync:a:/, "its reviewers are right before you may submit");
     reviewersChecked(sc);
     sc.complete("reviewers:a", { output: { files: [], suggestions: [] } });
@@ -2267,7 +2276,7 @@ describe("burndown verification", () => {
     assert.match(message, /Bug XXXXXXX - Remove skip-if annotations that no longer fail in a/);
     sc.complete(key, { report: { removal: sha("7"), summary: "removed one skip", feedback: [] } });
     sc.settle();
-    // The removal is a patch like any other: imported, linted, reviewed.
+    // The removal is a patch: imported and linted.
     const author = sc.view().byKey.get(key)![0].job;
     sc.complete(`import:${author}`, { output: imported(sha("7"), "Bug XXXXXXX - Remove skip-if annotations that no longer fail in a, r=smaug.", ["a/xpcshell.toml"]) });
     sc.settle();
@@ -2277,8 +2286,8 @@ describe("burndown verification", () => {
     sc.complete(`lint:p-annotations:${sha("7")}`, { output: lintOk });
     if (sc.view().byKey.has(`lint-bug:${author}`)) sc.complete(`lint-bug:${author}`, { output: lintOk });
     sc.settle();
-    sc.complete(`review:p-annotations:${author}`, { report: ok });
-    sc.settle();
+    // The commit try verified, only reworded: no critical review.
+    assert.ok(!sc.view().byKey.has(`review:p-annotations:${author}`));
     assert.equal(sc.state().items["i-annotations"].state, "reviewed");
     assert.equal(sc.state().step, "meta bug");
 
@@ -2296,9 +2305,17 @@ describe("burndown verification", () => {
     sc.settle();
     sc.complete(`review-stack:a:${hash}`, { report: { findings: [], addDeps: [], removeDeps: [], feedback: [] } });
     sc.settle();
-    assert.ok(!sc.state().metaBug, "not before the stack is ready");
+    const drafts = () => sc.view().jobs.filter((j) => j.purpose.what === "meta-draft").map((j) => j.purpose.key);
+    assert.equal(drafts().length, 1, "not written again before the stack is ready");
+    assert.ok(!sc.open().includes("meta-bug:a"));
     sc.complete(`summary:a:${hash}`, { output: { markdown: "t", metaComment: "m" } });
     sc.settle();
+    // Written again for the stack with its removal.
+    assert.equal(drafts().length, 2);
+    const stackFile = JSON.parse(String(sc.plan(drafts()[1]).files![0].content));
+    assert.deepEqual(stackFile.map((p: { bug: unknown }) => p.bug), [22, "the meta bug"]);
+    metaDrafted(sc, "Now with the removal.");
+    assert.equal(sc.state().metaBug?.draft?.description, "Now with the removal.");
 
     // That patch has no bug: the stack now needs the meta bug.
     const s = sc.state();
@@ -2314,6 +2331,106 @@ describe("burndown verification", () => {
     assert.deepEqual(sc.purpose(rewrite).edits, { "p-annotations": 999 });
     assert.equal(sc.view().jobs.filter((j) => j.purpose.reason === "removal").length, 1, "not resumed again");
   });
+  // Changes a patch, as an import would.
+  const setPatch = (sc: Scenario, pid: string, fields: object) => {
+    const { deps: _d, review: _r, replyDrafts: _rd, id, ...p } = sc.state().patches[pid];
+    sc.add({ type: "patch", request: ID, patch: id, ...p, ...fields });
+    sc.settle();
+  };
+  // The removal written, imported and assembled last in the stack, which is ready again.
+  const withRemoval = (sc: Scenario) => {
+    const key = "author:i-annotations:removal";
+    sc.complete(key, { report: { removal: sha("7"), summary: "removed one skip", feedback: [] } });
+    sc.settle();
+    const author = sc.view().byKey.get(key)![0].job;
+    sc.complete(`import:${author}`, { output: imported(sha("7"), "Bug XXXXXXX - Remove skip-if annotations that no longer fail in a, r=smaug.", ["a/xpcshell.toml"]) });
+    sc.settle();
+    sc.complete(`msg:p-annotations:${sha("7")}`, { output: "Bug XXXXXXX - Remove\n\nBody.\n" });
+    sc.settle();
+    sc.complete(`lint:p-annotations:${sha("7")}`, { output: lintOk });
+    if (sc.view().byKey.has(`lint-bug:${author}`)) sc.complete(`lint-bug:${author}`, { output: lintOk });
+    sc.settle();
+    const assemble = sc.view().jobs.find((j) => !j.end && j.purpose.what === "assemble")!.purpose.key;
+    const hash = assemble.split(":")[2];
+    sc.complete(assemble, { output: { mapping: { [sha("1")]: sha("a"), [sha("7")]: sha("d") } } });
+    sc.settle();
+    sc.complete(`deps:a:${hash}`, { output: [] });
+    sc.complete(`effort:p-annotations:${sha("7")}`, { report: { effort: 1, reason: "r", feedback: [] } });
+    sc.settle();
+    sc.complete(`order:a:${hash}`, { output: { order: ["p-test-a", "p-annotations"], flippedSoftDeps: [] } });
+    sc.settle();
+    sc.complete(`review-stack:a:${hash}`, { report: { findings: [], addDeps: [], removeDeps: [], feedback: [] } });
+    sc.settle();
+    sc.complete(`summary:a:${hash}`, { output: { markdown: "t", metaComment: "m" } });
+    sc.settle();
+  };
+  const draftKeys = (sc: Scenario) => sc.view().jobs.filter((j) => j.purpose.what === "meta-draft").map((j) => j.purpose.key);
+
+  it("the meta bug's draft: a task blocking the configured bugs, its text by an agent, written again when a patch's bug changes", () => {
+    const blocks = config.metaBugBlocks;
+    config.metaBugBlocks = [2063593];
+    try {
+      const { sc } = verified(false, 22);
+      const [first] = draftKeys(sc);
+      assert.match(first, /^meta-draft:a:/);
+      const draft = sc.state().metaBug!.draft!;
+      assert.deepEqual(
+        [draft.summary, draft.bugType, draft.keywords, draft.blocks, draft.description],
+        ["[meta] Fix the flakiness in a", "task", ["meta"], [2063593], "Reviewers: patch by patch."],
+      );
+      assert.equal(sc.state().metaBug!.bug, null);
+      const plan = sc.plan(first);
+      assert.equal(plan.agent?.vars?.stackFile, plan.files![0].path);
+      assert.equal(JSON.parse(plan.files![0].content)[0].bug, 22);
+
+      // No skip to remove: the stack is the same, ready again.
+      sc.complete("author:i-annotations:removal", { report: { summary: "every test still fails", feedback: [] } });
+      sc.settle();
+      assert.deepEqual(draftKeys(sc), [first]);
+      setPatch(sc, "p-test-a", { bug: 23, title: "Bug 23 - Fix a/test_a.js, r=smaug." });
+      const keys = draftKeys(sc);
+      assert.equal(keys.length, 2);
+      assert.notEqual(keys[1], first);
+      assert.equal(JSON.parse(sc.plan(keys[1]).files![0].content)[0].bug, 23);
+    } finally {
+      config.metaBugBlocks = blocks;
+    }
+  });
+
+  it("no blocks without metaBugBlocks", () => {
+    const { sc } = verified(false, 22);
+    assert.equal(sc.state().metaBug!.draft!.blocks, undefined);
+  });
+
+  it("a draft that arrives after the meta bug is filed leaves it as it is", () => {
+    const { sc } = verified(false, 22);
+    sc.complete("author:i-annotations:removal", { report: { summary: "every test still fails", feedback: [] } });
+    sc.settle();
+    setPatch(sc, "p-test-a", { bug: 23, title: "Bug 23 - Fix a/test_a.js, r=smaug." });
+    const draft = sc.state().metaBug!.draft;
+    sc.add({ type: "meta-bug", request: ID, bug: 999, draft });
+    metaDrafted(sc, "Too late.");
+    assert.equal(sc.state().metaBug!.bug, 999);
+    assert.equal(sc.state().metaBug!.draft!.description, "Reviewers: patch by patch.");
+    setPatch(sc, "p-test-a", { bug: 24, title: "Bug 24 - Fix a/test_a.js, r=smaug." });
+    assert.equal(draftKeys(sc).length, 2, "not written again once filed");
+  });
+
+  it("the meta bug is filed last: its ⚑ waits for the stack's other bugs to be filed", () => {
+    const { sc } = verified(false, 22);
+    setPatch(sc, "p-test-a", { bug: null, title: "Bug XXXXXXX - Fix a/test_a.js, r=smaug.", bugDraft: { product: "Core", component: "XPCOM", summary: "s", description: "d" } });
+    withRemoval(sc);
+    metaDrafted(sc);
+    const s = sc.state();
+    assert.deepEqual(s.stacks.a.order, ["p-test-a", "p-annotations"]);
+    assert.ok(needsMetaBug(s.stacks.a.order.map((pid) => s.patches[pid])));
+    assert.ok(s.metaBug?.draft);
+    assert.deepEqual(sc.open().filter((k) => k.startsWith("meta-bug:") || k.startsWith("file-bug:")), ["file-bug:p-test-a:meta-bug-step"]);
+    setPatch(sc, "p-test-a", { bug: 555, title: "Bug 555 - Fix a/test_a.js, r=smaug." });
+    assert.ok(sc.open().includes("meta-bug:a"));
+    assert.ok(!sc.open().some((k) => k.startsWith("file-bug:")));
+  });
+
   it("all green, has the author cherry-pick the commit try ran on top of the stack and only reword it", () => {
     const { sc } = verified(false, 22);
     const message = sc.plan("author:i-annotations:removal").agent!.message!;

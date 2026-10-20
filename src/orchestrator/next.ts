@@ -1731,9 +1731,10 @@ class Planner {
     if (this.s.step !== "meta bug" || this.removing) return;
     const stacks = this.liveStacks();
     const needsMeta = needsMetaBug(stacks.flatMap((st) => st.order).map((pid) => this.s.patches[pid]));
-    // Filed last: it depends on every other bug of the stack, so those are filed first.
+    // Filed last: it depends on every other bug of the stack, so those are filed first. A burndown's waits for its
+    // agent's draft; other requests have none to wait for.
     const unfiled = stacks.flatMap((st) => st.order).some((pid) => this.s.patches[pid]?.bugDraft && this.s.patches[pid].bug === null);
-    if (needsMeta && this.s.metaBug?.draft && !unfiled) for (const st of stacks) this.raise(`meta-bug:${st.id}`, { action: "File the meta bug, then review and submit", detail: "it tells reviewers what the stack fixes, patch by patch, in review order", stack: st.id });
+    if (needsMeta && (this.s.kind !== "burndown" || this.s.metaBug?.draft) && !unfiled) for (const st of stacks) this.raise(`meta-bug:${st.id}`, { action: "File the meta bug, then review and submit", detail: "it tells reviewers what the stack fixes, patch by patch, in review order", stack: st.id });
     for (const p of stacks.flatMap((st) => st.order).map((pid) => this.s.patches[pid])) {
       if (!p.bugDraft) continue;
       const key = fileBugKey(p.id, this.stepEpoch("meta bug"));

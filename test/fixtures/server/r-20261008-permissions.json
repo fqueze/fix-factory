@@ -130,7 +130,7 @@
     {
       "key": "meta-bug:permissions",
       "action": "File the meta bug, then review and submit",
-      "detail": "the meta-bug comment lists the stack in review order, with effort, value and repro",
+      "detail": "it tells reviewers what the stack fixes, patch by patch, in review order",
       "since": "2026-10-15T07:30:00.000Z",
       "stack": "permissions"
     }
