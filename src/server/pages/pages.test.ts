@@ -32,8 +32,19 @@ function get(id: string): RequestState {
 function rowOf(h: string, id: string): string {
   const start = h.indexOf(`<details class="row" id="${id}"`);
   assert.ok(start >= 0, id);
-  const next = h.indexOf('<details class="row"', start + 1);
-  return h.slice(start, next < 0 ? undefined : next);
+  // Up to its closing </details>, nested ones counted (or the next row, for the asks that follow it).
+  const tags = /<details\b|<\/details>/g;
+  tags.lastIndex = start;
+  let depth = 0;
+  for (let m = tags.exec(h); m; m = tags.exec(h)) {
+    depth += m[0] === "</details>" ? -1 : 1;
+    if (depth === 0) {
+      const next = h.indexOf('<details class="row"', tags.lastIndex);
+      const end = h.indexOf("</div></div>", tags.lastIndex);
+      return h.slice(start, Math.max(tags.lastIndex, next < 0 ? tags.lastIndex : Math.min(next, end < 0 ? next : end)));
+    }
+  }
+  return h.slice(start);
 }
 
 function expanded(id: string): string {
@@ -218,17 +229,16 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.match(h, /<span class="why clamp1" title="You said: “the browser_tabSpinner agent has been at it for 6 hours”">/);
   });
 
-  it("4. investigate and fix: a running request-level job is named in the summary line, not counted with the groups, and shown at the top of the body", () => {
+  it("4. investigate and fix: a running recovery agent is named in the summary line, not counted with the groups, and shown right above the box you typed in", () => {
     const h = expanded("r-20261013-tab-failures");
     const said = "restart the browser_pinnedTabs.js item, it has been waiting for a build slot since this morning";
     const summary = h.slice(0, h.indexOf("</summary>"));
     assert.match(summary, /<span class="needs-you">2 need you<\/span> · <span class="working">1 working<\/span> · <span class="ready">1 ready<\/span> · <span class="pending">1 pending<\/span> · <span class="closed">1 closed<\/span><\/span> · recovery plan<\/span>/);
     const body = h.slice(h.indexOf('<div class="rbody">'));
-    assert.ok(
-      body.startsWith(
-        `<div class="rbody">\n    <div class="jobs"><details class="job" data-fold="job-j-recover-2" data-watch="/api/requests/r-20261013-tab-failures/jobs/j-recover-2/activity" data-live><summary><span class="res run">working on <span class="said" title="${said}">“${said}”</span></span> <span class="sub">Opus · running <span data-since="2026-10-15T08:59:00.000Z">1 min</span></span> <form`,
-      ),
-    );
+    const line = `<div class="jobs"><details class="job" data-fold="job-j-recover-2" data-watch="/api/requests/r-20261013-tab-failures/jobs/j-recover-2/activity" data-live><summary><span class="res run">working on <span class="said" title="${said}">“${said}”</span></span> <span class="sub">Opus · running <span data-since="2026-10-15T08:59:00.000Z">1 min</span></span> <form`;
+    const at = body.indexOf(line);
+    assert.ok(at > 0 && at < body.indexOf('<form class="ask cmd reqask"') && body.indexOf("</details></div>", at) < body.indexOf('<form class="ask cmd reqask"'));
+    assert.ok(!body.slice(at + line.length, body.indexOf('<form class="ask cmd reqask"')).includes('<details class="row"'), "nothing between it and the box but its own line");
     assert.ok(body.includes(cmd({ cmd: "stop", job: "j-recover-2", request: "r-20261013-tab-failures" })));
     const old = structuredClone(get("r-20261013-tab-failures"));
     delete old.jobs["j-recover-2"].purpose;

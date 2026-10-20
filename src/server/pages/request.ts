@@ -113,9 +113,12 @@ export function renderRequestBody(r: RequestState, ctx: RenderContext): Html {
   const plans = r.recoveryPlans.filter((p) => !shownPlans.has(p));
   // A try push's jobs (push, watch) are on its row.
   const running = Object.values(r.jobs).filter((j) => j.item === undefined && j.endedAt === undefined && !(j.purpose?.push !== undefined && j.purpose.push in r.pushes));
+  // What you told the factory in the box below is worked on right above it.
+  const recovering = running.filter((j) => j.name === "recover");
+  const others = running.filter((j) => j.name !== "recover");
 
   return html`<div class="rbody">
-    ${running.length ? html`<div class="jobs">${running.map((j) => jobLine(r, j, ctx))}</div>` : null}
+    ${others.length ? html`<div class="jobs">${others.map((j) => jobLine(r, j, ctx))}</div>` : null}
     ${configLine(r)}
     ${pushes.length ? html`<h3>Try pushes${planned.length > 1 ? html` ${approvePushControls(r, planned, back)}` : null}</h3><div class="rows">${[...planned, ...rest].map((p) => pushRowOf(r, p, ctx))}${
       declined.length ? html`<details class="fold" data-fold="declined-pushes"><summary>${declined.length} declined or withdrawn</summary><div class="rows">${declined.map((p) => pushRowOf(r, p, ctx))}</div></details>` : null
@@ -127,6 +130,7 @@ export function renderRequestBody(r: RequestState, ctx: RenderContext): Html {
     ${landed.length ? html`<h3>Landed</h3>${groupRows(r, landed, ctx)}` : null}
     ${requestJobs(r, ctx)}
     ${notesFold(r, plans)}
+    ${recovering.length ? html`<div class="jobs">${recovering.map((j) => jobLine(r, j, ctx))}</div>` : null}
     <form class="ask cmd reqask" method="post" action="/api/commands">${commandFields([{ cmd: "tell-factory", request: r.id }], back)}<input type="text" name="text" required placeholder="Tell the factory about this request…"><button class="btn">Send</button></form>
   </div>`;
 }
