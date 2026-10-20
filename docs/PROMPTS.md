@@ -178,5 +178,5 @@ Patches {patchA} and {patchB} swapped order, and the soft dependency between the
 opus · Recovery · inputs: `text`, `id`, `stateDir`
 
 ```
-The user says: {text}. The state of request {id} is in {stateDir}: read `events.jsonl`, job outputs and transcripts there before deciding anything. Return a plan made only of the factory commands in the schema, with one sentence per command saying why. Put what can't be done with those commands in `cannotDo`, and ask the user anything the files don't tell you.
+The user says: {text}. The state of request {id} is in {stateDir}: read `events.jsonl`, job outputs and transcripts there before deciding anything. Answer them in `answer`, briefly, as a colleague would: what you'll do and why. Return a plan made only of the factory commands in the schema, with one sentence per command saying why; keep an agent's instructions as short as the task allows. Put in `cannotDo` only what they asked for that those commands can't do, and ask only what you need to go on, at most two questions.
 ```

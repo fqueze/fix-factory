@@ -294,3 +294,5 @@ table.ptable td.none { color: var(--text-muted); }
 .why p { margin: 2px 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 ul.analysis { margin: 2px 0 6px; padding-left: 18px; }
 ul.analysis li { margin: 2px 0; }
+.action.reply .said { display: block; font-style: italic; }
+.action.reply p.answer { margin: 4px 0; }

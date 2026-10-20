@@ -278,7 +278,7 @@ export function foldEvents(events: readonly Event[]): RequestState {
         }
         break;
       case "recovery-plan":
-        s.recoveryPlans.push({ job: e.job, text: e.text, plan: e.plan, cannotDo: e.cannotDo, questions: e.questions, t: e.t });
+        s.recoveryPlans.push({ job: e.job, text: e.text, ...(e.answer ? { answer: e.answer } : {}), plan: e.plan, cannotDo: e.cannotDo, questions: e.questions, t: e.t });
         break;
       case "note":
         // Review nits and answers to you used to be notes; they are in their job's report.

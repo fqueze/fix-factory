@@ -1,13 +1,14 @@
 import type { JobView, NeedsUser, PlannedCommand, PushView, RefusedCommand, RequestState, StackView } from "../../types.ts";
 import { canDismiss, canRetry, reviewLimitFlag } from "../../state/flags.ts";
 import { html, join, type Html } from "../html.ts";
-import { actionKind, COMMAND_LABELS, commandFields, enterBugUrl, groupLabel, jobLabel, pushName, jobNoun, refusedOf, needsMetaBug, requestUrl, stackOfPatch, submitChecks, type RenderContext } from "./common.ts";
+import { actionKind, COMMAND_LABELS, commandFields, enterBugUrl, groupLabel, jobLabel, pushName, jobNoun, refusedOf, needsMetaBug, plural, requestUrl, stackOfPatch, submitChecks, type RenderContext } from "./common.ts";
 
 // The ⚑ area of one open needs-user entry: what you're asked, why, and the buttons.
 export function renderAction(r: RequestState, n: NeedsUser, ctx: RenderContext): Html {
   const plan = recoveryPlanFor(r, n);
   if (plan) {
-    return html`<div class="action" data-key="${n.key}"><span class="flag">${n.action}</span> ${youSaid(n.detail || `You said: “${plan.text}”`)}${recoveryPlan(r, plan, requestUrl(r.id))}</div>`;
+    // What you said first, then its answer, what it would do, and what it asks you.
+    return html`<div class="action reply" data-key="${n.key}"><span class="flag">You asked</span> <span class="said clamp1" data-expand title="${plan.text}">“${plan.text}”</span>${recoveryPlan(r, plan, requestUrl(r.id))}</div>`;
   }
   return html`<div class="action" data-key="${n.key}"><span class="flag">${flagTitle(r, n)}</span>${flagControls(r, n, ctx)}${actionKind(n, r) === "submit" ? null : why(n.detail)}</div>`;
 }
@@ -308,15 +309,35 @@ function itemLabel(r: RequestState, item: string): string {
 }
 
 export function recoveryPlan(r: RequestState, plan: RequestState["recoveryPlans"][number], back: string): Html {
-  return html`<form class="inline cmd" method="post" action="/api/commands"><input type="hidden" name="back" value="${back}"><ul class="plan">${plan.plan.map(
-    (c) =>
-      // The shell escape hatch is opt-in; everything else is checked.
-      html`<li><label title="${plannedText(c, r)}"><input type="checkbox" name="command" value="${JSON.stringify({ ...c, request: r.id })}"${c.cmd === "shell" ? null : html` checked`}> ${plannedLabel(c, r)}</label><span class="reason">${c.reason}</span></li>`,
-  )}</ul>${plan.plan.length ? html`<button class="btn small primary">Run checked</button>` : null}</form>${
-    plan.cannotDo.length || plan.questions.length
-      ? html`<ul class="plan-notes">${plan.cannotDo.map((t) => html`<li>✋ Can't do: ${t}</li>`)}${plan.questions.map((t) => html`<li>❓ ${t}</li>`)}</ul>`
+  return html`${plan.answer ? html`<p class="answer">${plan.answer}</p>` : null}${
+    plan.plan.length
+      ? html`<form class="inline cmd" method="post" action="/api/commands"><input type="hidden" name="back" value="${back}"><ul class="plan">${plan.plan.map(
+          (c) =>
+            // The shell escape hatch is opt-in; everything else is checked. An agent's instructions are folded.
+            html`<li><label><input type="checkbox" name="command" value="${JSON.stringify({ ...c, request: r.id })}"${c.cmd === "shell" ? null : html` checked`}> ${shortLabel(c, r)}</label> <span class="reason">${c.reason}</span>${
+              instructions(c) ? html`<details class="fold"><summary>its instructions</summary><div class="sub">${instructions(c)}</div></details>` : null
+            }</li>`,
+        )}</ul><button class="btn small primary">${plan.plan.length === 1 ? "Do it" : "Do these"}</button></form>`
       : null
-  }<form class="inline cmd" method="post" action="/api/commands">${commandFields([{ cmd: "reply-recovery", request: r.id, job: plan.job }], back)}<input type="text" name="text" required placeholder="Reply…"><button class="btn small">Reply</button></form>`;
+  }${plan.questions.length ? html`<ul class="plan-notes">${plan.questions.map((t) => html`<li>❓ ${t}</li>`)}</ul>` : null}${
+    plan.cannotDo.length ? html`<details class="fold"><summary>${plural(plan.cannotDo.length, "thing")} it can't do</summary><ul class="plan-notes">${plan.cannotDo.map((t) => html`<li>${t}</li>`)}</ul></details>` : null
+  }<form class="inline cmd" method="post" action="/api/commands">${commandFields([{ cmd: "reply-recovery", request: r.id, job: plan.job }], back)}<input type="text" name="text" required placeholder="${plan.questions.length ? "Answer it, or say what to change…" : "Say what to change…"}"><button class="btn small">Reply</button></form>`;
+}
+
+// What a command does, without the text it hands an agent.
+function shortLabel(c: PlannedCommand, r: RequestState): Html {
+  switch (c.cmd) {
+    case "resume-agent":
+      return html`tell ${itemLabel(r, c.item)}’s author`;
+    case "start-agent":
+      return html`restart the investigation of ${itemLabel(r, c.item)}`;
+    default:
+      return plannedLabel(c, r);
+  }
+}
+
+function instructions(c: PlannedCommand): string | undefined {
+  return c.cmd === "resume-agent" ? c.message : c.cmd === "start-agent" ? c.prompt : undefined;
 }
 
 // A group's ⚑ is handled on its row, a try push's on its row too; the request's own ⚑s (recovery plans,

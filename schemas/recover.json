@@ -1,6 +1,10 @@
 {
   "type": "object",
   "properties": {
+    "answer": {
+      "type": "string",
+      "description": "Your reply to the user, in one to three plain sentences: what you'll do and why, or what you need from them. No ids or paths they didn't use."
+    },
     "plan": {
       "type": "array",
       "items": {
@@ -285,6 +289,7 @@
     }
   },
   "required": [
+    "answer",
     "plan",
     "cannotDo",
     "questions",

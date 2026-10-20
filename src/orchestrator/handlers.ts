@@ -293,8 +293,8 @@ export function handleFinished(input: HandlerInput): HandlerResult {
     case "recover": {
       const r = input.report as RecoverReport;
       const text = (purpose.reason ?? "").slice(0, 500);
-      ev("recovery-plan", { job: job.job, text, plan: r.plan, cannotDo: r.cannotDo, questions: r.questions });
-      ev("needs-user", { key: `recovery:${job.job}`, action: "Recovery plan", detail: `You said: “${text}”`, job: job.job });
+      ev("recovery-plan", { job: job.job, text, answer: r.answer, plan: r.plan, cannotDo: r.cannotDo, questions: r.questions });
+      ev("needs-user", { key: `recovery:${job.job}`, action: "Its answer to you", detail: `You said: “${text}”`, job: job.job });
       if (purpose.replyTo && s.needsUser.some((n) => n.key === `recovery:${purpose.replyTo}`)) ev("user-done", { key: `recovery:${purpose.replyTo}` });
       break;
     }

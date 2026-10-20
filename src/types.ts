@@ -183,7 +183,7 @@ export type Event =
   | (EventBase & { type: "needs-user"; key: string; action: string; detail: string; item?: ItemId; patch?: PatchId; push?: PushId; stack?: string; job?: JobId })
   | (EventBase & { type: "user-done"; key: string }) // clears a needs-user with the same key
   | (EventBase & { type: "command-executed"; command: string; ok: boolean; detail?: string; cmd?: Command["cmd"]; item?: ItemId; job?: JobId })
-  | (EventBase & { type: "recovery-plan"; job: JobId; text: string; plan: PlannedCommand[]; cannotDo: string[]; questions: string[] })
+  | (EventBase & { type: "recovery-plan"; job: JobId; text: string; answer?: string; plan: PlannedCommand[]; cannotDo: string[]; questions: string[] })
   | (EventBase & { type: "note"; text: string });
 
 export type EventType = Event["type"];
@@ -268,6 +268,7 @@ export interface ReviewPatchReport {
 }
 
 export interface RecoverReport {
+  answer: string; // to you, in a few sentences: what it will do and why, or what it needs from you
   plan: PlannedCommand[];
   cannotDo: string[];
   questions: string[];
@@ -400,7 +401,7 @@ export interface RequestState {
   needsUser: NeedsUser[]; // open ones only
   metaBug?: { bug: number | null; draft?: BugDraft };
   pollRequested?: Iso; // you asked to check Phabricator now
-  recoveryPlans: { job: JobId; text: string; plan: PlannedCommand[]; cannotDo: string[]; questions: string[]; t: Iso }[];
+  recoveryPlans: { job: JobId; text: string; answer?: string; plan: PlannedCommand[]; cannotDo: string[]; questions: string[]; t: Iso }[];
   // The latest commands the orchestrator refused, until dismissed or a later command with the same cmd succeeds.
   // Optional: folded states saved before it existed don't have it.
   refused?: RefusedCommand[];
