@@ -10,7 +10,7 @@
 //   Events for unknown items are ignored, as are unknown event types.
 // - pushes keep creation order as long as push ids aren't integer-like strings
 //   (JavaScript orders those keys first).
-import type { Dep, Event, InvestigateReport, ItemView, PatchView, PushView, RefusedCommand, RequestState } from "../types.ts";
+import type { Dep, Event, InvestigateReport, ItemView, PatchView, PushView, RefusedCommand, RequestState, TriageTryReport } from "../types.ts";
 
 const MAX_REFUSED = 5;
 
@@ -133,6 +133,13 @@ export function foldEvents(events: readonly Event[]): RequestState {
         const job = s.jobs[e.job];
         const outcome = outcomeOf(e.report);
         if (job && outcome) job.outcome = outcome;
+        // A push's failures as triage saw them; a later run of the same cell replaces the earlier verdict.
+        if (e.prompt === "triage-try" && job?.purpose?.push !== undefined && s.pushes[job.purpose.push]) {
+          const p = s.pushes[job.purpose.push];
+          const cells = (e.report as TriageTryReport).cells;
+          const at = (c: TriageTryReport["cells"][number]) => `${c.test ?? c.taskId}\n${c.config}`;
+          p.analysis = [...(p.analysis ?? []).filter((c) => !cells.some((n) => at(n) === at(c))), ...cells];
+        }
         const itemId = e.item ?? job?.item;
         const item: ItemView | undefined = itemId === undefined ? undefined : s.items[itemId];
         if (!item) {
@@ -143,7 +150,10 @@ export function foldEvents(events: readonly Event[]): RequestState {
         if (e.prompt === "investigate-and-fix") item.investigation = e.report as InvestigateReport;
         break;
       }
-      case "patch":
+      case "patch": {
+        // When its revision first showed up: what its author changes after that has to be resubmitted.
+        const before = s.patches[e.patch];
+        const submittedAt = e.revision === undefined ? undefined : before?.revision !== undefined ? before.submittedAt : e.t;
         s.patches[e.patch] = {
           id: e.patch,
           item: e.item,
@@ -156,10 +166,12 @@ export function foldEvents(events: readonly Event[]): RequestState {
           effort: e.effort,
           testOnly: e.testOnly,
           interdiffFile: e.interdiffFile,
+          ...(submittedAt ? { submittedAt } : {}),
           deps: [],
           replyDrafts: [],
         };
         break;
+      }
       case "dep": {
         const list = (deps.get(e.dep.patch) ?? []).filter((d) => d.needs !== e.dep.needs);
         list.push(e.dep);

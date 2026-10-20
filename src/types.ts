@@ -320,6 +320,7 @@ export interface PatchView {
   bug: number | null;
   bugDraft?: BugDraft;
   revision?: number;
+  submittedAt?: Iso; // when its revision first showed up
   effort?: number;
   testOnly?: boolean;
   interdiffFile?: string;
@@ -352,6 +353,7 @@ export interface PushView {
   progress?: { done: number; total: number; failures: number; tests?: { done: number; total: number } }; // tests: of those asked for
   result?: "green" | "failures";
   summary?: string;
+  analysis?: TriageTryReport["cells"]; // what triage-try made of its failures that no patch's tests matched
 }
 
 export interface NeedsUser {

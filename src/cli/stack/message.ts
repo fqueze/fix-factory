@@ -55,6 +55,7 @@ export interface MessageEdit {
   bug?: number; // replaces "Bug XXXXXXX" everywhere, and the title's bug number
   message?: string; // a whole new message; the Differential Revision trailer is kept if it lacks one
   diff?: string; // unified diff applied on top of the patch (a reviewer's suggested edit)
+  revision?: string; // its Differential Revision URL, added when the message lacks the trailer (an author's own commit)
 }
 
 export function editMessage(message: string, edit: MessageEdit): string {
@@ -64,7 +65,7 @@ export function editMessage(message: string, edit: MessageEdit): string {
     lines[0] = lines[0].replace(/^Bug (\d+|X+)\b/i, `Bug ${edit.bug}`);
     out = lines.join("\n").replace(new RegExp(PLACEHOLDER_RE.source, "gi"), `Bug ${edit.bug}`);
   }
-  const trailer = revisionTrailer(message);
+  const trailer = revisionTrailer(message) ?? (edit.revision ? `Differential Revision: ${edit.revision}` : undefined);
   if (trailer && !revisionTrailer(out)) {
     out = out.trimEnd() + "\n\n" + trailer + "\n";
   }

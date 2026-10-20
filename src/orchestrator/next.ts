@@ -14,6 +14,7 @@ import { describePriorArt, type PriorArtBug } from "../cli/bugzilla.ts";
 import type { ClusterGroup, CollectedFailure, TryRow, TryTable } from "../cli/failures.ts";
 import type { ReviewerSuggestion } from "../cli/phab.ts";
 import type { ImportedCommit } from "../cli/stack/import.ts";
+import type { MessageEdit } from "../cli/stack/message.ts";
 import type { OrderOutput } from "../cli/stack/order.ts";
 import { expectedTests, type DryRunResult } from "../cli/try.ts";
 import { REQUEST_STEPS } from "../server/commands.ts";
@@ -101,6 +102,8 @@ const NO_RETRY = new Set(["push"]);
 
 const SETTLED: ItemState[] = ["reviewed", "in stack", "in try", "waiting for review", "addressing review comments", "fixed", "landed", "left as-is", "handed back"];
 const WITH_PATCHES: ItemState[] = ["reviewed", "in stack", "in try", "waiting for review", "addressing review comments", "fixed", "landed"];
+// Author runs that can change a patch after it was submitted (besides address-review).
+const CHANGES_AFTER_SUBMIT = ["continue", "comment", "stack comments", "asked push", "try"];
 export const TERMINAL: ItemState[] = ["left as-is", "handed back", "landed", "fixed"];
 
 const at = (step: RequestStep) => REQUEST_STEPS.indexOf(step);
@@ -1376,12 +1379,13 @@ class Planner {
         if (bug !== null) edits[pid] = bug;
       }
       if (Object.keys(edits).length === 0) continue;
-      const file = dataPath(this.config, this.s.id, `edits-${stack.id}-${shortHash(Object.entries(edits).map(([k, v]) => `${k}=${v}`))}.json`);
-      this.want(`rewrite-bugs:${stack.id}:${shortHash(Object.entries(edits).map(([k, v]) => `${k}=${v}:${this.s.patches[k].sha}`))}`, () =>
-        this.cli("rewrite", "stack.ts", ["rewrite", "--cwd", stack.worktree, "--base", stack.base ?? this.config.baseRef, "--branch", stack.branch, "--order", stack.order.map((pid) => this.s.patches[pid].sha).join(","), "--edits", file], {
+      const key = `rewrite-bugs:${stack.id}:${shortHash(Object.entries(edits).map(([k, v]) => `${k}=${v}:${this.s.patches[k].sha}`))}`;
+      const e = this.rewriteEdits(`${stack.id}-${shortHash([key])}`, stack.order.map((pid) => this.s.patches[pid]), Object.fromEntries(Object.entries(edits).map(([pid, bug]) => [this.s.patches[pid].sha, { bug }])));
+      this.want(key, () =>
+        this.cli("rewrite", "stack.ts", ["rewrite", "--cwd", stack.worktree, "--base", stack.base ?? this.config.baseRef, "--branch", stack.branch, "--order", stack.order.map((pid) => this.s.patches[pid].sha).join(","), ...e.args], {
           cwd: stack.worktree,
           purpose: { stack: stack.id, edits, patches: Object.fromEntries(stack.order.map((pid) => [this.s.patches[pid].sha.slice(0, 12), pid])) },
-          files: [{ path: file, content: JSON.stringify(Object.fromEntries(Object.entries(edits).map(([pid, bug]) => [this.s.patches[pid].sha, { bug }]))) + "\n" }],
+          files: e.files,
         }),
       );
     }
@@ -1692,7 +1696,6 @@ class Planner {
       const messages = missing.map((p) => ({ p, msg: this.sourceMessage(p) }));
       if (messages.some((m) => m.msg === undefined)) return undefined;
       const titles = Object.fromEntries(missing.map((p) => [p.id, `${p.title.replace(/,\s*r=.*$/, "").replace(/\.\s*$/, "")}, r=${suggested.get(p.id)}.`]));
-      const file = dataPath(this.config, this.s.id, `reviewers-${st.id}-${contentKey}.json`);
       const edits = Object.fromEntries(
         messages.map(({ p, msg }) => {
           const lines = msg!.split("\n");
@@ -1700,11 +1703,12 @@ class Planner {
           return [p.sha, { message: lines.join("\n"), ...(p.bug !== null ? { bug: p.bug } : {}) }];
         }),
       );
+      const e = this.rewriteEdits(`reviewers-${st.id}-${contentKey}`, patches, edits);
       this.want(`rewrite-reviewers:${st.id}:${contentKey}`, () =>
-        this.cli("rewrite", "stack.ts", ["rewrite", "--cwd", st.worktree, "--base", st.base ?? this.config.baseRef, "--branch", st.branch, "--order", patches.map((p) => p.sha).join(","), "--edits", file], {
+        this.cli("rewrite", "stack.ts", ["rewrite", "--cwd", st.worktree, "--base", st.base ?? this.config.baseRef, "--branch", st.branch, "--order", patches.map((p) => p.sha).join(","), ...e.args], {
           cwd: st.worktree,
           purpose: { stack: st.id, reason: `r=${[...new Set(suggested.values())].join(", ")}`, titles, patches: Object.fromEntries(patches.map((p) => [p.sha.slice(0, 12), p.id])) },
-          files: [{ path: file, content: JSON.stringify(edits) + "\n" }],
+          files: e.files,
         }),
       );
       return undefined;
@@ -1832,17 +1836,22 @@ class Planner {
   private afterAddress(p: PatchView): void {
     const item = this.s.items[p.item!];
     const author = this.authorReport(item.id);
-    // Review rounds and the nits pass after the answer resume its session under the first prompt's name.
-    const answer = this.authorJobs(item.id).findLast((j) => j.purpose.reason === "initial" || j.purpose.reason === "start" || j.name === "address-review");
-    if (!author || answer?.name !== "address-review" || item.state !== "reviewed") return;
+    // Review rounds and the nits pass after the answer resume its session under the first prompt's name. Since it was
+    // submitted, any change its author made goes to Phabricator: an answer to review comments, or what you told it,
+    // or what it made of a try push it asked for.
+    const answer = this.authorJobs(item.id).findLast((j) => j.purpose.reason !== undefined && CHANGES_AFTER_SUBMIT.includes(j.purpose.reason) || j.purpose.reason === "initial" || j.purpose.reason === "start" || j.name === "address-review");
+    if (!author || !answer || answer.purpose.reason === "initial" || answer.purpose.reason === "start" || item.state !== "reviewed") return;
+    if (answer.name !== "address-review" && !(p.submittedAt && answer.startedAt > Date.parse(p.submittedAt))) return;
     const st = Object.values(this.s.stacks).find((x) => x.order.includes(p.id));
     if (!st) return;
     const previous = this.authorJobs(item.id).filter((j) => succeeded(j) && j.startedAt < answer.startedAt && commitsOf(j.name, this.rep(j)).length > 0).at(-1);
     const index = author.commits.findIndex((_, i) => patchId(item.id, i) === p.id);
     const oldSha = previous ? commitsOf(previous.name, this.rep(previous))[index] : undefined;
+    const e = this.rewriteEdits(`review-${st.id}-${author.job.job}`, st.order.map((pid) => this.s.patches[pid]));
     const rw = this.want(`rewrite-review:${st.id}:${author.job.job}`, () =>
-      this.cli("rewrite", "stack.ts", ["rewrite", "--cwd", st.worktree, "--base", st.base ?? this.config.baseRef, "--branch", st.branch, "--order", st.order.map((pid) => this.s.patches[pid].sha).join(",")], {
+      this.cli("rewrite", "stack.ts", ["rewrite", "--cwd", st.worktree, "--base", st.base ?? this.config.baseRef, "--branch", st.branch, "--order", st.order.map((pid) => this.s.patches[pid].sha).join(","), ...e.args], {
         cwd: st.worktree,
+        files: e.files,
         priority: REVIEW_PRIORITY,
         purpose: { stack: st.id, patches: Object.fromEntries(st.order.map((pid) => [this.s.patches[pid].sha.slice(0, 12), pid])) },
       }),
@@ -1854,10 +1863,10 @@ class Planner {
       );
       if (!inter) return;
     }
-    const replies = (this.rep<AddressReviewReport>(answer).replies ?? []).length;
+    const replies = answer.name === "address-review" ? (this.rep<AddressReviewReport>(answer).replies ?? []).length : 0;
     this.raise(`resubmit:${st.id}:${author.job.job}`, {
       action: `${replies ? `Post ${replies} ${replies === 1 ? "reply" : "replies"}, then resubmit` : "Resubmit"} D${p.revision}`,
-      detail: "comments addressed and re-reviewed (Opus) · interdiff below",
+      detail: `${answer.name === "address-review" ? "comments addressed" : "changed by its author since you submitted it"} and re-reviewed (Opus) · interdiff below`,
       stack: st.id,
       patch: p.id,
     });
@@ -1913,9 +1922,11 @@ class Planner {
       for (const n of this.s.needsUser) if (n.key.startsWith(`land:${st.id}:`) && n.key !== `land:${st.id}:${h}`) this.clear(n.key);
       if (!o.landable?.length || o.landable.every((pid) => landed(this.s.patches[pid]))) continue;
       if (o.order.join() !== st.order.join() || this.view.byKey.has(`rewrite-land:${st.id}:${h}`)) {
+        const e = this.rewriteEdits(`land-${st.id}-${h}`, ps);
         const rw = this.want(`rewrite-land:${st.id}:${h}`, () =>
-          this.cli("rewrite", "stack.ts", ["rewrite", "--cwd", st.worktree, "--base", st.base ?? this.config.baseRef, "--branch", st.branch, "--order", o.order.map((pid) => this.s.patches[pid].sha).join(",")], {
+          this.cli("rewrite", "stack.ts", ["rewrite", "--cwd", st.worktree, "--base", st.base ?? this.config.baseRef, "--branch", st.branch, "--order", o.order.map((pid) => this.s.patches[pid].sha).join(","), ...e.args], {
             cwd: st.worktree,
+            files: e.files,
             purpose: { stack: st.id, patches: Object.fromEntries(ps.map((p) => [p.sha.slice(0, 12), p.id])), reason: "landing order" },
           }),
         );
@@ -1945,6 +1956,16 @@ class Planner {
       const adapted = k ? ` (${k} soft ${k === 1 ? "dependency" : "dependencies"} adapted)` : "";
       this.raise(`land:${st.id}:${h}`, { action: `Stack reordered: ${n} landable ${n === 1 ? "patch" : "patches"} moved to the bottom`, detail: `Run moz-phab reorg so Phabricator has the new order${adapted}.`, stack: st.id });
     }
+  }
+
+  // A submitted patch's commit in its author's worktree has no Differential Revision line: every rewrite of a stack
+  // gives it back, or the next moz-phab submit would make a new revision. Edits keyed by sha, merged with others.
+  private rewriteEdits(name: string, patches: PatchView[], edits: Record<string, MessageEdit> = {}): { args: string[]; files: { path: string; content: string }[] } {
+    const all: Record<string, MessageEdit> = { ...edits };
+    for (const p of patches) if (p.revision !== undefined) all[p.sha] = { ...all[p.sha], revision: `https://phabricator.services.mozilla.com/D${p.revision}` };
+    if (Object.keys(all).length === 0) return { args: [], files: [] };
+    const file = dataPath(this.config, this.s.id, `edits-${name}.json`);
+    return { args: ["--edits", file], files: [{ path: file, content: JSON.stringify(all) + "\n" }] };
   }
 
   // Each worktree is ~6 GB: those of groups closed without a fix, and the signal worktrees a redo replaced, go

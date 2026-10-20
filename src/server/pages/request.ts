@@ -1,5 +1,5 @@
 import { REQUEST_STEPS } from "../commands.ts";
-import type { BugDraft, ItemView, PatchView, PushView, RequestState, StackView } from "../../types.ts";
+import type { BugDraft, ItemView, JobView, PatchView, PushView, RequestState, StackView } from "../../types.ts";
 import { html, join, type Html } from "../html.ts";
 import { ANNOTATIONS_ITEM } from "../../orchestrator/next.ts";
 import { actionsSummary, pollPhabButton, redoAnnotationsButton, approvePushControls, bugBox, continueBox, copyButton, flagControls, flagItemOf, flagText, plannedLabel, recoveryPlanFor, hasAuthorSession, stackViewerLink, submitControls, summaryId } from "./actions.ts";
@@ -616,7 +616,7 @@ function pushRowOf(r: RequestState, p: PushView, ctx: RenderContext): Html {
     }`,
     state: html`${
       p.rev
-        ? pushStatus(p)
+        ? pushOutcome(r, p)
         : p.declined !== undefined
           ? p.withdrawn
             ? html`withdrawn by the factory: ${p.declined}`
@@ -636,7 +636,10 @@ function pushRowOf(r: RequestState, p: PushView, ctx: RenderContext): Html {
                   : "approved, not pushed: see its ⚑ above"
     }`,
     warn: waiting ? dryRunWarnings(r, p) : null,
-    body: html`${p.taskCount === undefined ? html`<pre class="mono command">${p.command.join(" ")}</pre>` : html`<div class="ptasks">Loading…</div>`}${revisable(r, p) ? reviseBox(r, p) : null}`,
+    // While it waits for you, what it would run; once made, what came of it, its jobs and command folded under it.
+    body: html`${waiting ? null : pushAnalysis(r, p)}${
+      waiting ? pushJobs(p) : html`<details class="fold" data-fold="pushjobs-${p.id}"><summary>Its jobs, commits and command</summary>${pushJobs(p)}</details>`
+    }${revisable(r, p) ? reviseBox(r, p) : null}`,
   });
 }
 
@@ -659,6 +662,62 @@ function dryRunWarnings(r: RequestState, p: PushView): Html | null {
     rest = rest.slice(known.length + 3);
   }
   return html`⚠ ${rest}`;
+}
+
+function pushJobs(p: PushView): Html {
+  return p.taskCount === undefined ? html`<pre class="mono command">${p.command.join(" ")}</pre>` : html`<div class="ptasks">Loading…</div>`;
+}
+
+// The authors its failures were sent to (those in tests their patches change or fix).
+function routedTo(r: RequestState, p: PushView): ItemView[] {
+  const ids = Object.values(r.jobs).filter((j) => j.purpose?.reason === "try" && new RegExp(`:try:${p.id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(:final)?$`).test(j.purpose.key)).map((j) => j.item);
+  return [...new Set(ids)].flatMap((id) => (id && r.items[id] ? [r.items[id]] : []));
+}
+
+// A push an author asked for (…-ask-<hash>): its results go back to that author, whose answer says what came of them.
+function askedBy(r: RequestState, p: PushView): { item: ItemView; job?: JobView } | undefined {
+  const prefix = /^(.*)-ask-[0-9a-f]{4}(-\d+)?$/.exec(p.id)?.[1];
+  const item = prefix === undefined ? undefined : Object.values(r.items).find((i) => i.id.replace(/^i-/, "").slice(0, 24) === prefix);
+  if (!item) return undefined;
+  return { item, job: Object.values(r.jobs).findLast((j) => j.item === item.id && j.purpose?.reason === "asked push") };
+}
+
+// One line: how many jobs failed, and what the factory made of them.
+function pushOutcome(r: RequestState, p: PushView): Html {
+  const status = pushStatus(p);
+  if (p.result !== "failures" && !p.progress?.failures) {
+    return html`${status}`;
+  }
+  // "32 jobs, 5 failed (3 retried): <every job>…" → its count; the jobs are under it.
+  const count = status.split(":")[0];
+  const verdicts = new Map<string, number>();
+  for (const c of p.analysis ?? []) verdicts.set(c.verdict, (verdicts.get(c.verdict) ?? 0) + 1);
+  const authors = routedTo(r, p);
+  const asker = askedBy(r, p);
+  if (asker) {
+    const answer = asker.job?.outcome;
+    return html`${count} · ${asker.job ? (asker.job.endedAt ? html`its author: ${answer ?? "done"}` : "its author is reading the results") : "results go to its author"}`;
+  }
+  const made = [
+    ...[...verdicts].map(([v, n]) => `${n} ${v}`),
+    ...(authors.length ? [`sent to the author${authors.length > 1 ? "s" : ""} of ${authors.map((i) => groupLabel(r, i)).join(", ")}`] : []),
+  ];
+  return html`${count}${made.length ? html` · ${made.join(" · ")}` : null}`;
+}
+
+// Each failure no patch's tests matched, as triage saw it, with what it rests on.
+function pushAnalysis(r: RequestState, p: PushView): Html | null {
+  if (!p.analysis?.length) {
+    return null;
+  }
+  return html`<h4 class="part">What the factory made of its failures</h4><ul class="analysis">${p.analysis.map(
+    (c) =>
+      html`<li><b>${c.verdict}</b>${c.patch ? html` (${c.patch.slice(0, 12)})` : null}: ${c.test ? relativeTest(r, c.test) : (c.taskId ?? "a job")}${c.config ? html` <span class="sub">on ${c.config}</span>` : null}<div class="sub clamp1" data-expand title="Click to see all of it">${c.evidence}</div></li>`,
+  )}</ul>`;
+}
+
+function relativeTest(r: RequestState, t: string): string {
+  return r.folder && t.startsWith(`${r.folder}/`) ? t.slice(r.folder.length + 1) : t;
 }
 
 const DISCARDED = "discarded";
