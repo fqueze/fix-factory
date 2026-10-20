@@ -427,7 +427,7 @@ function bugLabel(p: PatchView, ctx: RenderContext): Html | null {
 
 // A recovery plan already answered: what you said, then what it planned, couldn't do and asked.
 function pastPlan(r: RequestState, p: RequestState["recoveryPlans"][number]): Html {
-  return html`<details class="note" data-fold="plan-${p.t}"><summary><b>You said: “${p.text.split("\n")[0]}”</b> <span class="sub">${formatDate(p.t)}</span></summary><ul>${p.plan.map(
+  return html`<details class="note" data-fold="plan-${p.t}"><summary><b>You said: “${p.text.split("\n")[0]}”</b> <span class="sub">${formatDate(p.t)}</span></summary>${p.answer ? html`<p>${p.answer}</p>` : null}<ul>${p.plan.map(
     (c) => html`<li>${plannedLabel(c, r)}<div class="sub">${c.reason}</div></li>`,
   )}${p.cannotDo.map((t) => html`<li>Can't do: ${t}</li>`)}${p.questions.map((t) => html`<li>Asked you: ${t}</li>`)}</ul></details>`;
 }
