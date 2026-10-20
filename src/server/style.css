@@ -301,4 +301,4 @@ ul.analysis li { margin: 2px 0; }
 /* The folds right in a request's body line up with its headings. */
 .rbody > details.fold > summary { padding: 6px 0; }
 /* Between a request's try pushes, its stacks and the rest. */
-hr.part { border: 0; border-top: 1px solid var(--border); margin: 10px -12px 0; }
+hr.part { border: 0; border-top: 3px solid var(--border); margin: 10px -12px 0; }
