@@ -147,13 +147,13 @@ describe("forms", () => {
     ]);
   });
 
-  it("turns the decline box's Ask for another button into change-push", () => {
-    const template = JSON.stringify({ cmd: "decline-push", request: R, push: "A" });
-    assert.deepEqual(commandsFromForm(new URLSearchParams({ command: template, text: "on mac" })), [{ cmd: "decline-push", request: R, push: "A", text: "on mac" }]);
-    assert.deepEqual(commandsFromForm(new URLSearchParams({ command: template, text: "on mac", as: "change-push" })), [{ cmd: "change-push", request: R, push: "A", text: "on mac" }]);
-    const other = JSON.stringify({ cmd: "approve-push", request: R, push: "A" });
-    assert.deepEqual(commandsFromForm(new URLSearchParams({ command: other, as: "change-push" })), [{ cmd: "approve-push", request: R, push: "A" }]);
-    assert.ok(validateCommand({ cmd: "change-push", request: R, push: "A", text: "on mac" }, get).ok);
+  it("fills the revise box's text into revise-push; no form field turns one command into another", () => {
+    const template = JSON.stringify({ cmd: "revise-push", request: R, push: "A" });
+    assert.deepEqual(commandsFromForm(new URLSearchParams({ command: template, text: "on mac" })), [{ cmd: "revise-push", request: R, push: "A", text: "on mac" }]);
+    const decline = JSON.stringify({ cmd: "decline-push", request: R, push: "A", text: "discarded" });
+    assert.deepEqual(commandsFromForm(new URLSearchParams({ command: decline, as: "revise-push" })), [{ cmd: "decline-push", request: R, push: "A", text: "discarded" }]);
+    assert.ok(validateCommand({ cmd: "revise-push", request: R, push: "A", text: "on mac" }, get).ok);
+    assert.ok(!validateCommand({ cmd: "change-push", request: R, push: "A", text: "on mac" }, get).ok);
   });
 
   it("fills the typed text in, and keeps every checked command", () => {

@@ -201,7 +201,7 @@ interface CommandBase {
 export type Command =
   | (CommandBase & { cmd: "approve-push"; push: PushId })
   | (CommandBase & { cmd: "decline-push"; push: PushId; text: string })
-  | (CommandBase & { cmd: "change-push"; push: PushId; text: string }) // declines it and asks for another plan in its place
+  | (CommandBase & { cmd: "revise-push"; push: PushId; text: string }) // the agent that planned it plans what replaces it, from your text
   | (CommandBase & { cmd: "copied-submit"; stack: string }) // you copied its moz-phab command
   | (CommandBase & { cmd: "set-bug"; patch: PatchId; bug: number })
   | (CommandBase & { cmd: "comment-bug-draft"; patch: PatchId | "meta"; text: string })
@@ -343,7 +343,7 @@ export interface PushView {
   taskCount?: number;
   declined?: string; // why you said no, or why the factory withdrew it
   withdrawn?: boolean; // by the factory, not you
-  replan?: boolean; // you asked for another plan in its place, following what you said
+  replan?: boolean; // you asked the agent that planned it for a revision
   rev?: string;
   url?: string;
   progress?: { done: number; total: number; failures: number; tests?: { done: number; total: number } }; // tests: of those asked for
@@ -420,6 +420,7 @@ export interface JobPurpose {
   item?: ItemId;
   patch?: PatchId;
   push?: PushId;
+  pushes?: PushId[]; // the pushes a plan-pushes revision replaces
   stack?: string;
   index?: number;
   sha?: string;

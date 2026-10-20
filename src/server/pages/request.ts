@@ -580,10 +580,8 @@ function pushRowOf(r: RequestState, p: PushView, ctx: RenderContext): Html {
     title: p.purpose,
     end: html`${p.taskCount === undefined ? null : html`<span>${plural(p.taskCount, "task")}</span><a class="btn small" href="/requests/${encodeURIComponent(r.id)}/pushes/${encodeURIComponent(p.id)}/view" target="_blank" rel="noopener" title="The commits it carries, in stack-viewer">View stack ↗</a>`}${
       p.rev ? html`<a class="mono" href="${pushUrl(p)}" target="_blank" rel="noopener">${p.rev.slice(0, 12)}</a>` : null
-    }${waiting ? html`${approvePushControls(r, [p], requestUrl(r.id))}<button type="button" class="btn small" data-decline title="This push won't be made; say why">Decline…</button>` : null}${
-      p.declined !== undefined && !p.withdrawn && !p.replan && !p.rev
-        ? html`<form class="inline cmd" method="post" action="/api/commands">${commandFields([{ cmd: "change-push", request: r.id, push: p.id, text: p.declined }], requestUrl(r.id))}<button class="btn small" title="The factory plans another push in its place, following what you wrote">Ask for another</button></form>`
-        : null
+    }${waiting ? html`${approvePushControls(r, [p], requestUrl(r.id))}${discardButton(r, p)}` : null}${
+      revisable(r, p) ? html`<button type="button" class="btn small" data-revise title="Tell the agent that planned it what to change">Revise…</button>` : null
     }`,
     state: html`${
       p.rev
@@ -591,7 +589,11 @@ function pushRowOf(r: RequestState, p: PushView, ctx: RenderContext): Html {
         : p.declined !== undefined
           ? p.withdrawn
             ? html`withdrawn by the factory: ${p.declined}`
-            : html`you declined it${p.replan ? ", asking for another" : ""}: ${p.declined}`
+            : p.replan
+              ? html`you asked for a revision: ${p.declined}`
+              : p.declined === DISCARDED
+                ? "you discarded it"
+                : html`you declined it: ${p.declined}`
           : waiting
             ? "waiting for your approval"
             : !job
@@ -603,7 +605,7 @@ function pushRowOf(r: RequestState, p: PushView, ctx: RenderContext): Html {
                   : "approved, not pushed: see its ⚑ above"
     }`,
     warn: waiting ? dryRunWarnings(r, p) : null,
-    body: html`${p.taskCount === undefined ? html`<pre class="mono command">${p.command.join(" ")}</pre>` : html`<div class="ptasks">Loading…</div>`}${waiting ? declineBox(r, p) : null}`,
+    body: html`${p.taskCount === undefined ? html`<pre class="mono command">${p.command.join(" ")}</pre>` : html`<div class="ptasks">Loading…</div>`}${revisable(r, p) ? reviseBox(r, p) : null}`,
   });
 }
 
@@ -628,6 +630,20 @@ function dryRunWarnings(r: RequestState, p: PushView): Html | null {
   return html`⚠ ${rest}`;
 }
 
-function declineBox(r: RequestState, p: PushView): Html {
-  return html`<form class="cmd decline" method="post" action="/api/commands">${commandFields([{ cmd: "decline-push", request: r.id, push: p.id }], requestUrl(r.id))}<textarea name="text" required rows="2" placeholder="Why not, or what should it be instead? The plan's other pushes still wait for you"></textarea><button class="btn small">Decline</button> <button class="btn small" name="as" value="change-push" title="Declines it, and the factory plans another push in its place following what you wrote">Ask for another</button></form>`;
+const DISCARDED = "discarded";
+
+// Removes it, and nothing else happens.
+function discardButton(r: RequestState, p: PushView): Html {
+  return html`<form class="inline cmd" method="post" action="/api/commands">${commandFields([{ cmd: "decline-push", request: r.id, push: p.id, text: DISCARDED }], requestUrl(r.id))}<button class="btn small icon" title="Discard this push: it won't be made, and nothing else happens" aria-label="Discard">🗑</button></form>`;
+}
+
+// While it waits for you, or after you declined it without asking for a revision.
+function revisable(r: RequestState, p: PushView): boolean {
+  return !p.rev && !p.replan && (isWaiting(r, p) || (p.declined !== undefined && !p.withdrawn));
+}
+
+// The agent that planned it gets what you write, in its session, and plans what replaces it.
+function reviseBox(r: RequestState, p: PushView): Html {
+  const declined = p.declined !== undefined && p.declined !== DISCARDED ? p.declined : "";
+  return html`<form class="cmd revise" method="post" action="/api/commands">${commandFields([{ cmd: "revise-push", request: r.id, push: p.id }], requestUrl(r.id))}<textarea name="text" required rows="2" placeholder="What should it run instead? The agent that planned it gets this; the plan's other pushes stay as they are">${declined}</textarea><button class="btn small">Revise</button></form>`;
 }

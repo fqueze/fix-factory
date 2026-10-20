@@ -569,24 +569,36 @@ class Planner {
   ): { ids: PushId[]; dry: DryRunResult[]; made: PushId[] } | undefined {
     const ids: PushId[] = [];
     const dry: DryRunResult[] = [];
-    // A push you declined asking for another is planned again, alone, from what you wrote; and so on.
-    for (let round = 0, k = key, v = vars, id = idOf; ; ) {
-      const plan = this.wantAgent(k, "plan-pushes", "plan-try-pushes", v, opts);
+    // A push you revise goes back to the agent that planned it, in its session, with what you wrote; what it returns
+    // replaces that push alone. Revisions of the same round go together, each round once.
+    const handled = new Set<PushId>();
+    let plan = this.wantAgent(key, "plan-pushes", "plan-try-pushes", vars, opts);
+    for (let round = 0; ; round++) {
       if (!plan) return undefined;
       const planned = this.rep<PlanTryPushesReport>(plan).pushes;
-      const these = planned.map((_, i) => id(i, planned.length));
+      const r = round;
+      const these = planned.map((_, i) => (r === 0 ? idOf(i, planned.length) : `${idOf(0, 1)}-v${r}${planned.length === 1 ? "" : `-${i + 1}`}`));
       const d = planned.map((push, i) => this.dryRun(these[i], push.tryArgs, push.purpose, cwd, stack));
       if (d.some((x) => !x)) return undefined;
       ids.push(...these);
       dry.push(...(d as DryRunResult[]));
-      const replan = these.filter((p) => this.s.pushes[p]?.replan);
-      if (replan.length === 0) break;
-      round++;
-      const declined = replan.map((p) => `push ${p} (\`${this.s.pushes[p].command.join(" ")}\`), saying “${this.s.pushes[p].declined}”`).join("; and ");
-      k = `${key}:r${round}`;
-      v = { ...vars, goal: `${vars.goal}. The user declined ${declined}. Plan only what replaces it, as the user said: the plan's other pushes stand` };
-      const r = round;
-      id = (i, count) => `${idOf(0, 1)}-r${r}${count === 1 ? "" : `-${i + 1}`}`;
+      const pending = ids.filter((p) => this.s.pushes[p]?.replan && !handled.has(p));
+      if (pending.length === 0) break;
+      // This round's revision, when it exists, keeps the pushes it was asked for; those revised since wait for the next.
+      const asked = this.view.jobs.find((j) => j.purpose.key.startsWith(`${key}:revise:`) && j.purpose.pushes?.every((p) => pending.includes(p)))?.purpose.pushes;
+      const revise = asked ?? pending;
+      for (const p of revise) handled.add(p);
+      const prev = plan;
+      const asks = revise.map((p) => `push ${p} (\`${this.s.pushes[p].command.join(" ")}\`): “${this.s.pushes[p].declined}”`).join("\n");
+      const message = `The user reviewed what you planned and wants it revised:\n${asks}\n\nDo exactly what they ask. Return only what replaces ${revise.length === 1 ? "that push" : "those pushes"} (the plan's other pushes stand), or an empty list if they want none. End with the JSON report again.`;
+      const k = `${key}:revise:${shortHash(revise).slice(0, 8)}`;
+      plan = this.want(k, () => ({
+        purpose: { key: k, what: "plan-pushes", pushes: revise },
+        kind: "agent",
+        name: "plan-try-pushes",
+        cwd: prev.cwd,
+        agent: { sessionId: prev.sessionId!, resume: true, message },
+      }));
     }
     // The ones to make: not a duplicate of a pending push, not declined.
     const made = ids.filter((id, i) => dry[i].duplicateOf === undefined && this.s.pushes[id]?.declined === undefined);

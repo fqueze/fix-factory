@@ -109,8 +109,12 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.match(row, /<span class="state">waiting for your approval<\/span>/);
     const top = row.slice(0, row.indexOf("</summary>"));
     assert.ok(top.includes(cmd({ cmd: "approve-push", request: "r-20261014-extensions-xpcshell", push: "unskip" })), "Approve on its top line");
-    assert.match(top, /data-decline[^>]*>Decline…<\/button>/);
-    assert.ok(row.includes(cmd({ cmd: "decline-push", request: "r-20261014-extensions-xpcshell", push: "unskip" })));
+    assert.ok(top.includes(cmd({ cmd: "decline-push", request: "r-20261014-extensions-xpcshell", push: "unskip", text: "discarded" })), "🗑 on its top line");
+    assert.match(top, /aria-label="Discard">🗑<\/button>/);
+    assert.match(top, /data-revise[^>]*>Revise…<\/button>/);
+    const body = row.slice(row.indexOf("</summary>"));
+    assert.ok(body.includes(cmd({ cmd: "revise-push", request: "r-20261014-extensions-xpcshell", push: "unskip" })), "the revise box in its body");
+    assert.match(body, /<form class="cmd revise"[^]*<textarea name="text" required[^>]*><\/textarea><button class="btn small">Revise<\/button><\/form>/);
     assert.match(row, /data-tasks="\/api\/requests\/r-20261014-extensions-xpcshell\/pushes\/unskip\/tasks"/);
     assert.match(top, /<span>186 tasks<\/span>/);
     assert.match(row, /<div class="ptasks">Loading…<\/div>/);
@@ -125,23 +129,28 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.equal(itemBucket(r, i, ctx), "working");
   });
 
-  it("2. first signal: Ask for another, in the decline box and on a push you declined", () => {
+  it("2. first signal: Revise, while it waits and on a push you declined; not once discarded-and-revised, withdrawn or revised", () => {
     const R = "r-20261014-extensions-xpcshell";
-    assert.match(rowOf(expanded(R), "push-unskip"), /<form class="cmd decline"[^]*<button class="btn small" name="as" value="change-push"[^>]*>Ask for another<\/button><\/form>/);
     const r = structuredClone(source.getRequest(R)!);
     r.needsUser = r.needsUser.filter((n) => n.key !== "approve-push:unskip");
     r.pushes.unskip.declined = "on mac";
     let row = rowOf(renderRequest(r, ctx, true).value, "push-unskip");
     assert.match(row, /<span class="state">you declined it: on mac<\/span>/);
-    assert.ok(row.includes(cmd({ cmd: "change-push", request: R, push: "unskip", text: "on mac" })));
-    assert.match(row, />Ask for another<\/button>/);
+    assert.match(row, /data-revise[^>]*>Revise…<\/button>/);
+    assert.match(row, /<textarea name="text"[^>]*>on mac<\/textarea>/, "prefilled with what you wrote");
+    assert.doesNotMatch(row, /Discard/, "no longer waiting");
+    r.pushes.unskip.declined = "discarded";
+    row = rowOf(renderRequest(r, ctx, true).value, "push-unskip");
+    assert.match(row, /<span class="state">you discarded it<\/span>/);
+    assert.match(row, /<textarea name="text"[^>]*><\/textarea>/, "not prefilled with “discarded”");
+    r.pushes.unskip.declined = "on mac";
     r.pushes.unskip.replan = true;
     row = rowOf(renderRequest(r, ctx, true).value, "push-unskip");
-    assert.match(row, /<span class="state">you declined it, asking for another: on mac<\/span>/);
-    assert.doesNotMatch(row, /change-push|Ask for another/);
+    assert.match(row, /<span class="state">you asked for a revision: on mac<\/span>/);
+    assert.doesNotMatch(row, /revise-push|Revise…/);
     r.pushes.unskip.replan = undefined;
     r.pushes.unskip.withdrawn = true;
-    assert.doesNotMatch(rowOf(renderRequest(r, ctx, true).value, "push-unskip"), /change-push|Ask for another/);
+    assert.doesNotMatch(rowOf(renderRequest(r, ctx, true).value, "push-unskip"), /revise-push|Revise…/);
   });
 
   it("2. first signal: an approved push says it's pushing on its row, not above the pushes", () => {
@@ -151,7 +160,7 @@ describe("one fixture per step of docs/MVP.md", () => {
     const h = renderRequest(r, ctx, true).value;
     const row = rowOf(h, "push-unskip");
     assert.match(row, /<span class="state">approved, pushing for <span data-since/);
-    assert.doesNotMatch(row, /approve-push|Decline…/);
+    assert.doesNotMatch(row, /approve-push|Revise…|Discard/);
     assert.doesNotMatch(h.slice(0, h.indexOf("Try pushes")), /push to try/, "its job is on its row");
   });
 

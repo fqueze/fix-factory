@@ -130,7 +130,7 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
       ev({ type: "try-declined", push: c.push, text: c.text });
       done(true);
       break;
-    case "change-push": {
+    case "revise-push": {
       const p = s.pushes[c.push];
       const waiting = s.needsUser.some((n) => n.key === `approve-push:${c.push}`);
       if (!p || p.rev || p.replan || !(waiting || (p.declined !== undefined && !p.withdrawn))) {

@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { InvalidReport } from "./handlers.ts";
 import { resumeAuthorPlan, stackId } from "./next.ts";
 import { config, HOUR, ID, Scenario, sha } from "./testkit.ts";
+import { shortHash } from "./plan.ts";
 
 const none = { verdict: "none", quote: "no bug", feedback: [] };
 const ok = { verdict: "ok", findings: [], feedback: [] };
@@ -1250,7 +1251,7 @@ describe("6. verify on try, again", () => {
     assert.equal(sc.state().step, "meta bug");
   });
 
-  it("plans again, alone, a push you declined asking for another, from what you wrote; and its replacement too", () => {
+  it("sends a push you revise back to the agent that planned it, in its session; what it returns replaces that push alone; and its replacement too", () => {
     const sc = stacked();
     const planKey = sc.view().jobs.find((j) => j.purpose.what === "plan-pushes")!.purpose.key;
     const two = [1, 2].map((n) => ({ purpose: `p${n}`, tryArgs: ["fuzzy", "-q", `x${n}`], rebuild: 5 }));
@@ -1261,28 +1262,63 @@ describe("6. verify on try, again", () => {
     sc.settle();
     const [keep, drop] = dries.map((d) => sc.purpose(d).push!);
     sc.add({ type: "try-declined", request: ID, push: drop, text: "on mac instead", replan: true });
-    assert.deepEqual(sc.settle(), [`${planKey}:r1`]);
-    const goal = String(sc.plan(`${planKey}:r1`).agent?.vars?.goal);
-    assert.ok(goal.startsWith(String(sc.plan(planKey).agent?.vars?.goal)), goal);
-    assert.ok(goal.includes(`The user declined push ${drop} (\`./mach try fuzzy\`), saying “on mac instead”. Plan only what replaces it`), goal);
+    const [rev1] = sc.settle();
+    assert.equal(rev1, `${planKey}:revise:${shortHash([drop]).slice(0, 8)}`);
+    const p1 = sc.plan(rev1);
+    assert.equal(p1.name, "plan-try-pushes");
+    assert.equal(p1.cwd, sc.plan(planKey).cwd);
+    assert.equal(p1.agent?.sessionId, sc.plan(planKey).agent?.sessionId);
+    assert.equal(p1.agent?.resume, true);
+    assert.ok(p1.agent?.message?.includes(`push ${drop} (\`./mach try fuzzy\`): “on mac instead”`), String(p1.agent?.message));
     assert.deepEqual(sc.open(), [`approve-push:${keep}`], "the plan's other push still waits for you");
 
-    sc.complete(`${planKey}:r1`, { report: { pushes: [{ purpose: "mac", tryArgs: ["fuzzy", "-q", "mac"], rebuild: 5 }], feedback: [] } });
+    sc.complete(rev1, { report: { pushes: [{ purpose: "mac", tryArgs: ["fuzzy", "-q", "mac"], rebuild: 5 }], feedback: [] } });
     const [dry1] = sc.settle();
-    const r1 = sc.purpose(dry1).push!;
-    assert.equal(r1, `${keep}-r1`);
+    const v1 = sc.purpose(dry1).push!;
+    assert.equal(v1, `${keep}-v1`);
     sc.complete(dry1, { output: dryOut });
     sc.settle();
-    assert.deepEqual(sc.open().sort(), [`approve-push:${keep}`, `approve-push:${r1}`].sort());
+    assert.deepEqual(sc.open().sort(), [`approve-push:${keep}`, `approve-push:${v1}`].sort());
 
-    // Its replacement declined the same way: a second round, the earlier ones standing.
-    sc.add({ type: "try-declined", request: ID, push: r1, text: "fewer jobs", replan: true });
-    assert.deepEqual(sc.settle(), [`${planKey}:r2`]);
-    assert.match(String(sc.plan(`${planKey}:r2`).agent?.vars?.goal), new RegExp(`push ${r1} .*“fewer jobs”`));
+    // Its replacement revised the same way: a second round, in the same session, the earlier ones standing.
+    sc.add({ type: "try-declined", request: ID, push: v1, text: "fewer jobs", replan: true });
+    const [rev2] = sc.settle();
+    assert.equal(rev2, `${planKey}:revise:${shortHash([v1]).slice(0, 8)}`);
+    assert.equal(sc.plan(rev2).agent?.sessionId, p1.agent?.sessionId);
+    assert.match(String(sc.plan(rev2).agent?.message), new RegExp(`push ${v1} .*“fewer jobs”`));
     const two2 = [1, 2].map((n) => ({ purpose: `q${n}`, tryArgs: ["fuzzy", "-q", `y${n}`], rebuild: 5 }));
-    sc.complete(`${planKey}:r2`, { report: { pushes: two2, feedback: [] } });
+    sc.complete(rev2, { report: { pushes: two2, feedback: [] } });
     const dries2 = sc.settle();
-    assert.deepEqual(dries2.map((d) => sc.purpose(d).push), [`${keep}-r2-1`, `${keep}-r2-2`]);
+    assert.deepEqual(dries2.map((d) => sc.purpose(d).push), [`${keep}-v2-1`, `${keep}-v2-2`]);
+  });
+
+  it("a revision of a first-round push made after the second round exists is handled in the third, the second standing", () => {
+    const sc = stacked();
+    const planKey = sc.view().jobs.find((j) => j.purpose.what === "plan-pushes")!.purpose.key;
+    const two = [1, 2].map((n) => ({ purpose: `p${n}`, tryArgs: ["fuzzy", "-q", `x${n}`], rebuild: 5 }));
+    sc.complete(planKey, { report: { pushes: two, feedback: [] } });
+    const dryOut = { command: ["./mach", "try", "fuzzy"], taskCount: 5, tasks: [], tryTaskConfig: {}, commits: [], warnings: [] };
+    const dries = sc.settle();
+    for (const d of dries) sc.complete(d, { output: dryOut });
+    sc.settle();
+    const [first, second] = dries.map((d) => sc.purpose(d).push!);
+    sc.add({ type: "try-declined", request: ID, push: second, text: "on mac", replan: true });
+    const [rev1] = sc.settle();
+    sc.complete(rev1, { report: { pushes: [{ purpose: "mac", tryArgs: ["fuzzy", "-q", "mac"], rebuild: 5 }], feedback: [] } });
+    const [dry1] = sc.settle();
+    sc.complete(dry1, { output: dryOut });
+    sc.settle();
+    const v1 = sc.purpose(dry1).push!;
+
+    sc.add({ type: "try-declined", request: ID, push: first, text: "on windows", replan: true });
+    const [rev2] = sc.settle();
+    assert.equal(rev2, `${planKey}:revise:${shortHash([first]).slice(0, 8)}`);
+    assert.match(String(sc.plan(rev2).agent?.message), new RegExp(`push ${first} .*“on windows”`));
+    assert.doesNotMatch(String(sc.plan(rev2).agent?.message), /on mac/);
+    assert.deepEqual(sc.open(), [`approve-push:${v1}`], "the second round stands");
+    sc.complete(rev2, { report: { pushes: [{ purpose: "win", tryArgs: ["fuzzy", "-q", "win"], rebuild: 5 }], feedback: [] } });
+    const [dry2] = sc.settle();
+    assert.equal(sc.purpose(dry2).push, `${first}-v2`);
   });
 
   it("verifies nothing while an un-skip push that you didn't decline has no result", () => {

@@ -256,12 +256,12 @@
     }
     var clamped = t.closest("[data-expand]");
     if (clamped) clamped.classList.toggle("open");
-    // Decline… opens its push's row at the box asking why.
-    var decline = t.closest("[data-decline]");
-    if (decline) {
-      var row = decline.closest("details.row");
+    // Revise… opens its push's row at the box.
+    var revise = t.closest("[data-revise]");
+    if (revise) {
+      var row = revise.closest("details.row");
       row.open = true;
-      row.querySelector("form.decline textarea").focus();
+      row.querySelector("form.revise textarea").focus();
     }
   });
 
