@@ -1035,6 +1035,11 @@ class Planner {
     const reviewed = () => {
       if (!WITH_PATCHES.includes(item.state) || item.state === "addressing review comments") this.setItem(item.id, "reviewed");
     };
+    // The skip-if removal is the commit try verified, reworded: the lint is all it needs.
+    if (item.id === ANNOTATIONS_ITEM && this.rep<WriteAnnotationPatchesReport>(author).removal) {
+      reviewed();
+      return;
+    }
     // The nits pass, and any lint fixes after it, only get the lint again: no new critical review.
     const jobs = this.authorJobs(item.id);
     if (jobs.slice(0, jobs.indexOf(author) + 1).findLast((j) => j.purpose.reason !== "lint")?.purpose.reason === "nits") {
@@ -1551,7 +1556,7 @@ class Planner {
         ANNOTATIONS_ITEM,
         key,
         "removal",
-        `The stack was verified on try with your DEBUG commit on top: ${list}. On top of the stack it became ${top.head.slice(0, 12)} (branch ${top.branch}): it only removes the skips the fix patches don't. In your branch, replace your DEBUG commit with it (\`git rebase --onto ${debug}^ ${debug} && git cherry-pick ${top.head}\`), then reword its message: \`Bug XXXXXXX - Remove skip-if annotations that no longer fail in ${this.s.folder}, r=<reviewer>.\`, its reviewer from the find-reviewer skill, its body naming each skip's old bug, without try links or run counts (the bug number is the meta bug's, given later). Change no code.${failures} Otherwise report it as \`removal\` (and \`runIf\` again), without \`debug\`.`,
+        `The stack was verified on try with your DEBUG commit on top: ${list}. On top of the stack it became ${top.head.slice(0, 12)} (branch ${top.branch}): it only removes the skips the fix patches don't. In your branch, replace your DEBUG commit with it (\`git rebase --onto ${debug}^ ${debug} && git cherry-pick ${top.head}\`), then reword its message to one line, no body: \`Bug XXXXXXX - Remove skip-if annotations that no longer fail in ${this.s.folder}, r=<reviewer>.\`, its reviewer from the find-reviewer skill (the bug number is the meta bug's, given later). Change no code.${failures} Otherwise report it as \`removal\` (and \`runIf\` again), without \`debug\`.`,
       );
     }
     // The meta bug waits for the removal to be in the stack: it's the patch that needs one.
