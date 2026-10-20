@@ -449,6 +449,71 @@ describe("3. work list", () => {
     assert.deepEqual(Object.keys(sc.state().items), []);
   });
 
+  // The clusters of tryPushFinished: two groups failing on different configs and tasks.
+  function clustered(): Scenario {
+    const sc = tryPushFinished();
+    sc.step();
+    sc.complete("try-table:initial:final", { output: table() });
+    sc.complete("collect:initial:final", { output: [failure("a/test_a.js", "boom"), failure("b/test_b.js", "bang")] });
+    sc.step();
+    sc.complete("cluster:initial:final", {
+      output: {
+        groups: [
+          { ...group("ka", "a/test_a.js", "boom", 2), configs: ["win/debug-xpcshell", "linux/opt-xpcshell"], taskIds: ["T1", "T2"] },
+          { ...group("kb", "b/test_b.js", "bang", 1.5), configs: ["linux/opt-xpcshell", "mac/opt-xpcshell"], taskIds: ["T2", "T3"] },
+        ],
+        singles: [],
+      },
+    });
+    sc.step();
+    return sc;
+  }
+
+  it("takes a merged group's configs, rate and task ids from the clusters it merges, never from the agent", () => {
+    const sc = clustered();
+    sc.complete("merge:initial:final", {
+      report: { groups: [{ message: "boom", tests: ["a/test_a.js", "b/test_b.js"], configs: ["every/folder-config"], from: ["ka", "kb"], reason: "same crash" }], feedback: [] },
+    });
+    sc.step();
+    const g = sc.state().items["i-test-a"].group;
+    assert.deepEqual(g.configs, ["linux/opt-xpcshell", "mac/opt-xpcshell", "win/debug-xpcshell"]);
+    assert.equal(g.ratePerWeek, 3.5);
+    assert.deepEqual(g.taskIds, ["T1", "T2", "T3"]);
+  });
+
+  it("rejects a merge-clusters report whose `from` names clusters that don't exist", () => {
+    const sc = clustered();
+    const report = { groups: [{ message: "boom", tests: ["a/test_a.js", "b/test_b.js"], configs: [], from: ["ka", "nope", "nope"], reason: "same" }], feedback: [] };
+    assert.throws(
+      () => sc.complete("merge:initial:final", { report }),
+      (e: Error) => e instanceof InvalidReport && /`from` names clusters that don't exist: nope \(use the input groups' `key` values\)/.test(e.message) && !/missing|weren't/.test(e.message),
+    );
+    assert.deepEqual(sc.of("agent-report"), []);
+  });
+
+  it("takes the configs of a merged group that names no existing cluster from the clusters of its tests", () => {
+    const sc = clustered();
+    // Recorded before unknown keys were rejected.
+    const job = sc.running("merge:initial:final");
+    const report = {
+      groups: [
+        { message: "boom", tests: ["a/test_a.js"], configs: ["every/folder-config"], from: ["a/test_a.js"], reason: "unchanged" },
+        { message: "bang", tests: ["b/test_b.js"], configs: ["every/folder-config"], from: ["kb", "gone"], reason: "unchanged" },
+      ],
+      feedback: [],
+    };
+    sc.reports.set(job, report);
+    sc.add({ type: "agent-report", request: ID, job, prompt: "merge-clusters", report });
+    sc.add({ type: "job-finished", request: ID, job, exitCode: 0, durationMs: 1 });
+    sc.settle();
+    const { items } = sc.state();
+    assert.deepEqual(items["i-test-a"].group.configs, ["linux/opt-xpcshell", "win/debug-xpcshell"]);
+    assert.equal(items["i-test-a"].group.ratePerWeek, 2);
+    assert.deepEqual(items["i-test-a"].group.taskIds, ["T1", "T2"]);
+    // One named cluster exists: only it counts.
+    assert.deepEqual(items["i-test-b"].group.configs, ["linux/opt-xpcshell", "mac/opt-xpcshell"]);
+  });
+
   it("runs at 2 h when the push hasn't finished, then again when it finishes, adding only new groups", () => {
     const sc = new Scenario("try-push", { rev: "abc" });
     sc.step();
