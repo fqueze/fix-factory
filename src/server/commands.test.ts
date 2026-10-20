@@ -58,6 +58,8 @@ describe("validateCommand", () => {
     assert.ok(validateCommand({ cmd: "dismiss", request: T, key: "refused:c-1" }, getT).ok, "a refused command is dismissed by its key");
     state.needsUser.push({ key: "approve-push:A", action: "Approve", detail: "", since: state.createdAt });
     assert.match((validateCommand({ cmd: "dismiss", request: T, key: "approve-push:A" }, getT) as { error: string }).error, /answered by its own buttons/);
+    state.needsUser.push({ key: "resubmit:a", action: "Resubmit D1", detail: "", stack: "a", since: state.createdAt });
+    assert.ok(validateCommand({ cmd: "dismiss", request: T, key: "resubmit:a" }, getT).ok, "a resubmit you decide against can be dismissed");
     assert.match((validateCommand({ cmd: "stop", request: T, job: "j-push" }, getT) as { error: string }).error, /try push isn.t stopped/);
     assert.match((validateCommand({ cmd: "accept-review", request: T, item: "i-drag" }, getT) as { error: string }).error, /isn't waiting for you/);
     state.jobs["j-review"] = { ...state.jobs["j-artifacts"], job: "j-review", kind: "agent", name: "review-patch", exitCode: 0 };

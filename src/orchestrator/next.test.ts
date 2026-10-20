@@ -1906,9 +1906,11 @@ describe("9. review comments", () => {
       [sha("7")]: { revision: "https://phabricator.services.mozilla.com/D101" },
     });
     sc.complete(`rewrite-review:a:${job}`, { output: { mapping: { [sha("e")]: sha("e"), [sha("7")]: sha("8") } } });
-    assert.deepEqual(sc.settle(), [`interdiff:p-test-a:${job}`]);
-    assert.deepEqual(sc.plan(`interdiff:p-test-a:${job}`).cli?.args, ["interdiff", "--cwd", `/wt/${ID}-a`, sha("1"), sha("8")]);
-    const inter = sc.complete(`interdiff:p-test-a:${job}`, { output: { diff: "-a\n+b\n", method: "same-parent" } });
+    // Against what Phabricator has (the commit D101 showed up on), not the author's previous commit.
+    const key = `interdiff:p-test-a:${job}:${sha("f").slice(0, 12)}`;
+    assert.deepEqual(sc.settle(), [key]);
+    assert.deepEqual(sc.plan(key).cli?.args, ["interdiff", "--cwd", `/wt/${ID}-a`, sha("f"), sha("8")]);
+    const inter = sc.complete(key, { output: { diff: "-a\n+b\n", method: "same-parent" } });
     assert.equal(sc.state().patches["p-test-a"].interdiffFile, `requests/${ID}/data/interdiff-p-test-a-${inter}.diff`);
     sc.settle();
     const n = sc.state().needsUser.find((x) => x.key.startsWith("resubmit:"))!;
@@ -2002,15 +2004,51 @@ describe("9. changes after submission", () => {
       assert.deepEqual(JSON.parse(rw.files![0].content)[sha("7")], { revision: "https://phabricator.services.mozilla.com/D101" });
       sc.complete(`rewrite-review:a:${job}`, { output: { mapping: { [sha("e")]: sha("e"), [sha("7")]: sha("8") } } });
       const [inter] = sc.settle();
-      assert.equal(inter, `interdiff:p-test-a:${job}`);
+      assert.equal(inter, `interdiff:p-test-a:${job}:${sha("f").slice(0, 12)}`);
+      assert.deepEqual(sc.plan(inter).cli?.args.slice(-2), [sha("f"), sha("8")]);
       sc.complete(inter, { output: { diff: "-a\n+b\n", method: "same-parent" } });
       sc.settle();
       const n = sc.state().needsUser.find((x) => x.key.startsWith("resubmit:"))!;
       assert.equal(n.action, "Resubmit D101");
       assert.equal(n.detail, "changed by its author since you submitted it and re-reviewed (Opus) · interdiff below");
       assert.equal(sc.state().items["i-test-a"].state, "waiting for review");
+      // Dismissed (it lands as it is): not asked again.
+      sc.add({ type: "user-done", request: ID, key: n.key });
+      sc.settle();
+      assert.ok(!sc.open().some((k) => k.startsWith("resubmit:")));
     });
   }
+
+  it("once you copied the resubmit, the next change's interdiff is against that commit", () => {
+    const { sc, job } = changed("continue");
+    sc.settle();
+    sc.complete(`rewrite-review:a:${job}`, { output: { mapping: { [sha("e")]: sha("e"), [sha("7")]: sha("8") } } });
+    sc.settle();
+    sc.complete(`interdiff:p-test-a:${job}:${sha("f").slice(0, 12)}`, { output: { diff: "-a\n+b\n", method: "same-parent" } });
+    sc.settle();
+    sc.add({ type: "submit-copied", request: ID, stack: "a" });
+    assert.equal(sc.state().patches["p-test-a"].sentSha, sha("8"));
+    sc.settle();
+    // Its author changes it again.
+    const plan = resumeAuthorPlan(ID, sc.view(), "i-test-a", "continue", { message: "m" }, "investigating");
+    assert.ok(plan && plan !== "busy");
+    plan.purpose.key = "author:i-test-a:continue:c-2";
+    sc.startJob(plan);
+    const again = sc.complete(plan.purpose.key, { report: fixed([sha("9")]) });
+    sc.settle();
+    sc.complete(`import:${again}`, { output: imported(sha("9"), "Bug 999 - Fix a, r=smaug.", ["a/test_a.js"], 999).map((c) => ({ ...c, revision: 101 })) });
+    sc.settle();
+    sc.complete(`msg:p-test-a:${sha("9")}`, { output: "m" });
+    sc.settle();
+    sc.complete(`lint:p-test-a:${sha("9")}`, { output: lintOk });
+    sc.settle();
+    sc.complete(`review:p-test-a:${again}`, { report: ok });
+    assert.deepEqual(sc.settle(), [`rewrite-review:a:${again}`]);
+    sc.complete(`rewrite-review:a:${again}`, { output: { mapping: { [sha("e")]: sha("e"), [sha("9")]: sha("a") } } });
+    const inter = `interdiff:p-test-a:${again}:${sha("8").slice(0, 12)}`;
+    assert.deepEqual(sc.settle(), [inter]);
+    assert.deepEqual(sc.plan(inter).cli?.args.slice(-2), [sha("8"), sha("a")]);
+  });
 
   it("an author run that started before the submission is neither rewritten nor resubmitted", () => {
     const { sc } = changed("continue", true);

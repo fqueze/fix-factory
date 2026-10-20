@@ -553,7 +553,10 @@ describe("one fixture per step of docs/MVP.md", () => {
     const r = structuredClone(get("r-20261005-newtab"));
     r.stacks.other = { ...r.stacks.newtab, id: "other" };
     r.needsUser = [{ key: "resubmit:x", action: "Resubmit", detail: "", stack: "other", since: r.createdAt }];
-    assert.match(renderRequest(r, ctx).value, /data-copy="mozphab-r-20261005-newtab-other"/);
+    const h = renderRequest(r, ctx).value;
+    assert.match(h, /data-copy="mozphab-r-20261005-newtab-other"/);
+    const flag = h.slice(h.indexOf('data-key="resubmit:x"'), h.indexOf("</div>", h.indexOf('data-key="resubmit:x"')));
+    assert.ok(flag.includes(cmd({ cmd: "dismiss", key: "resubmit:x", request: "r-20261005-newtab" })), "a resubmit you decide against can be dismissed");
 
     const t = structuredClone(get("r-20261013-tab-failures"));
     t.recoveryPlans.push({ ...t.recoveryPlans[0], job: "j-later", text: "a later plan", plan: [] });

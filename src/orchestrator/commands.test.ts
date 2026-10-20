@@ -306,6 +306,14 @@ describe("commands", () => {
     assert.equal(executed(sc).at(-1)?.ok, false);
   });
 
+  it("dismiss answers a resubmit you decide against", () => {
+    const sc = withPatch();
+    sc.add({ type: "needs-user", request: ID, key: "resubmit:a", action: "Resubmit", detail: "", stack: "a" });
+    run(sc, cmd({ cmd: "dismiss", key: "resubmit:a" }));
+    assert.deepEqual(sc.open(), []);
+    assert.equal(executed(sc).at(-1)?.ok, true);
+  });
+
   it("stop raises a ⚑ for a job without an item too, refuses try pushes; retry answers it", () => {
     const sc = withPatch();
     sc.startJob({ purpose: { key: "plan-pushes", what: "plan-pushes" }, kind: "agent", name: "plan-try-pushes", cwd: "/r", agent: { sessionId: "s-p", resume: false, message: "x" } });

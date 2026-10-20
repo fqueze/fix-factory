@@ -83,7 +83,8 @@ export function flagControls(r: RequestState, n: NeedsUser, ctx: RenderContext):
     }
     case "resubmit": {
       const stack = findStack(r, n);
-      controls = stack ? mozPhabButton(r.id, stack, false) : null;
+      // Or decide against it (the patch lands as it is).
+      controls = stack ? html`${mozPhabButton(r.id, stack, false)}${dismissButton(r.id, n.key, back)}` : null;
       break;
     }
     case "land": {

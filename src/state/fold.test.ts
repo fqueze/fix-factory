@@ -136,6 +136,7 @@ test("patches: the latest event per id wins, deps and review survive rewrites", 
     bug: 1,
     revision: 5,
     submittedAt: submitted.t,
+    sentSha: "b",
     deps: [{ patch: "p1", needs: "p0", kind: "hard", reason: "r", source: "agent" }],
     review: { revision: 5, status: "needs-review", reviewers: [{ name: "a", status: "pending" }], comments: [] },
     replyDrafts: [],
@@ -154,6 +155,27 @@ test("patches: submittedAt is when a revision first showed up, kept by later eve
   assert.equal(s.patches.p1.submittedAt, first.t);
   assert.equal(s.patches.p1.sha, "c");
   assert.equal("submittedAt" in s.patches.p2, false);
+});
+
+test("patches: sentSha is the commit their revision showed up on, kept by later events, then what you copied the submit for", () => {
+  const patch = (patch: string, sha: string, revision?: number) =>
+    ev({ type: "patch", patch, sha, worktree: "/wt", title: "t", bug: 1, ...(revision !== undefined ? { revision } : {}) });
+  const events = [
+    ev({ type: "stack", stack: "s1", folder: "f", branch: "b", worktree: "/wt", order: ["p1", "p2"] }),
+    patch("p1", "a"),
+    patch("p2", "d"),
+    patch("p1", "b", 5),
+    patch("p1", "c", 5),
+  ];
+  const s = fold(...events);
+  assert.equal(s.patches.p1.sentSha, "b");
+  assert.equal(s.patches.p1.sha, "c");
+  assert.equal("sentSha" in s.patches.p2, false);
+  // Copying the submit command: what Phabricator gets is their current commit; unsubmitted patches have none.
+  const copied = fold(...events, ev({ type: "submit-copied", stack: "s1" }));
+  assert.equal(copied.patches.p1.sentSha, "c");
+  assert.equal(copied.patches.p2.sentSha, undefined);
+  assert.equal(fold(...events, ev({ type: "submit-copied", stack: "s1" }), patch("p1", "e", 5)).patches.p1.sentSha, "c");
 });
 
 test("pushes: triage-try reports of a push's jobs are its analysis, a re-triaged cell replacing the earlier one", () => {
