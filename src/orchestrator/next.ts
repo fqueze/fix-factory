@@ -1529,11 +1529,17 @@ class Planner {
         return dry && this.out<DryRunResult>(dry).tryTaskConfig["use-artifact-builds"] === true ? ", artifact builds" : "";
       };
       const list = pushes.map((p) => `${p.rev} (${p.result === "green" ? "green" : (p.summary ?? "failures")}${artifact(p)})`).join(", ");
+      // Fix patches often remove their test's skip with the fix: those skips are theirs, and this worktree doesn't
+      // have the stack's patches to show it.
+      const stacks = Object.values(this.s.stacks).filter((st) => st.order.length);
+      const theirs = stacks.length
+        ? `The stack's fix patches may already remove some of these skips along with their fix: see \`git diff ${stacks[0].base ?? this.config.baseRef}..${stacks[0].branch} -- '*.toml' '*.ini'\` (run it in ${stacks[0].worktree}). Those skips are theirs: leave them out of your commit, and don't mention their tests in its message.`
+        : "";
       this.resumeAuthor(
         ANNOTATIONS_ITEM,
         key,
         "removal",
-        `The stack was verified on try with your DEBUG commit ${debug.slice(0, 12)} on top: ${list}. Read them with fx-tests (fx-tests try <rev>). Drop the DEBUG commit. For each skip-if it removed whose test passed in the configs the skip covered, remove that skip for real in one commit: \`Bug XXXXXXX - Remove skip-if annotations that no longer fail in ${this.s.folder}, r=<reviewer>.\`, its reviewer from the find-reviewer skill, its body naming each skip's old bug and the push that shows it passing (the bug number is the meta bug's, given later). Leave the skips whose test still failed. The classifications you were given stand: never turn a flakiness skip into a run-if. A skip whose configs no push ran (an artifact build, say) isn't kept for that: put the push that would cover them in \`tryRequest\`, and the factory resumes you with its results. Keep your run-if commit, if any, as it is. Report the new commit as \`removal\` (and \`runIf\` again), without \`debug\`.`,
+        `The stack was verified on try with your DEBUG commit ${debug.slice(0, 12)} on top: ${list}. Read them with fx-tests (fx-tests try <rev>). Drop the DEBUG commit. ${theirs}${theirs ? " " : ""}For each other skip-if it removed whose test passed in the configs the skip covered, remove that skip for real in one commit: \`Bug XXXXXXX - Remove skip-if annotations that no longer fail in ${this.s.folder}, r=<reviewer>.\`, its reviewer from the find-reviewer skill, its body naming each skip's old bug and the push that shows it passing (the bug number is the meta bug's, given later). Leave the skips whose test still failed. The classifications you were given stand: never turn a flakiness skip into a run-if. A skip whose configs no push ran (an artifact build, say) isn't kept for that: put the push that would cover them in \`tryRequest\`, and the factory resumes you with its results. Keep your run-if commit, if any, as it is. Report the new commit as \`removal\` (and \`runIf\` again), without \`debug\`.`,
       );
     }
     // The meta bug waits for the removal to be in the stack: it's the patch that needs one.
