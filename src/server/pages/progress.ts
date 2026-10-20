@@ -159,8 +159,8 @@ function stalledControls(r: RequestState, i: ItemView): Html {
 }
 
 // Where each group stands, counted per request (and for the whole factory) and drawn as a bar.
-export type Bucket = "working" | "needs you" | "ready" | "pending" | "closed";
-export const BUCKETS: Bucket[] = ["needs you", "working", "ready", "pending", "closed"];
+export type Bucket = "working" | "needs you" | "ready" | "pending" | "landed" | "closed";
+export const BUCKETS: Bucket[] = ["needs you", "working", "ready", "pending", "landed", "closed"];
 
 const READY: ItemState[] = ["reviewed", "in stack", "waiting for review", "fixed", "landed"];
 
@@ -171,6 +171,9 @@ export function itemBucket(r: RequestState, i: ItemView, ctx: RenderContext): Bu
   }
   if (cls === "find") {
     return "needs you";
+  }
+  if (i.state === "landed") {
+    return "landed";
   }
   if (cls === "closed") {
     return "closed";
@@ -183,7 +186,7 @@ export type Progress = Record<Bucket, number>;
 // Its groups; and the request's own ⚑s (recovery plans, refused commands…) need you too. Its own jobs aren't groups:
 // the summary next to it says what they do.
 export function requestProgress(r: RequestState, ctx: RenderContext): Progress {
-  const p: Progress = { "needs you": 0, working: 0, ready: 0, pending: 0, closed: 0 };
+  const p: Progress = { "needs you": 0, working: 0, ready: 0, pending: 0, landed: 0, closed: 0 };
   for (const i of Object.values(r.items)) {
     p[itemBucket(r, i, ctx)]++;
   }
@@ -211,7 +214,7 @@ export function progressLine(p: Progress): Html {
 }
 
 export function sumProgress(list: Progress[]): Progress {
-  const sum: Progress = { "needs you": 0, working: 0, ready: 0, pending: 0, closed: 0 };
+  const sum: Progress = { "needs you": 0, working: 0, ready: 0, pending: 0, landed: 0, closed: 0 };
   for (const p of list) {
     for (const b of BUCKETS) {
       sum[b] += p[b];

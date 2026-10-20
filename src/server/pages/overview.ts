@@ -50,6 +50,7 @@ export function renderMain(requests: RequestState[], ctx: RenderContext): Html {
   // Requests that need you first, the rest by latest activity.
   const active = byUpdate.filter((r) => sectionOf(r) === "active").sort((a, b) => Number(needsYou(b)) - Number(needsYou(a)));
   const queued = byUpdate.filter((r) => sectionOf(r) === "queued").reverse();
+  // Finished requests open like the active ones; text that was forwarded or rephrased is one line.
   const finished = byUpdate.filter((r) => sectionOf(r) === "finished");
   return html`<form class="ask cmd" method="post" action="/api/commands">${commandFields([{ cmd: "tell-factory" }], "/")}<input type="text" name="text" required placeholder="Tell the factory… (e.g. “burn down dom/base/test”, or “Lando was down this morning, re-push what failed”)"><button class="btn">Send</button></form>
 
@@ -70,10 +71,10 @@ export function renderMain(requests: RequestState[], ctx: RenderContext): Html {
   ${finished.length ? html`<h2>Finished</h2>
   <details class="archive"${finished.some((r) => r.id === ctx.open) ? html` open` : null}>
     <summary>${plural(finished.length, "request")}</summary>
-    <div class="simple" id="section-finished">${finished.map(
+    <div id="section-finished">${finished.filter((r) => r.kind !== "unrouted").map((r) => renderRequest(r, ctx, r.id === ctx.open))}</div>
+    <div class="simple">${finished.filter((r) => r.kind === "unrouted").map(
       (r) =>
-        // The one you opened, whole: its patches, pushes, agents and costs.
-        r.id === ctx.open ? renderRequest(r, ctx, true) : html`<div class="row" data-request="${r.id}" data-section="finished"><span class="grow"><a href="${requestUrl(r.id)}" title="Its patches, pushes, agents and costs"><b>${requestName(r)}</b></a> <span class="sub">· ${r.kind === "unrouted" ? routeOutcome(r) : `${plural(Object.values(r.patches).filter((p) => !isDropped(r, p) && !isDraft(r, p)).length, "patch", "patches")}, done ${formatDate(r.updatedAt)}, $${requestCost(r).toFixed(2)}`}</span></span><a class="btn small" href="${profileUrl(ctx, r.id)}" target="_blank" rel="noopener">Profile</a></div>`,
+        html`<div class="row" data-request="${r.id}" data-section="finished"><span class="grow"><b>${requestName(r)}</b> <span class="sub">· ${routeOutcome(r)}</span></span><a class="btn small" href="${profileUrl(ctx, r.id)}" target="_blank" rel="noopener">Profile</a></div>`,
     )}</div>
   </details>` : null}`;
 }

@@ -175,7 +175,7 @@ details.reopen[open] > summary { display: none; }
 /* Progress per request and for the factory: a bar, then the counts. */
 .pbar { display: inline-flex; width: 120px; height: 8px; border-radius: 4px; overflow: hidden; background: var(--track); vertical-align: middle; margin-right: 8px; }
 .pbar > span { min-width: 3px; }
-.pbar .needs-you { background: var(--serious); } .pbar .working { background: var(--accent); } .pbar .ready { background: var(--good); }
+.pbar .needs-you { background: var(--serious); } .pbar .working { background: var(--accent); } .pbar .ready { background: var(--good); } .pbar .landed { background: var(--good); }
 .pbar .pending { background: var(--text-muted); opacity: .5; } .pbar .closed { background: var(--border); }
 .rprog > .needs-you, .progress > .needs-you { color: var(--serious); font-weight: 600; }
 .rprog > .working, .progress > .working { color: var(--accent); }

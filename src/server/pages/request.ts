@@ -75,13 +75,15 @@ export function requestSummary(r: RequestState): string {
   parts.push(...new Set(own.map((j) => jobLabel(j.name))));
   // Once submitted, where its revisions stand says more than try.
   const submitted = Object.values(r.patches).filter((p) => p.revision !== undefined && !isDropped(r, p));
-  if (submitted.length && REQUEST_STEPS.indexOf(r.step) >= REQUEST_STEPS.indexOf("review comments")) {
+  // Done, everything landed: its groups' count says it.
+  if (submitted.length && r.step !== "done" && REQUEST_STEPS.indexOf(r.step) >= REQUEST_STEPS.indexOf("review comments")) {
     const label = (status: string) => ({ "needs-review": "waiting for review", accepted: "accepted", "needs-revision": "changes requested", published: "landed" })[status] ?? status;
     const counts = new Map<string, number>();
     for (const p of submitted) counts.set(label(p.review?.status ?? "needs-review"), (counts.get(label(p.review?.status ?? "needs-review")) ?? 0) + 1);
     parts.push(`on Phabricator: ${[...counts].map(([l, n]) => (counts.size === 1 && n === submitted.length ? l : `${n} ${l}`)).join(", ")}`);
     return parts.join(" · ");
   }
+  if (r.step === "done") return parts.join(" · ");
   // Declined pushes say nothing about try; the last one made does, or one waiting for you.
   const pushes = Object.values(r.pushes).filter((p) => p.declined === undefined);
   const running = pushes.filter((p) => p.rev && p.result === undefined);
@@ -97,15 +99,17 @@ export function requestSummary(r: RequestState): string {
 
 export function renderRequestBody(r: RequestState, ctx: RenderContext): Html {
   const back = requestUrl(r.id);
-  const stacks = Object.values(r.stacks);
-  const stacked = new Set(stacks.flatMap((s) => s.order));
-  const stackedItems = new Set(stacks.flatMap((s) => stackPatches(r, s).map((p) => p.item)));
+  // A landed patch leaves its stack, for the Landed section; a stack with nothing left isn't shown.
+  const stacks = Object.values(r.stacks).filter((s) => livePatches(r, s).length > 0);
+  const stacked = new Set(Object.values(r.stacks).flatMap((s) => s.order));
+  const stackedItems = new Set(stacks.flatMap((s) => livePatches(r, s).map((p) => p.item)));
   // Patches without a group (annotation patches) get a row of their own.
   const loose = Object.values(r.patches).filter((p) => !stacked.has(p.id) && itemOf(r, p) === undefined);
   const unstacked = Object.values(r.items).filter((i) => !stackedItems.has(i.id));
   // Groups whose patches landed have left their stack.
-  const landed = unstacked.filter((i) => i.state === "landed");
-  const items = unstacked.filter((i) => i.state !== "landed");
+  const own = (i: ItemView) => Object.values(r.patches).filter((p) => p.item === i.id && !isDropped(r, p));
+  const landed = unstacked.filter((i) => i.state === "landed" || (own(i).length > 0 && own(i).every((p) => isLanded(r, p))));
+  const items = unstacked.filter((i) => !landed.includes(i));
   // Newest first, as on Treeherder; those waiting for you are the newest anyway.
   const pushes = Object.values(r.pushes).reverse();
   const planned = pushes.filter((p) => isWaiting(r, p));
@@ -195,8 +199,16 @@ function metaBugLine(r: RequestState, back: string, ctx: RenderContext): Html {
 
 // The stack's title and stack-viewer link, the meta bug, its patches in review order (easy and valuable first, each
 // after its hard deps), then the command to submit them.
+function isLanded(r: RequestState, p: PatchView): boolean {
+  return p.review?.status === "published" || (p.item !== undefined && r.items[p.item]?.state === "landed");
+}
+
+function livePatches(r: RequestState, s: StackView): PatchView[] {
+  return stackPatches(r, s).filter((p) => !isLanded(r, p));
+}
+
 function stackSection(r: RequestState, s: StackView, ctx: RenderContext): Html {
-  const patches = stackPatches(r, s);
+  const patches = livePatches(r, s);
   const dropped = patches.filter((p) => isDropped(r, p));
   return html`<h3 class="stackhead"><span title="Branch ${s.branch}; patches in review order: easy and valuable first, each after its hard deps">${s.folder}</span>${stackViewerLink(r, s)}</h3>
     ${optionalMetaBug(r, s, ctx)}
