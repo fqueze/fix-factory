@@ -17,6 +17,8 @@ const imported = (s: string, title: string, files: string[], bug: number | null 
 const table = (rows: unknown[] = [], unparsed: unknown[] = []) => ({ rev: "abc", pushId: 1, project: "try", complete: true, pending: 0, configs: [], rows, unparsed });
 const failure = (test: string, message: string) => ({ test, config: "linux/opt-xpcshell", message, taskIds: ["T1"], count: 1 });
 const group = (key: string, test: string, message: string, rate = 1) => ({ key, message, tests: [test], configs: ["linux/opt-xpcshell"], ratePerWeek: rate, taskIds: ["T1"] });
+// The key of the latest job whose key starts with prefix (order and reorder keys end with a hash of the order's input).
+const keyOf = (sc: Scenario, prefix: string) => sc.view().jobs.findLast((j) => j.purpose.key.startsWith(prefix))!.purpose.key;
 
 // A try-push request whose initial push has finished.
 function tryPushFinished(): Scenario {
@@ -1104,9 +1106,9 @@ function stacked(reportA?: object): Scenario {
   sc.complete(`effort:p-test-a:${sha("1")}`, { report: { effort: 2, reason: "r", feedback: [] } });
   sc.complete(`effort:p-test-b:${sha("2")}`, { report: { effort: 1, reason: "r", feedback: [] } });
   sc.settle();
-  sc.complete(`order:a:${hash}`, { output: { order: ["p-test-b", "p-test-a"], flippedSoftDeps: [] } });
+  sc.complete(keyOf(sc, `order:a:${hash}:`), { output: { order: ["p-test-b", "p-test-a"], flippedSoftDeps: [] } });
   sc.settle();
-  sc.complete(`reorder:a:${hash}`, { output: { mapping: { [sha("b")]: sha("c"), [sha("a")]: sha("d") } } });
+  sc.complete(keyOf(sc, `reorder:a:${hash}:`), { output: { mapping: { [sha("b")]: sha("c"), [sha("a")]: sha("d") } } });
   sc.settle();
   sc.complete(`review-stack:a:${hash}`, { report: { findings: [], addDeps: [], removeDeps: [], feedback: [] } });
   sc.settle();
@@ -1171,13 +1173,14 @@ describe("5. stack", () => {
     assert.deepEqual(sc.state().patches["p-test-a"].deps.map((d) => d.needs), ["p-test-b"]);
     sc.complete(`effort:p-test-a:${sha("1")}`, { report: { effort: 2, reason: "r", feedback: [] } });
     sc.complete(`effort:p-test-b:${sha("2")}`, { report: { effort: 1, reason: "r", feedback: [] } });
-    assert.deepEqual(sc.settle(), [`order:a:${hash}`]);
-    const input = JSON.parse(sc.plan(`order:a:${hash}`).files![0].content);
+    const [ord] = sc.settle();
+    assert.match(ord, new RegExp(`^order:a:${hash}:[0-9a-f]{6}$`));
+    const input = JSON.parse(sc.plan(ord).files![0].content);
     assert.deepEqual(input.patches, [{ id: "p-test-a", effort: 2, value: 3, testOnly: true }, { id: "p-test-b", effort: 1, value: 1, testOnly: true }]);
-    sc.complete(`order:a:${hash}`, { output: { order: ["p-test-b", "p-test-a"], flippedSoftDeps: [] } });
-    assert.deepEqual(sc.settle(), [`reorder:a:${hash}`]);
-    assert.deepEqual(sc.plan(`reorder:a:${hash}`).cli?.args.slice(-2), ["--order", `${sha("b")},${sha("a")}`]);
-    sc.complete(`reorder:a:${hash}`, { output: { mapping: { [sha("b")]: sha("c"), [sha("a")]: sha("d") } } });
+    sc.complete(ord, { output: { order: ["p-test-b", "p-test-a"], flippedSoftDeps: [] } });
+    assert.deepEqual(sc.settle(), [`re${ord}`]);
+    assert.deepEqual(sc.plan(`re${ord}`).cli?.args.slice(-2), ["--order", `${sha("b")},${sha("a")}`]);
+    sc.complete(`re${ord}`, { output: { mapping: { [sha("b")]: sha("c"), [sha("a")]: sha("d") } } });
     assert.deepEqual(sc.settle(), [`review-stack:a:${hash}`]);
     assert.deepEqual(sc.state().stacks.a.order, ["p-test-b", "p-test-a"]);
     assert.equal(sc.state().patches["p-test-b"].sha, sha("c"));
@@ -1249,7 +1252,7 @@ describe("5. stack", () => {
     sc.complete(`effort:p-test-a:${sha("1")}`, { report: { effort: 2, reason: "r", feedback: [] } });
     sc.complete(`effort:p-test-b:${sha("2")}`, { report: { effort: 1, reason: "r", feedback: [] } });
     sc.settle();
-    sc.complete(`order:a:${hash}`, { output: { order: ["p-test-a", "p-test-b"], flippedSoftDeps: [] } });
+    sc.complete(keyOf(sc, `order:a:${hash}:`), { output: { order: ["p-test-a", "p-test-b"], flippedSoftDeps: [] } });
     assert.deepEqual(sc.settle(), [`review-stack:a:${hash}`]);
     const review = sc.complete(`review-stack:a:${hash}`, { report: { findings: [{ patch: sha("b"), severity: "must-fix", text: "same approach as test_a" }], addDeps: [], removeDeps: [], feedback: [] } });
     assert.deepEqual(sc.settle(), [`author:i-test-b:stack-review:${review}`]);
@@ -1714,6 +1717,40 @@ function reviewersChecked(sc: Scenario, unknown: string[] = []): void {
 }
 
 describe("8. submit", () => {
+  // A patch event changing these fields of a patch, as an effort estimate or an import would.
+  const setPatch = (sc: Scenario, pid: string, fields: object) => {
+    const { deps: _d, review: _r, replyDrafts: _rd, id, ...p } = sc.state().patches[pid];
+    sc.add({ type: "patch", request: ID, patch: id, ...p, ...fields });
+  };
+  const orderKeys = (sc: Scenario) => sc.view().jobs.filter((j) => j.purpose.key.startsWith("order:a:")).map((j) => j.purpose.key);
+
+  it("orders an unsubmitted stack again when a patch's effort changes, and reorders it", () => {
+    const sc = submitting();
+    assert.equal(sc.state().step, "submit");
+    assert.deepEqual(sc.state().stacks.a.order, ["p-test-b", "p-test-a"]);
+    const before = orderKeys(sc);
+    setPatch(sc, "p-test-b", { effort: 5 });
+    const ord = sc.settle().find((k) => k.startsWith("order:a:"))!;
+    assert.ok(ord && !before.includes(ord), "ordered again");
+    const input = JSON.parse(sc.plan(ord).files![0].content);
+    assert.deepEqual(input.patches.find((p: { id: string }) => p.id === "p-test-b").effort, 5);
+    assert.deepEqual(input.previous, ["p-test-b", "p-test-a"]);
+    sc.complete(ord, { output: { order: ["p-test-a", "p-test-b"], flippedSoftDeps: [] } });
+    const [re] = sc.settle();
+    assert.equal(re, `re${ord}`);
+    assert.deepEqual(sc.plan(re).cli?.args.slice(-2), ["--order", `${sha("f")},${sha("e")}`]);
+  });
+
+  it("doesn't order a stack again once a patch of it has a revision", () => {
+    const sc = submitting();
+    setPatch(sc, "p-test-b", { revision: 100 });
+    sc.settle();
+    const before = orderKeys(sc);
+    setPatch(sc, "p-test-b", { effort: 5 });
+    assert.ok(!sc.settle().some((k) => k.startsWith("order:") || k.startsWith("reorder:")));
+    assert.deepEqual(orderKeys(sc), before);
+  });
+
   it("checks the stack, asks you to submit, and notices the Differential Revision trailers", () => {
     const sc = submitting();
     assert.equal(sc.state().step, "submit");
@@ -2209,7 +2246,7 @@ describe("burndown verification", () => {
     sc.complete(`deps:a:${hash}`, { output: [] });
     sc.complete(`effort:p-test-a:${sha("1")}`, { report: { effort: 1, reason: "r", feedback: [] } });
     sc.settle();
-    sc.complete(`order:a:${hash}`, { output: { order: ["p-test-a"], flippedSoftDeps: [] } });
+    sc.complete(keyOf(sc, `order:a:${hash}:`), { output: { order: ["p-test-a"], flippedSoftDeps: [] } });
     sc.settle();
     sc.complete(`review-stack:a:${hash}`, { report: { findings: [], addDeps: [], removeDeps: [], feedback: [] } });
     sc.settle();
@@ -2301,7 +2338,7 @@ describe("burndown verification", () => {
     sc.complete(`deps:a:${hash}`, { output: [] });
     sc.complete(`effort:p-annotations:${sha("7")}`, { report: { effort: 1, reason: "r", feedback: [] } });
     sc.settle();
-    sc.complete(`order:a:${hash}`, { output: { order: ["p-test-a", "p-annotations"], flippedSoftDeps: [] } });
+    sc.complete(keyOf(sc, `order:a:${hash}:`), { output: { order: ["p-test-a", "p-annotations"], flippedSoftDeps: [] } });
     sc.settle();
     sc.complete(`review-stack:a:${hash}`, { report: { findings: [], addDeps: [], removeDeps: [], feedback: [] } });
     sc.settle();
@@ -2338,7 +2375,7 @@ describe("burndown verification", () => {
     sc.settle();
   };
   // The removal written, imported and assembled last in the stack, which is ready again.
-  const withRemoval = (sc: Scenario) => {
+  const withRemoval = (sc: Scenario, effort = 1) => {
     const key = "author:i-annotations:removal";
     sc.complete(key, { report: { removal: sha("7"), summary: "removed one skip", feedback: [] } });
     sc.settle();
@@ -2355,15 +2392,23 @@ describe("burndown verification", () => {
     sc.complete(assemble, { output: { mapping: { [sha("1")]: sha("a"), [sha("7")]: sha("d") } } });
     sc.settle();
     sc.complete(`deps:a:${hash}`, { output: [] });
-    sc.complete(`effort:p-annotations:${sha("7")}`, { report: { effort: 1, reason: "r", feedback: [] } });
+    sc.complete(`effort:p-annotations:${sha("7")}`, { report: { effort, reason: "r", feedback: [] } });
     sc.settle();
-    sc.complete(`order:a:${hash}`, { output: { order: ["p-test-a", "p-annotations"], flippedSoftDeps: [] } });
+    sc.complete(keyOf(sc, `order:a:${hash}:`), { output: { order: ["p-test-a", "p-annotations"], flippedSoftDeps: [] } });
     sc.settle();
     sc.complete(`review-stack:a:${hash}`, { report: { findings: [], addDeps: [], removeDeps: [], feedback: [] } });
     sc.settle();
     sc.complete(`summary:a:${hash}`, { output: { markdown: "t", metaComment: "m" } });
     sc.settle();
   };
+
+  it("ranks the skip-if removal with effort 1, whatever its estimate", () => {
+    const { sc } = verified(false, 22);
+    withRemoval(sc, 3);
+    assert.equal(sc.state().patches["p-annotations"].effort, 3);
+    const input = JSON.parse(sc.plan(keyOf(sc, "order:a:")).files![0].content);
+    assert.equal(input.patches.find((p: { id: string }) => p.id === "p-annotations").effort, 1);
+  });
   const draftKeys = (sc: Scenario) => sc.view().jobs.filter((j) => j.purpose.what === "meta-draft").map((j) => j.purpose.key);
 
   it("the meta bug's draft: a task blocking the configured bugs, its text by an agent, written again when a patch's bug changes", () => {
