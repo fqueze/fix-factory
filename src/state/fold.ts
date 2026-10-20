@@ -154,6 +154,8 @@ export function foldEvents(events: readonly Event[]): RequestState {
         // When its revision first showed up: what its author changes after that has to be resubmitted.
         const before = s.patches[e.patch];
         const submittedAt = e.revision === undefined ? undefined : before?.revision !== undefined ? before.submittedAt : e.t;
+        // The commit Phabricator has: the one its revision showed up on, then what you copied the moz-phab command for.
+        const sentSha = e.revision === undefined ? undefined : before?.revision !== undefined ? before.sentSha : e.sha;
         s.patches[e.patch] = {
           id: e.patch,
           item: e.item,
@@ -167,6 +169,7 @@ export function foldEvents(events: readonly Event[]): RequestState {
           testOnly: e.testOnly,
           interdiffFile: e.interdiffFile,
           ...(submittedAt ? { submittedAt } : {}),
+          ...(sentSha ? { sentSha } : {}),
           deps: [],
           replyDrafts: [],
         };
@@ -203,7 +206,10 @@ export function foldEvents(events: readonly Event[]): RequestState {
         s.pollRequested = e.t;
         break;
       case "submit-copied":
-        if (s.stacks[e.stack]) s.stacks[e.stack].submitCopied = e.t;
+        if (s.stacks[e.stack]) {
+          s.stacks[e.stack].submitCopied = e.t;
+          for (const id of s.stacks[e.stack].order) if (s.patches[id]?.revision !== undefined) s.patches[id].sentSha = s.patches[id].sha;
+        }
         break;
       case "try-planned": {
         const p = push(e.push);

@@ -321,6 +321,7 @@ export interface PatchView {
   bugDraft?: BugDraft;
   revision?: number;
   submittedAt?: Iso; // when its revision first showed up
+  sentSha?: string; // the commit Phabricator has, as far as the factory knows
   effort?: number;
   testOnly?: boolean;
   interdiffFile?: string;

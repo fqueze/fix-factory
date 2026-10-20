@@ -3,8 +3,9 @@
 import type { ItemId, JobView, NeedsUser, RequestState } from "../types.ts";
 
 // A user-done of these keys is your answer (approve-push: the approval, take-it: you took it, file-bug and
-// meta-bug: the bug is filed...), so dismissing them would answer for you.
-const ANSWERED_BY_USER_DONE = ["approve-push", "take-it", "file-bug", "meta-bug", "submit", "resubmit", "land"];
+// meta-bug: the bug is filed...), so dismissing them would answer for you. A resubmit you decide against (the patch is
+// landing as it is) can be dismissed.
+const ANSWERED_BY_USER_DONE = ["approve-push", "take-it", "file-bug", "meta-bug", "submit", "land"];
 
 export function canDismiss(key: string): boolean {
   return !ANSWERED_BY_USER_DONE.includes(key.split(":")[0]);

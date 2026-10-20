@@ -1853,7 +1853,8 @@ class Planner {
     if (!st) return;
     const previous = this.authorJobs(item.id).filter((j) => succeeded(j) && j.startedAt < answer.startedAt && commitsOf(j.name, this.rep(j)).length > 0).at(-1);
     const index = author.commits.findIndex((_, i) => patchId(item.id, i) === p.id);
-    const oldSha = previous ? commitsOf(previous.name, this.rep(previous))[index] : undefined;
+    // Against what Phabricator has, not the author's previous commit (which may never have been sent).
+    const oldSha = p.sentSha ?? (previous ? commitsOf(previous.name, this.rep(previous))[index] : undefined);
     const e = this.rewriteEdits(`review-${st.id}-${author.job.job}`, st.order.map((pid) => this.s.patches[pid]));
     const rw = this.want(`rewrite-review:${st.id}:${author.job.job}`, () =>
       this.cli("rewrite", "stack.ts", ["rewrite", "--cwd", st.worktree, "--base", st.base ?? this.config.baseRef, "--branch", st.branch, "--order", st.order.map((pid) => this.s.patches[pid].sha).join(","), ...e.args], {
@@ -1865,7 +1866,7 @@ class Planner {
     );
     if (!rw || p.worktree !== st.worktree) return;
     if (oldSha) {
-      const inter = this.want(`interdiff:${p.id}:${author.job.job}`, () =>
+      const inter = this.want(`interdiff:${p.id}:${author.job.job}:${oldSha.slice(0, 12)}`, () =>
         this.cli("interdiff", "stack.ts", ["interdiff", "--cwd", st.worktree, oldSha, p.sha], { cwd: st.worktree, priority: REVIEW_PRIORITY, purpose: { patch: p.id, stack: st.id } }),
       );
       if (!inter) return;
