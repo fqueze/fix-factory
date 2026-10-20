@@ -783,11 +783,6 @@ class Planner {
     const pair = (message: string, test: string) => `${message}\n${test}`;
     const known = new Set([...Object.values(this.s.items).map((i) => i.group), ...this.newItems.values()].flatMap((g) => g.tests.map((t) => pair(g.message, t))));
     for (const group of groups) {
-      // Groups made from an agent's configs (merge-clusters once gave each the whole folder's): corrected.
-      const same = Object.values(this.s.items).find((i) => i.group.message === group.message && i.group.tests.join() === group.tests.join());
-      if (same && (same.group.configs.join() !== group.configs.join() || same.group.ratePerWeek !== group.ratePerWeek)) {
-        this.event(this.ev("item-group", { item: same.id, group }));
-      }
       if (group.tests.length === 0 || group.tests.some((t) => known.has(pair(group.message, t)))) continue;
       this.createItem(group);
       for (const t of group.tests) known.add(pair(group.message, t));
