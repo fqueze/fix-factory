@@ -360,7 +360,8 @@ export function parseConfig(config: string): { os: string; build: string; suite:
   const os = m && OSES.find(([re]) => re.test(m[1]))?.[1];
   if (!m || !os) return undefined;
   const variant = /-(asan|tsan|ccov)(?:-|$)/.exec(m[1])?.[1];
-  return { os, build: variant ?? m[2], suite: m[3].replace(/^mochitest-/, "") };
+  // Chunks are one job, as on tests.firefox.dev.
+  return { os, build: variant ?? m[2], suite: m[3].replace(/^mochitest-/, "").replace(/-\d+$/, "") };
 }
 
 export function configTable(configs: string[]): Html {

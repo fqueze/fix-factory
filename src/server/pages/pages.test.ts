@@ -904,6 +904,7 @@ describe("failure table", () => {
     assert.deepEqual(parseConfig("test-linux2404-64-shippable/opt-mochitest-browser-chrome-swr"), { os: "Linux", build: "opt", suite: "browser-chrome-swr" });
     assert.deepEqual(parseConfig("test-linux2404-64-asan/opt-xpcshell"), { os: "Linux", build: "asan", suite: "xpcshell" });
     assert.deepEqual(parseConfig("test-linux1804-64-tsan-qr/opt-mochitest-plain"), { os: "Linux", build: "tsan", suite: "plain" });
+    assert.deepEqual(parseConfig("test-windows11-64-25h2/debug-mochitest-browser-chrome-3"), { os: "Windows", build: "debug", suite: "browser-chrome" }, "chunks are one job");
     assert.deepEqual(parseConfig("test-linux2404-64-ccov/opt-xpcshell"), { os: "Linux", build: "ccov", suite: "xpcshell" });
     assert.deepEqual(parseConfig("test-windows11-64-24h2/debug-mochitest-devtools-chrome"), { os: "Windows", build: "debug", suite: "devtools-chrome" });
     assert.deepEqual(parseConfig("test-macosx1500-aarch64-shippable/opt-xpcshell"), { os: "macOS", build: "opt", suite: "xpcshell" });
