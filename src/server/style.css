@@ -283,3 +283,12 @@ h3.stackhead .btn { font-weight: normal; }
 .pcommits .mono { color: #666; }
 .tryrow { display: flex; gap: 10px; align-items: baseline; white-space: nowrap; }
 .tryrow .ellipsis { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+/* A row opened: the failure, the fix, then what the factory did. */
+.rowbody h4.part { margin: 10px 0 3px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); font-weight: 600; }
+.rowbody h4.part:first-child { margin-top: 2px; }
+table.ptable { border-collapse: collapse; margin: 4px 0; font-size: 12px; }
+table.ptable th { text-align: left; font-weight: 500; color: var(--text-muted); padding: 2px 14px 2px 0; border-bottom: 1px solid var(--border); }
+table.ptable td { padding: 2px 14px 2px 0; }
+table.ptable td.none { color: var(--text-muted); }
+.failbadge { background: #f08c00; color: #fff; border-radius: 3px; padding: 0 5px; font-size: 11px; font-weight: 600; }
+.why p { margin: 2px 0; white-space: pre-wrap; overflow-wrap: anywhere; }

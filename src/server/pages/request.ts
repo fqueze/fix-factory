@@ -318,7 +318,7 @@ function groupRow(r: RequestState, i: ItemView, ctx: RenderContext): Html {
     state: stateText(r, i, ctx),
     trust: trustLine(r, i, ctx),
     ask: askBlock(r, i, ctx, patches.filter((p) => isDraft(r, p))),
-    body: html`${failure(r, i)}${talkBox(r, i, ctx)}${allowPush(r, i)}${investigationHtml(i)}${sentence.ask ? null : sentence.controls ? html`<div class="jobctl">${sentence.controls}</div>` : null}${patches
+    body: html`${failure(r, i)}${investigationHtml(i) ? html`<h4 class="part">The fix</h4>${investigationHtml(i)}` : null}${talkBox(r, i, ctx)}${sentence.ask ? null : sentence.controls ? html`<div class="jobctl">${sentence.controls}</div>` : null}${patches
       .filter((p) => isDraft(r, p))
       .map((p) => html`<div>Draft patch, its critical review hasn't passed yet: “${patchTitle(p)}” ${viewLink(r, p)}</div>`)}${patches
       .filter((p) => isDropped(r, p))
@@ -339,22 +339,46 @@ function talkBox(r: RequestState, i: ItemView, ctx: RenderContext): Html | null 
 }
 
 // Agents can't push to try; you can let its author make one push (it may be running).
-function allowPush(r: RequestState, i: ItemView): Html | null {
-  if (stateClass(i.state) === "closed" || !hasAuthorSession(r, i.id)) {
-    return null;
-  }
-  return html`<div class="jobctl"><form class="inline cmd" method="post" action="/api/commands">${commandFields([{ cmd: "allow-push", request: r.id, item: i.id }], requestUrl(r.id))}<button class="btn small" title="Its author's session may make one try push; the next one is blocked again">Allow one try push</button></form></div>`;
-}
-
-// The failure a group is about: its message, its tests when there are several, where and how often it fails.
-function failure(r: RequestState, i: ItemView, prefix = "Failure"): Html {
+// The failure a group is about: its message, its tests when there are several, and where it failed, laid out like
+// tests.firefox.dev's pass/fail table (its rates are a click away).
+function failure(r: RequestState, i: ItemView, prefix = "The failure"): Html {
   const g = i.group;
   const tests = g.tests.length > 1 ? g.tests.map((t) => (r.folder && t.startsWith(`${r.folder}/`) ? t.slice(r.folder.length + 1) : t)).join(", ") : null;
-  return html`<div class="failure"><span class="sub">${prefix}:</span> ${g.message}</div>${tests ? html`<div class="sub">${tests}</div>` : null}${
-    g.configs.length
-      ? html`<details class="fold configs" data-fold="configs-${i.id}"><summary>${g.ratePerWeek === undefined ? "" : `${g.ratePerWeek} failures/week, `}on ${plural(g.configs.length, "config")}</summary><div class="sub">${g.configs.join(", ")}</div></details>`
-      : null
+  const dashboard = /\.(toml|ini)$/.test(g.tests[0]) ? null : html` · <a href="https://tests.firefox.dev/test.html?test=${encodeURIComponent(g.tests[0])}" target="_blank" rel="noopener">rates on tests.firefox.dev ↗</a>`;
+  const rate = g.ratePerWeek === undefined ? null : html` · ${g.ratePerWeek} failures/week`;
+  return html`<h4 class="part">${prefix}</h4><div class="failure">${g.message}</div>${tests ? html`<div class="sub">${tests}</div>` : null}${
+    g.configs.length ? html`${configTable(g.configs)}<div class="sub">${plural(g.configs.length, "config")}${rate}${dashboard}</div>` : null
   }`;
+}
+
+const OSES: [RegExp, string][] = [[/^linux/, "Linux"], [/^macosx/, "macOS"], [/^windows/, "Windows"], [/^android/, "Android"]];
+const BUILDS = ["opt", "debug", "asan", "tsan", "ccov"];
+
+// test-linux2404-64-shippable/opt-mochitest-browser-chrome-swr → Linux, opt, browser-chrome-swr.
+export function parseConfig(config: string): { os: string; build: string; suite: string } | undefined {
+  const m = /^(?:test-)?([^/]+)\/([a-z]+)-(.+)$/.exec(config);
+  const os = m && OSES.find(([re]) => re.test(m[1]))?.[1];
+  if (!m || !os) return undefined;
+  const variant = /-(asan|tsan|ccov)(?:-|$)/.exec(m[1])?.[1];
+  return { os, build: variant ?? m[2], suite: m[3].replace(/^mochitest-/, "") };
+}
+
+function configTable(configs: string[]): Html {
+  const parsed = configs.map((c) => ({ c, p: parseConfig(c) }));
+  const known = parsed.filter((x) => x.p);
+  const oses = OSES.map(([, os]) => os).filter((os) => known.some((x) => x.p!.os === os));
+  const rows = [...new Set(known.map((x) => `${x.p!.build} ${x.p!.suite}`))].sort((a, b) => {
+    const [ba, sa] = a.split(" ");
+    const [bb, sb] = b.split(" ");
+    return (BUILDS.indexOf(ba) + 1 || 99) - (BUILDS.indexOf(bb) + 1 || 99) || sa.localeCompare(sb);
+  });
+  const others = parsed.filter((x) => !x.p).map((x) => x.c);
+  return html`${rows.length ? html`<table class="ptable"><thead><tr><th>Job</th>${oses.map((os) => html`<th>${os}</th>`)}</tr></thead><tbody>${rows.map((row) => {
+    return html`<tr><td class="mono">${row}</td>${oses.map((os) => {
+      const here = known.filter((x) => x.p!.os === os && `${x.p!.build} ${x.p!.suite}` === row).map((x) => x.c);
+      return here.length ? html`<td><span class="failbadge" title="${here.join("\n")}">FAIL</span></td>` : html`<td class="none">—</td>`;
+    })}</tr>`;
+  })}</tbody></table>` : null}${others.length ? html`<div class="sub">${others.join(", ")}</div>` : null}`;
 }
 
 function patchRow(r: RequestState, p: PatchView, ctx: RenderContext): Html {
@@ -379,8 +403,8 @@ function patchRow(r: RequestState, p: PatchView, ctx: RenderContext): Html {
     trust: item ? trustLine(r, item, ctx) : null,
     ask: item && asks ? askBlock(r, item, ctx, [], controls !== null) : undefined,
     under: bugBoxShown ? bugDraftBox(r, p, back) : null,
-    body: html`${item ? html`${failure(r, item)}${talkBox(r, item, ctx)}${allowPush(r, item)}${investigationHtml(item)}` : null}${p.effort === undefined ? null : html`<div class="sub">review effort ${p.effort}/5</div>`}${reviewers(p)}${p.deps.map((d) => depLine(r, d))}${controls && !sentence?.ask ? html`<div class="jobctl">${controls}</div>` : null}${reviewBox(r, p, back, p.interdiffFile === undefined ? undefined : ctx.interdiff?.(p))}${
-      item ? itemJobs(r, item, ctx) : null
+    body: html`${item ? failure(r, item) : null}<h4 class="part">The fix</h4>${item ? investigationHtml(item) : null}${p.effort === undefined ? null : html`<div class="sub">review effort ${p.effort}/5</div>`}${reviewers(p)}${p.deps.map((d) => depLine(r, d))}${controls && !sentence?.ask ? html`<div class="jobctl">${controls}</div>` : null}${reviewBox(r, p, back, p.interdiffFile === undefined ? undefined : ctx.interdiff?.(p))}${
+      item ? html`<h4 class="part">What the factory did</h4>${talkBox(r, item, ctx)}${itemJobs(r, item, ctx)}` : null
     }`,
   });
 }
@@ -455,7 +479,7 @@ function investigationHtml(i: ItemView): Html | null {
   if (!inv?.cause) {
     return null;
   }
-  return html`<details class="why" data-fold="why-${i.id}"><summary>Cause and verification</summary><h4>Cause</h4><p>${inv.cause}</p>${inv.verification ? html`<h4>Verification</h4><p>${inv.verification}</p>` : null}</details>`;
+  return html`<div class="why"><p><span class="sub">Cause:</span> ${inv.cause}</p>${inv.verification ? html`<details class="fold" data-fold="verified-${i.id}"><summary>How it was verified</summary><p>${inv.verification}</p></details>` : null}</div>`;
 }
 
 const ASK_EVIDENCE =
