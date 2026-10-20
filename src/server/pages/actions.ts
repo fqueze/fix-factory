@@ -8,7 +8,8 @@ export function renderAction(r: RequestState, n: NeedsUser, ctx: RenderContext):
   const plan = recoveryPlanFor(r, n);
   if (plan) {
     // What you said first, then its answer, what it would do, and what it asks you.
-    return html`<div class="action reply" data-key="${n.key}"><span class="flag">You asked</span> <span class="said clamp1" data-expand title="${plan.text}">“${plan.text}”</span>${recoveryPlan(r, plan, requestUrl(r.id))}</div>`;
+    // Moot once you've done it another way: Dismiss.
+    return html`<div class="action reply" data-key="${n.key}"><span class="flag">You asked</span> ${dismissButton(r.id, n.key, requestUrl(r.id))}<span class="said clamp1" data-expand title="${plan.text}">“${plan.text}”</span>${recoveryPlan(r, plan, requestUrl(r.id))}</div>`;
   }
   return html`<div class="action" data-key="${n.key}"><span class="flag">${flagTitle(r, n)}</span>${flagControls(r, n, ctx)}${actionKind(n, r) === "submit" ? null : why(n.detail)}</div>`;
 }

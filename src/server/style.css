@@ -297,3 +297,4 @@ ul.analysis li { margin: 2px 0; }
 .action.reply { display: block; }
 .action.reply .said { display: block; font-style: italic; }
 .action.reply p.answer { margin: 4px 0; }
+.action.reply > form.inline:first-of-type { float: right; }
