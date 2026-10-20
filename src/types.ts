@@ -470,6 +470,7 @@ export interface WriteAnnotationPatchesReport {
   runIf?: string; // sha of the run-if commit, absent when no skip was scoping
   debug?: string; // sha of the DEBUG un-skip commit, absent when no skip was flakiness
   removal?: string; // sha of the commit removing the skips that no longer fail, once try showed it
+  tryRequest?: string; // as InvestigateReport's
   summary: string;
   feedback: Feedback[];
 }

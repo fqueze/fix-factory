@@ -45,7 +45,7 @@ sonnet · 2. First signal · inputs: `folder`, `annotations`
 
 ```
 Here are the skip-ifs of {folder}, each classified as scoping or flakiness: {annotations}. Write up to two commits. The first, only if a skip is scoping, turns each scoping skip into the equivalent `run-if`. The second is
-`DEBUG - Remove flakiness skip-if annotations in {folder} to reproduce on try. DO NOT LAND.` and removes every flakiness skip. Change nothing else. The user's later messages override these instructions: if they say a skip isn't scoping, remove it in the DEBUG commit instead.
+`DEBUG - Remove flakiness skip-if annotations in {folder} to reproduce on try. DO NOT LAND.` and removes every flakiness skip. Change nothing else. The user's later messages override these instructions: if they say a skip isn't scoping, remove it in the DEBUG commit instead. The classifications stand: if you think one is wrong, say so in `feedback`, but follow it.
 ```
 
 ## plan-try-pushes

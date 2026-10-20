@@ -47,6 +47,10 @@
     "removal": {
       "type": "string",
       "description": "Sha of the commit removing the skip-ifs whose tests passed on try, once the factory asks for it."
+    },
+    "tryRequest": {
+      "type": "string",
+      "description": "A try push you need (configs no push ran yet): what it should run and why. The factory plans it, the user approves it, and you're resumed with the results."
     }
   },
   "required": [

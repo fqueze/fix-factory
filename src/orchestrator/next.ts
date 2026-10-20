@@ -35,6 +35,7 @@ import type {
   NeedsUser,
   PatchId,
   PatchView,
+  PushView,
   PushId,
   RequestId,
   RequestState,
@@ -935,7 +936,8 @@ class Planner {
     const asked = this.rep<{ tryRequest?: string }>(author).tryRequest;
     if (!asked) return false;
     const e = this.itemEpoch(item.id);
-    const wt = this.view.byKey.get(`wt:${item.id}${e}`)?.find(succeeded);
+    // The skip-ifs group works in the signal worktree.
+    const wt = this.view.byKey.get(item.id === ANNOTATIONS_ITEM ? `wt:signal${this.annotationsEpoch()}` : `wt:${item.id}${e}`)?.find(succeeded);
     if (!wt) return false;
     const { path, branch } = this.out<{ path: string; branch: string }>(wt);
     const h = shortHash([author.job]).slice(0, 4);
@@ -1521,12 +1523,17 @@ class Planner {
       if (!debug) return;
       const pushes = Object.values(this.s.pushes).filter((p) => p.rev && p.result && this.view.byKey.get(`dry-run:${p.id}`)?.[0].purpose.stack !== undefined);
       if (!pushes.length) return;
-      const list = pushes.map((p) => `${p.rev} (${p.result === "green" ? "green" : (p.summary ?? "failures")})`).join(", ");
+      // Whether a push ran artifact builds is what tells whether an `artifact` skip's config ran.
+      const artifact = (p: PushView) => {
+        const dry = this.view.byKey.get(`dry-run:${p.id}`)?.find(succeeded);
+        return dry && this.out<DryRunResult>(dry).tryTaskConfig["use-artifact-builds"] === true ? ", artifact builds" : "";
+      };
+      const list = pushes.map((p) => `${p.rev} (${p.result === "green" ? "green" : (p.summary ?? "failures")}${artifact(p)})`).join(", ");
       this.resumeAuthor(
         ANNOTATIONS_ITEM,
         key,
         "removal",
-        `The stack was verified on try with your DEBUG commit ${debug.slice(0, 12)} on top: ${list}. Read them with fx-tests (fx-tests try <rev>). Drop the DEBUG commit. For each skip-if it removed whose test passed in the configs the skip covered, remove that skip for real in one commit: \`Bug XXXXXXX - Remove skip-if annotations that no longer fail in ${this.s.folder}, r=<reviewer>.\`, its reviewer from the find-reviewer skill, its body naming each skip's old bug and the push that shows it passing (the bug number is the meta bug's, given later). Leave the skips whose test still failed. Keep your run-if commit, if any, as it is. Report the new commit as \`removal\` (and \`runIf\` again), without \`debug\`.`,
+        `The stack was verified on try with your DEBUG commit ${debug.slice(0, 12)} on top: ${list}. Read them with fx-tests (fx-tests try <rev>). Drop the DEBUG commit. For each skip-if it removed whose test passed in the configs the skip covered, remove that skip for real in one commit: \`Bug XXXXXXX - Remove skip-if annotations that no longer fail in ${this.s.folder}, r=<reviewer>.\`, its reviewer from the find-reviewer skill, its body naming each skip's old bug and the push that shows it passing (the bug number is the meta bug's, given later). Leave the skips whose test still failed. The classifications you were given stand: never turn a flakiness skip into a run-if. A skip whose configs no push ran (an artifact build, say) isn't kept for that: put the push that would cover them in \`tryRequest\`, and the factory resumes you with its results. Keep your run-if commit, if any, as it is. Report the new commit as \`removal\` (and \`runIf\` again), without \`debug\`.`,
       );
     }
     // The meta bug waits for the removal to be in the stack: it's the patch that needs one.
