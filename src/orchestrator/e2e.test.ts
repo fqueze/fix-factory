@@ -114,14 +114,14 @@ test("a try-push request goes from the request to a planned verification push", 
     assert.equal(readFileSync(join(config.stateDir, "jobs", build.job, "mach-profile-1.json"), "utf8"), '{"meta":{}}', "its build profile, kept with the job");
 
     // 5: assembled, ordered (a rewrite, since the order changed), reviewed and summarized.
-    const stack = s.stacks["dom-base-test"];
+    const stack = s.stacks["root"];
     assert.deepEqual(stack.order, ["p-test-b", "p-test-a"]);
     assert.match(stack.summary ?? "", /This stack fixes intermittent failures in dom\/base\/test/);
     assert.equal(s.patches["p-test-a"].sha, "f".repeat(40));
     assert.equal(s.patches["p-test-b"].sha, "e".repeat(40));
     assert.equal(s.patches["p-test-a"].worktree, stack.worktree);
     assert.equal(s.patches["p-test-a"].effort, 2);
-    assert.ok(existsSync(join(config.stateDir, "requests", s.id, "data", "summary-dom-base-test.md")));
+    assert.ok(existsSync(join(config.stateDir, "requests", s.id, "data", "summary-root.md")));
 
     // 6: the verification push is planned and waits for your approval.
     const planned = of("try-planned");

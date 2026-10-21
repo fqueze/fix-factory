@@ -1060,7 +1060,7 @@ describe("4. investigate and fix", () => {
     assert.equal(sc.state().items["i-test-a"].state, "blocked");
     sc.add({ type: "item-state", request: ID, item: "i-test-a", state: "reviewed", detail: "accepted by you" });
     sc.add({ type: "user-done", request: ID, key: `failed:${review}` });
-    assert.deepEqual(sc.settle(), ["wt:a"], "on to the stack, no review");
+    assert.deepEqual(sc.settle(), ["wt:root"], "on to the stack, no review");
     assert.deepEqual(sc.open(), [], "not raised again once answered");
     assert.equal(sc.state().items["i-test-a"].state, "reviewed");
   });
@@ -1132,23 +1132,23 @@ function twoReviewed(reportA?: object): Scenario {
 // twoReviewed, assembled, ordered b then a, reviewed and summarized: step 6.
 function stacked(reportA?: object): Scenario {
   const sc = twoReviewed(reportA);
-  sc.complete("wt:a", { output: { name: `${ID}-a`, path: `/wt/${ID}-a`, branch: `${ID}-a` } });
+  sc.complete("wt:root", { output: { name: `${ID}-root`, path: `/wt/${ID}-root`, branch: `${ID}-root` } });
   sc.settle();
   const key = sc.view().jobs.find((j) => j.purpose.what === "assemble")!.purpose.key;
-  sc.complete(key, { output: { branch: `${ID}-a`, commits: [{ sha: sha("1"), newSha: sha("a") }, { sha: sha("2"), newSha: sha("b") }], skipped: [], empty: [] } });
+  sc.complete(key, { output: { branch: `${ID}-root`, commits: [{ sha: sha("1"), newSha: sha("a") }, { sha: sha("2"), newSha: sha("b") }], skipped: [], empty: [] } });
   sc.settle();
   const hash = key.split(":")[2];
-  sc.complete(`deps:a:${hash}`, { output: [] });
+  sc.complete(`deps:root:${hash}`, { output: [] });
   sc.complete(`effort:p-test-a:${sha("1")}`, { report: { effort: 2, reason: "r", feedback: [] } });
   sc.complete(`effort:p-test-b:${sha("2")}`, { report: { effort: 1, reason: "r", feedback: [] } });
   sc.settle();
-  sc.complete(keyOf(sc, `order:a:${hash}:`), { output: { order: ["p-test-b", "p-test-a"], flippedSoftDeps: [] } });
+  sc.complete(keyOf(sc, `order:root:${hash}:`), { output: { order: ["p-test-b", "p-test-a"], flippedSoftDeps: [] } });
   sc.settle();
-  sc.complete(keyOf(sc, `reorder:a:${hash}:`), { output: { mapping: { [sha("b")]: sha("c"), [sha("a")]: sha("d") } } });
+  sc.complete(keyOf(sc, `reorder:root:${hash}:`), { output: { mapping: { [sha("b")]: sha("c"), [sha("a")]: sha("d") } } });
   sc.settle();
-  sc.complete(`review-stack:a:${hash}`, { report: { findings: [], addDeps: [], removeDeps: [], feedback: [] } });
+  sc.complete(`review-stack:root:${hash}`, { report: { findings: [], addDeps: [], removeDeps: [], feedback: [] } });
   sc.settle();
-  sc.complete(`summary:a:${hash}`, { output: { markdown: "| table |", metaComment: "This stack fixes 2 failures." } });
+  sc.complete(`summary:root:${hash}`, { output: { markdown: "| table |", metaComment: "This stack fixes 2 failures." } });
   sc.settle();
   return sc;
 }
@@ -1166,7 +1166,7 @@ describe("4b. try repro", () => {
     const wt = [...sc.view().byKey.keys()].find((k) => k.startsWith("wt:repro:"))!;
     assert.ok(wt);
     const hash = wt.split(":")[2];
-    assert.ok(!sc.view().byKey.has("wt:a"), "no stack while a group of the folder waits for its repro");
+    assert.ok(!sc.view().byKey.has("wt:root"), "no stack while a group of the folder waits for its repro");
     sc.complete(wt, { output: { name: `${ID}-repro`, path: `/wt/${ID}-repro`, branch: `${ID}-repro` } });
     sc.settle();
     assert.deepEqual(sc.plan(`repro-branch:${hash}`).cli?.args.slice(-2), ["--leave-conflict", sha("d")]);
@@ -1195,37 +1195,37 @@ describe("5. stack", () => {
   it("assembles a settled folder, finds deps and efforts, orders, reviews the stack and summarizes it", () => {
     const sc = twoReviewed();
     assert.equal(sc.state().step, "stack");
-    assert.deepEqual(sc.view().jobs.filter((j) => !j.end).map((j) => j.purpose.key), ["wt:a"]);
-    sc.complete("wt:a", { output: { name: `${ID}-a`, path: `/wt/${ID}-a`, branch: `${ID}-a` } });
+    assert.deepEqual(sc.view().jobs.filter((j) => !j.end).map((j) => j.purpose.key), ["wt:root"]);
+    sc.complete("wt:root", { output: { name: `${ID}-root`, path: `/wt/${ID}-root`, branch: `${ID}-root` } });
     const [assemble] = sc.settle();
-    assert.match(assemble, /^assemble:a:[0-9a-f]{10}$/);
-    assert.deepEqual(sc.plan(assemble).cli?.args, ["assemble", "--cwd", `/wt/${ID}-a`, "--branch", `${ID}-a`, "--base", "origin/main", "--leave-conflict", sha("1"), sha("2")]);
-    sc.complete(assemble, { output: { branch: `${ID}-a`, commits: [{ sha: sha("1"), newSha: sha("a") }, { sha: sha("2"), newSha: sha("b") }], skipped: [], empty: [] } });
+    assert.match(assemble, /^assemble:root:[0-9a-f]{10}$/);
+    assert.deepEqual(sc.plan(assemble).cli?.args, ["assemble", "--cwd", `/wt/${ID}-root`, "--branch", `${ID}-root`, "--base", "origin/main", "--leave-conflict", sha("1"), sha("2")]);
+    sc.complete(assemble, { output: { branch: `${ID}-root`, commits: [{ sha: sha("1"), newSha: sha("a") }, { sha: sha("2"), newSha: sha("b") }], skipped: [], empty: [] } });
     assert.equal(sc.state().patches["p-test-a"].sha, sha("a"));
-    assert.equal(sc.state().patches["p-test-a"].worktree, `/wt/${ID}-a`);
+    assert.equal(sc.state().patches["p-test-a"].worktree, `/wt/${ID}-root`);
     const hash = assemble.split(":")[2];
-    assert.deepEqual(sc.settle().sort(), [`deps:a:${hash}`, `effort:p-test-a:${sha("1")}`, `effort:p-test-b:${sha("2")}`]);
-    sc.complete(`deps:a:${hash}`, { output: [{ patch: sha("a"), needs: sha("b"), kind: "hard", reason: "textual", source: "textual" }] });
+    assert.deepEqual(sc.settle().sort(), [`deps:root:${hash}`, `effort:p-test-a:${sha("1")}`, `effort:p-test-b:${sha("2")}`]);
+    sc.complete(`deps:root:${hash}`, { output: [{ patch: sha("a"), needs: sha("b"), kind: "hard", reason: "textual", source: "textual" }] });
     assert.deepEqual(sc.state().patches["p-test-a"].deps.map((d) => d.needs), ["p-test-b"]);
     sc.complete(`effort:p-test-a:${sha("1")}`, { report: { effort: 2, reason: "r", feedback: [] } });
     sc.complete(`effort:p-test-b:${sha("2")}`, { report: { effort: 1, reason: "r", feedback: [] } });
     const [ord] = sc.settle();
-    assert.match(ord, new RegExp(`^order:a:${hash}:[0-9a-f]{6}$`));
+    assert.match(ord, new RegExp(`^order:root:${hash}:[0-9a-f]{6}$`));
     const input = JSON.parse(sc.plan(ord).files![0].content);
     assert.deepEqual(input.patches, [{ id: "p-test-a", effort: 2, value: 3, testOnly: true }, { id: "p-test-b", effort: 1, value: 1, testOnly: true }]);
     sc.complete(ord, { output: { order: ["p-test-b", "p-test-a"], flippedSoftDeps: [] } });
     assert.deepEqual(sc.settle(), [`re${ord}`]);
     assert.deepEqual(sc.plan(`re${ord}`).cli?.args.slice(-2), ["--order", `${sha("b")},${sha("a")}`]);
     sc.complete(`re${ord}`, { output: { mapping: { [sha("b")]: sha("c"), [sha("a")]: sha("d") } } });
-    assert.deepEqual(sc.settle(), [`review-stack:a:${hash}`]);
-    assert.deepEqual(sc.state().stacks.a.order, ["p-test-b", "p-test-a"]);
+    assert.deepEqual(sc.settle(), [`review-stack:root:${hash}`]);
+    assert.deepEqual(sc.state().stacks.root.order, ["p-test-b", "p-test-a"]);
     assert.equal(sc.state().patches["p-test-b"].sha, sha("c"));
-    sc.complete(`review-stack:a:${hash}`, { report: { findings: [{ patch: sha("c"), severity: "nit", text: "typo" }], addDeps: [], removeDeps: [], feedback: [] } });
-    assert.deepEqual(sc.settle(), [`summary:a:${hash}`]);
-    sc.complete(`summary:a:${hash}`, { output: { markdown: "| table |", metaComment: "This stack fixes 2 failures." } });
+    sc.complete(`review-stack:root:${hash}`, { report: { findings: [{ patch: sha("c"), severity: "nit", text: "typo" }], addDeps: [], removeDeps: [], feedback: [] } });
+    assert.deepEqual(sc.settle(), [`summary:root:${hash}`]);
+    sc.complete(`summary:root:${hash}`, { output: { markdown: "| table |", metaComment: "This stack fixes 2 failures." } });
     sc.settle();
     const s = sc.state();
-    assert.equal(s.stacks.a.summary, "This stack fixes 2 failures.");
+    assert.equal(s.stacks.root.summary, "This stack fixes 2 failures.");
     assert.equal(s.items["i-test-a"].state, "in stack");
     assert.equal(s.step, "verify on try");
   });
@@ -1237,32 +1237,76 @@ describe("5. stack", () => {
     assert.equal(stackId(""), "root");
   });
 
-  it("gives two folders whose names start alike their own stacks", () => {
+  it("gives a try-push request's two folders, even ones whose names start alike, one stack", () => {
     const long = "a".repeat(45);
     const sc = workList([group("ka", `${long}/x/test_a.js`, "boom"), group("kb", `${long}/y/test_b.js`, "bang")]);
     investigating(sc, "i-test-a");
     investigating(sc, "i-test-b");
     reviewed(sc, "i-test-a", sha("1"), `${long}/x/test_a.js`);
     reviewed(sc, "i-test-b", sha("2"), `${long}/y/test_b.js`);
-    const wts = sc.view().jobs.filter((j) => j.purpose.key.startsWith("wt:a")).map((j) => j.purpose.key);
-    assert.equal(new Set(wts).size, 2, JSON.stringify(wts));
+    const wts = sc.view().jobs.filter((j) => j.purpose.key.startsWith("wt:") && !j.purpose.key.startsWith("wt:i-")).map((j) => j.purpose.key);
+    assert.deepEqual(wts, ["wt:root"]);
+  });
+
+  it("puts a try-push request's patches of two folders in one stack; a stack made per folder before, without a revision, is gone", () => {
+    const sc = workList([group("ka", "a/test_a.js", "boom"), group("kb", "b/test_b.js", "bang")]);
+    sc.add({ type: "stack", request: ID, stack: "a", folder: "a", branch: `${ID}-a`, worktree: `/wt/${ID}-a`, order: ["p-test-a"] });
+    investigating(sc, "i-test-a");
+    investigating(sc, "i-test-b");
+    reviewed(sc, "i-test-a", sha("1"), "a/test_a.js");
+    reviewed(sc, "i-test-b", sha("2"), "b/test_b.js");
+    sc.complete("wt:root", { output: { name: `${ID}-root`, path: `/wt/${ID}-root`, branch: `${ID}-root` } });
+    const [assemble] = sc.settle();
+    assert.match(assemble, /^assemble:root:/);
+    assert.deepEqual(sc.plan(assemble).cli?.args.slice(-2), [sha("1"), sha("2")]);
+    sc.complete(assemble, { output: { branch: `${ID}-root`, commits: [{ sha: sha("1"), newSha: sha("a") }, { sha: sha("2"), newSha: sha("b") }], skipped: [], empty: [] } });
+    sc.settle();
+    const hash = assemble.split(":")[2];
+    sc.complete(`deps:root:${hash}`, { output: [] });
+    sc.complete(`effort:p-test-a:${sha("1")}`, { report: { effort: 2, reason: "r", feedback: [] } });
+    sc.complete(`effort:p-test-b:${sha("2")}`, { report: { effort: 1, reason: "r", feedback: [] } });
+    sc.settle();
+    sc.complete(keyOf(sc, `order:root:${hash}:`), { output: { order: ["p-test-a", "p-test-b"], flippedSoftDeps: [] } });
+    sc.settle();
+    sc.complete(`review-stack:root:${hash}`, { report: { findings: [], addDeps: [], removeDeps: [], feedback: [] } });
+    sc.settle();
+    sc.complete(`summary:root:${hash}`, { output: { markdown: "| table |", metaComment: "This stack fixes 2 failures." } });
+    sc.settle();
+    const s = sc.state();
+    assert.equal(s.step, "verify on try");
+    assert.deepEqual(s.stacks.root.order, ["p-test-a", "p-test-b"]);
+    const planKey = sc.view().jobs.find((j) => j.purpose.what === "plan-pushes")!.purpose.key;
+    sc.complete(planKey, { report: { pushes: [{ purpose: "verify", tryArgs: ["fuzzy", "-q", "x"], rebuild: 5 }], feedback: [] } });
+    const [dry] = sc.settle();
+    const push = sc.purpose(dry).push!;
+    sc.complete(dry, { output: { command: ["./mach", "try", "fuzzy"], taskCount: 5, tasks: [], tryTaskConfig: {}, commits: [], warnings: [] } });
+    sc.add({ type: "user-done", request: ID, key: `approve-push:${push}` });
+    sc.add({ type: "try-pushed", request: ID, push, rev: "fed", url: "u" });
+    sc.add({ type: "try-finished", request: ID, push, result: "green", summary: "green" });
+    sc.settle();
+    sc.complete(`try-table:${push}:final`, { output: table() });
+    sc.settle();
+    assert.deepEqual(sc.open(), ["meta-bug:root"], "one meta bug, for the one stack");
+    const keys = sc.view().jobs.map((j) => j.purpose.key);
+    assert.ok(!keys.some((k) => /^[a-z-]+:a(:|$)/.test(k)), JSON.stringify(keys));
+    assert.ok(!sc.state().needsUser.some((n) => n.stack === "a"));
   });
 
   it("goes on when an author reported its commit by a short sha", () => {
     const sc = workList([group("ka", "a/test_a.js", "boom")]);
     investigating(sc, "i-test-a");
     reviewed(sc, "i-test-a", sha("1").slice(0, 12), "a/test_a.js");
-    sc.complete("wt:a", { output: { name: `${ID}-a`, path: `/wt/${ID}-a`, branch: `${ID}-a` } });
+    sc.complete("wt:root", { output: { name: `${ID}-root`, path: `/wt/${ID}-root`, branch: `${ID}-root` } });
     const [assemble] = sc.settle();
-    sc.complete(assemble, { output: { branch: `${ID}-a`, commits: [{ sha: sha("1"), newSha: sha("a") }], skipped: [], empty: [] } });
-    assert.ok(sc.settle().includes(`deps:a:${assemble.split(":")[2]}`));
+    sc.complete(assemble, { output: { branch: `${ID}-root`, commits: [{ sha: sha("1"), newSha: sha("a") }], skipped: [], empty: [] } });
+    assert.ok(sc.settle().includes(`deps:root:${assemble.split(":")[2]}`));
   });
 
   it("drops the ⚑ of a job of an earlier version of the stack", () => {
     const sc = twoReviewed();
-    sc.startJob({ purpose: { key: "review-stack:a:0123456789", what: "review-stack", stack: "a" }, kind: "agent", name: "review-stack", cwd: "/wt", agent: { sessionId: "s-old", resume: false, message: "x" } });
-    const old = sc.running("review-stack:a:0123456789");
-    sc.complete("review-stack:a:0123456789", { exitCode: -1, error: "cancelled by you" });
+    sc.startJob({ purpose: { key: "review-stack:root:0123456789", what: "review-stack", stack: "root" }, kind: "agent", name: "review-stack", cwd: "/wt", agent: { sessionId: "s-old", resume: false, message: "x" } });
+    const old = sc.running("review-stack:root:0123456789");
+    sc.complete("review-stack:root:0123456789", { exitCode: -1, error: "cancelled by you" });
     sc.add({ type: "needs-user", request: ID, key: `stopped:${old}`, action: "stopped", detail: "", job: old });
     sc.settle();
     assert.ok(!sc.open().includes(`stopped:${old}`));
@@ -1273,24 +1317,24 @@ describe("5. stack", () => {
     investigating(sc, "i-test-a");
     investigating(sc, "i-test-b");
     reviewed(sc, "i-test-a", sha("1"), "a/test_a.js");
-    assert.ok(!sc.view().byKey.has("wt:a"));
+    assert.ok(!sc.view().byKey.has("wt:root"));
   });
 
   it("sends a stack review's must-fix finding to that patch's author", () => {
     const sc = twoReviewed();
-    sc.complete("wt:a", { output: { path: `/wt/${ID}-a` } });
+    sc.complete("wt:root", { output: { path: `/wt/${ID}-root` } });
     sc.settle();
     const key = sc.view().jobs.find((j) => j.purpose.what === "assemble")!.purpose.key;
     const hash = key.split(":")[2];
     sc.complete(key, { output: { commits: [{ sha: sha("1"), newSha: sha("a") }, { sha: sha("2"), newSha: sha("b") }] } });
     sc.settle();
-    sc.complete(`deps:a:${hash}`, { output: [] });
+    sc.complete(`deps:root:${hash}`, { output: [] });
     sc.complete(`effort:p-test-a:${sha("1")}`, { report: { effort: 2, reason: "r", feedback: [] } });
     sc.complete(`effort:p-test-b:${sha("2")}`, { report: { effort: 1, reason: "r", feedback: [] } });
     sc.settle();
-    sc.complete(keyOf(sc, `order:a:${hash}:`), { output: { order: ["p-test-a", "p-test-b"], flippedSoftDeps: [] } });
-    assert.deepEqual(sc.settle(), [`review-stack:a:${hash}`]);
-    const review = sc.complete(`review-stack:a:${hash}`, { report: { findings: [{ patch: sha("b"), severity: "must-fix", text: "same approach as test_a" }], addDeps: [], removeDeps: [], feedback: [] } });
+    sc.complete(keyOf(sc, `order:root:${hash}:`), { output: { order: ["p-test-a", "p-test-b"], flippedSoftDeps: [] } });
+    assert.deepEqual(sc.settle(), [`review-stack:root:${hash}`]);
+    const review = sc.complete(`review-stack:root:${hash}`, { report: { findings: [{ patch: sha("b"), severity: "must-fix", text: "same approach as test_a" }], addDeps: [], removeDeps: [], feedback: [] } });
     assert.deepEqual(sc.settle(), [`author:i-test-b:stack-review:${review}`]);
     assert.match(sc.plan(`author:i-test-b:stack-review:${review}`).agent?.message ?? "", /same approach as test_a/);
     assert.equal(sc.state().items["i-test-b"].state, "investigating");
@@ -1298,20 +1342,20 @@ describe("5. stack", () => {
 
   it("hands a text conflict to resolve-conflict, then assembles the rest", () => {
     const sc = twoReviewed();
-    sc.complete("wt:a", { output: { path: `/wt/${ID}-a` } });
+    sc.complete("wt:root", { output: { path: `/wt/${ID}-root` } });
     sc.settle();
     const key = sc.view().jobs.find((j) => j.purpose.what === "assemble")!.purpose.key;
     const hash = key.split(":")[2];
     sc.complete(key, { output: { commits: [], conflict: { sha: sha("1"), files: ["a/test_a.js"] }, remaining: [sha("2")] } });
-    assert.deepEqual(sc.settle(), [`resolve:a:${hash}:${sha("1")}`]);
-    assert.deepEqual(sc.plan(`resolve:a:${hash}:${sha("1")}`).agent?.vars, { sha: sha("1"), base: `${ID}-a`, files: "a/test_a.js" });
-    sc.complete(`resolve:a:${hash}:${sha("1")}`, { report: { state: "resolved", commit: sha("a"), explanation: "kept both", feedback: [] } });
+    assert.deepEqual(sc.settle(), [`resolve:root:${hash}:${sha("1")}`]);
+    assert.deepEqual(sc.plan(`resolve:root:${hash}:${sha("1")}`).agent?.vars, { sha: sha("1"), base: `${ID}-root`, files: "a/test_a.js" });
+    sc.complete(`resolve:root:${hash}:${sha("1")}`, { report: { state: "resolved", commit: sha("a"), explanation: "kept both", feedback: [] } });
     assert.equal(sc.state().patches["p-test-a"].sha, sha("a"));
-    const rest = `assemble:a:${hash}:after:${sha("1").slice(0, 12)}`;
+    const rest = `assemble:root:${hash}:after:${sha("1").slice(0, 12)}`;
     assert.deepEqual(sc.settle(), [rest]);
-    assert.deepEqual(sc.plan(rest).cli?.args, ["assemble", "--cwd", `/wt/${ID}-a`, "--branch", `${ID}-a`, "--leave-conflict", sha("2")]);
+    assert.deepEqual(sc.plan(rest).cli?.args, ["assemble", "--cwd", `/wt/${ID}-root`, "--branch", `${ID}-root`, "--leave-conflict", sha("2")]);
     sc.complete(rest, { output: { commits: [{ sha: sha("2"), newSha: sha("b") }] } });
-    assert.ok(sc.settle().includes(`deps:a:${hash}`));
+    assert.ok(sc.settle().includes(`deps:root:${hash}`));
   });
 });
 
@@ -1321,7 +1365,7 @@ describe("6. verify on try", () => {
     assert.equal(sc.state().step, "verify on try");
     const planKey = sc.view().jobs.find((j) => j.purpose.what === "plan-pushes")!.purpose.key;
     const vars = sc.plan(planKey).agent!.vars!;
-    assert.equal(vars.branch, `${ID}-a`);
+    assert.equal(vars.branch, `${ID}-root`);
     const failures = JSON.parse(sc.plan(planKey).files![0].content);
     assert.deepEqual(failures.map((f: { patch: string }) => f.patch), ["p-test-a", "p-test-b"]);
     sc.complete(planKey, { report: { pushes: [{ purpose: "verify", tryArgs: ["fuzzy", "-q", "x"], rebuild: 5 }], feedback: [] } });
@@ -1469,11 +1513,11 @@ describe("review fixes", () => {
     const { deps: _d, review: _r, replyDrafts: _rd, id, ...p } = sc.state().patches["p-test-a"];
     sc.add({ type: "patch", request: ID, patch: id, ...p, title: "Bug 999 - Fix a, r=#gone-reviewers." });
     reviewersChecked(sc, ["#gone-reviewers"]);
-    sc.complete("reviewers:a", { output: { files: [], suggestions: [{ name: "#gone-reviewers", source: "recent" }] } });
+    sc.complete("reviewers:root", { output: { files: [], suggestions: [{ name: "#gone-reviewers", source: "recent" }] } });
     const [own] = sc.settle();
     sc.complete(own, { output: { files: [], suggestions: [{ name: "#gone-reviewers", source: "recent" }] } });
     assert.ok(!sc.settle().some((k) => k.startsWith("rewrite-reviewers:")), "no rewrite that can't help");
-    assert.ok(sc.open().includes("reviewers:a"));
+    assert.ok(sc.open().includes("reviewers:root"));
   });
 });
 
@@ -1598,7 +1642,7 @@ describe("6. verify on try, again", () => {
     sc.complete(planKey, { report: { pushes: [], feedback: [] } });
     sc.settle();
     assert.equal(sc.state().step, "verify on try", "nothing verified it");
-    assert.deepEqual(sc.open(), ["unverified:a"]);
+    assert.deepEqual(sc.open(), ["unverified:root"]);
 
     // Planned again (the step redone): a push made and green, then a plan with nothing more to push.
     sc.add({ type: "step", request: ID, step: "verify on try" });
@@ -1639,11 +1683,11 @@ describe("7. meta bug", () => {
     const sc = verified();
     assert.equal(sc.state().metaBug, undefined);
     assert.ok(!sc.view().jobs.some((j) => j.purpose.what === "meta-draft"));
-    assert.deepEqual(sc.open(), ["meta-bug:a"]);
+    assert.deepEqual(sc.open(), ["meta-bug:root"]);
     sc.add({ type: "meta-bug", request: ID, bug: 999 });
-    sc.add({ type: "user-done", request: ID, key: "meta-bug:a" });
+    sc.add({ type: "user-done", request: ID, key: "meta-bug:root" });
     const [rewrite] = sc.settle();
-    assert.match(rewrite, /^rewrite-bugs:a:/);
+    assert.match(rewrite, /^rewrite-bugs:root:/);
     assert.deepEqual(JSON.parse(sc.plan(rewrite).files![0].content), { [sha("d")]: { bug: 999 } });
     sc.complete(rewrite, { output: { mapping: { [sha("c")]: sha("e"), [sha("d")]: sha("f") } } });
     assert.equal(sc.state().patches["p-test-a"].title, "Bug 999 - Fix a/test_a.js, r=smaug.");
@@ -1657,9 +1701,9 @@ describe("7. meta bug", () => {
     const { deps: _d, review: _r, replyDrafts: _rd, id, ...p } = sc.state().patches["p-test-a"];
     sc.add({ type: "patch", request: ID, patch: id, ...p, revision: 7 });
     sc.add({ type: "meta-bug", request: ID, bug: 999 });
-    sc.add({ type: "user-done", request: ID, key: "meta-bug:a" });
+    sc.add({ type: "user-done", request: ID, key: "meta-bug:root" });
     const [rewrite] = sc.settle();
-    assert.match(rewrite, /^rewrite-bugs:a:/);
+    assert.match(rewrite, /^rewrite-bugs:root:/);
     const plan = sc.plan(rewrite);
     assert.deepEqual(plan.cli?.args.slice(-2), ["--edits", plan.files![0].path]);
     assert.deepEqual(JSON.parse(plan.files![0].content), { [sha("d")]: { bug: 999, revision: "https://phabricator.services.mozilla.com/D7" } });
@@ -1758,15 +1802,15 @@ describe("8. submit", () => {
     const { deps: _d, review: _r, replyDrafts: _rd, id, ...p } = sc.state().patches[pid];
     sc.add({ type: "patch", request: ID, patch: id, ...p, ...fields });
   };
-  const orderKeys = (sc: Scenario) => sc.view().jobs.filter((j) => j.purpose.key.startsWith("order:a:")).map((j) => j.purpose.key);
+  const orderKeys = (sc: Scenario) => sc.view().jobs.filter((j) => j.purpose.key.startsWith("order:root:")).map((j) => j.purpose.key);
 
   it("orders an unsubmitted stack again when a patch's effort changes, and reorders it", () => {
     const sc = submitting();
     assert.equal(sc.state().step, "submit");
-    assert.deepEqual(sc.state().stacks.a.order, ["p-test-b", "p-test-a"]);
+    assert.deepEqual(sc.state().stacks.root.order, ["p-test-b", "p-test-a"]);
     const before = orderKeys(sc);
     setPatch(sc, "p-test-b", { effort: 5 });
-    const ord = sc.settle().find((k) => k.startsWith("order:a:"))!;
+    const ord = sc.settle().find((k) => k.startsWith("order:root:"))!;
     assert.ok(ord && !before.includes(ord), "ordered again");
     const input = JSON.parse(sc.plan(ord).files![0].content);
     assert.deepEqual(input.patches.find((p: { id: string }) => p.id === "p-test-b").effort, 5);
@@ -1790,25 +1834,25 @@ describe("8. submit", () => {
   it("checks the stack, asks you to submit, and notices the Differential Revision trailers", () => {
     const sc = submitting();
     assert.equal(sc.state().step, "submit");
-    assert.deepEqual(sc.plan("reviewers:a").cli?.args, ["reviewers", "a/test_b.js", "a/test_a.js", "--repo", `/wt/${ID}-a`]);
-    sc.complete("reviewers:a", { output: { files: [], suggestions: [{ name: "smaug", source: "mots" }] } });
+    assert.deepEqual(sc.plan("reviewers:root").cli?.args, ["reviewers", "a/test_b.js", "a/test_a.js", "--repo", `/wt/${ID}-root`]);
+    sc.complete("reviewers:root", { output: { files: [], suggestions: [{ name: "smaug", source: "mots" }] } });
     const [check] = sc.settle();
-    assert.match(check, /^check:a:/);
+    assert.match(check, /^check:root:/);
     assert.deepEqual(JSON.parse(sc.plan(check).files![0].content).map((p: { result: string }) => p.result), ["green"]);
     sc.complete(check, { output: { ok: true, failures: [] } });
     assert.deepEqual(sc.settle(), [], "nothing looks for revisions before you copy the moz-phab command");
-    assert.deepEqual(sc.open(), ["submit:a"]);
-    sc.add({ type: "submit-copied", request: ID, stack: "a" });
-    assert.deepEqual(sc.settle(), ["import-submit:a:0"]);
-    sc.complete("import-submit:a:0", { output: imported(sha("e"), "Bug 22 - Fix test_b, r=smaug.", [], 22).concat(imported(sha("f"), "Bug 999 - Fix a, r=smaug.", [], 999)) });
+    assert.deepEqual(sc.open(), ["submit:root"]);
+    sc.add({ type: "submit-copied", request: ID, stack: "root" });
+    assert.deepEqual(sc.settle(), ["import-submit:root:0"]);
+    sc.complete("import-submit:root:0", { output: imported(sha("e"), "Bug 22 - Fix test_b, r=smaug.", [], 22).concat(imported(sha("f"), "Bug 999 - Fix a, r=smaug.", [], 999)) });
     assert.deepEqual(sc.settle(), []);
     sc.now += 2 * 60_000;
-    assert.deepEqual(sc.settle(), ["import-submit:a:1"]);
+    assert.deepEqual(sc.settle(), ["import-submit:root:1"]);
     const withRevisions = [
       { ...imported(sha("e"), "Bug 22 - Fix test_b, r=smaug.", [], 22)[0], revision: 100 },
       { ...imported(sha("f"), "Bug 999 - Fix a, r=smaug.", [], 999)[0], revision: 101 },
     ];
-    sc.complete("import-submit:a:1", { output: withRevisions });
+    sc.complete("import-submit:root:1", { output: withRevisions });
     sc.settle();
     assert.equal(sc.state().patches["p-test-a"].revision, 101);
     assert.deepEqual(sc.open(), []);
@@ -1823,9 +1867,9 @@ describe("8. submit", () => {
     const [known] = sc.settle();
     assert.deepEqual(sc.plan(known).cli?.args, ["check-reviewers", "smaug", "#testing-reviewers"]);
     sc.complete(known, { output: { unknown: ["#testing-reviewers"] } });
-    sc.complete("reviewers:a", { output: { files: [], suggestions: [{ name: "#dom-core", source: "mots" }] } });
+    sc.complete("reviewers:root", { output: { files: [], suggestions: [{ name: "#dom-core", source: "mots" }] } });
     const [own] = sc.settle();
-    assert.deepEqual(sc.plan(own).cli?.args, ["reviewers", "a/test_a.js", "--repo", `/wt/${ID}-a`], "the suggestion for its own files");
+    assert.deepEqual(sc.plan(own).cli?.args, ["reviewers", "a/test_a.js", "--repo", `/wt/${ID}-root`], "the suggestion for its own files");
     sc.complete(own, { output: { files: [], suggestions: [{ name: "#xpcshell-reviewers", source: "mots" }] } });
     const [rewrite] = sc.settle();
     assert.equal(JSON.parse(sc.plan(rewrite).files![0].content)[sha("f")].message, "Bug 999 - Fix a, r=#xpcshell-reviewers.\n\nBody.\n");
@@ -1839,11 +1883,11 @@ describe("8. submit", () => {
     const sc = submitting();
     const { deps: _d, review: _r, replyDrafts: _rd, id, ...p } = sc.state().patches["p-test-a"];
     sc.add({ type: "patch", request: ID, patch: id, ...p, title: "Bug 999 - Fix a", revision: 101 });
-    sc.complete("reviewers:a", { output: { files: [], suggestions: [{ name: "#dom-core", source: "mots" }] } });
+    sc.complete("reviewers:root", { output: { files: [], suggestions: [{ name: "#dom-core", source: "mots" }] } });
     const own = sc.settle().find((k) => k.startsWith("reviewers:"))!;
     sc.complete(own, { output: { files: [], suggestions: [] } });
     const [rewrite] = sc.settle();
-    assert.match(rewrite, /^rewrite-reviewers:a:/);
+    assert.match(rewrite, /^rewrite-reviewers:root:/);
     assert.deepEqual(JSON.parse(sc.plan(rewrite).files![0].content), {
       [sha("f")]: { message: "Bug 999 - Fix a, r=#dom-core.\n\nBody.\n", bug: 999, revision: "https://phabricator.services.mozilla.com/D101" },
     });
@@ -1854,17 +1898,17 @@ describe("8. submit", () => {
     const s = sc.state();
     const { deps: _d, review: _r, replyDrafts: _rd, id, ...p } = s.patches["p-test-a"];
     sc.add({ type: "patch", request: ID, patch: id, ...p, title: "Bug 999 - Fix a" });
-    sc.complete("reviewers:a", { output: { files: [], suggestions: [{ name: "#dom-core", source: "mots" }] } });
+    sc.complete("reviewers:root", { output: { files: [], suggestions: [{ name: "#dom-core", source: "mots" }] } });
     sc.complete(sc.settle()[0], { output: { files: [], suggestions: [] } });
     const [rewrite] = sc.settle();
-    assert.match(rewrite, /^rewrite-reviewers:a:/, "without a suggestion for its own files, the stack's");
+    assert.match(rewrite, /^rewrite-reviewers:root:/, "without a suggestion for its own files, the stack's");
     const edits = JSON.parse(sc.plan(rewrite).files![0].content);
     assert.equal(edits[sha("f")].message, "Bug 999 - Fix a, r=#dom-core.\n\nBody.\n");
     sc.complete(rewrite, { output: { mapping: { [sha("f")]: sha("9") } } });
     assert.equal(sc.state().patches["p-test-a"].title, "Bug 999 - Fix a, r=#dom-core.");
     reviewersChecked(sc);
     assert.deepEqual(sc.plan(sc.view().jobs.filter((j) => j.purpose.what === "check-reviewers").at(-1)!.purpose.key).cli?.args, ["check-reviewers", "smaug", "#dom-core"]);
-    const check = sc.view().jobs.find((j) => !j.end && j.purpose.key.startsWith("check:a:"))!.purpose.key;
+    const check = sc.view().jobs.find((j) => !j.end && j.purpose.key.startsWith("check:root:"))!.purpose.key;
     const job = sc.complete(check, { output: { ok: false, failures: [{ rule: "try", message: "try isn't green" }] } });
     sc.settle();
     assert.deepEqual(sc.open(), [`failed:${job}`]);
@@ -1873,12 +1917,12 @@ describe("8. submit", () => {
 
 function inReview(): Scenario {
   const sc = submitting();
-  sc.complete("reviewers:a", { output: { files: [], suggestions: [] } });
+  sc.complete("reviewers:root", { output: { files: [], suggestions: [] } });
   const [check] = sc.settle();
   sc.complete(check, { output: { ok: true, failures: [] } });
-  sc.add({ type: "submit-copied", request: ID, stack: "a" });
+  sc.add({ type: "submit-copied", request: ID, stack: "root" });
   sc.settle();
-  sc.complete("import-submit:a:0", {
+  sc.complete("import-submit:root:0", {
     output: [
       { ...imported(sha("e"), "Bug 22 - Fix test_b, r=smaug.", [], 22)[0], revision: 100 },
       { ...imported(sha("f"), "Bug 999 - Fix a, r=smaug.", [], 999)[0], revision: 101 },
@@ -1971,25 +2015,25 @@ describe("9. review comments", () => {
     sc.settle();
     assert.equal(sc.plan(`review:p-test-a:${job}`).priority, 0);
     sc.complete(`review:p-test-a:${job}`, { report: ok });
-    assert.deepEqual(sc.settle(), [`rewrite-review:a:${job}`]);
+    assert.deepEqual(sc.settle(), [`rewrite-review:root:${job}`]);
     // Its commit lost its Differential Revision line: the rewrite gives every submitted patch its own back.
-    const rw = sc.plan(`rewrite-review:a:${job}`);
+    const rw = sc.plan(`rewrite-review:root:${job}`);
     assert.deepEqual(rw.cli?.args.slice(-4), ["--order", `${sha("e")},${sha("7")}`, "--edits", rw.files![0].path]);
     assert.deepEqual(JSON.parse(rw.files![0].content), {
       [sha("e")]: { revision: "https://phabricator.services.mozilla.com/D100" },
       [sha("7")]: { revision: "https://phabricator.services.mozilla.com/D101" },
     });
-    sc.complete(`rewrite-review:a:${job}`, { output: { mapping: { [sha("e")]: sha("e"), [sha("7")]: sha("8") } } });
+    sc.complete(`rewrite-review:root:${job}`, { output: { mapping: { [sha("e")]: sha("e"), [sha("7")]: sha("8") } } });
     // Against what Phabricator has (the commit D101 showed up on), not the author's previous commit.
     const key = `interdiff:p-test-a:${job}:${sha("f").slice(0, 12)}`;
     assert.deepEqual(sc.settle(), [key]);
-    assert.deepEqual(sc.plan(key).cli?.args, ["interdiff", "--cwd", `/wt/${ID}-a`, sha("f"), sha("8")]);
+    assert.deepEqual(sc.plan(key).cli?.args, ["interdiff", "--cwd", `/wt/${ID}-root`, sha("f"), sha("8")]);
     const inter = sc.complete(key, { output: { diff: "-a\n+b\n", method: "same-parent" } });
     assert.equal(sc.state().patches["p-test-a"].interdiffFile, `requests/${ID}/data/interdiff-p-test-a-${inter}.diff`);
     sc.settle();
     const n = sc.state().needsUser.find((x) => x.key.startsWith("resubmit:"))!;
     assert.equal(n.action, "Post 1 reply, then resubmit D101");
-    assert.equal(n.stack, "a");
+    assert.equal(n.stack, "root");
     assert.equal(sc.state().items["i-test-a"].state, "waiting for review");
   });
 
@@ -2022,7 +2066,7 @@ describe("9. review comments", () => {
     sc.complete(`msg:p-test-a:${sha("9")}`, { output: "m" });
     sc.settle();
     sc.complete(`lint:p-test-a:${sha("9")}`, { output: lintOk });
-    assert.deepEqual(sc.settle(), [`rewrite-review:a:${pass}`]);
+    assert.deepEqual(sc.settle(), [`rewrite-review:root:${pass}`]);
   });
 });
 
@@ -2039,14 +2083,14 @@ describe("9. changes after submission", () => {
     };
     if (before) {
       sc = submitting();
-      sc.complete("reviewers:a", { output: { files: [], suggestions: [] } });
+      sc.complete("reviewers:root", { output: { files: [], suggestions: [] } });
       const [check] = sc.settle();
       sc.complete(check, { output: { ok: true, failures: [] } });
-      sc.add({ type: "submit-copied", request: ID, stack: "a" });
+      sc.add({ type: "submit-copied", request: ID, stack: "root" });
       sc.settle();
       // While you submit.
       start();
-      sc.complete("import-submit:a:0", {
+      sc.complete("import-submit:root:0", {
         output: [
           { ...imported(sha("e"), "Bug 22 - Fix test_b, r=smaug.", [], 22)[0], revision: 100 },
           { ...imported(sha("f"), "Bug 999 - Fix a, r=smaug.", [], 999)[0], revision: 101 },
@@ -2073,10 +2117,10 @@ describe("9. changes after submission", () => {
   for (const reason of ["continue", "comment", "stack comments", "asked push", "try"]) {
     it(`an author run for ${reason} after the submission is put in the stack, and asks you to resubmit`, () => {
       const { sc, job } = changed(reason);
-      assert.deepEqual(sc.settle(), [`rewrite-review:a:${job}`]);
-      const rw = sc.plan(`rewrite-review:a:${job}`);
+      assert.deepEqual(sc.settle(), [`rewrite-review:root:${job}`]);
+      const rw = sc.plan(`rewrite-review:root:${job}`);
       assert.deepEqual(JSON.parse(rw.files![0].content)[sha("7")], { revision: "https://phabricator.services.mozilla.com/D101" });
-      sc.complete(`rewrite-review:a:${job}`, { output: { mapping: { [sha("e")]: sha("e"), [sha("7")]: sha("8") } } });
+      sc.complete(`rewrite-review:root:${job}`, { output: { mapping: { [sha("e")]: sha("e"), [sha("7")]: sha("8") } } });
       const [inter] = sc.settle();
       assert.equal(inter, `interdiff:p-test-a:${job}:${sha("f").slice(0, 12)}`);
       assert.deepEqual(sc.plan(inter).cli?.args.slice(-2), [sha("f"), sha("8")]);
@@ -2096,11 +2140,11 @@ describe("9. changes after submission", () => {
   it("once you copied the resubmit, the next change's interdiff is against that commit", () => {
     const { sc, job } = changed("continue");
     sc.settle();
-    sc.complete(`rewrite-review:a:${job}`, { output: { mapping: { [sha("e")]: sha("e"), [sha("7")]: sha("8") } } });
+    sc.complete(`rewrite-review:root:${job}`, { output: { mapping: { [sha("e")]: sha("e"), [sha("7")]: sha("8") } } });
     sc.settle();
     sc.complete(`interdiff:p-test-a:${job}:${sha("f").slice(0, 12)}`, { output: { diff: "-a\n+b\n", method: "same-parent" } });
     sc.settle();
-    sc.add({ type: "submit-copied", request: ID, stack: "a" });
+    sc.add({ type: "submit-copied", request: ID, stack: "root" });
     assert.equal(sc.state().patches["p-test-a"].sentSha, sha("8"));
     sc.settle();
     // Its author changes it again.
@@ -2117,8 +2161,8 @@ describe("9. changes after submission", () => {
     sc.complete(`lint:p-test-a:${sha("9")}`, { output: lintOk });
     sc.settle();
     sc.complete(`review:p-test-a:${again}`, { report: ok });
-    assert.deepEqual(sc.settle(), [`rewrite-review:a:${again}`]);
-    sc.complete(`rewrite-review:a:${again}`, { output: { mapping: { [sha("e")]: sha("e"), [sha("9")]: sha("a") } } });
+    assert.deepEqual(sc.settle(), [`rewrite-review:root:${again}`]);
+    sc.complete(`rewrite-review:root:${again}`, { output: { mapping: { [sha("e")]: sha("e"), [sha("9")]: sha("a") } } });
     const inter = `interdiff:p-test-a:${again}:${sha("8").slice(0, 12)}`;
     assert.deepEqual(sc.settle(), [inter]);
     assert.deepEqual(sc.plan(inter).cli?.args.slice(-2), [sha("8"), sha("a")]);
@@ -2140,12 +2184,12 @@ describe("10. landing", () => {
     sc.complete("poll:0", { output: [{ ...d100, status: "needs-review", reviewers: [{ name: "smaug", status: "pending" }] }, d101] });
     sc.settle();
     assert.equal(sc.state().step, "landing");
-    assert.deepEqual(sc.state().stacks.a.order, ["p-test-b", "p-test-a"]);
+    assert.deepEqual(sc.state().stacks.root.order, ["p-test-b", "p-test-a"]);
     const key = sc.view().jobs.find((j) => j.purpose.key.startsWith("order-landable:"))!.purpose.key;
     assert.deepEqual(sc.plan(key).cli?.args.slice(-1), ["--landable"]);
     sc.complete(key, { output: { order: ["p-test-a", "p-test-b"], flippedSoftDeps: [{ patch: "p-test-b", needs: "p-test-a", kind: "soft", reason: "shares a helper", source: "agent" }], landable: ["p-test-a"] } });
     const [rewrite] = sc.settle();
-    assert.match(rewrite, /^rewrite-land:a:/);
+    assert.match(rewrite, /^rewrite-land:root:/);
     assert.deepEqual(JSON.parse(sc.plan(rewrite).files![0].content), { [sha("e")]: { revision: "https://phabricator.services.mozilla.com/D100" }, [sha("f")]: { revision: "https://phabricator.services.mozilla.com/D101" } });
     sc.complete(rewrite, { output: { mapping: { [sha("f")]: sha("5"), [sha("e")]: sha("6") } } });
     const [adapt] = sc.settle();
@@ -2155,11 +2199,11 @@ describe("10. landing", () => {
     const [refresh] = sc.settle();
     sc.complete(refresh, { output: [{ ...imported(sha("5"), "Bug 999 - Fix a, r=smaug.", [], 999)[0], revision: 101 }, { ...imported(sha("4"), "Bug 22 - Fix test_b, r=smaug.", [], 22)[0], revision: 100 }] });
     sc.settle();
-    const flag = sc.state().needsUser.find((n) => n.key.startsWith("land:a:"))!;
-    assert.equal(flag.key, `land:a:${key.split(":").at(-1)}`);
+    const flag = sc.state().needsUser.find((n) => n.key.startsWith("land:root:"))!;
+    assert.equal(flag.key, `land:root:${key.split(":").at(-1)}`);
     assert.equal(flag.action, "Stack reordered: 1 landable patch moved to the bottom");
     assert.equal(flag.detail, "Run moz-phab reorg so Phabricator has the new order (1 soft dependency adapted).");
-    assert.equal(flag.stack, "a");
+    assert.equal(flag.stack, "root");
 
     sc.now += 3 * HOUR;
     sc.settle();
@@ -2170,7 +2214,7 @@ describe("10. landing", () => {
     assert.equal(s.items["i-test-a"].state, "landed");
     // Worktrees go, removed from the main checkout, never from inside themselves.
     const removes = sc.view().jobs.filter((j) => j.purpose.what === "remove");
-    assert.deepEqual(removes.map((j) => j.purpose.key).sort(), [`remove:${ID}-a`, `remove:${ID}-i-test-a`, `remove:${ID}-i-test-b`].sort());
+    assert.deepEqual(removes.map((j) => j.purpose.key).sort(), [`remove:${ID}-root`, `remove:${ID}-i-test-a`, `remove:${ID}-i-test-b`].sort());
     assert.ok(removes.every((j) => j.cwd === config.firefoxRepo));
   });
 });
@@ -2185,8 +2229,8 @@ describe("10. landing: the reorg flag", () => {
 
   it("asks for nothing when the landable patches are already at the bottom, and clears an earlier reorg flag", () => {
     const { sc, key } = accepted();
-    sc.add({ type: "needs-user", request: ID, key: "land:a:old", action: "Stack reordered", detail: "", stack: "a" });
-    sc.complete(key, { output: { order: sc.state().stacks.a.order, flippedSoftDeps: [], landable: ["p-test-b"] } });
+    sc.add({ type: "needs-user", request: ID, key: "land:root:old", action: "Stack reordered", detail: "", stack: "root" });
+    sc.complete(key, { output: { order: sc.state().stacks.root.order, flippedSoftDeps: [], landable: ["p-test-b"] } });
     assert.deepEqual(sc.settle(), []);
     assert.ok(!sc.view().jobs.some((j) => j.purpose.key.startsWith("rewrite-land:")));
     assert.deepEqual(sc.open().filter((k) => k.startsWith("land:")), []);
@@ -2194,12 +2238,12 @@ describe("10. landing: the reorg flag", () => {
 
   it("says nothing about soft dependencies when none was adapted, and stays answered once you copied the reorg", () => {
     const { sc, key } = accepted();
-    const order = [...sc.state().stacks.a.order].reverse();
+    const order = [...sc.state().stacks.root.order].reverse();
     sc.complete(key, { output: { order, flippedSoftDeps: [], landable: [order[0]] } });
     const [rewrite] = sc.settle();
     sc.complete(rewrite, { output: { mapping: { [sha("f")]: sha("5"), [sha("e")]: sha("6") } } });
     sc.settle();
-    const flag = sc.state().needsUser.find((n) => n.key.startsWith("land:a:"))!;
+    const flag = sc.state().needsUser.find((n) => n.key.startsWith("land:root:"))!;
     assert.equal(flag.action, "Stack reordered: 1 landable patch moved to the bottom");
     assert.equal(flag.detail, "Run moz-phab reorg so Phabricator has the new order.");
     sc.add({ type: "user-done", request: ID, key: flag.key });
@@ -2209,31 +2253,31 @@ describe("10. landing: the reorg flag", () => {
 
   it("keeps the order you submitted (moz-phab or reorg) across stack events", () => {
     const { sc, key } = accepted();
-    assert.deepEqual(sc.state().stacks.a.submittedOrder, ["p-test-b", "p-test-a"]);
+    assert.deepEqual(sc.state().stacks.root.submittedOrder, ["p-test-b", "p-test-a"]);
     sc.complete(key, { output: { order: ["p-test-a", "p-test-b"], flippedSoftDeps: [], landable: ["p-test-a"] } });
     const [rewrite] = sc.settle();
     sc.complete(rewrite, { output: { mapping: { [sha("f")]: sha("5"), [sha("e")]: sha("6") } } });
     sc.settle();
-    assert.deepEqual(sc.state().stacks.a.order, ["p-test-a", "p-test-b"]);
-    assert.deepEqual(sc.state().stacks.a.submittedOrder, ["p-test-b", "p-test-a"], "kept on a stack event");
-    const flag = sc.state().needsUser.find((n) => n.key.startsWith("land:a:"))!;
+    assert.deepEqual(sc.state().stacks.root.order, ["p-test-a", "p-test-b"]);
+    assert.deepEqual(sc.state().stacks.root.submittedOrder, ["p-test-b", "p-test-a"], "kept on a stack event");
+    const flag = sc.state().needsUser.find((n) => n.key.startsWith("land:root:"))!;
     sc.add({ type: "user-done", request: ID, key: flag.key, reorg: true });
-    assert.deepEqual(sc.state().stacks.a.submittedOrder, ["p-test-a", "p-test-b"], "copying the reorg gives Phabricator the new order");
+    assert.deepEqual(sc.state().stacks.root.submittedOrder, ["p-test-a", "p-test-b"], "copying the reorg gives Phabricator the new order");
     // Another stack event keeps it.
-    const { id, ...rest } = sc.state().stacks.a;
+    const { id, ...rest } = sc.state().stacks.root;
     sc.add({ type: "stack", request: ID, stack: id, ...rest, order: ["p-test-b", "p-test-a"] });
-    assert.deepEqual(sc.state().stacks.a.submittedOrder, ["p-test-a", "p-test-b"]);
-    sc.add({ type: "submit-copied", request: ID, stack: "a" });
-    assert.deepEqual(sc.state().stacks.a.submittedOrder, ["p-test-b", "p-test-a"], "copying moz-phab submit records the order");
+    assert.deepEqual(sc.state().stacks.root.submittedOrder, ["p-test-a", "p-test-b"]);
+    sc.add({ type: "submit-copied", request: ID, stack: "root" });
+    assert.deepEqual(sc.state().stacks.root.submittedOrder, ["p-test-b", "p-test-a"], "copying moz-phab submit records the order");
   });
 
   it("does not reorder when every patch is landable, and clears an earlier reorg flag", () => {
     const { sc, key } = accepted();
-    sc.add({ type: "needs-user", request: ID, key: "land:a:old", action: "Stack reordered", detail: "", stack: "a" });
+    sc.add({ type: "needs-user", request: ID, key: "land:root:old", action: "Stack reordered", detail: "", stack: "root" });
     sc.complete(key, { output: { order: ["p-test-a", "p-test-b"], flippedSoftDeps: [], landable: ["p-test-a", "p-test-b"] } });
     assert.deepEqual(sc.settle(), []);
     assert.ok(!sc.view().jobs.some((j) => j.purpose.key.startsWith("rewrite-land:") || j.purpose.key.startsWith("rewrite-restore:")));
-    assert.deepEqual(sc.state().stacks.a.order, ["p-test-b", "p-test-a"]);
+    assert.deepEqual(sc.state().stacks.root.order, ["p-test-b", "p-test-a"]);
     assert.deepEqual(sc.open().filter((k) => k.startsWith("land:")), []);
   });
 
@@ -2247,8 +2291,8 @@ describe("10. landing: the reorg flag", () => {
     const [rewrite] = sc.settle();
     sc.complete(rewrite, { output: { mapping: { [sha("f")]: sha("5"), [sha("e")]: sha("6") } } });
     sc.settle();
-    assert.deepEqual(sc.state().stacks.a.order, ["p-test-a", "p-test-b"]);
-    assert.ok(sc.open().some((k) => k.startsWith("land:a:")));
+    assert.deepEqual(sc.state().stacks.root.order, ["p-test-a", "p-test-b"]);
+    assert.ok(sc.open().some((k) => k.startsWith("land:root:")));
     // D100 gets accepted too.
     sc.now += 10 * 60_000;
     sc.settle();
@@ -2257,13 +2301,13 @@ describe("10. landing: the reorg flag", () => {
     const again = sc.view().jobs.find((j) => j.purpose.key.startsWith("order-landable:") && j.purpose.key !== key)!.purpose.key;
     sc.complete(again, { output: { order: ["p-test-a", "p-test-b"], flippedSoftDeps: [], landable: ["p-test-a", "p-test-b"] } });
     const [restore] = sc.settle();
-    assert.equal(restore, `rewrite-restore:a:${again.split(":").at(-1)}`);
+    assert.equal(restore, `rewrite-restore:root:${again.split(":").at(-1)}`);
     const args = sc.plan(restore).cli!.args;
     assert.equal(args[args.indexOf("--order") + 1], [sha("6"), sha("5")].join(","));
     assert.deepEqual(sc.open().filter((k) => k.startsWith("land:")), [], "the reorg is moot");
     sc.complete(restore, { output: { mapping: { [sha("6")]: sha("7"), [sha("5")]: sha("8") } } });
     sc.settle();
-    assert.deepEqual(sc.state().stacks.a.order, ["p-test-b", "p-test-a"]);
+    assert.deepEqual(sc.state().stacks.root.order, ["p-test-b", "p-test-a"]);
     assert.deepEqual(sc.settle(), []);
     assert.equal(sc.view().jobs.filter((j) => j.purpose.key.startsWith("rewrite-restore:")).length, 1);
     assert.deepEqual(sc.open().filter((k) => k.startsWith("land:")), []);
@@ -2271,14 +2315,14 @@ describe("10. landing: the reorg flag", () => {
 
   it("asks for no reorg when the landing reorder gives back the order you submitted", () => {
     const { sc, key } = accepted();
-    const { id, ...rest } = sc.state().stacks.a;
+    const { id, ...rest } = sc.state().stacks.root;
     sc.add({ type: "stack", request: ID, stack: id, ...rest, order: ["p-test-a", "p-test-b"] });
     sc.complete(key, { output: { order: ["p-test-b", "p-test-a"], flippedSoftDeps: [], landable: ["p-test-b"] } });
     const [rewrite] = sc.settle();
-    assert.match(rewrite, /^rewrite-land:a:/);
+    assert.match(rewrite, /^rewrite-land:root:/);
     sc.complete(rewrite, { output: { mapping: {} } });
     sc.settle();
-    assert.deepEqual(sc.state().stacks.a.order, ["p-test-b", "p-test-a"]);
+    assert.deepEqual(sc.state().stacks.root.order, ["p-test-b", "p-test-a"]);
     assert.deepEqual(sc.open().filter((k) => k.startsWith("land:")), []);
   });
 });

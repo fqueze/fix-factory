@@ -1229,21 +1229,29 @@ class Planner {
   // 5. Stack, per folder once every item in it is settled
 
   // A burndown's groups make one stack for its folder, subfolders included; other requests, one per folder.
+  // One stack per request: one try push verifies it, one meta bug tracks it. A burndown's is its folder's; stacks
+  // made per test folder before keep their patches only once submitted (liveStacks).
   private stackFolder(i: ItemView): string {
     const f = this.s.kind === "burndown" ? this.s.folder : undefined;
-    return f !== undefined && (i.folder === f || i.folder.startsWith(`${f}/`)) ? f : i.folder;
+    if (f === undefined) return this.s.folder ?? "";
+    return i.folder === f || i.folder.startsWith(`${f}/`) ? f : i.folder;
   }
 
   // Its stacks, but those of a burndown's subfolders made before it got one stack for its whole folder: their
   // patches are in that one.
   private liveStacks(): StackView[] {
-    const f = this.s.kind === "burndown" ? this.s.folder : undefined;
-    const whole = f !== undefined && Object.values(this.s.stacks).some((st) => st.folder === f);
-    return Object.values(this.s.stacks).filter((st) => !whole || !st.folder.startsWith(`${f}/`));
+    const current = new Set(Object.values(this.s.items).map((i) => this.stackFolder(i)));
+    return Object.values(this.s.stacks).filter((st) => current.has(st.folder) || st.order.some((p) => this.s.patches[p]?.revision !== undefined));
   }
 
   private computeStacks(): void {
     const folders = [...new Set(Object.values(this.s.items).map((i) => this.stackFolder(i)))].sort();
+    // A patch submitted in a stack of the earlier rule (one per test folder) stays in it.
+    const submittedElsewhere = new Set(
+      Object.values(this.s.stacks)
+        .filter((st) => !folders.includes(st.folder) && st.order.some((p) => this.s.patches[p]?.revision !== undefined))
+        .flatMap((st) => st.order),
+    );
     const ids = new Map<string, string>();
     for (const folder of folders) {
       // A stack keeps the id it was made with; two folders whose ids are the same don't share one.
@@ -1257,7 +1265,7 @@ class Planner {
         if (!WITH_PATCHES.includes(item.state)) continue;
         const author = this.authorReport(item.id);
         author?.commits.forEach((source, i) => {
-          if (this.s.patches[patchId(item.id, i)]) patches.push({ id: patchId(item.id, i), source, item: item.id });
+          if (this.s.patches[patchId(item.id, i)] && !submittedElsewhere.has(patchId(item.id, i))) patches.push({ id: patchId(item.id, i), source, item: item.id });
         });
       }
       if (patches.length === 0) continue;
@@ -1779,7 +1787,7 @@ class Planner {
     const draft: BugDraft = {
       product: first?.product ?? "Testing",
       component: first?.component ?? "General",
-      summary: `[meta] Fix the flakiness in ${this.s.folder ?? st.folder}`,
+      summary: this.s.kind === "burndown" ? `[meta] Fix the flakiness in ${this.s.folder ?? st.folder}` : "",
       description: "",
       bugType: "task",
       keywords: ["meta"],
@@ -1800,11 +1808,21 @@ class Planner {
         summary: inv?.summary ?? (item?.lastReport?.report as { summary?: string } | undefined)?.summary,
       };
     });
-    this.wantAgent(`meta-draft:${st.id}:${h}`, "meta-draft", "write-meta-bug", { folder: this.s.folder ?? st.folder, stackFile: file, worktree: st.worktree }, {
+    this.wantAgent(`meta-draft:${st.id}:${h}`, "meta-draft", "write-meta-bug", { ...this.metaSubject(st), stackFile: file }, {
       cwd: st.worktree,
       files: [{ path: file, content: JSON.stringify(patches, null, 2) + "\n" }],
       purpose: { stack: st.id, draft },
     });
+  }
+
+  // A burndown's meta bug is about its folder, with its dashboard; any other request's about what it asked, and its
+  // agent writes the summary too.
+  private metaSubject(st: StackView): Record<string, string> {
+    const vars = { stackFile: "", worktree: st.worktree };
+    const folder = this.s.kind === "burndown" ? (this.s.folder ?? st.folder) : undefined;
+    return folder !== undefined
+      ? { ...vars, subject: `the flakiness burndown of ${folder}`, overall: `what was wrong in the folder overall, the folder's path in it linking to its dashboard (\`[${folder}](https://tests.firefox.dev/tests.html?path=${folder})\`)`, summary: "" }
+      : { ...vars, subject: `this request: “${this.s.text}”`, overall: "what was wrong overall", summary: " Also write its `summary`: \"[meta] \" and a few words saying what the patches fix overall (\"[meta] Fix the tests that fail when run alone\")." };
   }
 
   private metaBug(): void {

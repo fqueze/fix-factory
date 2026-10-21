@@ -292,7 +292,7 @@ export function handleFinished(input: HandlerInput): HandlerResult {
     case "meta-draft": {
       // The meta bug's text, rewritten as the stack changes, until it's filed.
       const d = input.report as WriteMetaBugReport;
-      if (!s.metaBug?.bug) ev("meta-bug", { bug: null, draft: { ...(purpose.draft as BugDraft), description: d.description } });
+      if (!s.metaBug?.bug) ev("meta-bug", { bug: null, draft: { ...(purpose.draft as BugDraft), description: d.description, ...(d.summary ? { summary: d.summary } : {}) } });
       break;
     }
     case "revise-draft": {

@@ -5,6 +5,10 @@
       "type": "string",
       "description": "The meta bug's description, in Markdown."
     },
+    "summary": {
+      "type": "string",
+      "description": "Only when asked: the meta bug's summary, \"[meta] \u2026\"."
+    },
     "feedback": {
       "type": "array",
       "description": "Problems with the tools or inputs you used, one entry per problem.",
