@@ -231,7 +231,7 @@ describe("one fixture per step of docs/MVP.md", () => {
     const h = expanded("r-20261013-tab-failures");
     assert.match(h, /<div class="action reply" data-key="recovery:j-recover"><span class="flag">You asked<\/span> <form class="inline cmd"[^>]*>.*?Dismiss<\/button><\/form><span class="said clamp1" data-expand title="the browser_tabSpinner agent has been at it for 6 hours">“the browser_tabSpinner agent has been at it for 6 hours”<\/span><form/, "a plan recorded without an answer still renders, without an empty answer");
     assert.ok(h.includes(cmd({ cmd: "dismiss", key: "recovery:j-recover", request: "r-20261013-tab-failures" })), "dismissed when done another way");
-    assert.doesNotMatch(h, /<p class="answer">/);
+    assert.doesNotMatch(h, /<div class="answer"><div class="md">/);
     const items = [...h.matchAll(/<li><label><input type="checkbox"[^>]*> (.*?)<\/label> <span class="reason">[^<]*<\/span>(.*?)<\/li>/g)].map((m) => [m[1], m[2]]);
     assert.deepEqual(
       items.map(([label]) => label),
@@ -263,16 +263,16 @@ describe("one fixture per step of docs/MVP.md", () => {
     plan.questions = [];
     plan.cannotDo = [];
     let h = renderRequest(r, ctx, true).value;
-    assert.match(h, /“the browser_tabSpinner agent has been at it for 6 hours”<\/span><p class="answer">I&#39;ll stop the &lt;spinner&gt; agent &amp; restart it\.<\/p><form/);
+    assert.match(h, /“the browser_tabSpinner agent has been at it for 6 hours”<\/span><div class="answer"><div class="md"><p>I&#39;ll stop the &lt;spinner&gt; agent &amp; restart it\.<\/p><\/div><\/div><form/);
     assert.match(h, /<button class="btn small primary">Do it<\/button>/);
     assert.doesNotMatch(h, /plan-notes|it can't do/);
     assert.match(h, /placeholder="Say what to change…"/);
 
     plan.plan = [];
     h = renderRequest(r, ctx, true).value;
-    const flag = h.slice(h.indexOf('data-key="recovery:j-recover"'), h.indexOf("</div>", h.indexOf('data-key="recovery:j-recover"')));
+    const flag = h.slice(h.indexOf('data-key="recovery:j-recover"'), h.indexOf("</div>", h.indexOf("reply-recovery")));
     assert.doesNotMatch(flag, /<ul class="plan">|Do it|Do these/);
-    assert.match(flag, /<p class="answer">[^]*reply-recovery/);
+    assert.match(flag, /<div class="answer"><div class="md">[^]*reply-recovery/);
   });
 
   it("4. investigate and fix: a running recovery agent is named in the summary line, not counted with the groups, and shown right above the box you typed in", () => {
@@ -396,12 +396,12 @@ describe("one fixture per step of docs/MVP.md", () => {
     );
     const row = rowOf(renderRequest(r, ctx, true).value, "item-i-idle");
     const ask = row.slice(row.indexOf('<div class="ask-you">'));
-    assert.match(ask, /^<div class="ask-you"><p>Critical review failed: API error<\/p><p>Retry it, or hand the group back to you\.<\/p>/);
+    assert.match(ask, /^<div class="ask-you"><p>Critical review failed:<\/p><div class="md"><p>API error<\/p><\/div><p>Retry it, or hand the group back to you\.<\/p>/);
     assert.match(ask, /title="Runs critical review again">Retry</);
     assert.doesNotMatch(ask, /Its author|Resume/);
     assert.ok(!ask.includes(cmd({ cmd: "continue", request: D, item: "i-idle" })), "its author has nothing to do with it");
     assert.ok(ask.includes(cmd({ cmd: "hand-back", item: "i-idle", request: D })));
-    assert.match(ask, /<div class="ask-more" data-key="note:odd"><p><b>Also: Something odd<\/b><\/p><p>look at it<\/p><div class="jobctl"><form[^]*?>Dismiss<\/button>/, "the second ⚑ with its own buttons: a note isn't a take-it");
+    assert.match(ask, /<div class="ask-more" data-key="note:odd"><p><b>Also: Something odd<\/b><\/p><div class="md"><p>look at it<\/p><\/div><div class="jobctl"><form[^]*?>Dismiss<\/button>/, "the second ⚑ with its own buttons: a note isn't a take-it");
   });
 
   it("asks whether to keep the skip-ifs whose tests still fail, with Keep them and the talk box", () => {
@@ -422,7 +422,7 @@ describe("one fixture per step of docs/MVP.md", () => {
     r.patches["p-close2"] = { ...r.patches["p-close"], id: "p-close2", sha: "e".repeat(40) };
     r.needsUser.push({ key: "note:close", action: "Something odd", detail: "look at it", item: "i-close", since: r.createdAt });
     const h = renderRequest(r, ctx, true).value;
-    assert.match(rowOf(h, "patch-p-close"), /<div class="ask-you"><p>look at it<\/p>/);
+    assert.match(rowOf(h, "patch-p-close"), /<div class="ask-you"><div class="md"><p>look at it<\/p><\/div>/);
     assert.doesNotMatch(rowOf(h, "patch-p-close2"), /ask-you/);
   });
 
@@ -433,7 +433,7 @@ describe("one fixture per step of docs/MVP.md", () => {
     r.jobs["j-author-nits"].endedAt = "2026-10-15T08:59:00.000Z";
     const row = rowOf(renderRequest(r, ctx, true).value, "item-i-nits");
     assert.match(row, /<span class="state">needs you: Its author disagrees with you<\/span>/);
-    assert.match(row, /<p>Its author didn't do what you asked: there is no product leak<\/p>/);
+    assert.match(row, /<p>Its author didn't do what you asked:<\/p><div class="md"><p>there is no product leak<\/p><\/div>/);
     assert.ok(row.includes(cmd({ cmd: "dismiss", key: "disagrees:j-author-nits", request: D })));
     assert.ok(row.includes(cmd({ cmd: "hand-back", item: "i-nits", request: D })));
     assert.match(row, />Go ahead with its patch</);
@@ -551,7 +551,10 @@ describe("one fixture per step of docs/MVP.md", () => {
     const order = ["p-prefs", "p-storage", "p-copydir", "p-fixture"].map((p) => h.indexOf(`data-patch="${p}"`));
     assert.deepEqual([...order].sort((a, b) => a - b), order);
     assert.ok(order[0] > 0);
-    assert.match(h, /<span class="bug none" title="Goes under the meta bug">meta bug<\/span> Save the prefs file of test_libPrefs\.js in the temp dir, r=gstoll\./);
+    assert.match(h, /<span class="bug missing" title="[^"]*">no bug yet<\/span> Save the prefs file of test_libPrefs\.js in the temp dir, r=gstoll\./, "only annotation patches go under the meta bug");
+    const r = structuredClone(get("r-20261010-xpcshell-cwd"));
+    r.patches["p-prefs"].item = "i-annotations";
+    assert.match(renderRequest(r, ctx, true).value, /<span class="bug none" title="Goes under the meta bug">meta bug<\/span> Save the prefs file/);
     assert.match(h, /⛔ hard: needs “Make nsLocalFile::CopyDirectoryTo/);
     assert.match(h, /🔗 soft: needs a newer sqlite on the try builders \(the vacuum test is slow without it\)/);
     assert.match(rowOf(h, "patch-p-prefs"), /<h4 class="part">The failure<\/h4><div class="failure">Test wrote into its own directory<\/div><div class="sub">linux64\/debug, windows11-64\/opt<\/div><div class="sub">2 configs · 31 failures\/week · <a href="https:\/\/tests\.firefox\.dev\/test\.html\?test=storage%2Ftest%2Funit%2Ftest_libPrefs\.js"[^>]*>rates on tests\.firefox\.dev ↗<\/a><\/div><h4 class="part">The fix<\/h4><div class="sub">review effort 1\/5<\/div>/);
@@ -630,18 +633,24 @@ describe("one fixture per step of docs/MVP.md", () => {
       return i < 0 ? null : h.slice(i, h.indexOf("</h4>", i));
     };
     const r = structuredClone(get("r-20261008-permissions"));
-    // Two patches go under it: required, and ready to file.
+    // An annotation patch goes under it: required, and ready to file.
+    r.patches["p-captive"].item = "i-annotations";
+    r.patches["p-webrtc"].bug = 2079003;
     assert.doesNotMatch(box(r)!, /optional/);
-    assert.match(box(r)!, /<a class="bug tofile" href="[^"]*dependson=2079001/);
+    assert.match(box(r)!, /<a class="bug tofile" href="[^"]*dependson=2079003%2C2079001/);
     // A patch's own bug still to file: the meta bug, which depends on it, comes after.
-    r.patches["p-captive"].bugDraft = { product: "Core", component: "DOM", summary: "s", description: "d" };
+    r.patches["p-webrtc"].bug = null;
+    r.patches["p-webrtc"].bugDraft = { product: "Core", component: "DOM", summary: "s", description: "d" };
     assert.match(box(r)!, /to file once the stack's 1 other bug is filed/);
     assert.doesNotMatch(box(r)!, /tofile/);
-    r.patches["p-webrtc"].bugDraft = { product: "Core", component: "DOM", summary: "s", description: "d" };
+    r.patches["p-perm"].bug = null;
+    r.patches["p-perm"].bugDraft = { product: "Core", component: "DOM", summary: "s", description: "d" };
     assert.match(box(r)!, /to file once the stack's 2 other bugs are filed/);
-    // Filed, every patch has its own bug: nothing needs the meta bug.
+    // Filed, and no annotation patch: nothing needs the meta bug.
+    r.patches["p-captive"].item = "i-captive";
     r.patches["p-captive"].bug = 2079002;
     r.patches["p-webrtc"].bug = 2079003;
+    r.patches["p-perm"].bug = 2079001;
     assert.match(box(r)!, /Meta bug <span class="sub">\(optional\)<\/span>/);
     assert.match(box(r)!, /tofile" href="[^"]*dependson=2079003%2C2079002%2C2079001/);
     // Filed: its link.
@@ -656,7 +665,8 @@ describe("one fixture per step of docs/MVP.md", () => {
   it("7. meta bug: a burndown's waits for its agent's draft; another request's, needed, says so", () => {
     const r = structuredClone(get("r-20261008-permissions"));
     delete r.metaBug;
-    assert.match(renderRequest(r, ctx, true).value, /This stack needs a meta bug, for its patches without a bug of their own: <a href="https:\/\/bugzilla/);
+    r.patches["p-captive"].item = "i-annotations";
+    assert.match(renderRequest(r, ctx, true).value, /This stack needs a meta bug, for its annotation patches: <a href="https:\/\/bugzilla/);
     r.kind = "burndown";
     const h = renderRequest(r, ctx, true).value;
     assert.doesNotMatch(h, /class="metabug|<h4>Meta bug/);
@@ -898,7 +908,7 @@ describe("a burndown with closed groups, running agents and a dropped patch", ()
     assert.doesNotMatch(rowOf(renderRequest(r, ctx, true).value, `item-${i.id}`), /The fix/, "nothing to show before a cause");
     i.investigation = { state: "fix verified locally", summary: "s", cause: "the query holds the window", verification: "ran it 50 times", commits: [], landsAfter: [], feedback: [] };
     const row = rowOf(renderRequest(r, ctx, true).value, `item-${i.id}`);
-    assert.match(row, /<\/h4><div class="failure">[^]*<h4 class="part">The fix<\/h4><div class="why"><p><span class="sub">Cause:<\/span> the query holds the window<\/p><details class="fold" data-fold="verified-i-browser-policy-trackingprotection"><summary>How it was verified<\/summary><p>ran it 50 times<\/p><\/details><\/div>/);
+    assert.match(row, /<\/h4><div class="failure">[^]*<h4 class="part">The fix<\/h4><div class="why"><div class="md"><p>Cause: the query holds the window<\/p><\/div><details class="fold" data-fold="verified-i-browser-policy-trackingprotection"><summary>How it was verified<\/summary><div class="md"><p>ran it 50 times<\/p><\/div><\/details><\/div>/);
     assert.doesNotMatch(row, /Allow one try push|allow-push/);
   });
 
@@ -947,7 +957,10 @@ describe("agent activity", () => {
     assert.match(h, /<details class="call" data-more="call-t3"><summary><b>Bash<\/b> <span class="mono">\.\/mach test browser\/base\/content\/test\/tabs\/browser_tabSpinner\.js --repeat 20<\/span>/);
     assert.match(h, /<pre class="in">\.\/mach test [^<]*\necho done<\/pre>/);
     assert.match(h, /<details class="call subagent" data-more="call-t5" title="in a subagent">/);
-    assert.match(h, /<div class="turn agent report"><dl><dt>Status<\/dt><dd><span class="rtext">fixed<\/span>/);
+    assert.match(h, /<div class="turn agent report"><dl><dt>Status<\/dt><dd><div class="rtext"><div class="md"><p>fixed<\/p><\/div><\/div>/);
+    // A multi-line message with a "- " list: a paragraph, then a list.
+    const said = renderActivity(r.id, job, { turns: [{ kind: "said" as const, text: "Two causes:\n- the paint\n- the timer" }], summary: { done: false, toolUses: { count: 0, byName: {} } }, transcript: false }, ctx).value;
+    assert.match(said, /<div class="turn agent"><div class="md"><p>Two causes:<\/p><ul><li>the paint<\/li><li>the timer<\/li><\/ul><\/div><\/div>/);
     // A long run of tool calls: the last ones shown, the earlier ones folded.
     const many = Array.from({ length: 6 }, (_, n) => ({ kind: "call" as const, id: `c${n}`, tool: "Read", input: { file_path: `f${n}.js` }, output: "x" }));
     const m = renderActivity(r.id, job, { turns: many, summary: { done: false, toolUses: { count: 6, byName: {} } }, transcript: false }, ctx).value;

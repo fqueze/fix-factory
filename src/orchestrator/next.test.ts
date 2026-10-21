@@ -11,6 +11,7 @@ import { needsMetaBug } from "../state/meta-bug.ts";
 
 const none = { verdict: "none", quote: "no bug", feedback: [] };
 const ok = { verdict: "ok", findings: [], feedback: [] };
+const bugDraft = { product: "Core", component: "XPCOM", summary: "s", description: "d" };
 const lintOk = { ok: true, violations: [] };
 const fixed = (commits: string[], extra = {}) => ({ state: "fix verified locally", summary: "fixed", cause: "c", verification: "v", commits, landsAfter: [], feedback: [], ...extra });
 const imported = (s: string, title: string, files: string[], bug: number | null = null) => [{ sha: s, title, bug, reviewers: [], files, insertions: 1, deletions: 0, testOnly: true }];
@@ -59,7 +60,8 @@ function investigating(sc: Scenario, item: string): void {
 
 // The author reports a fix; import, lint and review all pass.
 function reviewed(sc: Scenario, item: string, commit: string, test: string, opts: { title?: string; bug?: number | null; report?: object } = {}): void {
-  sc.complete(`author:${item}:initial`, { report: fixed([commit], opts.report) });
+  // A fix has a bug of its own: the one its title gives, or else one to file.
+  sc.complete(`author:${item}:initial`, { report: fixed([commit], opts.bug ? opts.report : { bugDraft, ...opts.report }) });
   sc.settle();
   const author = sc.view().byKey.get(`author:${item}:initial`)![0].job;
   sc.complete(`import:${author}`, { output: imported(commit, opts.title ?? `Bug XXXXXXX - Fix ${test}, r=smaug.`, [test], opts.bug ?? null) });
@@ -754,7 +756,7 @@ describe("4. investigate and fix", () => {
       sc.complete(author, { report: fixed([commit]) });
       sc.settle();
       const job = sc.view().byKey.get(author)!.at(-1)!.job;
-      sc.complete(`import:${job}`, { output: imported(commit, "Bug XXXXXXX - Fix", ["a/test_a.js"]) });
+      sc.complete(`import:${job}`, { output: imported(commit, "Bug 1 - Fix", ["a/test_a.js"], 1) });
       sc.settle();
       sc.complete(`msg:p-test-a:${commit}`, { output: "m" });
       sc.settle();
@@ -774,6 +776,31 @@ describe("4. investigate and fix", () => {
         assert.equal(sc.state().items["i-test-a"].state, "blocked");
       }
     }
+  });
+
+  it("a fix without a bug or a draft goes back to its author once, before anything else; with a draft it goes on", () => {
+    const sc = workList([group("ka", "a/test_a.js", "boom")]);
+    investigating(sc, "i-test-a");
+    sc.complete("author:i-test-a:initial", { report: fixed([sha("1")]) });
+    sc.settle();
+    const job = sc.view().byKey.get("author:i-test-a:initial")![0].job;
+    sc.complete(`import:${job}`, { output: imported(sha("1"), "Bug XXXXXXX - Fix test_a, r=smaug.", ["a/test_a.js"]) });
+    const resumed = `author:i-test-a:bug:${job}`;
+    assert.deepEqual(sc.settle(), [resumed]);
+    const plan = sc.plan(resumed);
+    assert.equal(plan.agent?.resume, true);
+    assert.match(plan.agent?.message ?? "", /no bug: only annotation patches go under the meta bug/);
+    assert.ok(![...sc.view().byKey.keys()].some((k) => k.startsWith("msg:") || k.startsWith("lint:") || k.startsWith("review:")));
+    sc.complete(resumed, { report: fixed([sha("2")], { bugDraft }) });
+    sc.settle();
+    const again = sc.view().byKey.get(resumed)![0].job;
+    sc.complete(`import:${again}`, { output: imported(sha("2"), "Bug XXXXXXX - Fix test_a, r=smaug.", ["a/test_a.js"]) });
+    assert.deepEqual(sc.settle().sort(), [`lint-bug:${again}`, `msg:p-test-a:${sha("2")}`]);
+    sc.complete(`msg:p-test-a:${sha("2")}`, { output: "Bug XXXXXXX - Fix\n" });
+    sc.complete(`lint-bug:${again}`, { output: lintOk });
+    assert.deepEqual(sc.settle(), [`lint:p-test-a:${sha("2")}`]);
+    sc.complete(`lint:p-test-a:${sha("2")}`, { output: lintOk });
+    assert.deepEqual(sc.settle(), [`review:p-test-a:${again}`]);
   });
 
   it("critical review findings go back to the author for at most 3 rounds, then come to you", () => {
@@ -1383,7 +1410,7 @@ describe("5. stack", () => {
     sc.settle();
     sc.complete(`try-table:${push}:final`, { output: table() });
     sc.settle();
-    assert.deepEqual(sc.open(), ["meta-bug:root"], "one meta bug, for the one stack");
+    assert.deepEqual(sc.open().sort(), ["file-bug:p-test-a:meta-bug-step", "file-bug:p-test-b:meta-bug-step"], "nothing for the per-folder stack");
     const keys = sc.view().jobs.map((j) => j.purpose.key);
     assert.ok(!keys.some((k) => /^[a-z-]+:a(:|$)/.test(k)), JSON.stringify(keys));
     assert.ok(!sc.state().needsUser.some((n) => n.stack === "a"));
@@ -1812,8 +1839,20 @@ describe("6. verify on try, again", () => {
 });
 
 describe("7. meta bug", () => {
-  it("asks for the meta bug (no draft outside burndowns), and its number goes in every patch without a bug of its own", () => {
+  // verified() with test_a's patch made the skip-ifs group's annotation patch, and test_b's without a bug or draft if bugless.
+  function annotated(bugless = false): Scenario {
     const sc = verified();
+    const { deps: _d, review: _r, replyDrafts: _rd, bugDraft: _b, id, ...a } = sc.state().patches["p-test-a"];
+    sc.add({ type: "patch", request: ID, patch: id, ...a, item: "i-annotations" });
+    const { deps: _d2, review: _r2, replyDrafts: _rd2, id: idB, ...b } = sc.state().patches["p-test-b"];
+    if (bugless) sc.add({ type: "patch", request: ID, patch: idB, ...b, bug: null, title: "Bug XXXXXXX - Fix test_b, r=smaug." });
+    sc.add({ type: "user-done", request: ID, key: "file-bug:p-test-a:meta-bug-step" });
+    return sc;
+  }
+
+  it("asks for the meta bug (no draft outside burndowns) for an annotation patch, and its number goes only in the annotation patches", () => {
+    const sc = annotated(true);
+    assert.ok(sc.settle().some((k) => k.startsWith("author:i-test-b:bug:")), "test_b's fix gets a bug from its author instead");
     assert.equal(sc.state().metaBug, undefined);
     assert.ok(!sc.view().jobs.some((j) => j.purpose.what === "meta-draft"));
     assert.deepEqual(sc.open(), ["meta-bug:root"]);
@@ -1821,16 +1860,15 @@ describe("7. meta bug", () => {
     sc.add({ type: "user-done", request: ID, key: "meta-bug:root" });
     const [rewrite] = sc.settle();
     assert.match(rewrite, /^rewrite-bugs:root:/);
-    assert.deepEqual(JSON.parse(sc.plan(rewrite).files![0].content), { [sha("d")]: { bug: 999 } });
+    assert.deepEqual(JSON.parse(sc.plan(rewrite).files![0].content), { [sha("d")]: { bug: 999 } }, "not test_b's fix, which has no bug");
     sc.complete(rewrite, { output: { mapping: { [sha("c")]: sha("e"), [sha("d")]: sha("f") } } });
     assert.equal(sc.state().patches["p-test-a"].title, "Bug 999 - Fix a/test_a.js, r=smaug.");
     assert.equal(sc.state().patches["p-test-a"].bug, 999);
-    sc.settle();
-    assert.equal(sc.state().step, "submit");
+    assert.equal(sc.state().patches["p-test-b"].bug, null);
   });
 
   it("a patch already on Phabricator gets its Differential Revision line along with its bug", () => {
-    const sc = verified();
+    const sc = annotated();
     const { deps: _d, review: _r, replyDrafts: _rd, id, ...p } = sc.state().patches["p-test-a"];
     sc.add({ type: "patch", request: ID, patch: id, ...p, revision: 7 });
     sc.add({ type: "meta-bug", request: ID, bug: 999 });
@@ -1898,7 +1936,10 @@ describe("file-bug at a redone step 7", () => {
 
 function submitting(): Scenario {
   const sc = verified();
-  sc.add({ type: "meta-bug", request: ID, bug: 999 });
+  // You file test_a's drafted bug: 999.
+  const { deps: _d, review: _r, replyDrafts: _rd, id, ...p } = sc.state().patches["p-test-a"];
+  sc.add({ type: "patch", request: ID, patch: id, ...p, bug: 999, bugFromYou: true });
+  sc.add({ type: "user-done", request: ID, key: "file-bug:p-test-a:meta-bug-step" });
   sc.settle();
   const rewrite = sc.view().jobs.find((j) => j.purpose.key.startsWith("rewrite-bugs:"))!.purpose.key;
   sc.complete(rewrite, { output: { mapping: { [sha("c")]: sha("e"), [sha("d")]: sha("f") } } });
@@ -2583,6 +2624,9 @@ describe("burndown verification", () => {
     // No skip to remove for real (followed with one in the next test).
     sc.complete("author:i-annotations:removal", { report: { summary: "every test still fails", feedback: [] } });
     sc.settle();
+    // You file test_a's drafted bug, then the meta bug.
+    const { deps: _d, review: _r, replyDrafts: _rd, id, ...p } = sc.state().patches["p-test-a"];
+    sc.add({ type: "patch", request: ID, patch: id, ...p, bug: 555, bugFromYou: true });
     sc.add({ type: "meta-bug", request: ID, bug: 999 });
     const [rewrite] = sc.settle();
     sc.complete(rewrite, { output: { mapping: { [sha("a")]: sha("c") } } });

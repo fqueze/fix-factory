@@ -290,10 +290,10 @@ describe("agent activity, transcript and profile", () => {
   it("shows an agent's run as a conversation, from its prompt, with links to its transcript and profile", async () => {
     const h = await (await fetch(`${bases[0]}${R}/j-inv-spinner/activity`)).text();
     assert.doesNotMatch(h, /running for|tool calls ·/, "its line says it already");
-    assert.match(h, /<div class="convo"><div class="turn user prompt" data-expand title="Click to expand">Fix browser_tabSpinner\.js\.<\/div><div class="turn agent">I&#39;ll start by reading the test\.<\/div>/);
+    assert.match(h, /<div class="convo"><div class="turn user prompt" data-expand title="Click to expand"><div class="md"><p>Fix browser_tabSpinner\.js\.<\/p><\/div><\/div><div class="turn agent"><div class="md"><p>I&#39;ll start by reading the test\.<\/p><\/div><\/div>/);
     assert.match(h, /<details class="call" data-more="call-t3"><summary><b>Bash<\/b> <span class="mono">\.\/mach test browser\/base\/content\/test\/tabs\/browser_tabSpinner\.js --repeat 20<\/span>/);
     assert.match(h, /<details class="call subagent" data-more="call-t5" title="in a subagent"><summary><b>Glob<\/b>/);
-    assert.match(h, /<div class="turn agent">The spinner waits on a paint that never comes in headless mode\.<\/div><div class="sub">working <span data-since/);
+    assert.match(h, /<div class="turn agent"><div class="md"><p>The spinner waits on a paint that never comes in headless mode\.<\/p><\/div><\/div><div class="sub">working <span data-since/);
     assert.ok(h.includes(`href="${R}/j-inv-spinner/transcript"`));
     const api = encodeURIComponent(`${bases[0]}${R}/j-inv-spinner/profile`);
     assert.ok(h.includes(`href="http://localhost:4242/from-url/${api}?thread=0"`));

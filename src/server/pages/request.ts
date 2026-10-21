@@ -1,8 +1,8 @@
-import { needsMetaBug as stackNeedsMetaBug } from "../../state/meta-bug.ts";
+import { ANNOTATIONS_ITEM, needsMetaBug as stackNeedsMetaBug } from "../../state/meta-bug.ts";
+import { md } from "./md.ts";
 import { REQUEST_STEPS } from "../commands.ts";
 import type { BugDraft, ItemView, JobView, PatchView, PushView, RequestState, StackView } from "../../types.ts";
 import { html, join, type Html } from "../html.ts";
-import { ANNOTATIONS_ITEM } from "../../orchestrator/next.ts";
 import { actionsSummary, recoveryAnswers, pollPhabButton, redoAnnotationsButton, approvePushControls, bugBox, continueBox, copyButton, handBackButton, flagControls, flagItemOf, flagText, plannedLabel, recoveryPlanFor, hasAuthorSession, stackViewerLink, submitControls, summaryId } from "./actions.ts";
 import { groupJobs, jobLine } from "./activity.ts";
 import { flagAsk, itemBucket, itemSentence, progressLine, requestProgress, type Bucket } from "./progress.ts";
@@ -196,7 +196,7 @@ function metaBugLine(r: RequestState, back: string, ctx: RenderContext): Html {
       ? html`· <span class="sub">to file once the stack's ${plural(unfiled, "other bug")} ${unfiled === 1 ? "is" : "are"} filed</span>`
       : html`· <a class="bug tofile" href="${metaBugUrl(r, m.draft, ctx)}" target="_blank" rel="noopener">Bug to file</a>`;
   return html`<div class="box"><h4>Meta bug${required ? null : html` <span class="sub">(optional)</span>`} ${link} ${m.draft ? html`· “${m.draft.summary}”` : null}</h4>${
-    m.draft ? html`<details data-fold="desc-meta"><summary>Description</summary><div class="desc">${m.draft.description}</div></details>${revisions(r, "meta")}` : null
+    m.draft ? html`<details data-fold="desc-meta"><summary>Description</summary><div class="desc">${md(m.draft.description)}</div></details>${revisions(r, "meta")}` : null
   }${bugBox(r.id, "meta", back, "row")}</div>`;
 }
 
@@ -249,7 +249,7 @@ function optionalMetaBug(r: RequestState, s: StackView, ctx: RenderContext): Htm
     keywords: ["meta"],
     dependsOn: stackBugs(r),
   };
-  const lead = stackNeedsMetaBug(stackPatches(r, s)) ? "This stack needs a meta bug, for its patches without a bug of their own" : "A meta bug is optional here";
+  const lead = stackNeedsMetaBug(stackPatches(r, s)) ? "This stack needs a meta bug, for its annotation patches" : "A meta bug is optional here";
   return html`<div class="metabug sub">${lead}: <a href="${enterBugUrl(draft, ctx)}" target="_blank" rel="noopener" title="Opens a prefilled enter_bug.cgi, depending on the stack's bugs">file one ↗</a> to track the stack's bugs, then paste its number ${bugBox(r.id, "meta", requestUrl(r.id))}</div>`;
 }
 
@@ -457,12 +457,12 @@ function bugLabel(p: PatchView, ctx: RenderContext): Html | null {
   if (p.bugDraft) {
     return html`<a class="bug tofile" href="${enterBugUrl(p.bugDraft, ctx)}" target="_blank" rel="noopener" title="Opens a prefilled enter_bug.cgi; paste its number below">Bug to file</a>`;
   }
-  return p.testOnly ? html`<span class="bug none" title="Goes under the meta bug">meta bug</span>` : null;
+  return p.item === ANNOTATIONS_ITEM ? html`<span class="bug none" title="Goes under the meta bug">meta bug</span>` : html`<span class="bug missing" title="Its author gives it one: an open bug for this failure, or a draft to file">no bug yet</span>`;
 }
 
 // A recovery plan already answered: what you said, then what it planned, couldn't do and asked.
 function pastPlan(r: RequestState, p: RequestState["recoveryPlans"][number]): Html {
-  return html`<details class="note" data-fold="plan-${p.t}"><summary><b>You said: “${p.text.split("\n")[0]}”</b> <span class="sub">${formatDate(p.t)}</span></summary>${p.answer ? html`<p>${p.answer}</p>` : null}<ul>${p.plan.map(
+  return html`<details class="note" data-fold="plan-${p.t}"><summary><b>You said: “${p.text.split("\n")[0]}”</b> <span class="sub">${formatDate(p.t)}</span></summary>${p.answer ? md(p.answer) : null}<ul>${p.plan.map(
     (c) => html`<li>${plannedLabel(c, r)}<div class="sub">${c.reason}</div></li>`,
   )}${p.cannotDo.map((t) => html`<li>Can't do: ${t}</li>`)}${p.questions.map((t) => html`<li>Asked you: ${t}</li>`)}</ul></details>`;
 }
@@ -528,7 +528,7 @@ function investigationHtml(i: ItemView): Html | null {
   if (!inv?.cause) {
     return null;
   }
-  return html`<div class="why"><p><span class="sub">Cause:</span> ${inv.cause}</p>${inv.verification ? html`<details class="fold" data-fold="verified-${i.id}"><summary>How it was verified</summary><p>${inv.verification}</p></details>` : null}</div>`;
+  return html`<div class="why">${md(`Cause: ${inv.cause}`, i.group.tests)}${inv.verification ? html`<details class="fold" data-fold="verified-${i.id}"><summary>How it was verified</summary>${md(inv.verification, i.group.tests)}</details>` : null}</div>`;
 }
 
 const ASK_EVIDENCE =
@@ -559,7 +559,7 @@ function bugDraftBox(r: RequestState, p: PatchView, back: string): Html {
   const d = p.bugDraft!;
   return html`<div class="box tofile">
     <h4>${d.product}::${d.component} · “${d.summary}”</h4>
-    <details data-fold="desc-${p.id}"><summary>Description</summary><div class="desc">${d.description}</div></details>
+    <details data-fold="desc-${p.id}"><summary>Description</summary><div class="desc">${md(d.description)}</div></details>
     ${revisions(r, p.id)}${bugBox(r.id, p.id, back, "row")}
   </div>`;
 }

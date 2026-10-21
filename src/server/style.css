@@ -160,6 +160,12 @@ ul.plan .reason { display: block; color: var(--text-muted); font-size: 12px; pad
 .turn.prompt.open { max-height: none; }
 .turn.report { white-space: normal; max-width: none; align-self: stretch; }
 .turn.bad { border-color: var(--critical); }
+.md { white-space: normal; }
+.md > :first-child { margin-top: 0; } .md > :last-child { margin-bottom: 0; }
+.md p, .md ul, .md ol, .md pre { margin: 0 0 6px; }
+.md ul, .md ol { padding-left: 20px; }
+.md code { font: 12px ui-monospace, monospace; background: var(--track); padding: 0 3px; border-radius: 3px; }
+.md pre { font: 12px ui-monospace, monospace; background: var(--track); padding: 6px; border-radius: 6px; overflow-x: auto; white-space: pre; }
 .calls { display: flex; flex-direction: column; font-size: 12px; padding-left: 4px; }
 .calls details.more { margin: 0; }
 .call { color: var(--text-secondary); }

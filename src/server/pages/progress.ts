@@ -1,5 +1,6 @@
 // What each group is doing, in plain words, and what a request (or the whole factory) is doing: working,
 // waiting for you, or done. No internal state names.
+import { md } from "./md.ts";
 import { canRetry, reviewLimitFlag } from "../../state/flags.ts";
 import type { ItemState, ItemView, JobView, NeedsUser, RequestState, ReviewPatchReport } from "../../types.ts";
 import { html, join, type Html } from "../html.ts";
@@ -124,7 +125,7 @@ export function itemSentence(r: RequestState, i: ItemView, ctx: RenderContext): 
 // The question a group's ⚑ asks, with what you need to answer it; its buttons say what each answer does.
 export function flagAsk(r: RequestState, i: ItemView, n: NeedsUser): Html {
   const job = n.job === undefined ? undefined : r.jobs[n.job];
-  const detail = linkify(n.detail, i.group.tests);
+  const detail = md(n.detail, i.group.tests);
   if (reviewLimitFlag(r, i.id) === n) {
     const report = i.lastReport?.prompt === "review-patch" ? (i.lastReport.report as ReviewPatchReport) : undefined;
     const findings = report?.findings.filter((f) => f.severity === "must-fix").map((f) => `${f.file ? `${f.file}${f.line ? `:${f.line}` : ""}: ` : ""}${f.text}`) ?? n.detail.split("; ");
@@ -135,17 +136,17 @@ export function flagAsk(r: RequestState, i: ItemView, n: NeedsUser): Html {
       return html`<p>You stopped ${job ? jobNoun(job.name) : "its job"}. Resume it, tell its author what to do instead, or dismiss this.</p>`;
     case "failed":
       if (job?.kind !== "agent") {
-        return html`<p>${detail}</p><p>Retry it, tell its author what to do, or hand the group back to you.</p>`;
+        return html`${detail}<p>Retry it, tell its author what to do, or hand the group back to you.</p>`;
       }
       return isAuthorJob(job)
-        ? html`<p>Its author stopped without a fix: ${detail}</p><p>Resume it where it stopped, tell it what to do, or hand the group back to you.</p>`
-        : html`<p>${jobNoun(job.name).replace(/^./, (c) => c.toUpperCase())} failed: ${detail}</p><p>Retry it, or hand the group back to you.</p>`;
+        ? html`<p>Its author stopped without a fix:</p>${detail}<p>Resume it where it stopped, tell it what to do, or hand the group back to you.</p>`
+        : html`<p>${jobNoun(job.name).replace(/^./, (c) => c.toUpperCase())} failed:</p>${detail}<p>Retry it, or hand the group back to you.</p>`;
     case "disagrees":
-      return html`<p>Its author didn't do what you asked: ${detail}</p><p>Tell it again, go ahead with its patch as it is, or hand the group back to you.</p>`;
+      return html`<p>Its author didn't do what you asked:</p>${detail}<p>Tell it again, go ahead with its patch as it is, or hand the group back to you.</p>`;
     case "take-it":
-      return html`<p>${detail}</p><p>Fix it anyway, or leave it to them: the factory then stops working on this test.</p>`;
+      return html`${detail}<p>Fix it anyway, or leave it to them: the factory then stops working on this test.</p>`;
     default:
-      return html`<p>${detail}</p>`;
+      return detail;
   }
 }
 

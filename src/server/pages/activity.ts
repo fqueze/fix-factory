@@ -1,4 +1,5 @@
 import { toolCallText, type StreamSummary } from "../../agents/run.ts";
+import { md } from "./md.ts";
 import { isPushJob } from "../../state/flags.ts";
 import type { ItemView, JobView, RequestId, RequestState } from "../../types.ts";
 import { html, type Html } from "../html.ts";
@@ -169,22 +170,22 @@ export function renderActivity(request: RequestId, job: JobView, a: Activity | u
     s.report !== undefined
       ? html`<div class="turn agent report">${reportHtml(s.report)}</div>`
       : s.isError && s.resultText
-        ? html`<div class="turn agent bad">${s.resultText}</div>`
+        ? html`<div class="turn agent bad">${md(s.resultText)}</div>`
         : job.endedAt === undefined
           ? html`<div class="sub">working ${elapsed(job.startedAt, ctx)}…</div>`
           : null;
-  return html`${head}<div class="convo">${a.prompt ? html`<div class="turn user prompt" data-expand title="Click to expand">${a.prompt.trim()}</div>` : null}${groups.map((g, n) =>
+  return html`${head}<div class="convo">${a.prompt ? html`<div class="turn user prompt" data-expand title="Click to expand">${md(a.prompt)}</div>` : null}${groups.map((g, n) =>
     g[0].kind === "call" ? callRun(g as Extract<Turn, { kind: "call" }>[]) : turnHtml(g[0], n),
   )}${end}</div>`;
 }
 
 function turnHtml(t: Exclude<Turn, { kind: "call" }>, n: number): Html {
   if (t.kind === "said") {
-    return html`<div class="turn agent">${t.text.trim()}</div>`;
+    return html`<div class="turn agent">${md(t.text)}</div>`;
   }
   return t.synthetic
     ? html`<div class="calls"><details class="call" data-more="loaded-${n}"><summary>${t.text.startsWith("Base directory for this skill") ? "the skill's instructions" : "instructions"}</summary><pre class="out">${clip(t.text)}</pre></details></div>`
-    : html`<div class="turn user">${t.text.trim()}</div>`;
+    : html`<div class="turn user">${md(t.text)}</div>`;
 }
 
 function callRun(calls: Extract<Turn, { kind: "call" }>[]): Html {
@@ -221,7 +222,7 @@ function reportHtml(v: unknown): Html | null {
     const sorted = [...entries.filter(([k]) => k !== "feedback"), ...entries.filter(([k]) => k === "feedback")];
     return html`<dl>${sorted.map(([k, x]) => html`<dt>${inWords(k)}</dt><dd>${reportHtml(x)}</dd>`)}</dl>`;
   }
-  return html`<span class="rtext">${String(v)}</span>`;
+  return typeof v === "string" ? html`<div class="rtext">${md(v)}</div>` : html`<span class="rtext">${String(v)}</span>`;
 }
 
 // A list item's short fields on one line ("must-fix · foo.js · 12"), its long text after them.
@@ -229,7 +230,7 @@ function inline(o: Record<string, unknown>): Html {
   const short = Object.entries(o).filter(([, x]) => (typeof x === "string" && x.length <= 60) || typeof x === "number" || typeof x === "boolean");
   const rest = Object.entries(o).filter(([k]) => !short.some(([s]) => s === k));
   return html`${short.length ? html`<span class="sub">${short.map(([, x]) => String(x)).join(" · ")}</span> ` : null}${rest.map(([k, x]) =>
-    typeof x === "string" ? html`<span class="rtext">${x}</span> ` : reportHtml(x) === null ? null : html`<div><b>${inWords(k)}</b> ${reportHtml(x)}</div>`,
+    typeof x === "string" ? html`<div class="rtext">${md(x)}</div>` : reportHtml(x) === null ? null : html`<div><b>${inWords(k)}</b> ${reportHtml(x)}</div>`,
   )}`;
 }
 

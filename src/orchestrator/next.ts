@@ -19,7 +19,7 @@ import type { OrderOutput } from "../cli/stack/order.ts";
 import { expectedTests, type DryRunResult } from "../cli/try.ts";
 import { REQUEST_STEPS } from "../server/commands.ts";
 import { COMMITS_CHANGED } from "../state/flags.ts";
-import { needsMetaBug } from "../state/meta-bug.ts";
+import { ANNOTATIONS_ITEM, lacksBug, needsMetaBug } from "../state/meta-bug.ts";
 import type { EventInput } from "../state/events.ts";
 import type {
   AddressReviewReport,
@@ -92,7 +92,7 @@ export const HOUR = 3600_000;
 export const EARLY_WORK_LIST_MS = 2 * HOUR;
 export const SUBMIT_IMPORT_MS = 2 * 60_000;
 export const SUBMIT_WATCH_MS = 60 * 60_000; // after you copy the moz-phab command
-export const ANNOTATIONS_ITEM = "i-annotations";
+export { ANNOTATIONS_ITEM };
 export const LINT_ROUNDS = 2;
 export const REVIEW_ROUNDS = 3;
 export const STACK_REVIEW_ROUNDS = 3;
@@ -1093,6 +1093,17 @@ class Planner {
     );
     if (!imp) return;
     const patches = commits.map((sha, i) => ({ id: patchId(item.id, i), sha }));
+    // Only annotation patches go under the meta bug: any other needs a bug of its own, an open one or a draft.
+    const bugless = patches.filter((p) => this.s.patches[p.id] && lacksBug(this.s.patches[p.id]));
+    if (bugless.length && item.id !== ANNOTATIONS_ITEM && author.purpose.reason !== "bug") {
+      this.resumeAuthor(
+        item.id,
+        `author:${item.id}${e}:bug:${author.job}`,
+        "bug",
+        `${bugless.length === 1 ? `Your commit ${bugless[0].sha.slice(0, 12)} has` : `Your commits ${bugless.map((p) => p.sha.slice(0, 12)).join(", ")} have`} no bug: only annotation patches go under the meta bug. If an open bug covers this failure, put its number in the commit message; otherwise add a \`bugDraft\` to your report for the user to file (keep \`Bug XXXXXXX\`). Change nothing else, then end with the JSON report again.`,
+      );
+      return;
+    }
     const lints: { job: JobRecord; what: string }[] = [];
     let pending = false;
     for (const p of patches) {
@@ -1485,7 +1496,7 @@ class Planner {
       for (const pid of stack.order) {
         const p = this.s.patches[pid];
         if (!p || !/^Bug X+\b/i.test(p.title)) continue;
-        const bug = p.bug ?? (meta !== null && (p.testOnly || !p.bugDraft) ? meta : null);
+        const bug = p.bug ?? (meta !== null && p.item === ANNOTATIONS_ITEM ? meta : null);
         if (bug !== null) edits[pid] = bug;
       }
       if (Object.keys(edits).length === 0) continue;

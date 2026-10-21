@@ -1,4 +1,5 @@
 import type { JobView, NeedsUser, PlannedCommand, PushView, RefusedCommand, RequestState, StackView } from "../../types.ts";
+import { md } from "./md.ts";
 import { canDismiss, canRetry, reviewLimitFlag } from "../../state/flags.ts";
 import { html, join, type Html } from "../html.ts";
 import { actionKind, COMMAND_LABELS, linkify, commandFields, enterBugUrl, metaBugUrl, groupLabel, jobLabel, pushName, jobNoun, refusedOf, needsMetaBug, plural, requestUrl, stackOfPatch, submitChecks, type RenderContext } from "./common.ts";
@@ -318,7 +319,7 @@ function itemLabel(r: RequestState, item: string): string {
 }
 
 export function recoveryPlan(r: RequestState, plan: RequestState["recoveryPlans"][number], back: string): Html {
-  return html`${plan.answer ? html`<p class="answer">${plan.answer}</p>` : null}${
+  return html`${plan.answer ? html`<div class="answer">${md(plan.answer)}</div>` : null}${
     plan.plan.length
       ? html`<form class="inline cmd" method="post" action="/api/commands"><input type="hidden" name="back" value="${back}"><ul class="plan">${plan.plan.map(
           (c, i) =>
