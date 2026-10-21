@@ -43,6 +43,8 @@ export function runningSentence(job: JobView): string {
   return job.name === "review-patch" && job.model ? `${what} by ${modelLabel(job.model)}` : what;
 }
 
+const UNSETTLED: ItemState[] = ["not started", "waiting for a build slot", "investigating", "fix verified locally", "in critical review", "review findings", "blocked", "waiting for a try repro"];
+
 // A group where nothing runs and nothing waits for you. active: something should be running, so it has stalled.
 export const IDLE: Record<ItemState, { text: (i: ItemView, builds: number) => string; active: boolean }> = {
   "not started": { text: () => "not started yet: waiting for an agent", active: false },
@@ -103,6 +105,15 @@ export function itemSentence(r: RequestState, i: ItemView, ctx: RenderContext): 
         hasAuthorSession(r, i.id) ? "Retry its last job, tell its author what to do, or hand it back to you." : "Retry its last job, or hand it back to you."
       }</p>`,
     };
+  }
+  if (i.state === "not started") {
+    // next(): a test's later group waits for its first one's fix; the others for one of the groups investigating.
+    const all = Object.values(r.items);
+    const first = all.slice(0, all.indexOf(i)).find((x) => x.group.tests[0] === i.group.tests[0] && UNSETTLED.includes(x.state));
+    const text = first
+      ? `not started yet: waits for the fix of its test's first group, which may fix this failure too`
+      : `not started yet: a request investigates ${ctx.maxAgents ?? "a few"} groups at a time`;
+    return { text: html`${text}`, cls: "wait", controls: null, detail: i.detail };
   }
   const builds = ctx.runningBuilds ?? Object.values(r.jobs).filter((j) => j.kind === "build" && j.endedAt === undefined).length;
   // On try, its push is what runs.

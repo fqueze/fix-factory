@@ -663,35 +663,14 @@ describe("4. investigate and fix", () => {
     assert.deepEqual(wt.cli?.args, ["create", `${ID}-i-test-a`, "--base", "origin/main", "--build", "artifact"]);
   });
 
-  it("the second group of a test finding someone active asks as the first group", () => {
-    const sc = workList([group("ka", "a/test_a.js", "boom"), group("kb", "a/test_a.js", "bang")]);
-    for (const item of ["i-test-a", "i-test-a-2"]) sc.complete(`prior-art:${item}`, { output: { bugs: [] } });
-    sc.settle();
-    sc.complete("prior-art-verdict:i-test-a", { report: none });
-    sc.complete("prior-art-verdict:i-test-a-2", { report: { verdict: "active", bug: 77, quote: "assigned to janv", feedback: [] } });
-    assert.deepEqual(sc.settle(), ["wt:i-test-a"]);
-    assert.deepEqual(sc.open(), ["take-it:i-test-a"]);
-    const flag = sc.state().needsUser[0];
-    assert.equal(flag.item, "i-test-a");
-    assert.equal(flag.detail, "assigned to janv", "no such bug in the prior art: its quote");
-    sc.add({ type: "user-done", request: ID, key: "take-it:i-test-a" });
-    assert.deepEqual(sc.settle(), [], "the second group waits for the first");
-  });
-
-  it("two groups of one test ask once, on the first, with the bug the verdict names; take it lets both go on", () => {
-    const sc = workList([group("ka", "a/test_a.js", "boom"), group("kb", "a/test_a.js", "bang")]);
-    const bug = { id: 77, summary: "Intermittent test_a.js", status: "ASSIGNED", product: "Core", component: "DOM", keywords: [], assignee: "janv", lastHumanComment: null, revisions: [] };
-    for (const item of ["i-test-a", "i-test-a-2"]) sc.complete(`prior-art:${item}`, { output: { bugs: [bug] } });
-    sc.settle();
-    for (const item of ["i-test-a", "i-test-a-2"]) sc.complete(`prior-art-verdict:${item}`, { report: { verdict: "active", bug: 77, quote: "assigned to janv", feedback: [] } });
-    assert.deepEqual(sc.settle(), []);
-    assert.deepEqual(sc.open(), ["take-it:i-test-a"]);
-    const flag = sc.state().needsUser[0];
-    assert.equal(flag.action, "Someone else may be fixing test_a.js");
-    assert.equal(flag.detail, "Bug 77 - Intermittent test_a.js (ASSIGNED, assigned to janv).");
-    assert.equal(flag.item, "i-test-a");
-    sc.add({ type: "user-done", request: ID, key: "take-it:i-test-a" });
-    assert.deepEqual(sc.settle(), ["wt:i-test-a"]);
+  it("two groups of one test that haven't started are one: the first gets both failures, the second closes", () => {
+    const sc = workList([group("ka", "a/test_a.js", "boom"), { ...group("kb", "a/test_a.js", "bang"), configs: ["mac/opt-xpcshell"], taskIds: ["T2"] }]);
+    assert.equal(sc.state().items["i-test-a-2"].state, "left as-is");
+    const g = sc.state().items["i-test-a"].group;
+    assert.equal(g.message, "boom | bang");
+    assert.deepEqual(g.configs, ["linux/opt-xpcshell", "mac/opt-xpcshell"]);
+    assert.deepEqual(g.taskIds, ["T1", "T2"]);
+    assert.deepEqual(sc.view().jobs.filter((j) => !j.end).map((j) => j.purpose.key), ["prior-art:i-test-a"]);
   });
 
   it("a request has as many groups investigating in worktrees as it can run agents (4 here); reviewed ones don't count", () => {
@@ -709,9 +688,13 @@ describe("4. investigate and fix", () => {
   });
 
   it("a test's second group starts once the first is reviewed, told to check the first fix", () => {
-    const sc = workList([group("ka", "a/test_a.js", "boom"), group("kb", "a/test_a.js", "bang")]);
-    sc.complete("prior-art:i-test-a-2", { output: { bugs: [] } });
+    const sc = workList([group("ka", "a/test_a.js", "boom")]);
     investigating(sc, "i-test-a");
+    // A group found later (a try push's triage…), once the first one's author started.
+    sc.add({ type: "item-created", request: ID, item: "i-test-a-2", folder: "a", group: group("kb", "a/test_a.js", "bang") } as never);
+    sc.settle();
+    sc.complete("prior-art:i-test-a-2", { output: { bugs: [] } });
+    sc.settle();
     sc.complete("prior-art-verdict:i-test-a-2", { report: none });
     assert.ok(!sc.settle().includes("wt:i-test-a-2"));
     reviewed(sc, "i-test-a", "c1", "a/test_a.js");

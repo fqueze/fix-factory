@@ -260,6 +260,7 @@ class Planner {
     this.firstSignal();
     this.pushes();
     this.workList();
+    this.mergeSameTest();
     for (const item of Object.values(this.s.items)) this.item(item);
     this.reproPushes();
     this.stacks();
@@ -862,6 +863,35 @@ class Planner {
     }
     const plan = resumeAuthorPlan(this.s.id, this.view, item, reason, { message }, state);
     return plan === "busy" || plan === undefined ? undefined : this.want(key, () => plan);
+  }
+
+  // One group per test: its first failure usually causes the others. A group whose author hasn't started joins the
+  // first open group of its test that hasn't either; one whose first group started waits for that fix (item()).
+  private mergeSameTest(): void {
+    const started = (i: ItemView) => this.authorJobs(i.id).length > 0 || i.id === ANNOTATIONS_ITEM;
+    const into = new Map<string, ItemView>();
+    for (const i of Object.values(this.s.items)) {
+      if (TERMINAL.includes(i.state)) continue;
+      const test = i.group.tests[0];
+      const first = into.get(test);
+      if (!first) {
+        into.set(test, i);
+        continue;
+      }
+      if (started(i) || started(first)) continue;
+      const g = first.group;
+      const group = {
+        ...g,
+        message: g.message.split(" | ").includes(i.group.message) ? g.message : `${g.message} | ${i.group.message}`,
+        configs: [...new Set([...g.configs, ...i.group.configs])],
+        taskIds: g.taskIds || i.group.taskIds ? [...new Set([...(g.taskIds ?? []), ...(i.group.taskIds ?? [])])] : undefined,
+      };
+      this.event(this.ev("item-group", { item: first.id, group }));
+      first.group = group;
+      this.event(this.ev("item-state", { item: i.id, state: "left as-is", detail: `merged into the first group of ${basename(test)}` }));
+      i.state = "left as-is";
+      this.clear(`take-it:${i.id}`);
+    }
   }
 
   private item(item: ItemView): void {
