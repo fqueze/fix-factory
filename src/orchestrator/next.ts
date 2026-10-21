@@ -907,8 +907,11 @@ class Planner {
       // Each worktree is ~6 GB: a request has no more than it can run agents in, the others wait for one to close.
       if (!this.view.byKey.has(`wt:${item.id}${e}`)) {
         if (earlier.some((i) => !SETTLED.includes(i.state))) return;
-        const open = Object.values(this.s.items).filter((i) => i.id !== item.id && !TERMINAL.includes(i.state) && [...this.view.byKey.keys()].some((k) => k.startsWith(`wt:${i.id}`)));
-        if (open.length >= (this.config.maxWorktrees ?? this.config.maxAgents)) return;
+        // Groups being investigated in a worktree: reviewed ones keep theirs, but no agent runs in it; the disk
+        // check in worktree.ts covers those.
+        const open = Object.values(this.s.items).filter((i) => i.id !== item.id && !SETTLED.includes(i.state) && this.view.byKey.get(`wt:${i.id}${this.itemEpoch(i.id)}`)?.some((j) => !j.end || succeeded(j)));
+        const planned = [...this.startedKeys].filter((k) => k.startsWith("wt:i-")).length;
+        if (open.length + planned >= (this.config.maxWorktrees ?? this.config.maxAgents)) return;
       }
       const wt = this.want(`wt:${item.id}${e}`, () => this.worktree(`${this.s.id}-${item.id}${e.replace("@", "-")}`, { item: item.id }));
       if (!wt) return;

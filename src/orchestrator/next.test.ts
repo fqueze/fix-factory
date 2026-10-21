@@ -694,6 +694,20 @@ describe("4. investigate and fix", () => {
     assert.deepEqual(sc.settle(), ["wt:i-test-a"]);
   });
 
+  it("a request has as many groups investigating in worktrees as it can run agents (4 here); reviewed ones don't count", () => {
+    const tests = ["a", "b", "c", "d", "e", "f"];
+    const sc = workList(tests.map((t) => group(`k${t}`, `a/test_${t}.js`, "boom")));
+    for (const t of tests) sc.complete(`prior-art:i-test-${t}`, { output: { bugs: [] } });
+    sc.settle();
+    for (const t of tests) sc.complete(`prior-art-verdict:i-test-${t}`, { report: none });
+    assert.deepEqual(sc.settle().sort(), ["wt:i-test-a", "wt:i-test-b", "wt:i-test-c", "wt:i-test-d"]);
+    sc.complete("wt:i-test-a", { output: { name: `${ID}-i-test-a`, path: `/wt/${ID}-i-test-a`, branch: `${ID}-i-test-a` } });
+    sc.settle();
+    reviewed(sc, "i-test-a", "c1", "a/test_a.js");
+    assert.ok(sc.view().byKey.has("wt:i-test-e"), "a's fix is reviewed: e gets its worktree");
+    assert.ok(!sc.view().byKey.has("wt:i-test-f"));
+  });
+
   it("a test's second group starts once the first is reviewed, told to check the first fix", () => {
     const sc = workList([group("ka", "a/test_a.js", "boom"), group("kb", "a/test_a.js", "bang")]);
     sc.complete("prior-art:i-test-a-2", { output: { bugs: [] } });
