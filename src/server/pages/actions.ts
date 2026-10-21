@@ -150,7 +150,7 @@ export function renderRefused(r: RequestState, x: RefusedCommand): Html {
 }
 
 export function handBackButton(request: string, item: string, back: string): Html {
-  return commandButton(request, { cmd: "hand-back", item }, "Hand back to me", back, false, "Closes the group: the factory stops working on it");
+  return commandButton(request, { cmd: "hand-back", item }, "Close", back, false, "The factory stops working on this group");
 }
 
 // An author with a session is resumed where it stopped; anything else runs again.

@@ -224,7 +224,7 @@ export const COMMAND_LABELS: Record<Command["cmd"], string> = {
   "poll-phab": "check Phabricator now",
   "revise-push": "revise the push",
   "take-it": "take it",
-  "hand-back": "hand back",
+  "hand-back": "close",
   "comment-fix": "comment on the fix",
   "tell-factory": "message to the factory",
   "reply-recovery": "reply to the recovery plan",

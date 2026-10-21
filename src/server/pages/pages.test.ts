@@ -213,7 +213,7 @@ describe("one fixture per step of docs/MVP.md", () => {
     const h = expanded("r-20261013-tab-failures");
     assert.match(rowOf(h, "item-i-spinner"), /<span class="st run"><\/span>[^]*<span class="state"><span class="working">investigating · <span data-since="[^"]+">6 h<\/span><\/span><\/span>/);
     assert.match(rowOf(h, "item-i-drag"), /<span class="st find"><\/span>[^]*<span class="state">stalled: nothing running: the drag session is still left open on failure<\/span>/);
-    assert.match(rowOf(h, "item-i-mute"), /<span class="st closed"><\/span>[^]*<span class="state">closed: handed back to you: bug 2081413, dao active<\/span>/);
+    assert.match(rowOf(h, "item-i-mute"), /<span class="st closed"><\/span>[^]*<span class="state">closed by you: bug 2081413, dao active<\/span>/);
     assert.match(rowOf(h, "item-i-pin"), /<span class="state">waiting for a build slot \(0 builds running\)<\/span>/);
     assert.doesNotMatch(h, /<span class="state">(review findings|handed back|investigating)</, "no state names");
     const boxes = h.match(/<input type="checkbox" name="command"[^>]*>/g) ?? [];
@@ -412,7 +412,7 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.ok(row.includes(cmd({ cmd: "continue", item: "i-idle", text, request: D })), "Keep them sends its canned answer");
     assert.match(row, /title="Those failures stay unfixed, skipped as before">Keep them</);
     assert.ok(row.includes(cmd({ cmd: "continue", request: D, item: "i-idle" })), "or tell its author something else");
-    assert.doesNotMatch(row, />(Dismiss|Hand back)</);
+    assert.doesNotMatch(row, />(Dismiss|Close)</);
   });
 
   it("asks a flagged group's question once when it has two patches", () => {
@@ -425,7 +425,7 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.doesNotMatch(rowOf(h, "patch-p-close2"), /ask-you/);
   });
 
-  it("asks you when its author disagrees with your message, with Tell it again, Go ahead and Hand back", () => {
+  it("asks you when its author disagrees with your message, with Tell it again, Go ahead and Close", () => {
     const D = "r-20261015-downloads-stuck";
     const r = structuredClone(get(D));
     r.needsUser.push({ key: "disagrees:j-author-nits", action: "Its author disagrees with you", detail: "there is no product leak", job: "j-author-nits", item: "i-nits", since: r.createdAt });
