@@ -41,13 +41,14 @@ export type AgentCommandOptions = {
 
 // Builds and test runs take longer than Claude Code's 10-minute command limit. Without a higher one,
 // agents run them in the background, and a headless session ends before they finish. no-push.ts
-// refuses any push: an instruction alone isn't enough.
+// refuses any push: an instruction alone isn't enough. Agents never need ssh: without your ssh-agent, Claude
+// Code's own ssh probes (ssh -T -o BatchMode=yes…) can't make your keyring ask for the key.
 // It reads the one-push allowances you give (allow-push/<session> in the state directory).
 // The hook command is a shell line; paths may have spaces.
 const shellQuote = (s: string) => `'${s.replaceAll("'", "'\\''")}'`;
 const agentSettings = (stateDir: string) =>
   JSON.stringify({
-    env: { BASH_DEFAULT_TIMEOUT_MS: "7200000", BASH_MAX_TIMEOUT_MS: "7200000" },
+    env: { BASH_DEFAULT_TIMEOUT_MS: "7200000", BASH_MAX_TIMEOUT_MS: "7200000", SSH_AUTH_SOCK: "", CLAUDE_CODE_PLUGIN_PREFER_HTTPS: "1" },
     hooks: { PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: [process.execPath, join(import.meta.dirname, "no-push.ts"), stateDir].map(shellQuote).join(" ") }] }] },
   });
 

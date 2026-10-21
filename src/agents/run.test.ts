@@ -48,7 +48,7 @@ test("buildAgentCommand with a new session", () => {
     "--settings",
   ]);
   const settings = JSON.parse(cmd.at(-1)!);
-  assert.deepEqual(settings.env, { BASH_DEFAULT_TIMEOUT_MS: "7200000", BASH_MAX_TIMEOUT_MS: "7200000" });
+  assert.deepEqual(settings.env, { BASH_DEFAULT_TIMEOUT_MS: "7200000", BASH_MAX_TIMEOUT_MS: "7200000", SSH_AUTH_SOCK: "", CLAUDE_CODE_PLUGIN_PREFER_HTTPS: "1" });
   // Every agent's Bash commands go through no-push.ts first.
   const [hook] = settings.hooks.PreToolUse;
   assert.equal(hook.matcher, "Bash");
