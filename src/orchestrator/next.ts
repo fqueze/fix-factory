@@ -904,9 +904,9 @@ class Planner {
       // Groups failing the same test go one at a time: the first one's fix often fixes the others' failures too.
       const all = Object.values(this.s.items);
       const earlier = all.slice(0, all.indexOf(item)).filter((i) => i.group.tests[0] === test);
-      if (earlier.some((i) => !SETTLED.includes(i.state))) return;
       // Each worktree is ~6 GB: a request has no more than it can run agents in, the others wait for one to close.
       if (!this.view.byKey.has(`wt:${item.id}${e}`)) {
+        if (earlier.some((i) => !SETTLED.includes(i.state))) return;
         const open = Object.values(this.s.items).filter((i) => i.id !== item.id && !TERMINAL.includes(i.state) && [...this.view.byKey.keys()].some((k) => k.startsWith(`wt:${i.id}`)));
         if (open.length >= (this.config.maxWorktrees ?? this.config.maxAgents)) return;
       }
