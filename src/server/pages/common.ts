@@ -267,9 +267,6 @@ export function actionKind(n: NeedsUser, r: RequestState): ActionKind {
   if (patch && !hasBug(patch) && patch.bugDraft) {
     return "file-bug";
   }
-  if (n.item) {
-    return "take-it";
-  }
   return "other";
 }
 

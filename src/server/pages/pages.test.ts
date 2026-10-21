@@ -401,7 +401,7 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.doesNotMatch(ask, /Its author|Resume/);
     assert.ok(!ask.includes(cmd({ cmd: "continue", request: D, item: "i-idle" })), "its author has nothing to do with it");
     assert.ok(ask.includes(cmd({ cmd: "hand-back", item: "i-idle", request: D })));
-    assert.match(ask, /<div class="ask-more" data-key="note:odd"><p><b>Also: Something odd<\/b><\/p><p>look at it<\/p><p>Fix it anyway, or leave it to them[^<]*<\/p><div class="jobctl"><form[^]*?>Fix it anyway<\/button>/, "the second ⚑ with its own buttons");
+    assert.match(ask, /<div class="ask-more" data-key="note:odd"><p><b>Also: Something odd<\/b><\/p><p>look at it<\/p><div class="jobctl"><form[^]*?>Dismiss<\/button>/, "the second ⚑ with its own buttons: a note isn't a take-it");
   });
 
   it("asks whether to keep the skip-ifs whose tests still fail, with Keep them and the talk box", () => {
@@ -513,6 +513,11 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.match(h, /<details class="req needs"/);
     assert.match(h, /<span class="flag">Your restart of the investigation was refused<\/span><form[^]*?<\/form><span class="why clamp1" data-expand title="[^"]*">start-agent only starts a new investigate-and-fix on an item that already had one<\/span>/, "its title and button first, the reason under them");
     assert.ok(h.includes(cmd({ cmd: "dismiss", key: "refused:c-7", request: "r-20261013-tab-failures" })));
+  });
+
+  it("an open group can be closed from its row", () => {
+    const h = expanded("r-20261013-dom-indexeddb");
+    assert.ok(rowOf(h, "item-i-idb-upgrade").includes(cmd({ cmd: "hand-back", item: "i-idb-upgrade", request: "r-20261013-dom-indexeddb" })));
   });
 
   it("7. bugs: the patch's Bug to file link, and the paste-number/comment box hanging from it", () => {

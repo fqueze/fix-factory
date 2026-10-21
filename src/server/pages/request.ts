@@ -3,7 +3,7 @@ import { REQUEST_STEPS } from "../commands.ts";
 import type { BugDraft, ItemView, JobView, PatchView, PushView, RequestState, StackView } from "../../types.ts";
 import { html, join, type Html } from "../html.ts";
 import { ANNOTATIONS_ITEM } from "../../orchestrator/next.ts";
-import { actionsSummary, recoveryAnswers, pollPhabButton, redoAnnotationsButton, approvePushControls, bugBox, continueBox, copyButton, flagControls, flagItemOf, flagText, plannedLabel, recoveryPlanFor, hasAuthorSession, stackViewerLink, submitControls, summaryId } from "./actions.ts";
+import { actionsSummary, recoveryAnswers, pollPhabButton, redoAnnotationsButton, approvePushControls, bugBox, continueBox, copyButton, handBackButton, flagControls, flagItemOf, flagText, plannedLabel, recoveryPlanFor, hasAuthorSession, stackViewerLink, submitControls, summaryId } from "./actions.ts";
 import { groupJobs, jobLine } from "./activity.ts";
 import { flagAsk, itemBucket, itemSentence, progressLine, requestProgress, type Bucket } from "./progress.ts";
 import {
@@ -367,14 +367,14 @@ function groupRow(r: RequestState, i: ItemView, ctx: RenderContext): Html {
   });
 }
 
-// Whatever its state, you can tell its author what to change; a group asking you has the box in its question,
-// a closed one under Reopen.
+// Whatever its state, you can tell its author what to change, or close it; a group asking you has these in its
+// question, a closed one Reopen.
 function talkBox(r: RequestState, i: ItemView, ctx: RenderContext): Html | null {
   const s = itemSentence(r, i, ctx);
-  if (s.ask || s.cls === "run" || stateClass(i.state) === "closed" || !hasAuthorSession(r, i.id)) {
+  if (s.ask || s.cls === "run" || ["fixed", "landed", "left as-is", "handed back"].includes(i.state)) {
     return null;
   }
-  return html`<div class="jobctl">${continueBox(r.id, i.id, requestUrl(r.id))}</div>`;
+  return html`<div class="jobctl">${hasAuthorSession(r, i.id) ? continueBox(r.id, i.id, requestUrl(r.id)) : null}${handBackButton(r.id, i.id, requestUrl(r.id))}</div>`;
 }
 
 // Agents can't push to try; you can let its author make one push (it may be running).
