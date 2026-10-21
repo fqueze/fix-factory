@@ -16,6 +16,7 @@ export interface RenderContext {
   bugzillaEmail?: string; // bugs to file are assigned to you
   // The text of a patch's interdiffFile, read by the server inside stateDir.
   interdiff?: (p: PatchView) => string | undefined;
+  freeDiskGB?: number; // where the worktrees go
 }
 
 export const PHABRICATOR = "https://phabricator.services.mozilla.com";

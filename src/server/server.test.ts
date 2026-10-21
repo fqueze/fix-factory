@@ -26,6 +26,7 @@ const server = createFactoryServer({
     mdViewerCommand: [process.execPath, join(FIXTURES, "fake-md-viewer.js")],
     diffViewerCommand: [process.execPath, join(FIXTURES, "fake-md-viewer.js")],
     stateDir,
+    worktreesDir: stateDir,
     maxAgents: 10,
     maxBuilds: 3,
     allowedHosts: ["factory.example"],
@@ -78,7 +79,7 @@ describe("pages", () => {
     assert.doesNotMatch(closed, /Draft reply/);
     const open = await (await fetch(`${base}/fragments/requests/r-20261005-newtab?open=1`)).text();
     assert.match(open, /Draft reply/);
-    assert.match(await (await fetch(`${base}/fragments/strip`)).text(), /id="strip"/);
+    assert.match(await (await fetch(`${base}/fragments/strip`)).text(), /id="strip"[^]*disk <b>[\d.]+ [GT]B<\/b> free/);
     assert.match(await (await fetch(`${base}/fragments/main`)).text(), /<h2>Active/);
   });
 });

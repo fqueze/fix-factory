@@ -39,8 +39,13 @@ export function renderStrip(requests: RequestState[], ctx: RenderContext): Html 
   return html`<div class="strip" id="strip">
     <span>agents <b>${agents}${ctx.maxAgents ? `/${ctx.maxAgents}` : ""}</b></span>
     <span>builds <b>${builds}${ctx.maxBuilds ? `/${ctx.maxBuilds}` : ""}</b></span>
+    ${ctx.freeDiskGB === undefined ? null : html`<span class="${ctx.freeDiskGB < 100 ? "disk-low" : ""}" title="Free space for worktrees; none is created below 20 GB">disk <b>${diskSize(ctx.freeDiskGB)}</b> free</span>`}
     <span class="progress">${progressLine(progress)}</span>
   </div>`;
+}
+
+function diskSize(gb: number): string {
+  return gb >= 1000 ? `${(gb / 1000).toFixed(1)} TB` : `${Math.floor(gb)} GB`;
 }
 
 // Everything under the header, also served alone so the client can refresh it

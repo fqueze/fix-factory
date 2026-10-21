@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync, realpathSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync, statfsSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { createRequire } from "node:module";
 import { homedir } from "node:os";
@@ -23,7 +23,7 @@ import type { CommandInput } from "../state/commands.ts";
 import type { CommandSink, StateSource } from "./state-source.ts";
 
 export interface ServerOptions {
-  config: Pick<FactoryConfig, "port" | "profilerOrigin" | "stackViewerCommand" | "mdViewerCommand" | "diffViewerCommand" | "stateDir" | "maxAgents" | "maxBuilds" | "allowedHosts" | "bugzillaEmail">;
+  config: Pick<FactoryConfig, "port" | "profilerOrigin" | "stackViewerCommand" | "mdViewerCommand" | "diffViewerCommand" | "stateDir" | "maxAgents" | "maxBuilds" | "allowedHosts" | "bugzillaEmail"> & Partial<Pick<FactoryConfig, "worktreesDir">>;
   state: StateSource;
   sink: CommandSink;
   now?: () => number;
@@ -193,6 +193,16 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
     return profiler;
   }
 
+  // Free space where the worktrees go: the factory stops creating them below 20 GB.
+  function freeDiskGB(): number | undefined {
+    const dir = opts.config.worktreesDir;
+    if (dir === undefined || !existsSync(dir)) {
+      return undefined;
+    }
+    const fs = statfsSync(dir);
+    return (fs.bavail * fs.bsize) / 1e9;
+  }
+
   function ctx(req: IncomingMessage, open?: string): RenderContext {
     return {
       profilerOrigin: opts.config.profilerOrigin,
@@ -207,6 +217,7 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
       open,
       bugzillaEmail: opts.config.bugzillaEmail,
       interdiff: readInterdiff,
+      freeDiskGB: freeDiskGB(),
     };
   }
 
