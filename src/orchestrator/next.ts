@@ -1334,8 +1334,10 @@ class Planner {
       });
       if (!res) return;
       const r = this.rep<ResolveConflictReport>(res);
-      // Fixed on the base already: its group closes, and the stack is assembled again without it.
+      // Fixed on the base already: the cherry-pick left in progress goes, its group closes, and the stack is
+      // assembled again without it.
       if (r.state === "already fixed") {
+        if (!this.want(`abort:${res.job}`, () => this.cli("abort", "git", ["cherry-pick", "--abort"], { cwd: wt, purpose: { stack: id } }))) return;
         this.setItem(sourceOf(conflict.sha).item, "left as-is", `already fixed on ${this.config.baseRef}: ${r.explanation}`.slice(0, 300));
         return;
       }
@@ -1711,6 +1713,7 @@ class Planner {
       if (!res) return undefined;
       const r = this.rep<ResolveConflictReport>(res);
       if (r.state === "already fixed") {
+        if (!this.want(`abort:${res.job}`, () => this.cli("abort", "git", ["cherry-pick", "--abort"], { cwd: info.wt, purpose: { stack: info.id } }))) return undefined;
         this.setItem(owner.item.id, "left as-is", `already fixed on ${this.config.baseRef}: ${r.explanation}`.slice(0, 300));
         return undefined;
       }
