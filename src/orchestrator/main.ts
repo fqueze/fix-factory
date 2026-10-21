@@ -292,6 +292,11 @@ export class Orchestrator {
         try {
           const { s, view } = this.load(id);
           const actions: Action[] = next(s, this.ctx(s, view));
+          // It plans again: its earlier "can't plan" ⚑ is over.
+          for (const n of s.needsUser.filter((x) => x.key.startsWith("failed:plan:"))) {
+            appendEventSafe(this.config.stateDir, { type: "user-done", request: id, key: n.key, byFactory: true });
+            this.planErrors.delete(n.key);
+          }
           for (const a of actions) {
             if (a.type === "event") {
               appendEventSafe(this.config.stateDir, a.event);

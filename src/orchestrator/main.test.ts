@@ -221,6 +221,11 @@ describe("Orchestrator", () => {
       assert.match(flags[0].detail, /JSON/);
       assert.equal(a.filter((e) => e.type === "note").length, 1);
       assert.ok(readEvents(config.stateDir, "r-b").some((e) => e.type === "job-started"));
+      // Once it plans again (here: the output became readable), its ⚑ goes.
+      mkdirSync(jobDir(config.stateDir, "j-ann"), { recursive: true });
+      writeFileSync(join(jobDir(config.stateDir, "j-ann"), "out.log"), "[]");
+      await o.tick();
+      assert.ok(readEvents(config.stateDir, "r-a").some((e) => e.type === "user-done" && e.key === flags[0].key));
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
