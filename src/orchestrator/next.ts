@@ -299,7 +299,7 @@ class Planner {
   }
 
   clear(key: string): void {
-    if (this.s.needsUser.some((n) => n.key === key)) this.event(this.ev("user-done", { key }));
+    if (this.s.needsUser.some((n) => n.key === key)) this.event(this.ev("user-done", { key, byFactory: true }));
   }
 
   note(text: string): void {

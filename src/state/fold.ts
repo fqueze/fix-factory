@@ -270,8 +270,8 @@ export function foldEvents(events: readonly Event[]): RequestState {
         s.metaBug = { bug: e.bug, draft: e.draft };
         break;
       case "user-done": {
-        // Copying the reorg command: Phabricator gets the stack's order.
-        const reorg = /^land:([^:]+):/.exec(e.key)?.[1];
+        // Copying the reorg command: Phabricator gets the stack's order. A reorg flag the factory clears doesn't.
+        const reorg = e.byFactory ? undefined : /^land:([^:]+):/.exec(e.key)?.[1];
         if (reorg && s.stacks[reorg]) s.stacks[reorg].submittedOrder = [...s.stacks[reorg].order];
         s.needsUser = s.needsUser.filter((n) => n.key !== e.key);
         refused = refused.filter((x) => x.key !== e.key);
