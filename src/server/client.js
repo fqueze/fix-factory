@@ -310,7 +310,11 @@
         form.querySelectorAll("input[type=text], textarea").forEach(function (i) {
           i.value = "";
         });
-        flash(form, "Sent", "flash");
+        // A ⚑ you dismissed goes away now, not at the next refresh.
+        var dismissed = /"cmd":"dismiss"/.test((form.querySelector("input[name=command]") || {}).value || "");
+        var flag = dismissed && form.closest("[data-key]");
+        if (flag) flag.remove();
+        else flash(form, "Sent", "flash");
       })
       .catch(function (e) {
         flash(form, e.message, "error");
