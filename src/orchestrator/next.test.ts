@@ -1157,40 +1157,106 @@ function stacked(reportA?: object): Scenario {
 }
 
 describe("4b. try repro", () => {
-  it("pushes the folder's DEBUG commits in one try push once you approve it, then gives each author the results", () => {
-    const sc = workList([group("ka", "a/test_a.js", "boom"), group("kb", "a/test_b.js", "bang")]);
-    investigating(sc, "i-test-a");
-    investigating(sc, "i-test-b");
-    sc.complete("author:i-test-a:initial", { report: fixed([sha("d")], { state: "needs a try repro", summary: "the race only shows on mac debug" }) });
-    sc.settle();
-    assert.equal(sc.state().items["i-test-a"].state, "waiting for a try repro");
-    assert.ok(![...sc.view().byKey.keys()].some((k) => k.startsWith("wt:repro:")), "waits for the folder's other groups");
+  const open = (sc: Scenario) => sc.view().jobs.filter((j) => !j.end).map((j) => j.purpose.key);
+  // Groups a (and c, in a/test_c.js, given DEBUG commits) wait for a try repro with DEBUG commit d (and e); b is
+  // reviewed: the stack is built with b's patch alone, up to its verify push's try branch.
+  const waitingStack = (two = false) => {
+    const groups = [group("ka", "a/test_a.js", "boom"), group("kb", "a/test_b.js", "bang"), ...(two ? [group("kc", "a/test_c.js", "crash")] : [])];
+    const sc = workList(groups);
+    for (const g of groups) investigating(sc, `i-${g.tests[0].slice(2, -3).replace("_", "-")}`);
+    const repro = (item: string, commit: string) => {
+      sc.complete(`author:${item}:initial`, { report: fixed([commit], { state: "needs a try repro", summary: "the race only shows on mac debug" }) });
+      sc.settle();
+      assert.equal(sc.state().items[item].state, "waiting for a try repro");
+    };
+    repro("i-test-a", sha("d"));
+    if (two) repro("i-test-c", sha("e"));
     reviewed(sc, "i-test-b", sha("2"), "a/test_b.js");
-    const wt = [...sc.view().byKey.keys()].find((k) => k.startsWith("wt:repro:"))!;
-    assert.ok(wt);
-    const hash = wt.split(":")[2];
-    assert.ok(!sc.view().byKey.has("wt:root"), "no stack while a group of the folder waits for its repro");
-    sc.complete(wt, { output: { name: `${ID}-repro`, path: `/wt/${ID}-repro`, branch: `${ID}-repro` } });
+    assert.deepEqual(open(sc), ["wt:root"], "a group waiting for its repro doesn't hold the stack back");
+    sc.complete("wt:root", { output: { name: `${ID}-root`, path: `/wt/${ID}-root`, branch: `${ID}-root` } });
     sc.settle();
-    assert.deepEqual(sc.plan(`repro-branch:${hash}`).cli?.args.slice(-2), ["--leave-conflict", sha("d")]);
-    sc.complete(`repro-branch:${hash}`, { output: { branch: `${ID}-repro`, commits: [{ sha: sha("d"), newSha: sha("e") }] } });
+    const assemble = keyOf(sc, "assemble:root:");
+    assert.deepEqual(sc.plan(assemble).cli?.args.slice(-2), ["--leave-conflict", sha("2")]);
+    const hash = assemble.split(":")[2];
+    sc.complete(assemble, { output: { branch: `${ID}-root`, commits: [{ sha: sha("2"), newSha: sha("b") }], skipped: [], empty: [] } });
     sc.settle();
-    sc.complete(`plan:repro:${hash}`, { report: { pushes: [{ purpose: "repro on mac debug", tryArgs: ["fuzzy", "-q", "mac"], rebuild: 10 }], feedback: [] } });
+    sc.complete(`deps:root:${hash}`, { output: [] });
+    sc.complete(`effort:p-test-b:${sha("2")}`, { report: { effort: 1, reason: "r", feedback: [] } });
     sc.settle();
-    const push = `repro-${hash.slice(0, 6)}`;
-    sc.complete(`dry-run:${push}`, { output: { command: ["./mach", "try", "fuzzy"], taskCount: 4, tasks: [], tryTaskConfig: {}, commits: [sha("e")], warnings: [] } });
+    sc.complete(keyOf(sc, `order:root:${hash}:`), { output: { order: ["p-test-b"], flippedSoftDeps: [] } });
     sc.settle();
-    assert.ok(sc.open().includes(`approve-push:${push}`), "nothing is pushed before you approve");
-    assert.ok(!sc.view().byKey.has(`push:${push}`));
+    sc.complete(`review-stack:root:${hash}`, { report: { findings: [], addDeps: [], removeDeps: [], feedback: [] } });
+    sc.settle();
+    sc.complete(`summary:root:${hash}`, { output: { markdown: "t", metaComment: "m" } });
+    sc.settle();
+    assert.equal(sc.state().step, "verify on try");
+    return sc;
+  };
+
+  it("puts a waiting group's DEBUG commits on top of the stack's verify push, then gives its author the results", () => {
+    const sc = waitingStack();
+    const tb = keyOf(sc, "try-branch:root:");
+    assert.match(tb, /^try-branch:root:[0-9a-f]{6}$/);
+    assert.deepEqual(sc.plan(tb).cli?.args, ["assemble", "--cwd", `/wt/${ID}-root`, "--branch", `${ID}-root-try-${tb.split(":")[2]}`, "--base", `${ID}-root`, sha("d")]);
+    sc.complete(tb, { output: { branch: `${ID}-root-try-x`, head: sha("f"), commits: [{ sha: sha("d"), newSha: sha("f") }] } });
+    sc.settle();
+    const planKey = sc.view().jobs.find((j) => j.purpose.what === "plan-pushes")!.purpose.key;
+    assert.equal(sc.plan(planKey).agent?.vars?.branch, `${ID}-root-try-x`);
+    const failures = JSON.parse(sc.plan(planKey).files![0].content);
+    assert.deepEqual(failures.map((f: { patch?: string; toReproduce?: boolean; debugCommits?: string[]; tests: string[] }) => [f.patch, f.toReproduce, f.debugCommits, f.tests]), [
+      ["p-test-b", undefined, undefined, ["a/test_b.js"]],
+      [undefined, true, [sha("d")], ["a/test_a.js"]],
+    ]);
+    sc.complete(planKey, { report: { pushes: [{ purpose: "verify", tryArgs: ["fuzzy", "-q", "x"], rebuild: 5 }], feedback: [] } });
+    const [dry] = sc.settle();
+    const push = sc.purpose(dry).push!;
+    sc.complete(dry, { output: { command: ["./mach", "try", "fuzzy"], taskCount: 5, tasks: [], tryTaskConfig: {}, commits: [sha("f"), sha("b")], warnings: [] } });
     sc.add({ type: "user-done", request: ID, key: `approve-push:${push}` });
+    sc.add({ type: "try-pushed", request: ID, push, rev: "fed", url: "u" });
     sc.settle();
-    sc.complete(`push:${push}`, { output: { rev: "fff", landoJobId: 1, treeherderUrl: "t" } });
-    sc.settle();
+    assert.ok(!open(sc).some((k) => k.startsWith("author:i-test-a:")), "its author waits for the push's results");
     sc.add({ type: "try-finished", request: ID, push, result: "failures", summary: "3 failures" });
     sc.settle();
-    const resumed = sc.plan(`author:i-test-a:repro:${hash}`);
-    assert.match(resumed.agent?.message ?? "", /fff \(3 failures\)[^]*drop your DEBUG commits/);
+    sc.complete(`try-table:${push}:final`, { output: table([{ test: "a/test_a.js", config: "mac", result: "fail", failures: ["boom"], taskIds: ["T1"] }]) });
+    sc.settle();
+    const resumed = open(sc).filter((k) => k.startsWith("author:i-test-a:"));
+    assert.equal(resumed.length, 1);
+    assert.match(resumed[0], /^author:i-test-a:repro:[0-9a-f]{8}$/);
+    assert.match(sc.plan(resumed[0]).agent?.message ?? "", /^The factory pushed your DEBUG commits to try on top of the stack: fed \(3 failures\)[^]*drop your DEBUG commits/);
     assert.equal(sc.state().items["i-test-a"].state, "investigating");
+    // Its test failing is its results: not a failure of the stack's patches, not triaged.
+    assert.ok(!open(sc).some((k) => k.startsWith("triage:") || k.startsWith("author:i-test-b:")));
+  });
+
+  it("leaves out a waiting group whose DEBUG commits conflict with the others', and tells its author once the push is done", () => {
+    const sc = waitingStack(true);
+    const first = keyOf(sc, "try-branch:root:");
+    assert.deepEqual(sc.plan(first).cli?.args.slice(-2), [sha("d"), sha("e")]);
+    sc.complete(first, { output: { conflict: { sha: sha("e"), files: ["a/head.js"] } } });
+    sc.settle();
+    const second = keyOf(sc, "try-branch:root:");
+    assert.notEqual(second, first);
+    assert.deepEqual(sc.plan(second).cli?.args.slice(-3), ["--base", `${ID}-root`, sha("d")]);
+    sc.complete(second, { output: { branch: `${ID}-root-try-y`, head: sha("f"), commits: [{ sha: sha("d"), newSha: sha("f") }] } });
+    sc.settle();
+    const planKey = sc.view().jobs.find((j) => j.purpose.what === "plan-pushes")!.purpose.key;
+    assert.equal(sc.plan(planKey).agent?.vars?.branch, `${ID}-root-try-y`);
+    const failures = JSON.parse(sc.plan(planKey).files![0].content);
+    assert.deepEqual(failures.filter((f: { toReproduce?: boolean }) => f.toReproduce).map((f: { tests: string[] }) => f.tests), [["a/test_a.js"]]);
+    sc.complete(planKey, { report: { pushes: [{ purpose: "verify", tryArgs: ["fuzzy", "-q", "x"], rebuild: 5 }], feedback: [] } });
+    const [dry] = sc.settle();
+    const push = sc.purpose(dry).push!;
+    sc.complete(dry, { output: { command: ["./mach", "try", "fuzzy"], taskCount: 5, tasks: [], tryTaskConfig: {}, commits: [sha("f"), sha("b")], warnings: [] } });
+    // Resumed before the push, its group would hold the stack back, and the push's results would go nowhere.
+    assert.ok(!open(sc).some((k) => k.startsWith("author:i-test-c:")));
+    sc.add({ type: "user-done", request: ID, key: `approve-push:${push}` });
+    sc.add({ type: "try-pushed", request: ID, push, rev: "fed", url: "u" });
+    sc.add({ type: "try-finished", request: ID, push, result: "green", summary: "green" });
+    sc.settle();
+    const resumed = open(sc).filter((k) => k.startsWith("author:i-test-"));
+    assert.deepEqual(resumed.map((k) => k.replace(/:[0-9a-f]{8}$/, "")).sort(), ["author:i-test-a:repro", "author:i-test-c:repro-left"]);
+    assert.match(sc.plan(resumed.find((k) => k.includes("i-test-c"))!).agent?.message ?? "", /^Your DEBUG commits conflict/);
+    assert.match(sc.plan(resumed.find((k) => k.includes("i-test-a"))!).agent?.message ?? "", /fed \(green\)/);
   });
 });
 
@@ -2423,9 +2489,9 @@ describe("burndown verification", () => {
     sc.complete("reviewers:a", { output: { files: [], suggestions: [] } });
 
     // The stack branch plus the DEBUG commit, on a branch of its own: that's what try gets.
-    if (check) assert.equal(tryBranch, `try-branch:a:${hash}`);
+    if (check) assert.match(tryBranch, /^try-branch:a:[0-9a-f]{6}$/);
     const args = sc.plan(tryBranch).cli!.args;
-    if (check) assert.deepEqual([args[0], args[4].startsWith(`${ID}-a-try-`), ...args.slice(5)], ["assemble", true, "--base", `${ID}-a`, sha("9")]);
+    if (check) assert.deepEqual([args[0], args[4], ...args.slice(5)], ["assemble", `${ID}-a-try-${tryBranch.split(":")[2]}`, "--base", `${ID}-a`, sha("9")]);
     sc.complete(tryBranch, { output: { branch: args[4], head: sha("b"), commits: [{ sha: sha("9"), newSha: sha("b") }] } });
     const [planKey] = sc.settle();
     if (check) assert.equal(sc.plan(planKey).agent?.vars?.branch, args[4]);
