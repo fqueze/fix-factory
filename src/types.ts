@@ -183,7 +183,7 @@ export type Event =
   | (EventBase & { type: "review-status"; patch: PatchId; revision: number; status: string; reviewers: ReviewerStatus[]; comments: InlineComment[] })
   | (EventBase & { type: "reply-draft"; patch: PatchId; commentId: number; text: string })
   | (EventBase & { type: "needs-user"; key: string; action: string; detail: string; item?: ItemId; patch?: PatchId; push?: PushId; stack?: string; job?: JobId })
-  | (EventBase & { type: "user-done"; key: string; byFactory?: true }) // clears a needs-user with the same key; byFactory: the factory found it moot, not your answer
+  | (EventBase & { type: "user-done"; key: string; byFactory?: true; reorg?: true }) // clears a needs-user with the same key; byFactory: the factory found it moot, not your answer; reorg: you copied the moz-phab reorg command
   | (EventBase & { type: "command-executed"; command: string; ok: boolean; detail?: string; cmd?: Command["cmd"]; item?: ItemId; job?: JobId })
   | (EventBase & { type: "recovery-plan"; job: JobId; text: string; answer?: string; plan: PlannedCommand[]; cannotDo: string[]; questions: string[] })
   | (EventBase & { type: "note"; text: string });

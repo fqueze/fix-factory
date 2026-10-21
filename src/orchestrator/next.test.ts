@@ -2181,7 +2181,7 @@ describe("10. landing: the reorg flag", () => {
     assert.deepEqual(sc.state().stacks.a.order, ["p-test-a", "p-test-b"]);
     assert.deepEqual(sc.state().stacks.a.submittedOrder, ["p-test-b", "p-test-a"], "kept on a stack event");
     const flag = sc.state().needsUser.find((n) => n.key.startsWith("land:a:"))!;
-    sc.add({ type: "user-done", request: ID, key: flag.key });
+    sc.add({ type: "user-done", request: ID, key: flag.key, reorg: true });
     assert.deepEqual(sc.state().stacks.a.submittedOrder, ["p-test-a", "p-test-b"], "copying the reorg gives Phabricator the new order");
     // Another stack event keeps it.
     const { id, ...rest } = sc.state().stacks.a;

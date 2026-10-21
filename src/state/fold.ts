@@ -271,7 +271,8 @@ export function foldEvents(events: readonly Event[]): RequestState {
         break;
       case "user-done": {
         // Copying the reorg command: Phabricator gets the stack's order. A reorg flag the factory clears doesn't.
-        const reorg = e.byFactory ? undefined : /^land:([^:]+):/.exec(e.key)?.[1];
+        // Only a copy of the reorg command: other answers to a land ⚑ (the factory's, earlier ones) say nothing of the order.
+        const reorg = e.reorg ? /^land:([^:]+):/.exec(e.key)?.[1] : undefined;
         if (reorg && s.stacks[reorg]) s.stacks[reorg].submittedOrder = [...s.stacks[reorg].order];
         s.needsUser = s.needsUser.filter((n) => n.key !== e.key);
         refused = refused.filter((x) => x.key !== e.key);

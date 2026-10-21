@@ -128,7 +128,7 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
         done(false, `${c.key} isn't a reorg to run`);
         break;
       }
-      ev({ type: "user-done", key: c.key });
+      ev({ type: "user-done", key: c.key, reorg: true });
       done(true);
       break;
     case "copied-submit":
