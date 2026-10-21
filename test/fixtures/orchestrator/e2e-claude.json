@@ -4,7 +4,7 @@
     "report": { "kind": "try-push", "rev": "abcdef123456", "config": { "folders": ["dom/base/test"], "tests": [], "platforms": [], "constraints": [] }, "questions": [], "feedback": [] }
   },
   {
-    "match": "were grouped by exact message",
+    "match": "are clustered by exact message",
     "report": {
       "groups": [
         { "message": "Test timed out waiting for load", "tests": ["dom/base/test/test_a.html"], "configs": ["test-linux2404-64/opt-mochitest-plain"], "from": ["ka"], "reason": "unchanged" },

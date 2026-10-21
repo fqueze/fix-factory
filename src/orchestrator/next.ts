@@ -774,7 +774,7 @@ class Planner {
     };
     if (groups.length <= 1) return withSingles(groups.map(strip));
     const clustersFile = dataPath(this.config, this.s.id, `clusters-${scope}-${run}.json`);
-    const merge = this.wantAgent(`merge:${scope}:${run}`, "merge", "merge-clusters", { clustersFile }, { files: [{ path: clustersFile, content: JSON.stringify({ groups }, null, 2) + "\n" }] });
+    const merge = this.wantAgent(`merge:${scope}:${run}`, "merge", "merge-clusters", { clustersFile, logsDir: artifactsDir(this.config) }, { files: [{ path: clustersFile, content: JSON.stringify({ groups }, null, 2) + "\n" }] });
     if (!merge) return undefined;
     const byKey = new Map(groups.map((g) => [g.key, g]));
     const merged = this.rep<MergeClustersReport>(merge).groups.map((g) => {

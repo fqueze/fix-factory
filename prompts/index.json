@@ -4,7 +4,7 @@
   "write-annotation-patches": { "model": "sonnet", "step": "2. First signal", "purpose": "Write the run-if commit and the DEBUG un-skip commit." },
   "plan-try-pushes": { "model": "sonnet", "step": "2. First signal, 6. Verify on try", "purpose": "Plan the try pushes, each with a command and a purpose." },
   "triage-try": { "model": "sonnet", "step": "3. Work list, 6. Verify on try", "purpose": "Classify failures fx-tests couldn't parse or that match no patch." },
-  "merge-clusters": { "model": "haiku", "step": "3. Work list", "purpose": "Merge or split failure clusters grouped by exact message." },
+  "merge-clusters": { "model": "sonnet", "step": "3. Work list", "purpose": "Turn failure clusters grouped by exact message into work groups, one per problem to fix." },
   "prior-art-verdict": { "model": "haiku", "step": "3. Work list", "purpose": "Decide whether someone is already on a failure, or a bug can be reused." },
   "investigate-and-fix": { "model": "opus", "step": "4. Investigate and fix", "purpose": "Investigate and fix one failure group, as today's subagents do." },
   "review-patch": { "model": "opus", "step": "2. First signal, 4. Investigate and fix, 9. Review comments", "purpose": "Critical review of one commit, diff and message." },
