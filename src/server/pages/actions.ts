@@ -1,7 +1,7 @@
 import type { JobView, NeedsUser, PlannedCommand, PushView, RefusedCommand, RequestState, StackView } from "../../types.ts";
 import { canDismiss, canRetry, reviewLimitFlag } from "../../state/flags.ts";
 import { html, join, type Html } from "../html.ts";
-import { actionKind, COMMAND_LABELS, commandFields, enterBugUrl, metaBugUrl, groupLabel, jobLabel, pushName, jobNoun, refusedOf, needsMetaBug, plural, requestUrl, stackOfPatch, submitChecks, type RenderContext } from "./common.ts";
+import { actionKind, COMMAND_LABELS, linkify, commandFields, enterBugUrl, metaBugUrl, groupLabel, jobLabel, pushName, jobNoun, refusedOf, needsMetaBug, plural, requestUrl, stackOfPatch, submitChecks, type RenderContext } from "./common.ts";
 
 // The ⚑ area of one open needs-user entry: what you're asked, why, and the buttons.
 export function renderAction(r: RequestState, n: NeedsUser, ctx: RenderContext): Html {
@@ -11,12 +11,17 @@ export function renderAction(r: RequestState, n: NeedsUser, ctx: RenderContext):
     // Moot once you've done it another way: Dismiss.
     return html`<div class="action reply" data-key="${n.key}"><span class="flag">You asked</span> ${dismissButton(r.id, n.key, requestUrl(r.id))}<span class="said clamp1" data-expand title="${plan.text}">“${plan.text}”</span>${recoveryPlan(r, plan, requestUrl(r.id))}</div>`;
   }
-  return html`<div class="action" data-key="${n.key}"><span class="flag">${flagTitle(r, n)}</span>${flagControls(r, n, ctx)}${actionKind(n, r) === "submit" ? null : why(n.detail)}</div>`;
+  return html`<div class="action" data-key="${n.key}"><span class="flag">${flagTitle(r, n)}</span>${flagControls(r, n, ctx)}${actionKind(n, r) === "submit" ? null : why(n.detail, flagTests(r, n))}</div>`;
 }
 
 // Under the title and its buttons, the whole width: one line, all of it when clicked.
-function why(text: string | undefined): Html | null {
-  return text ? html`<span class="why clamp1" data-expand title="${text}">${text}</span>` : null;
+function why(text: string | undefined, tests: string[] = []): Html | null {
+  return text ? html`<span class="why clamp1" data-expand title="${text}">${linkify(text, tests)}</span>` : null;
+}
+
+function flagTests(r: RequestState, n: NeedsUser): string[] {
+  const item = n.item ?? (n.job === undefined ? undefined : r.jobs[n.job]?.item);
+  return item !== undefined && item in r.items ? r.items[item].group.tests.filter((t) => !/\.(toml|ini)$/.test(t)) : [];
 }
 
 // A stopped job by its label rather than its tool or prompt name.

@@ -280,7 +280,7 @@
       event.preventDefault();
     }
     var clamped = t.closest("[data-expand]");
-    if (clamped) clamped.classList.toggle("open");
+    if (clamped && !t.closest("a")) clamped.classList.toggle("open");
     // Revise… opens its push's row at the box.
     var revise = t.closest("[data-revise]");
     if (revise) {

@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import { describe, it } from "node:test";
 import { FixtureStateSource } from "../state-source.ts";
 import type { RequestState } from "../../types.ts";
-import { jobLabel, pushStatus, type RenderContext } from "./common.ts";
+import { jobLabel, linkify, pushStatus, type RenderContext } from "./common.ts";
 import { renderOverview, renderRecentPushes } from "./overview.ts";
 import { IDLE, itemBucket, runningSentence } from "./progress.ts";
 import { configTable, parseConfig, renderRequest, requestSummary } from "./request.ts";
@@ -1100,5 +1100,15 @@ describe("failure table", () => {
     assert.match(t, /<tr><td class="mono">debug xpcshell<\/td><td><span class="failbadge" title="test-linux2404-64\/debug-xpcshell">FAIL<\/span><\/td><td><span class="failbadge" title="test-windows11-64-24h2\/debug-xpcshell">FAIL<\/span><\/td><\/tr>/);
     assert.match(t, /<\/table><div class="sub">linux64\/debug<\/div>$/);
     assert.equal(configTable(["linux64/debug", "windows11-64/opt"]).value, '<div class="sub">linux64/debug, windows11-64/opt</div>', "no table when nothing parses");
+  });
+});
+
+describe("linkify", () => {
+  it("links bug numbers, revisions and the given tests by path or name", () => {
+    const out = linkify("Bug 2077160 - Fix browser_tab_preview.js: D334614 in review, see bug 123456.", ["a/b/browser_tab_preview.js"]).value;
+    assert.match(out, /<a href="https:\/\/bugzilla.mozilla.org\/show_bug.cgi\?id=2077160"[^>]*>Bug 2077160<\/a>/);
+    assert.match(out, /<a href="https:\/\/tests.firefox.dev\/test.html\?test=a%2Fb%2Fbrowser_tab_preview.js"[^>]*>browser_tab_preview.js<\/a>/);
+    assert.match(out, /<a href="https:\/\/phabricator.services.mozilla.com\/D334614"[^>]*>D334614<\/a>/);
+    assert.match(out, /id=123456"[^>]*>bug 123456<\/a>\.$/);
   });
 });

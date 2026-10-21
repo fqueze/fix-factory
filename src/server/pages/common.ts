@@ -1,3 +1,4 @@
+import { basename } from "node:path";
 import type { BugDraft, Command, ItemState, ItemView, NeedsUser, PatchView, PushView, RefusedCommand, RequestState, StackView } from "../../types.ts";
 import { REQUEST_STEPS } from "../commands.ts";
 import { html, join, type Html } from "../html.ts";
@@ -389,6 +390,23 @@ export function groupLabel(r: RequestState, i: ItemView): string {
   }
   const folder = i.folder === r.folder ? "" : relativePath(i.folder, r.folder);
   return `${folder ? `${folder}, ` : ""}${tests.length} tests`;
+}
+
+// Bug numbers, revisions and the given tests (by full path or file name) of a text, as links.
+export function linkify(text: string, tests: string[] = []): Html {
+  const byName = new Map(tests.flatMap((t) => [[t, t], [basename(t), t]]));
+  const names = [...byName.keys()].sort((a, b) => b.length - a.length).map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  const re = new RegExp(`\\b([Bb]ug (\\d{5,8}))\\b|\\b(D(\\d{5,7}))\\b${names.length ? `|(${names.join("|")})` : ""}`, "g");
+  const parts: Html[] = [];
+  let last = 0;
+  for (const m of text.matchAll(re)) {
+    parts.push(html`${text.slice(last, m.index)}`);
+    const href = m[1] ? `${BUGZILLA}/show_bug.cgi?id=${m[2]}` : m[3] ? `${PHABRICATOR}/${m[3]}` : `https://tests.firefox.dev/test.html?test=${encodeURIComponent(byName.get(m[5])!)}`;
+    parts.push(html`<a href="${href}" target="_blank" rel="noopener">${m[0]}</a>`);
+    last = m.index + m[0].length;
+  }
+  parts.push(html`${text.slice(last)}`);
+  return join(parts, "");
 }
 
 // The same, each test linked to its dashboard on tests.firefox.dev (manifests aren't tests).
