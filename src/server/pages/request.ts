@@ -107,6 +107,8 @@ export function renderRequestBody(r: RequestState, ctx: RenderContext): Html {
   const loose = Object.values(r.patches).filter((p) => !stacked.has(p.id) && itemOf(r, p) === undefined);
   const unstacked = Object.values(r.items).filter((i) => !stackedItems.has(i.id));
   // Groups whose patches landed have left their stack.
+  const metaSummary = r.metaBug?.draft?.summary ?? "";
+  // The abandoned groups come last, after what landed.
   const own = (i: ItemView) => Object.values(r.patches).filter((p) => p.item === i.id && !isDropped(r, p));
   const landed = unstacked.filter((i) => i.state === "landed" || (own(i).length > 0 && own(i).every((p) => isLanded(r, p))));
   const items = unstacked.filter((i) => !landed.includes(i));
@@ -129,11 +131,12 @@ export function renderRequestBody(r: RequestState, ctx: RenderContext): Html {
     ${pushes.length ? html`<h3>Try pushes${planned.length > 1 ? html` ${approvePushControls(r, planned, back)}` : null}</h3><div class="rows">${[...planned, ...rest].map((p) => pushRowOf(r, p, ctx))}${
       declined.length ? html`<details class="fold" data-fold="declined-pushes"><summary>${declined.length} declined or withdrawn</summary><div class="rows">${declined.map((p) => pushRowOf(r, p, ctx))}</div></details>` : null
     }</div><hr class="part">` : null}
-    ${r.metaBug && !(hasBug(r.metaBug) && stacks.length) ? metaBugLine(r, back, ctx) : null}
+    ${r.metaBug && !(hasBug(r.metaBug) && (stacks.length || landed.length)) ? metaBugLine(r, back, ctx) : null}
     ${stacks.map((s) => stackSection(r, s, ctx))}
     ${loose.length ? html`<h3>Patches</h3><div class="rows">${loose.map((p) => patchRow(r, p, ctx))}</div>` : null}
-    ${items.length ? html`${(stacks.length || loose.length) && items.some((i) => itemBucket(r, i, ctx) !== "closed") ? html`<h3>Not in a stack yet</h3>` : null}${groupRows(r, items, ctx)}` : null}
-    ${landed.length ? html`<h3>Landed</h3>${groupRows(r, landed, ctx)}` : null}
+    ${items.some((i) => itemBucket(r, i, ctx) !== "closed") ? html`${stacks.length || loose.length ? html`<h3>Not in a stack yet</h3>` : null}${groupRows(r, items, ctx, false)}` : null}
+    ${landed.length ? html`<h3>Landed${r.metaBug && hasBug(r.metaBug) && !stacks.length ? html` · <a class="bug" href="${bugUrl(r.metaBug.bug)}" target="_blank" rel="noopener">Bug ${r.metaBug.bug}</a> ${metaSummary}` : null}</h3>${groupRows(r, landed, ctx)}` : null}
+    ${closedFold(r, items.filter((i) => itemBucket(r, i, ctx) === "closed"), ctx)}
     ${stacks.length || loose.length || items.length || landed.length ? html`<hr class="part">` : null}
     ${requestJobs(r, ctx)}
     ${notesFold(r, plans)}
@@ -182,7 +185,7 @@ function configLine(r: RequestState): Html | null {
 function metaBugLine(r: RequestState, back: string, ctx: RenderContext): Html {
   const m = r.metaBug!;
   if (hasBug(m)) {
-    return html`<div class="sub" style="margin-top:8px">Meta bug: <a class="bug" href="${bugUrl(m.bug)}">Bug ${m.bug}</a></div>`;
+    return html`<h3 class="stackhead"><span><a class="bug" href="${bugUrl(m.bug)}" target="_blank" rel="noopener">Bug ${m.bug}</a> ${r.metaBug?.draft?.summary ?? "meta bug"}</span></h3>`;
   }
   // Filed last: it depends on the stack's other bugs.
   const unfiled = Object.values(r.stacks).flatMap((s) => stackPatches(r, s)).filter((p) => !isDropped(r, p) && p.bugDraft && !hasBug(p)).length;
@@ -297,17 +300,23 @@ function askBlock(r: RequestState, i: ItemView, ctx: RenderContext, patches: Pat
 // What needs you first, then what runs, what's ready and what waits; the closed ones folded under one line.
 const ORDER: Bucket[] = ["needs you", "working", "ready", "pending", "landed"];
 
-function groupRows(r: RequestState, items: ItemView[], ctx: RenderContext): Html {
+function groupRows(r: RequestState, items: ItemView[], ctx: RenderContext, withClosed = true): Html {
   const bucket = new Map(items.map((i) => [i.id, itemBucket(r, i, ctx)]));
-  const closed = items.filter((i) => bucket.get(i.id) === "closed");
   return html`<div class="rows">${ORDER.flatMap((b) => items.filter((i) => bucket.get(i.id) === b)).map((i) => itemRows(r, i, ctx))}${
-    closed.length ? html`<details class="fold" data-fold="closed-groups"><summary>${closed.length} closed</summary><div class="rows">${closed.map((i) => itemRows(r, i, ctx))}</div></details>` : null
+    withClosed ? closedFold(r, items.filter((i) => bucket.get(i.id) === "closed"), ctx) : null
   }</div>`;
+}
+
+function closedFold(r: RequestState, closed: ItemView[], ctx: RenderContext): Html | null {
+  return closed.length ? html`<details class="fold" data-fold="closed-groups"><summary>${closed.length} closed</summary><div class="rows">${closed.map((i) => itemRows(r, i, ctx))}</div></details>` : null;
 }
 
 // Once a group has a reviewed patch, the patch's row replaces the group's.
 function itemRows(r: RequestState, i: ItemView, ctx: RenderContext): Html {
-  const live = Object.values(r.patches).filter((p) => p.item === i.id && !isDraft(r, p) && !isDropped(r, p));
+  // A commit its author squashed away stays a patch of the group, outside every stack, while a sibling is in one.
+  const stacked = new Set(Object.values(r.stacks).flatMap((s) => s.order));
+  const own = Object.values(r.patches).filter((p) => p.item === i.id && !isDraft(r, p) && !isDropped(r, p));
+  const live = own.some((p) => stacked.has(p.id)) ? own.filter((p) => stacked.has(p.id)) : own;
   return live.length ? html`${live.map((p) => patchRow(r, p, ctx))}` : groupRow(r, i, ctx);
 }
 
