@@ -1259,12 +1259,20 @@ class Planner {
 
   private computeStacks(): void {
     const folders = [...new Set(Object.values(this.s.items).map((i) => this.stackFolder(i)))].sort();
-    // A patch submitted in a stack of the earlier rule (one per test folder) stays in it.
-    const submittedElsewhere = new Set(
-      Object.values(this.s.stacks)
-        .filter((st) => !folders.includes(st.folder) && st.order.some((p) => this.s.patches[p]?.revision !== undefined))
-        .flatMap((st) => st.order),
-    );
+    // A stack of the earlier rule (one per test folder) is dropped, unless it was submitted: its patches stay in it.
+    const old = Object.values(this.s.stacks).filter((st) => !folders.includes(st.folder));
+    const submitted = (st: StackView) => st.order.some((p) => this.s.patches[p]?.revision !== undefined);
+    for (const st of old.filter((st) => !submitted(st))) {
+      this.event(this.ev("stack-dropped", { stack: st.id }));
+      delete this.s.stacks[st.id];
+      // Its worktree goes too (the request's end would remove it), unless a job still runs in it.
+      const wt = this.view.byKey.get(`wt:${st.id}`)?.find(succeeded);
+      if (wt && !this.view.jobs.some((r) => r.end === undefined && r.cwd.startsWith(st.worktree))) {
+        const { name } = this.out<{ name: string }>(wt);
+        this.want(`remove:${name}`, () => this.cli("remove", "worktree.ts", ["remove", name], { cwd: this.config.firefoxRepo }));
+      }
+    }
+    const submittedElsewhere = new Set(old.filter(submitted).flatMap((st) => st.order));
     const ids = new Map<string, string>();
     for (const folder of folders) {
       // A stack keeps the id it was made with; two folders whose ids are the same don't share one.

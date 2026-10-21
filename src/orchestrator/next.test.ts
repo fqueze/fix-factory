@@ -1278,6 +1278,7 @@ describe("5. stack", () => {
     const s = sc.state();
     assert.equal(s.step, "verify on try");
     assert.deepEqual(s.stacks.root.order, ["p-test-a", "p-test-b"]);
+    assert.deepEqual(Object.keys(s.stacks), ["root"], "the per-folder stack is dropped");
     const planKey = sc.view().jobs.find((j) => j.purpose.what === "plan-pushes")!.purpose.key;
     sc.complete(planKey, { report: { pushes: [{ purpose: "verify", tryArgs: ["fuzzy", "-q", "x"], rebuild: 5 }], feedback: [] } });
     const [dry] = sc.settle();

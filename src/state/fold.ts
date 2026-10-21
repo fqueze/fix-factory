@@ -191,6 +191,9 @@ export function foldEvents(events: readonly Event[]): RequestState {
         );
         break;
       }
+      case "stack-dropped":
+        delete s.stacks[e.stack];
+        break;
       case "stack":
         s.stacks[e.stack] = {
           id: e.stack,

@@ -171,6 +171,7 @@ export type Event =
     })
   | (EventBase & { type: "dep"; dep: Dep })
   | (EventBase & { type: "dep-removed"; patch: PatchId; needs: PatchId | string })
+  | (EventBase & { type: "stack-dropped"; stack: string }) // made by an earlier rule (one per test folder), never submitted
   | (EventBase & { type: "stack"; stack: string; folder: string; branch: string; worktree: string; base?: string; order: PatchId[]; summary?: string })
   | (EventBase & { type: "meta-bug"; bug: number | null; draft?: BugDraft })
   | (EventBase & { type: "try-planned"; push: PushId; purpose: string; command: string[]; taskCount?: number })
