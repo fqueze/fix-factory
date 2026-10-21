@@ -343,6 +343,7 @@ export interface StackView {
   order: PatchId[];
   summary?: string;
   submitCopied?: Iso; // when you last copied its moz-phab command: the factory looks for its revisions for a while
+  submittedOrder?: PatchId[]; // its order when you last copied its moz-phab (or reorg) command: Phabricator's
 }
 
 export interface PushView {

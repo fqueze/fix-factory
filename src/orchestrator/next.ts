@@ -2025,7 +2025,7 @@ class Planner {
               path: file,
               content:
                 JSON.stringify({
-                  patches: ps.map((p) => ({ id: p.id, effort: p.effort, value: this.s.items[p.item ?? ""]?.group.ratePerWeek, testOnly: p.testOnly, accepted: accepted(p), commentsAddressed: !fresh(p), landed: landed(p) })),
+                  patches: ps.map((p) => ({ id: p.id, effort: p.item === ANNOTATIONS_ITEM ? 0 : p.effort, value: this.s.items[p.item ?? ""]?.group.ratePerWeek, testOnly: p.testOnly, accepted: accepted(p), commentsAddressed: !fresh(p), landed: landed(p) })),
                   deps: ps.flatMap((p) => p.deps),
                   previous: st.order,
                 }) + "\n",
@@ -2038,6 +2038,28 @@ class Planner {
       // One reorg to ask for at a time: an earlier one's order is moot.
       for (const n of this.s.needsUser) if (n.key.startsWith(`land:${st.id}:`) && n.key !== `land:${st.id}:${h}`) this.clear(n.key);
       if (!o.landable?.length || o.landable.every((pid) => landed(this.s.patches[pid]))) continue;
+      // Every patch landable: nothing to move to the bottom. The stack keeps Phabricator's order, and gets it back if a
+      // landing reorder changed it.
+      const landable = o.landable;
+      if (ps.every((p) => landed(p) || landable.includes(p.id))) {
+        const phab = st.submittedOrder?.filter((pid) => st.order.includes(pid));
+        if (phab && phab.length === st.order.length && phab.join() !== st.order.join()) {
+          const e = this.rewriteEdits(`restore-${st.id}-${h}`, ps);
+          const rw = this.want(`rewrite-restore:${st.id}:${h}`, () =>
+            this.cli("rewrite", "stack.ts", ["rewrite", "--cwd", st.worktree, "--base", st.base ?? this.config.baseRef, "--branch", st.branch, "--order", phab.map((pid) => this.s.patches[pid].sha).join(","), ...e.args], {
+              cwd: st.worktree,
+              files: e.files,
+              purpose: { stack: st.id, patches: Object.fromEntries(ps.map((p) => [p.sha.slice(0, 12), p.id])), reason: "back to Phabricator's order" },
+            }),
+          );
+          if (rw && !this.out<{ conflict?: unknown }>(rw).conflict) {
+            const { id, ...rest } = st;
+            this.event(this.ev("stack", { stack: id, ...rest, order: phab }));
+          }
+        }
+        for (const n of this.s.needsUser) if (n.key.startsWith(`land:${st.id}:`)) this.clear(n.key);
+        continue;
+      }
       if (o.order.join() !== st.order.join() || this.view.byKey.has(`rewrite-land:${st.id}:${h}`)) {
         const e = this.rewriteEdits(`land-${st.id}-${h}`, ps);
         const rw = this.want(`rewrite-land:${st.id}:${h}`, () =>
@@ -2063,8 +2085,10 @@ class Planner {
         if (adapts.some((a) => !a)) continue;
         if (adapts.length > 0 && !this.want(`refresh:${st.id}:${h}`, () => this.cli("refresh", "stack.ts", ["import", "--cwd", st.worktree, `${st.base ?? this.config.baseRef}..${st.branch}`], { cwd: st.worktree, purpose: { stack: st.id } }))) continue;
       }
-      // Only when the stack was reordered: landable patches already at the bottom need nothing on Phabricator.
-      if (!this.view.byKey.has(`rewrite-land:${st.id}:${h}`)) {
+      // Only when the stack's order differs from Phabricator's: landable patches already at the bottom, or a stack put
+      // back in the order you submitted, need nothing there.
+      const phab = st.submittedOrder?.filter((pid) => st.order.includes(pid));
+      if (!this.view.byKey.has(`rewrite-land:${st.id}:${h}`) || (phab && phab.join() === st.order.join())) {
         this.clear(`land:${st.id}:${h}`);
         continue;
       }

@@ -201,6 +201,7 @@ export function foldEvents(events: readonly Event[]): RequestState {
           order: e.order,
           summary: e.summary,
           submitCopied: s.stacks[e.stack]?.submitCopied,
+          submittedOrder: s.stacks[e.stack]?.submittedOrder,
         };
         break;
       case "poll-requested":
@@ -209,6 +210,7 @@ export function foldEvents(events: readonly Event[]): RequestState {
       case "submit-copied":
         if (s.stacks[e.stack]) {
           s.stacks[e.stack].submitCopied = e.t;
+          s.stacks[e.stack].submittedOrder = [...s.stacks[e.stack].order];
           for (const id of s.stacks[e.stack].order) if (s.patches[id]?.revision !== undefined) s.patches[id].sentSha = s.patches[id].sha;
         }
         break;
@@ -267,10 +269,14 @@ export function foldEvents(events: readonly Event[]): RequestState {
       case "meta-bug":
         s.metaBug = { bug: e.bug, draft: e.draft };
         break;
-      case "user-done":
+      case "user-done": {
+        // Copying the reorg command: Phabricator gets the stack's order.
+        const reorg = /^land:([^:]+):/.exec(e.key)?.[1];
+        if (reorg && s.stacks[reorg]) s.stacks[reorg].submittedOrder = [...s.stacks[reorg].order];
         s.needsUser = s.needsUser.filter((n) => n.key !== e.key);
         refused = refused.filter((x) => x.key !== e.key);
         break;
+      }
       case "command-executed":
         if (e.ok) {
           refused = refused.filter((x) => e.cmd === undefined || x.cmd !== e.cmd || x.item !== e.item || x.job !== e.job);
