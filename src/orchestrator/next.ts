@@ -1338,7 +1338,7 @@ class Planner {
       // assembled again without it.
       if (r.state === "already fixed") {
         if (!this.want(`abort:${res.job}`, () => this.cli("abort", "git", ["cherry-pick", "--abort"], { cwd: wt, purpose: { stack: id } }))) return;
-        this.setItem(sourceOf(conflict.sha).item, "left as-is", `already fixed on ${this.config.baseRef}: ${r.explanation}`.slice(0, 300));
+        this.setItem(sourceOf(conflict.sha).item, "left as-is", `already fixed: ${r.explanation}`.slice(0, 300));
         return;
       }
       if (r.state !== "resolved" || !r.commit) {
@@ -1714,7 +1714,7 @@ class Planner {
       const r = this.rep<ResolveConflictReport>(res);
       if (r.state === "already fixed") {
         if (!this.want(`abort:${res.job}`, () => this.cli("abort", "git", ["cherry-pick", "--abort"], { cwd: info.wt, purpose: { stack: info.id } }))) return undefined;
-        this.setItem(owner.item.id, "left as-is", `already fixed on ${this.config.baseRef}: ${r.explanation}`.slice(0, 300));
+        this.setItem(owner.item.id, "left as-is", `already fixed: ${r.explanation}`.slice(0, 300));
         return undefined;
       }
       if (r.state !== "resolved" || !r.commit) {

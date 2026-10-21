@@ -1469,7 +1469,7 @@ describe("5. stack", () => {
     sc.complete(`abort:${resolve}`, { output: "" });
     const started = sc.settle();
     assert.equal(sc.state().items["i-test-a"].state, "left as-is");
-    assert.match(sc.state().items["i-test-a"].detail ?? "", /^already fixed on origin\/main: bug 2075832 landed the same fix/);
+    assert.match(sc.state().items["i-test-a"].detail ?? "", /^already fixed: bug 2075832 landed the same fix/);
     assert.deepEqual(sc.state().needsUser, []);
     const again = started.find((k) => k.startsWith("assemble:root:") && k !== key)!;
     assert.ok(again, String(started));
