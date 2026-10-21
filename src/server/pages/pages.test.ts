@@ -6,7 +6,7 @@ import { FixtureStateSource } from "../state-source.ts";
 import type { RequestState } from "../../types.ts";
 import { jobLabel, linkify, pushStatus, type RenderContext } from "./common.ts";
 import { renderOverview, renderRecentPushes } from "./overview.ts";
-import { IDLE, itemBucket, runningSentence } from "./progress.ts";
+import { IDLE, itemBucket, progressLine, requestProgress, runningSentence } from "./progress.ts";
 import { configTable, parseConfig, renderRequest, requestSummary } from "./request.ts";
 import { conversationOf, renderActivity } from "./activity.ts";
 import { ITEM_STATES } from "../commands.ts";
@@ -158,12 +158,13 @@ describe("one fixture per step of docs/MVP.md", () => {
 
   });
 
-  it("6. verify on try: a group on try is working, not ready, until its push has results", () => {
+  it("6. verify on try: a group on try waits for try, neither working nor ready, until its push has results", () => {
     const r = structuredClone(source.getRequest("r-20261010-xpcshell-cwd")!);
     const i = Object.values(r.items)[0];
     r.needsUser = r.needsUser.filter((n) => n.item !== i.id);
     i.state = "in try";
-    assert.equal(itemBucket(r, i, ctx), "working");
+    assert.equal(itemBucket(r, i, ctx), "waiting for try");
+    assert.match(progressLine(requestProgress(r, ctx)).value, /<span class="waiting-for-try">1 waiting for try<\/span>/);
   });
 
   it("2. first signal: Revise, while it waits and on a push you declined; not once discarded-and-revised, withdrawn or revised", () => {

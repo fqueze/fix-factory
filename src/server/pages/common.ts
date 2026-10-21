@@ -325,9 +325,9 @@ export function stateClass(s: ItemState): StateClass {
     case "investigating":
     case "in critical review":
     case "addressing review comments":
+      return "run";
     case "in stack":
     case "in try":
-      return "run";
     case "not started":
     case "waiting for a build slot":
     case "waiting for review":

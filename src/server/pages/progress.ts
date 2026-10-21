@@ -56,7 +56,7 @@ export const IDLE: Record<ItemState, { text: (i: ItemView, builds: number) => st
   "review findings": { text: () => "review findings go back to the author", active: true },
   reviewed: { text: () => "reviewed: waiting for the rest of the stack", active: false },
   "in stack": { text: () => "in the stack", active: false },
-  "in try": { text: () => "being verified on try", active: false },
+  "in try": { text: () => "waiting for the stack's try results", active: false },
   "waiting for review": { text: () => "waiting for review on Phabricator", active: false },
   "addressing review comments": { text: () => "addressing Phabricator review comments", active: true },
   blocked: { text: () => "blocked", active: true },
@@ -118,7 +118,7 @@ export function itemSentence(r: RequestState, i: ItemView, ctx: RenderContext): 
   }
   const builds = ctx.runningBuilds ?? Object.values(r.jobs).filter((j) => j.kind === "build" && j.endedAt === undefined).length;
   // On try, its push is what runs.
-  const cls = i.state === "in try" ? "run" : DONE.includes(i.state) ? (i.state === "fixed" || i.state === "landed" ? "ok" : "closed") : "wait";
+  const cls = DONE.includes(i.state) ? (i.state === "fixed" || i.state === "landed" ? "ok" : "closed") : "wait";
   return { text: html`${idle.text(i, builds)}`, cls, controls: null, detail: i.detail };
 }
 
@@ -172,8 +172,8 @@ function stalledControls(r: RequestState, i: ItemView): Html {
 }
 
 // Where each group stands, counted per request (and for the whole factory) and drawn as a bar.
-export type Bucket = "working" | "needs you" | "ready" | "pending" | "landed" | "closed";
-export const BUCKETS: Bucket[] = ["needs you", "working", "ready", "pending", "landed", "closed"];
+export type Bucket = "working" | "needs you" | "waiting for try" | "ready" | "pending" | "landed" | "closed";
+export const BUCKETS: Bucket[] = ["needs you", "working", "waiting for try", "ready", "pending", "landed", "closed"];
 
 const READY: ItemState[] = ["reviewed", "in stack", "waiting for review", "fixed", "landed"];
 
@@ -184,6 +184,10 @@ export function itemBucket(r: RequestState, i: ItemView, ctx: RenderContext): Bu
   }
   if (cls === "find") {
     return "needs you";
+  }
+  // Its push runs on try: nothing of the factory's does.
+  if (i.state === "in try") {
+    return "waiting for try";
   }
   if (i.state === "landed") {
     return "landed";
@@ -199,7 +203,7 @@ export type Progress = Record<Bucket, number>;
 // Its groups; and the request's own ⚑s (recovery plans, refused commands…) need you too. Its own jobs aren't groups:
 // the summary next to it says what they do.
 export function requestProgress(r: RequestState, ctx: RenderContext): Progress {
-  const p: Progress = { "needs you": 0, working: 0, ready: 0, pending: 0, landed: 0, closed: 0 };
+  const p: Progress = { "needs you": 0, working: 0, "waiting for try": 0, ready: 0, pending: 0, landed: 0, closed: 0 };
   for (const i of Object.values(r.items)) {
     p[itemBucket(r, i, ctx)]++;
   }
@@ -219,7 +223,7 @@ export function progressLine(p: Progress): Html {
   if (!shown.length) {
     return html`<span class="sub">nothing to work on yet</span>`;
   }
-  const cls = (b: Bucket) => b.replace(" ", "-");
+  const cls = (b: Bucket) => b.replaceAll(" ", "-");
   return html`<span class="pbar">${shown.map((b) => html`<span class="${cls(b)}" style="flex-grow:${p[b]}"></span>`)}</span>${join(
     shown.map((b) => html`<span class="${cls(b)}">${p[b]} ${b === "needs you" && p[b] === 1 ? "needs you" : b === "needs you" ? "need you" : b}</span>`),
     " · ",
@@ -227,7 +231,7 @@ export function progressLine(p: Progress): Html {
 }
 
 export function sumProgress(list: Progress[]): Progress {
-  const sum: Progress = { "needs you": 0, working: 0, ready: 0, pending: 0, landed: 0, closed: 0 };
+  const sum: Progress = { "needs you": 0, working: 0, "waiting for try": 0, ready: 0, pending: 0, landed: 0, closed: 0 };
   for (const p of list) {
     for (const b of BUCKETS) {
       sum[b] += p[b];
