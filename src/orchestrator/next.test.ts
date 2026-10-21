@@ -1521,7 +1521,7 @@ describe("5. stack", () => {
     sc.complete(rest, { output: { commits: [{ sha: sha("2"), newSha: sha("b") }] } });
     assert.ok(sc.settle().includes(`deps:root:${hash}`));
   });
-  it("a patch the base already fixes closes its group, and the stack is assembled again without it", () => {
+  it("a patch whose fix is already there (an earlier stack patch, or the base): its author keeps only what isn't covered", () => {
     const sc = twoReviewed();
     sc.complete("wt:root", { output: { path: `/wt/${ID}-root` } });
     sc.settle();
@@ -1529,18 +1529,15 @@ describe("5. stack", () => {
     const hash = key.split(":")[2];
     sc.complete(key, { output: { commits: [], conflict: { sha: sha("1"), files: ["a/test_a.js"] }, remaining: [sha("2")] } });
     sc.settle();
-    sc.complete(`resolve:root:${hash}:${sha("1")}`, { report: { state: "already fixed", explanation: "bug 2075832 landed the same fix", feedback: [] } });
+    sc.complete(`resolve:root:${hash}:${sha("1")}`, { report: { state: "already fixed", explanation: "stack patch 5bda7bf makes the same change", feedback: [] } });
     const resolve = sc.view().byKey.get(`resolve:root:${hash}:${sha("1")}`)![0].job;
-    assert.deepEqual(sc.settle(), [`abort:${resolve}`], "the cherry-pick left in progress goes first");
-    assert.deepEqual(sc.plan(`abort:${resolve}`).cli, { tool: "sh", args: ["-c", 'test ! -e "$(git rev-parse --git-path CHERRY_PICK_HEAD)" || git cherry-pick --abort'] });
-    sc.complete(`abort:${resolve}`, { output: "" });
-    const started = sc.settle();
-    assert.equal(sc.state().items["i-test-a"].state, "left as-is");
-    assert.match(sc.state().items["i-test-a"].detail ?? "", /^already fixed: bug 2075832 landed the same fix/);
+    assert.deepEqual(sc.settle(), [`abort:${resolve}:v2`], "the cherry-pick left in progress goes first");
+    assert.deepEqual(sc.plan(`abort:${resolve}:v2`).cli, { tool: "sh", args: ["-c", 'test ! -e "$(git rev-parse --git-path CHERRY_PICK_HEAD)" || git cherry-pick --abort'] });
+    sc.complete(`abort:${resolve}:v2`, { output: "" });
+    const covered = `author:i-test-a:covered:${resolve}`;
+    assert.deepEqual(sc.settle(), [covered]);
+    assert.match(sc.plan(covered).agent?.message ?? "", /stack patch 5bda7bf makes the same change[^]*keep only what it doesn't already do[^]*"left as-is"/);
     assert.deepEqual(sc.state().needsUser, []);
-    const again = started.find((k) => k.startsWith("assemble:root:") && k !== key)!;
-    assert.ok(again, String(started));
-    assert.deepEqual(sc.plan(again).cli?.args.slice(-1), [sha("2")]);
   });
 
   it("a conflict on a patch whose author reported a short sha goes to resolve-conflict too", () => {

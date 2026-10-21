@@ -1352,11 +1352,18 @@ class Planner {
       });
       if (!res) return;
       const r = this.rep<ResolveConflictReport>(res);
-      // Fixed on the base already: the cherry-pick left in progress goes, its group closes, and the stack is
-      // assembled again without it.
+      // What it fixes is fixed already (by an earlier patch of the stack, or on the base): the cherry-pick left in
+      // progress goes, and its author keeps only what isn't covered yet, or ends with nothing left ("left as-is").
+      // The stack is assembled again with what it returns.
       if (r.state === "already fixed") {
-        if (!this.want(`abort:${res.job}`, () => this.cli("abort", "sh", ["-c", ABORT_CHERRY_PICK], { cwd: wt, purpose: { stack: id } }))) return;
-        this.setItem(sourceOf(conflict.sha).item, "left as-is", `already fixed: ${r.explanation}`.slice(0, 300));
+        if (!this.want(`abort:${res.job}:v2`, () => this.cli("abort", "sh", ["-c", ABORT_CHERRY_PICK], { cwd: wt, purpose: { stack: id } }))) return;
+        const item = sourceOf(conflict.sha).item;
+        this.resumeAuthor(
+          item,
+          `author:${item}${this.itemEpoch(item)}:covered:${res.job}`,
+          "covered",
+          `Assembling the stack, your commit ${conflict.sha.slice(0, 12)} conflicted with a change that already does what it does: ${r.explanation}\n\nThat commit is in this repository (\`git show\` it). Rebase your commits on top of it and keep only what it doesn't already do (each part you keep has to be needed on its own). If nothing is left, drop your commits and report "left as-is", saying which commit covers your fix. Then end with the JSON report again.`,
+        );
         return;
       }
       if (r.state !== "resolved" || !r.commit) {

@@ -138,7 +138,7 @@ Revise this bug draft according to the user's comments. Always make it follow th
 sonnet · 5. Stack, 10. Landing · inputs: `sha`, `base`, `files`
 
 ```
-Rebasing {sha} onto {base} conflicts in {files}. {base} is the branch being assembled: the stack's earlier patches ("Bug XXXXXXX" in their messages until filed) on top of origin/main, so the other side may be another of the factory's patches, not a landed change: say which, with `git log`. Resolve it, keeping the intent of both sides, and give the resolved commit's sha in `commit`. If the other side already fixes what the patch fixes, don't keep both: stop with state "already fixed", naming that commit and whether it's on origin/main or a patch of the stack. If the conflict is semantic otherwise (the patch's approach no longer fits the new base), stop and explain instead.
+Rebasing {sha} onto {base} conflicts in {files}. {base} is the branch being assembled: the stack's earlier patches ("Bug XXXXXXX" in their messages until filed) on top of origin/main, so the other side may be another of the factory's patches, not a landed change: say which, with `git log`. Resolve it, keeping the intent of both sides, and give the resolved commit's sha in `commit`. If the other side already does what the patch does, even in part, don't keep both: stop with state "already fixed", naming that commit, whether it's on origin/main or a patch of the stack, and what the patch does beyond it (its author then keeps only that). If the conflict is semantic otherwise (the patch's approach no longer fits the new base), stop and explain instead.
 ```
 
 ## estimate-review-effort
