@@ -1454,6 +1454,20 @@ describe("5. stack", () => {
     sc.complete(rest, { output: { commits: [{ sha: sha("2"), newSha: sha("b") }] } });
     assert.ok(sc.settle().includes(`deps:root:${hash}`));
   });
+  it("a conflict on a patch whose author reported a short sha goes to resolve-conflict too", () => {
+    const sc = workList([group("ka", "a/test_a.js", "boom", 3), group("kb", "a/test_b.js", "bang", 1)]);
+    investigating(sc, "i-test-a");
+    investigating(sc, "i-test-b");
+    reviewed(sc, "i-test-a", sha("1").slice(0, 12), "a/test_a.js");
+    reviewed(sc, "i-test-b", sha("2"), "a/test_b.js", { title: "Bug 22 - Fix test_b, r=smaug.", bug: 22 });
+    sc.complete("wt:root", { output: { path: `/wt/${ID}-root` } });
+    sc.settle();
+    const key = sc.view().jobs.find((j) => j.purpose.what === "assemble")!.purpose.key;
+    const hash = key.split(":")[2];
+    sc.complete(key, { output: { commits: [], conflict: { sha: sha("1"), files: ["a/test_a.js"] }, remaining: [sha("2")] } });
+    assert.deepEqual(sc.settle(), [`resolve:root:${hash}:${sha("1")}`]);
+    assert.deepEqual(sc.purpose(`resolve:root:${hash}:${sha("1")}`).patches, { [sha("1").slice(0, 12)]: "p-test-a" });
+  });
 });
 
 describe("6. verify on try", () => {

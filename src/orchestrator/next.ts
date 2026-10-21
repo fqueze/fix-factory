@@ -1304,7 +1304,9 @@ class Planner {
       ...(prev?.order ?? []).map((pid) => info.patches.find((p) => p.id === pid)?.source).filter((x) => x !== undefined),
       ...info.patches.filter((p) => !prev?.order.includes(p.id)).map((p) => p.source),
     ];
-    const patchesOf = (shas: string[]) => Object.fromEntries(shas.map((sha) => [sha.slice(0, 12), bySource.get(sha)!.id]));
+    // Authors may report short shas; the stack scripts answer with full ones.
+    const sourceOf = (sha: string) => bySource.get(sha) ?? info.patches.find((p) => sha.startsWith(p.source) || p.source.startsWith(sha))!;
+    const patchesOf = (shas: string[]) => Object.fromEntries(shas.map((sha) => [sha.slice(0, 12), sourceOf(sha).id]));
     const key = `assemble:${id}:${hash}`;
     const reassembly = this.view.jobs.some((j) => j.purpose.what === "assemble" && j.purpose.stack === id && j.purpose.key !== key && !j.purpose.key.startsWith(`${key}:after:`));
     const first = this.want(key, () =>
