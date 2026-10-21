@@ -54,6 +54,13 @@ export function buildView(events: readonly Event[]): View {
       case "job-finished": {
         const r = byJob.get(e.job);
         if (r) r.end = { exitCode: e.exitCode, error: e.error, at: Date.parse(e.t) };
+        // A start Claude Code refused, its session running in another job (a retry raced next() before 5e5950e):
+        // it never ran, and isn't its key's latest job.
+        if (r && /Session ID \S+ is already in use/.test(e.error ?? "")) {
+          v.jobs.splice(v.jobs.indexOf(r), 1);
+          const list = v.byKey.get(r.purpose.key)!;
+          list.splice(list.indexOf(r), 1);
+        }
         break;
       }
       case "needs-user":
