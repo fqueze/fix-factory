@@ -70,7 +70,7 @@ The result table of try push {rev} (goal: {goal}) is in {tableFile}, with the pa
 haiku · 3. Work list · inputs: `clustersFile`
 
 ```
-The failure clusters in {clustersFile} were grouped by exact message. Merge clusters whose messages are the same specific failure with different numbers, names or paths. Split clusters that only look alike. A generic message such as "Test timed out" is never a shared cause. Give a one-line reason for each change.
+The failure clusters in {clustersFile} were grouped by exact message. Merge clusters whose messages are the same specific failure with different numbers, names or paths. Also merge the clusters of one test that fail in the same tasks (compare their `taskIds`): in one run, a test's first failure usually causes the others, so they're one failure to fix. Split clusters that only look alike. A generic message such as "Test timed out" is never a shared cause on its own. Give a one-line reason for each change.
 ```
 
 ## prior-art-verdict
