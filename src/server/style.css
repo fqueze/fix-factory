@@ -87,7 +87,7 @@ details.row[open]:has(> .under) .bug.tofile { background: var(--tofile-bg); bord
 .st { font-size: 12px; white-space: nowrap; }
 .st::before { margin-right: 3px; }
 .st.run::before { content: "◔"; color: var(--accent); }
-.st.wait::before { content: "◌"; color: var(--text-muted); }
+.st.wait::before { content: "⧗"; color: var(--text-muted); }
 .st.find::before { content: "↺"; color: var(--serious); }
 .st.ok::before { content: "✓"; color: var(--good); font-weight: 700; }
 .st.closed { color: var(--text-muted); }
