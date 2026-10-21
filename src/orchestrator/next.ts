@@ -1065,10 +1065,10 @@ class Planner {
     );
     if (!planned) return true;
     if (planned.made.some((id) => this.s.pushes[id]?.result === undefined)) return true;
-    const results = planned.made.map((id) => `${this.s.pushes[id].rev} (${this.s.pushes[id].result === "green" ? "green" : (this.s.pushes[id].summary ?? "failures")})`).join(", ");
+    const results = this.pushResults(planned.made);
     const declined = planned.ids.map((id) => this.s.pushes[id]?.declined).filter((t) => t !== undefined && t !== "discarded");
     const message = planned.made.length
-      ? `The try push you asked for ran: ${results}. Read the results with fx-tests (fx-tests try <rev>); the failed jobs' logs are under ${artifactsDir(this.config)}/<task id>. Act on them, then end with the JSON report again, without a tryRequest unless you need another push.`
+      ? `The try push you asked for ran: ${results}. Read the results with fx-tests (\`fx-tests try <rev>\`, with \`--all-jobs\` for the tests that failed then passed on retry inside a green job); the failed jobs' logs are under ${artifactsDir(this.config)}/<task id>. Act on them, then end with the JSON report again, without a tryRequest unless you need another push.`
       : `The user didn't make the try push you asked for${declined.length ? `: “${declined[0]}”` : ""}. Go on without it, then end with the JSON report again, without a tryRequest.`;
     this.resumeAuthor(item.id, `author:${item.id}${e}:asked:${author.job}`, "asked push", message);
     return true;
@@ -1400,7 +1400,7 @@ class Planner {
         const pv = this.s.patches[p.id];
         return { id: p.id, effort: pv.effort, value: value(p.id), testOnly: pv.testOnly };
       }),
-      deps: inStack.flatMap((p) => this.s.patches[p.id].deps),
+      deps: inStack.flatMap((p) => this.s.patches[p.id].deps).map((d) => ({ ...d, needs: this.depTarget(d.needs, inStack.map((x) => x.id)) })),
     };
     // Ordered again when what it's ordered by changes (an effort, a dep, how the factory ranks them).
     const oh = shortHash([JSON.stringify(orderInput)]).slice(0, 6);
@@ -1537,6 +1537,17 @@ class Planner {
     if (!imp) return undefined;
     const index = author.commits.findIndex((_, i) => patchId(p.item!, i) === p.id);
     return this.out<ImportedCommit[]>(imp)[index]?.patchId || undefined;
+  }
+
+  // A dep's "needs" as a patch of the stack when its text names one (agents name commits by any sha they've had, or by
+  // title): an author's "lands after 8f68f1ae2fde (…) Bug XXXXXXX - Reposition popups…" is a hard dep on that patch.
+  private depTarget(needs: string, ids: PatchId[]): string {
+    if (ids.includes(needs)) return needs;
+    const patches = ids.map((id) => this.s.patches[id]);
+    const shas = needs.match(/\b[0-9a-f]{7,40}\b/g) ?? [];
+    const bySha = patches.find((p) => [p.sha, ...(p.pastShas ?? [])].some((x) => shas.some((s) => x.startsWith(s))));
+    const byTitle = patches.find((p) => needs.includes(p.title.replace(/^Bug (\d+|X+) - /i, "").replace(/,? r=.*$/, "")));
+    return (bySha ?? byTitle)?.id ?? needs;
   }
 
   // Whether an earlier run of this item's authors had the same code (git patch-id) as this one, and its code was
@@ -1820,18 +1831,24 @@ class Planner {
     }
   }
 
+  // Each push by its full hash and summary. Green only means every job passed: a test that failed then passed on retry
+  // inside its job doesn't show (fx-tests try --all-jobs finds it).
+  private pushResults(ids: PushId[]): string {
+    return ids.map((id) => `${this.s.pushes[id].rev} (${this.s.pushes[id].summary ?? this.s.pushes[id].result})`).join(", ");
+  }
+
   // The authors whose DEBUG commits went to try on top of the stack get its results.
   private reproResults(plan: { ids: PushId[]; made: PushId[] }): void {
     const groups = this.debugGroups().filter((g) => g.item.id !== ANNOTATIONS_ITEM);
     const key = (g: { item: ItemView; commits: string[] }, what: string) => `author:${g.item.id}${this.itemEpoch(g.item.id)}:${what}:${shortHash([...g.commits, ...plan.ids]).slice(0, 8)}`;
     if (!plan.ids.length || plan.made.some((id) => this.s.pushes[id]?.result === undefined)) return;
-    const results = plan.made.map((id) => `${this.s.pushes[id].rev} (${this.s.pushes[id].result === "green" ? "green" : (this.s.pushes[id].summary ?? "failures")})`).join(", ");
+    const results = this.pushResults(plan.made);
     // Pushes discarded (or withdrawn by the factory) say nothing: the DEBUG commits wait for the stack's next push.
     // Only your reason for declining one goes to them.
     const declined = plan.ids.map((id) => this.s.pushes[id]).filter((p) => p?.declined !== undefined && p.declined !== "discarded" && !p.withdrawn).map((p) => p.declined!);
     if (!plan.made.length && !declined.length) return;
     const message = plan.made.length
-      ? `The factory pushed your DEBUG commits to try on top of the stack: ${results}. Read the results with fx-tests (fx-tests try <rev>); the failed jobs' logs are under ${artifactsDir(this.config)}/<task id>. Say in your reproduction file whether it reproduced, and how often. Then drop your DEBUG commits and fix it as usual, with the reproduction "on try"; or, if it didn't reproduce, report "not reproduced". End with the JSON report again.`
+      ? `The factory pushed your DEBUG commits to try on top of the stack: ${results}. Read the results with fx-tests (\`fx-tests try <rev>\`, with \`--all-jobs\` for the tests that failed then passed on retry inside a green job); the failed jobs' logs are under ${artifactsDir(this.config)}/<task id>. Say in your reproduction file whether it reproduced, and how often. Then drop your DEBUG commits and fix it as usual, with the reproduction "on try"; or, if it didn't reproduce, report "not reproduced". End with the JSON report again.`
       : `The user declined the stack's try push your DEBUG commits were to go on: “${declined[0]}”. Go on from what you know: fix it if you can show the cause, or report "not reproduced". End with the JSON report again.`;
     for (const g of groups) this.resumeAuthor(g.item.id, key(g, "repro"), "repro", message);
   }

@@ -332,6 +332,7 @@ export interface PatchView {
   sentSha?: string; // the commit Phabricator has, as far as the factory knows
   effort?: number;
   testOnly?: boolean;
+  pastShas?: string[]; // its commit's earlier shas, oldest first
   interdiffFile?: string;
   deps: Dep[]; // deps where this patch is the dependent one
   review?: { revision: number; status: string; reviewers: ReviewerStatus[]; comments: InlineComment[] };

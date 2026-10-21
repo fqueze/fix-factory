@@ -1475,6 +1475,24 @@ describe("5. stack", () => {
     assert.ok(!sc.state().needsUser.some((n) => n.stack === "a"));
   });
 
+  it("orders by an author's lands-after that names another patch by an earlier sha, or by its title", () => {
+    for (const what of [`${sha("2").slice(0, 12)} (stack: 1d1e0248d718) the other fix`, "Fix test_b"]) {
+      const sc = twoReviewed({ landsAfter: [{ what, reason: "fails without it" }] });
+      sc.complete("wt:root", { output: { name: `${ID}-root`, path: `/wt/${ID}-root`, branch: `${ID}-root` } });
+      sc.settle();
+      const key = sc.view().jobs.find((j) => j.purpose.what === "assemble")!.purpose.key;
+      sc.complete(key, { output: { branch: `${ID}-root`, commits: [{ sha: sha("1"), newSha: sha("a") }, { sha: sha("2"), newSha: sha("b") }], skipped: [], empty: [] } });
+      sc.settle();
+      const hash = key.split(":")[2];
+      sc.complete(`deps:root:${hash}`, { output: [] });
+      sc.complete(`effort:p-test-a:${sha("1")}`, { report: { effort: 2, reason: "r", feedback: [] } });
+      sc.complete(`effort:p-test-b:${sha("2")}`, { report: { effort: 1, reason: "r", feedback: [] } });
+      sc.settle();
+      const input = JSON.parse(sc.plan(keyOf(sc, `order:root:${hash}:`)).files![0].content);
+      assert.deepEqual(input.deps.map((d: { patch: string; needs: string; kind: string }) => [d.patch, d.needs, d.kind]), [["p-test-a", "p-test-b", "hard"]], what);
+    }
+  });
+
   it("goes on when an author reported its commit by a short sha (12 or 7 characters)", () => {
     for (const length of [12, 7]) {
       const sc = workList([group("ka", "a/test_a.js", "boom")]);

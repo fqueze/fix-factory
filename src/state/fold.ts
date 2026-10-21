@@ -174,6 +174,8 @@ export function foldEvents(events: readonly Event[]): RequestState {
           interdiffFile: e.interdiffFile,
           ...(submittedAt ? { submittedAt } : {}),
           ...(sentSha ? { sentSha } : {}),
+          // Its commit's earlier shas (before rebases and rewrites): what agents may still call it by.
+          pastShas: before && before.sha !== e.sha ? [...(before.pastShas ?? []), before.sha] : before?.pastShas,
           deps: [],
           replyDrafts: [],
         };
