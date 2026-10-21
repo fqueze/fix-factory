@@ -5,6 +5,7 @@
       "type": "string",
       "enum": [
         "resolved",
+        "already fixed",
         "semantic"
       ]
     },

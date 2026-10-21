@@ -131,7 +131,7 @@ Revise this bug draft according to the user's comments. Always make it follow th
 sonnet · 5. Stack, 10. Landing · inputs: `sha`, `base`, `files`
 
 ```
-Rebasing {sha} onto {base} conflicts in {files}. Resolve it, keeping the intent of both sides. If the conflict is semantic (the patch's approach no longer fits the new base), stop and explain instead.
+Rebasing {sha} onto {base} conflicts in {files}. Resolve it, keeping the intent of both sides. If the base already fixes what the patch fixes (another change landed for the same problem), stop with state "already fixed" and say which change. If the conflict is semantic otherwise (the patch's approach no longer fits the new base), stop and explain instead.
 ```
 
 ## estimate-review-effort

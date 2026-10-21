@@ -1334,6 +1334,11 @@ class Planner {
       });
       if (!res) return;
       const r = this.rep<ResolveConflictReport>(res);
+      // Fixed on the base already: its group closes, and the stack is assembled again without it.
+      if (r.state === "already fixed") {
+        this.setItem(sourceOf(conflict.sha).item, "left as-is", `already fixed on ${this.config.baseRef}: ${r.explanation}`.slice(0, 300));
+        return;
+      }
       if (r.state !== "resolved" || !r.commit) {
         this.raise(`failed:${res.job}`, { action: "Approach conflict while assembling the stack", detail: r.explanation.slice(0, 500), job: res.job, stack: id });
         return;
@@ -1705,6 +1710,10 @@ class Planner {
       const res = this.wantAgent(`resolve:${info.id}:try-${h}:${sha}`, "resolve", "resolve-conflict", { sha, base: branch, files: files.join(", ") }, { cwd: info.wt, purpose: { stack: info.id, sha } });
       if (!res) return undefined;
       const r = this.rep<ResolveConflictReport>(res);
+      if (r.state === "already fixed") {
+        this.setItem(owner.item.id, "left as-is", `already fixed on ${this.config.baseRef}: ${r.explanation}`.slice(0, 300));
+        return undefined;
+      }
       if (r.state !== "resolved" || !r.commit) {
         this.raise(`failed:${res.job}`, { action: "Its DEBUG commits don't apply on top of the stack", detail: r.explanation.slice(0, 500), job: res.job, item: owner.item.id });
         return undefined;

@@ -521,7 +521,7 @@ export interface ReviseBugDraftReport {
 }
 
 export interface ResolveConflictReport {
-  state: "resolved" | "semantic";
+  state: "resolved" | "already fixed" | "semantic"; // already fixed: the base fixes what the patch does
   commit?: string; // the resolved commit's sha, when resolved
   explanation: string;
   feedback: Feedback[];
