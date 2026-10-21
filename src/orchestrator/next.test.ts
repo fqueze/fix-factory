@@ -2414,7 +2414,6 @@ describe("burndown verification", () => {
     sc.complete(assemble, { output: { mapping: { [sha("1")]: sha("a"), [sha("7")]: sha("d") } } });
     sc.settle();
     sc.complete(`deps:a:${hash}`, { output: [] });
-    sc.complete(`effort:p-annotations:${sha("7")}`, { report: { effort: 1, reason: "r", feedback: [] } });
     sc.settle();
     sc.complete(keyOf(sc, `order:a:${hash}:`), { output: { order: ["p-test-a", "p-annotations"], flippedSoftDeps: [] } });
     sc.settle();
@@ -2453,7 +2452,7 @@ describe("burndown verification", () => {
     sc.settle();
   };
   // The removal written, imported and assembled last in the stack, which is ready again.
-  const withRemoval = (sc: Scenario, effort = 1) => {
+  const withRemoval = (sc: Scenario) => {
     const key = "author:i-annotations:removal";
     sc.complete(key, { report: { removal: sha("7"), summary: "removed one skip", feedback: [] } });
     sc.settle();
@@ -2470,7 +2469,6 @@ describe("burndown verification", () => {
     sc.complete(assemble, { output: { mapping: { [sha("1")]: sha("a"), [sha("7")]: sha("d") } } });
     sc.settle();
     sc.complete(`deps:a:${hash}`, { output: [] });
-    sc.complete(`effort:p-annotations:${sha("7")}`, { report: { effort, reason: "r", feedback: [] } });
     sc.settle();
     sc.complete(keyOf(sc, `order:a:${hash}:`), { output: { order: ["p-test-a", "p-annotations"], flippedSoftDeps: [] } });
     sc.settle();
@@ -2480,10 +2478,11 @@ describe("burndown verification", () => {
     sc.settle();
   };
 
-  it("ranks the skip-if removal before every fix (effort 0), whatever its estimate", () => {
+  it("ranks the skip-if removal before every fix: its effort is 0, without an estimate", () => {
     const { sc } = verified(false, 22);
-    withRemoval(sc, 3);
-    assert.equal(sc.state().patches["p-annotations"].effort, 3);
+    withRemoval(sc);
+    assert.ok(!sc.view().jobs.some((j) => j.purpose.key.startsWith("effort:p-annotations:")));
+    assert.equal(sc.state().patches["p-annotations"].effort, 0);
     const input = JSON.parse(sc.plan(keyOf(sc, "order:a:")).files![0].content);
     assert.equal(input.patches.find((p: { id: string }) => p.id === "p-annotations").effort, 0);
   });
