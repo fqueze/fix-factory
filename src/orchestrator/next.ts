@@ -1159,6 +1159,11 @@ class Planner {
       reviewed();
       return;
     }
+    // Only reworded (a bug added, a message fixed): the code an earlier review accepted needs no new one.
+    if (this.acceptedCode(item.id, author)) {
+      reviewed();
+      return;
+    }
     // The same commits a critical review already found problems in: another review would say the same. You decide.
     const prior = patches.map((p) => this.view.jobs.filter((j) => j.purpose.what === "review" && j.purpose.patch === p.id && j.purpose.sha === p.sha && j.purpose.key !== `review:${p.id}:${author.job}` && succeeded(j)).at(-1));
     if (!this.view.byKey.has(`review:${patches[0].id}:${author.job}`) && prior.every((j) => j && this.rep<ReviewPatchReport>(j).verdict === "findings")) {
@@ -1523,6 +1528,26 @@ class Planner {
     if (!imp) return undefined;
     const index = author.commits.findIndex((_, i) => patchId(p.item!, i) === p.id);
     return this.out<ImportedCommit[]>(imp)[index]?.patchId || undefined;
+  }
+
+  // Whether an earlier run of this item's authors had the same code (git patch-id) as this one, and its code was
+  // accepted: its critical reviews passed, or only nits were left, which its nits pass addressed.
+  private acceptedCode(item: ItemId, author: JobRecord): boolean {
+    const codes = (j: JobRecord) => {
+      const imp = this.view.byKey.get(`import:${j.job}`)?.find(succeeded);
+      return imp && this.out<ImportedCommit[]>(imp).map((c) => c.patchId);
+    };
+    const mine = codes(author);
+    if (!mine?.every(Boolean)) return false;
+    const jobs = this.authorJobs(item).filter(succeeded);
+    for (const prev of jobs.slice(0, jobs.indexOf(author)).reverse()) {
+      const theirs = codes(prev);
+      if (!theirs || theirs.join() !== mine.join()) return false;
+      if (prev.purpose.reason === "nits") return true;
+      const reviews = this.view.jobs.filter((j) => j.purpose.what === "review" && j.purpose.key.endsWith(`:${prev.job}`) && succeeded(j));
+      if (reviews.length) return reviews.every((r) => this.rep<ReviewPatchReport>(r).verdict === "ok");
+    }
+    return false;
   }
 
   // A file an author named, relative to its worktree: readable from anywhere.

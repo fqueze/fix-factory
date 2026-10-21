@@ -803,6 +803,46 @@ describe("4. investigate and fix", () => {
     assert.deepEqual(sc.settle(), [`review:p-test-a:${again}`]);
   });
 
+  it("a reworded commit whose code a review accepted gets the lint again, no new critical review; changed code does", () => {
+    for (const code of ["P1", "P2"]) {
+      const sc = workList([group("ka", "a/test_a.js", "boom")]);
+      investigating(sc, "i-test-a");
+      const withCode = (c: string, patchId: string) => imported(c, "Bug 7 - Fix test_a, r=smaug.", ["a/test_a.js"], 7).map((x) => ({ ...x, patchId }));
+      sc.complete("author:i-test-a:initial", { report: fixed([sha("1")]) });
+      sc.settle();
+      const first = sc.view().byKey.get("author:i-test-a:initial")![0].job;
+      sc.complete(`import:${first}`, { output: withCode(sha("1"), "P1") });
+      sc.settle();
+      sc.complete(`msg:p-test-a:${sha("1")}`, { output: "Bug 7 - Fix\n" });
+      sc.settle();
+      sc.complete(`lint:p-test-a:${sha("1")}`, { output: lintOk });
+      sc.settle();
+      sc.complete(`review:p-test-a:${first}`, { report: ok });
+      sc.settle();
+      assert.equal(sc.state().items["i-test-a"].state, "reviewed");
+      // You ask for a new message (or the factory for a bug): the author rewords its commit.
+      const plan = resumeAuthorPlan(ID, sc.view(), "i-test-a", "continue", { message: "shorter message" }, "investigating");
+      assert.ok(plan && plan !== "busy");
+      plan.purpose.key = "author:i-test-a:continue:c-1";
+      sc.startJob(plan);
+      sc.complete("author:i-test-a:continue:c-1", { report: fixed([sha("2")]) });
+      sc.settle();
+      const second = sc.view().byKey.get("author:i-test-a:continue:c-1")![0].job;
+      sc.complete(`import:${second}`, { output: withCode(sha("2"), code) });
+      sc.settle();
+      sc.complete(`msg:p-test-a:${sha("2")}`, { output: "Bug 7 - Fix\n" });
+      sc.settle();
+      sc.complete(`lint:p-test-a:${sha("2")}`, { output: lintOk });
+      const next = sc.settle();
+      if (code === "P1") {
+        assert.deepEqual(next, []);
+        assert.equal(sc.state().items["i-test-a"].state, "reviewed");
+      } else {
+        assert.deepEqual(next, [`review:p-test-a:${second}`]);
+      }
+    }
+  });
+
   it("critical review findings go back to the author for at most 3 rounds, then come to you", () => {
     const sc = workList([group("ka", "a/test_a.js", "boom")]);
     investigating(sc, "i-test-a");
