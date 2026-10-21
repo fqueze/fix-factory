@@ -307,8 +307,11 @@ export class Orchestrator {
       }
       if (!wrote) break;
     }
-    // Commands' jobs (a retry…) first; they skip the caps but not the worktree lock.
+    // Commands' jobs (a retry…) first; they skip the caps but not the worktree lock. The retry reopened its key,
+    // so next() plans it too: the retry's job (an agent resumed where it stopped) is the one that runs.
     const deferred = this.deferred.filter((d) => !only || d.request === only);
+    const retried = new Set(this.deferred.map((d) => `${d.request} ${d.plan.purpose.key}`));
+    starts = starts.filter((st) => !retried.has(`${st.request} ${st.plan.purpose.key}`));
     const running = this.requests().flatMap((id) => Object.values(this.load(id).s.jobs).filter((j) => j.endedAt === undefined));
     let agents = running.filter((j) => j.kind === "agent").length;
     let builds = running.filter((j) => j.kind === "build").length;

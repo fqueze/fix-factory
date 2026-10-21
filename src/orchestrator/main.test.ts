@@ -10,6 +10,8 @@ import { foldEvents } from "../state/fold.ts";
 import { groupMembers, jobDir, readPidFile, startJob } from "../state/jobs.ts";
 import type { Event, FactoryConfig } from "../types.ts";
 import { Orchestrator, withDryRun, worktreeLock } from "./main.ts";
+import { ANNOTATIONS_ITEM, CANCELLED } from "./next.ts";
+import { sessionIdFor } from "./plan.ts";
 
 const fixtures = fileURLToPath(new URL("../../test/fixtures/orchestrator/", import.meta.url));
 
@@ -277,6 +279,39 @@ describe("Orchestrator", () => {
       const plan = (tool: string, args: string[]) => ({ purpose: { key: "k", what: "w" }, kind: "script" as const, name: "n", cwd: "/", cli: { tool, args } });
       assert.deepEqual(withDryRun(plan("try.ts", ["push", "--cwd", "/w", "--", "fuzzy", "-q", "x"])).cli?.args, ["push", "--cwd", "/w", "--dry-run", "--", "fuzzy", "-q", "x"]);
       assert.deepEqual(withDryRun(plan("lint-text.ts", ["--kind", "commit", "f"])).cli?.args, ["--kind", "commit", "f"]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("retrying a stopped author resumes its session, and doesn't also start it fresh", async () => {
+    const { root, config, o } = setup();
+    try {
+      add(config.stateDir, { type: "request-created", request: "r-a", kind: "burndown", text: "", folder: "a" });
+      add(config.stateDir, { type: "step", request: "r-a", step: "work list" });
+      add(config.stateDir, { type: "job-started", request: "r-a", job: "j-wt", kind: "script", name: "worktree.ts create", pid: 1, pidStartTime: 1, cmd: [], cwd: root, codeVersion: "t", purpose: { key: "wt:signal", what: "worktree" } });
+      mkdirSync(jobDir(config.stateDir, "j-wt"), { recursive: true });
+      writeFileSync(join(jobDir(config.stateDir, "j-wt"), "out.log"), JSON.stringify({ path: root, branch: "b" }));
+      add(config.stateDir, { type: "job-finished", request: "r-a", job: "j-wt", exitCode: 0, durationMs: 1 });
+      const item = ANNOTATIONS_ITEM;
+      const key = `author:${item}:initial`;
+      const session = sessionIdFor("r-a", key);
+      add(config.stateDir, { type: "item-created", request: "r-a", item, folder: "a", group: { message: "m", tests: [], configs: [] } });
+      const purpose = { key, what: "author", item, reason: "initial" };
+      add(config.stateDir, { type: "job-started", request: "r-a", job: "j-author", item, kind: "agent", name: "write-annotation-patches", pid: 1, pidStartTime: 1, cmd: [], cwd: root, codeVersion: "t", sessionId: session, purpose } as EventInput);
+      const plan = { purpose, kind: "agent", name: "write-annotation-patches", item, cwd: root, agent: { sessionId: session, resume: false, vars: { folder: "a", annotations: "x" } } };
+      mkdirSync(jobDir(config.stateDir, "j-author"), { recursive: true });
+      writeFileSync(join(jobDir(config.stateDir, "j-author"), "plan.json"), JSON.stringify(plan));
+      add(config.stateDir, { type: "job-finished", request: "r-a", job: "j-author", exitCode: -1, durationMs: 1, error: CANCELLED });
+      add(config.stateDir, { type: "item-state", request: "r-a", item, state: "blocked", detail: "stopped" });
+      add(config.stateDir, { type: "needs-user", request: "r-a", key: "stopped:j-author", action: "stopped", detail: "d", job: "j-author", item });
+      await o.startup();
+      appendCommand(config.stateDir, { cmd: "retry", request: "r-a", job: "j-author" });
+      await o.tick();
+      const started = readEvents(config.stateDir, "r-a").filter((e): e is Extract<Event, { type: "job-started" }> => e.type === "job-started" && e.job !== "j-author" && e.purpose?.key === key);
+      assert.equal(started.length, 1);
+      assert.equal(started[0].cmd[started[0].cmd.indexOf("--resume") + 1], session);
+      assert.ok(!started[0].cmd.includes("--session-id"));
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
