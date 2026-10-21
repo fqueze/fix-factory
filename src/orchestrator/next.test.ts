@@ -1262,13 +1262,14 @@ describe("4b. try repro", () => {
     assert.deepEqual(plans(sc2), [], "the push waits");
   });
 
-  it("a group waiting for a try repro joins a group of its test that has a fix, whose author checks it once its run ends", () => {
+  it("a group waiting for a try repro joins a group of its test that has a fix, whose author checks it once its run ends (also when one names the test by file name alone)", () => {
+    for (const test of ["a/test_a.js", "test_a.js"]) {
     // z, still investigating, keeps the request from ending.
     const sc = workList([group("ka", "a/test_a.js", "boom"), group("kz", "a/test_z.js", "zap")]);
     investigating(sc, "i-test-a");
     // Out of the way (in the real flow: in the stack), so a later group of its test starts on its own.
     sc.add({ type: "item-state", request: ID, item: "i-test-a", state: "left as-is", detail: "by you" });
-    sc.add({ type: "item-created", request: ID, item: "i-test-a-2", folder: "a", group: group("kb", "a/test_a.js", "bang") } as never);
+    sc.add({ type: "item-created", request: ID, item: "i-test-a-2", folder: "a", group: group("kb", test, "bang") } as never);
     investigating(sc, "i-test-a-2");
     sc.complete("author:i-test-a-2:initial", { report: fixed([sha("d")], { state: "needs a try repro", summary: "mac only" }) });
     sc.settle();
@@ -1282,6 +1283,7 @@ describe("4b. try repro", () => {
     const late = started.find((k) => k.startsWith("author:i-test-a:late:"));
     assert.match(late ?? String(started), /^author:i-test-a:late:[0-9a-f]{8}$/);
     assert.match(sc.plan(late!).agent?.message ?? "", /also failed with: "bang"/);
+    }
   });
 });
 

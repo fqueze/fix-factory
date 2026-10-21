@@ -875,10 +875,13 @@ class Planner {
   // A first group already in the stack keeps it waiting for that fix (item()).
   private mergeSameTest(): void {
     const started = (i: ItemView) => this.authorJobs(i.id).length > 0 || i.id === ANNOTATIONS_ITEM;
+    // Some groups name their test by file name alone: the full path another group gives it.
+    const paths = new Map(Object.values(this.s.items).flatMap((i) => i.group.tests.filter((t) => t.includes("/")).map((t) => [basename(t), t] as const)));
+    const testOf = (i: ItemView) => (i.group.tests[0].includes("/") ? i.group.tests[0] : (paths.get(i.group.tests[0]) ?? i.group.tests[0]));
     const into = new Map<string, ItemView>();
     for (const i of Object.values(this.s.items)) {
       if (TERMINAL.includes(i.state)) continue;
-      const test = i.group.tests[0];
+      const test = testOf(i);
       const first = into.get(test);
       if (!first) {
         into.set(test, i);
@@ -891,7 +894,7 @@ class Planner {
     // well cover it, and its author checks.
     for (const i of Object.values(this.s.items)) {
       if (i.state !== "waiting for a try repro" || i.id === ANNOTATIONS_ITEM) continue;
-      const fixed = Object.values(this.s.items).find((x) => x.id !== i.id && x.group.tests[0] === i.group.tests[0] && FIXING.includes(x.state));
+      const fixed = Object.values(this.s.items).find((x) => x.id !== i.id && testOf(x) === testOf(i) && FIXING.includes(x.state));
       if (fixed) this.merge(i, fixed, true, `another group of ${basename(i.group.tests[0])} has a fix: its author checks whether it covers this failure`);
     }
   }
