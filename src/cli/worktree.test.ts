@@ -156,3 +156,21 @@ test("remove kills only the worktree's processes, removes the tree, keeps the br
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("create replaces the branch a failed worktree add left, but not one with commits of its own", async () => {
+  const { root, repo, git } = await tempRepo();
+  const worktreesDir = join(root, "wt");
+  writeFileSync(join(repo, "mach"), "#!/bin/sh\nexit 0\n");
+  chmodSync(join(repo, "mach"), 0o755);
+  await git("commit", "-qam", "mach");
+  try {
+    await git("branch", "a", "main");
+    assert.equal((await create("a", { build: "artifact", repo, worktreesDir, base: "main" })).branch, "a");
+    await git("checkout", "-qb", "c");
+    await git("commit", "-q", "--allow-empty", "-m", "work");
+    await git("checkout", "-q", "main");
+    await assert.rejects(create("c", { build: "artifact", repo, worktreesDir, base: "main" }), /branch c already exists/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

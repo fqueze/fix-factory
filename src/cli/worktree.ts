@@ -123,8 +123,17 @@ export async function create(name: string, opts: { base?: string; build: BuildKi
     base = opts.base ?? name;
     log(`reusing worktree ${dest}`);
   } else {
-    const branchExists = (await exec(["git", "show-ref", "--verify", "--quiet", `refs/heads/${name}`], { cwd: repo })).code === 0;
-    if (branchExists && opts.base) throw new Error(`branch ${name} already exists; --base would be ignored`);
+    let branchExists = (await exec(["git", "show-ref", "--verify", "--quiet", `refs/heads/${name}`], { cwd: repo })).code === 0;
+    if (branchExists && opts.base) {
+      // What a worktree add that failed (a full disk…) leaves: the branch, in no worktree, with nothing of its own.
+      await git(["worktree", "prune"]);
+      const used = (await git(["worktree", "list", "--porcelain"])).includes(`branch refs/heads/${name}\n`);
+      const own = Number((await git(["rev-list", "--count", `${opts.base}..${name}`])).trim());
+      if (used || own > 0) throw new Error(`branch ${name} already exists; --base would be ignored`);
+      log(`deleting branch ${name}, left by a worktree add that failed`);
+      await git(["branch", "-D", name]);
+      branchExists = false;
+    }
     base = branchExists ? name : (opts.base ?? (await git(["rev-parse", "--abbrev-ref", "HEAD"])).trim());
     if (!branchExists) await fetchRemoteBase(repo, base);
     mkdirSync(opts.worktreesDir, { recursive: true });
