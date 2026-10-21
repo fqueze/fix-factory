@@ -382,6 +382,23 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
       }
       return send(res, 200, "text/html; charset=utf-8", page);
     }
+    // A group's DEBUG commits, waiting to go to try on top of the stack.
+    if ((m = path.match(/^\/requests\/([^/]+)\/items\/([^/]+)\/debug$/))) {
+      const request = opts.state.getRequest(decodeURIComponent(m[1]));
+      const item = request?.items[decodeURIComponent(m[2])];
+      const last = item?.lastReport;
+      const commits = (last?.report as { commits?: string[] } | undefined)?.commits ?? [];
+      if (!request || !last || commits.length === 0) {
+        throw new HttpError(404, "no DEBUG commits");
+      }
+      let page: string;
+      try {
+        page = await buildPushView({ command: opts.config.stackViewerCommand, cwd: request.jobs[last.job].cwd, commits: [...commits].reverse() });
+      } catch (e) {
+        throw new HttpError(502, errorMessage(e));
+      }
+      return send(res, 200, "text/html; charset=utf-8", page);
+    }
     if ((m = path.match(/^\/requests\/([^/]+)\/pushes\/([^/]+)\/view$/))) {
       const { dry, d } = pushDryRun(m[1], m[2]);
       if (d.commits.length === 0) {

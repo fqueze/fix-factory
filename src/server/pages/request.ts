@@ -357,7 +357,7 @@ function groupRow(r: RequestState, i: ItemView, ctx: RenderContext): Html {
     state: stateText(r, i, ctx),
     trust: trustLine(r, i, ctx),
     ask: askBlock(r, i, ctx, patches.filter((p) => isDraft(r, p))),
-    body: html`${failure(r, i)}${investigationHtml(i) ? html`<h4 class="part">The fix</h4>${investigationHtml(i)}` : null}${talkBox(r, i, ctx)}${sentence.ask ? null : sentence.controls ? html`<div class="jobctl">${sentence.controls}</div>` : null}${patches
+    body: html`${failure(r, i)}${investigationHtml(i) ? html`<h4 class="part">The fix</h4>${investigationHtml(i)}` : null}${debugCommitsHtml(r, i)}${talkBox(r, i, ctx)}${sentence.ask ? null : sentence.controls ? html`<div class="jobctl">${sentence.controls}</div>` : null}${patches
       .filter((p) => isDraft(r, p))
       .map((p) => html`<div>Draft patch, its critical review hasn't passed yet: “${patchTitle(p)}” ${viewLink(r, p)}</div>`)}${patches
       .filter((p) => isDropped(r, p))
@@ -512,6 +512,15 @@ function trustLine(r: RequestState, i: ItemView, ctx: RenderContext): Html | nul
 function fileLink(r: RequestState, i: ItemView, which: "evidence" | "reproduction" | "widening", label: string): Html {
   const file = i.investigation?.files?.[which];
   return file ? html`<a href="/requests/${encodeURIComponent(r.id)}/items/${encodeURIComponent(i.id)}/files/${which}" target="_blank" rel="noopener" title="${file}">${label}</a>` : html`${label}`;
+}
+
+// What goes to try on top of the stack for a group that needs CI evidence: you see it before approving that push.
+function debugCommitsHtml(r: RequestState, i: ItemView): Html | null {
+  const commits = i.state === "waiting for a try repro" ? (i.lastReport?.report as { commits?: string[] } | undefined)?.commits : undefined;
+  if (!commits?.length) {
+    return null;
+  }
+  return html`<p class="sub">Its DEBUG ${commits.length === 1 ? "commit" : "commits"} (${commits.map((c) => c.slice(0, 12)).join(", ")}) go to try on top of the stack's next push. <a href="/requests/${encodeURIComponent(r.id)}/items/${encodeURIComponent(i.id)}/debug" target="_blank">View ↗</a></p>`;
 }
 
 function investigationHtml(i: ItemView): Html | null {

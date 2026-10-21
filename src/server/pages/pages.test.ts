@@ -515,6 +515,15 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.ok(h.includes(cmd({ cmd: "dismiss", key: "refused:c-7", request: "r-20261013-tab-failures" })));
   });
 
+  it("a group waiting for a try repro shows its DEBUG commits, with a link to view them", () => {
+    const r = structuredClone(get("r-20261013-dom-indexeddb"));
+    const i = r.items["i-idb-upgrade"];
+    i.state = "waiting for a try repro";
+    i.lastReport = { prompt: "investigate-and-fix", report: { state: "needs a try repro", commits: ["aaaaaaaaaaaaaaaa", "bbbbbbbbbbbbbbbb"] }, job: "j-1" };
+    const row = rowOf(renderRequest(r, ctx, true).value, "item-i-idb-upgrade");
+    assert.match(row, /Its DEBUG commits \(aaaaaaaaaaaa, bbbbbbbbbbbb\) go to try on top of the stack's next push\. <a href="\/requests\/r-20261013-dom-indexeddb\/items\/i-idb-upgrade\/debug"/);
+  });
+
   it("an open group can be closed from its row", () => {
     const h = expanded("r-20261013-dom-indexeddb");
     assert.ok(rowOf(h, "item-i-idb-upgrade").includes(cmd({ cmd: "hand-back", item: "i-idb-upgrade", request: "r-20261013-dom-indexeddb" })));
