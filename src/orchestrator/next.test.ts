@@ -687,21 +687,24 @@ describe("4. investigate and fix", () => {
     assert.ok(!sc.view().byKey.has("wt:i-test-f"));
   });
 
-  it("a test's second group starts once the first is reviewed, told to check the first fix", () => {
+  it("a test's group found after its first group started joins it, and the first group's author is told once its run ends", () => {
     const sc = workList([group("ka", "a/test_a.js", "boom")]);
     investigating(sc, "i-test-a");
     // A group found later (a try push's triage…), once the first one's author started.
-    sc.add({ type: "item-created", request: ID, item: "i-test-a-2", folder: "a", group: group("kb", "a/test_a.js", "bang") } as never);
+    sc.add({ type: "item-created", request: ID, item: "i-test-a-2", folder: "a", group: { ...group("kb", "a/test_a.js", "bang"), configs: ["mac/opt-xpcshell"] } } as never);
     sc.settle();
-    sc.complete("prior-art:i-test-a-2", { output: { bugs: [] } });
-    sc.settle();
-    sc.complete("prior-art-verdict:i-test-a-2", { report: none });
-    assert.ok(!sc.settle().includes("wt:i-test-a-2"));
-    reviewed(sc, "i-test-a", "c1", "a/test_a.js");
-    assert.ok(sc.view().byKey.has("wt:i-test-a-2"));
-    sc.complete("wt:i-test-a-2", { output: { name: `${ID}-i-test-a-2`, path: `/wt/${ID}-i-test-a-2`, branch: `${ID}-i-test-a-2` } });
-    sc.settle();
-    assert.match(String(sc.plan("author:i-test-a-2:initial").agent?.vars?.failureSummary), new RegExp(`already has a fix for another failure \\("boom": the commits beyond origin/main in /wt/${ID}-i-test-a\\)`));
+    assert.equal(sc.state().items["i-test-a-2"].state, "left as-is");
+    assert.deepEqual(sc.state().items["i-test-a"].group.late, ["bang"]);
+    assert.deepEqual(Object.keys(sc.state().items), ["i-test-a", "i-test-a-2"], "boom isn't found again as a new group");
+    sc.complete("author:i-test-a:initial", { report: fixed(["c1"]) });
+    const started = sc.settle();
+    const late = started.find((k) => k.startsWith("author:i-test-a:late:"))!;
+    assert.ok(late, String(started));
+    assert.ok(!started.some((k) => k.startsWith("import:")), "the fix waits for the author's answer");
+    assert.match(sc.plan(late).agent?.message ?? "", /also failed with: "bang" \(the test's failures are now on linux\/opt-xpcshell, mac\/opt-xpcshell/);
+    sc.complete(late, { report: fixed(["c2"]) });
+    const next = sc.view().byKey.get(late)![0].job;
+    assert.ok(sc.settle().includes(`import:${next}`), "told once");
   });
 
   it("investigates in the worktree, imports the commits, lints, reviews; a bug draft doesn't ask you to file it yet", () => {

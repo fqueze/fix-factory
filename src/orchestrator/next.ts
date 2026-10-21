@@ -101,6 +101,7 @@ export const CANCELLED = "cancelled by you";
 // pushed (a Lando timeout), and a retry would push again. They come to you instead.
 const NO_RETRY = new Set(["push"]);
 
+const STACKED: ItemState[] = ["in stack", "in try", "waiting for review", "addressing review comments", "fixed", "landed"];
 const SETTLED: ItemState[] = ["reviewed", "in stack", "in try", "waiting for review", "addressing review comments", "fixed", "landed", "left as-is", "handed back"];
 const WITH_PATCHES: ItemState[] = ["reviewed", "in stack", "in try", "waiting for review", "addressing review comments", "fixed", "landed"];
 // Author runs that can change a patch after it was submitted (besides address-review).
@@ -799,10 +800,11 @@ class Planner {
 
   // A later run finds the groups of the earlier ones again, possibly with more tests: a group is
   // known when one of its tests already has an item with its message. Not the message alone:
-  // singles of different tests share generic messages such as "Test timed out".
+  // singles of different tests share generic messages such as "Test timed out". A merged group's messages are
+  // " | "-separated.
   private createItems(groups: FailureGroup[]): void {
     const pair = (message: string, test: string) => `${message}\n${test}`;
-    const known = new Set([...Object.values(this.s.items).map((i) => i.group), ...this.newItems.values()].flatMap((g) => g.tests.map((t) => pair(g.message, t))));
+    const known = new Set([...Object.values(this.s.items).map((i) => i.group), ...this.newItems.values()].flatMap((g) => g.message.split(" | ").flatMap((m) => g.tests.map((t) => pair(m, t)))));
     for (const group of groups) {
       if (group.tests.length === 0 || group.tests.some((t) => known.has(pair(group.message, t)))) continue;
       this.createItem(group);
@@ -866,7 +868,8 @@ class Planner {
   }
 
   // One group per test: its first failure usually causes the others. A group whose author hasn't started joins the
-  // first open group of its test that hasn't either; one whose first group started waits for that fix (item()).
+  // first open group of its test; if that one's author started, it's told about the new failures once its run ends.
+  // A first group already in the stack keeps it waiting for that fix (item()).
   private mergeSameTest(): void {
     const started = (i: ItemView) => this.authorJobs(i.id).length > 0 || i.id === ANNOTATIONS_ITEM;
     const into = new Map<string, ItemView>();
@@ -878,11 +881,13 @@ class Planner {
         into.set(test, i);
         continue;
       }
-      if (started(i) || started(first)) continue;
+      if (started(i) || STACKED.includes(first.state)) continue;
       const g = first.group;
+      const known = g.message.split(" | ").includes(i.group.message);
       const group = {
         ...g,
-        message: g.message.split(" | ").includes(i.group.message) ? g.message : `${g.message} | ${i.group.message}`,
+        ...(started(first) && !known ? { late: [...(g.late ?? []), i.group.message] } : {}),
+        message: known ? g.message : `${g.message} | ${i.group.message}`,
         configs: [...new Set([...g.configs, ...i.group.configs])],
         taskIds: g.taskIds || i.group.taskIds ? [...new Set([...(g.taskIds ?? []), ...(i.group.taskIds ?? [])])] : undefined,
       };
@@ -973,6 +978,14 @@ class Planner {
     const latest = this.latestAuthor(item.id);
     if (!latest) return;
     if (!this.want(latest.purpose.key)) return;
+    // Groups of its test merged in after it started.
+    if (item.group.late?.length) {
+      const key = `${prefix}:late:${shortHash(item.group.late).slice(0, 8)}`;
+      if (!this.view.byKey.has(key)) {
+        this.resumeAuthor(item.id, key, "same test", `The same test also failed with: ${item.group.late.map((m) => `"${m}"`).join(", ")} (the test's failures are now on ${item.group.configs.join(", ")}; task ids ${item.group.taskIds?.join(", ") ?? "unknown"}). Check whether your fix covers these too; if not, fix them as well, amending your commit or adding one. Then end with the JSON report again.`);
+        return;
+      }
+    }
     const author = this.authorReport(item.id)!;
     if (this.askedPush(item, author.job)) return;
     // Skips whose tests still fail: leaving those failures unfixed is your call.

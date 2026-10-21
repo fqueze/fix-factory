@@ -87,6 +87,7 @@ export interface FailureGroup {
   configs: string[];
   ratePerWeek?: number; // value, for stack ordering
   taskIds?: string[];
+  late?: string[]; // messages of groups merged in after its author started: it's told about them
 }
 
 export interface BugDraft {
