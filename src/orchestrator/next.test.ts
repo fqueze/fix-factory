@@ -1197,11 +1197,11 @@ describe("4b. try repro", () => {
     const sc = waitingStack();
     const tb = keyOf(sc, "try-branch:root:");
     assert.match(tb, /^try-branch:root:[0-9a-f]{6}$/);
-    assert.deepEqual(sc.plan(tb).cli?.args, ["assemble", "--cwd", `/wt/${ID}-root`, "--branch", `${ID}-root-try-${tb.split(":")[2]}`, "--base", `${ID}-root`, sha("d")]);
-    sc.complete(tb, { output: { branch: `${ID}-root-try-x`, head: sha("f"), commits: [{ sha: sha("d"), newSha: sha("f") }] } });
+    assert.deepEqual(sc.plan(tb).cli?.args, ["assemble", "--cwd", `/wt/${ID}-root`, "--branch", `${ID}-root-try-${tb.split(":")[2]}`, "--base", `${ID}-root`, "--leave-conflict", sha("d")]);
+    sc.complete(tb, { output: { branch: `${ID}-root-try-${tb.split(":")[2]}`, head: sha("f"), commits: [{ sha: sha("d"), newSha: sha("f") }] } });
     sc.settle();
     const planKey = sc.view().jobs.find((j) => j.purpose.what === "plan-pushes")!.purpose.key;
-    assert.equal(sc.plan(planKey).agent?.vars?.branch, `${ID}-root-try-x`);
+    assert.equal(sc.plan(planKey).agent?.vars?.branch, `${ID}-root-try-${tb.split(":")[2]}`);
     const failures = JSON.parse(sc.plan(planKey).files![0].content);
     assert.deepEqual(failures.map((f: { patch?: string; toReproduce?: boolean; debugCommits?: string[]; tests: string[] }) => [f.patch, f.toReproduce, f.debugCommits, f.tests]), [
       ["p-test-b", undefined, undefined, ["a/test_b.js"]],
@@ -1228,35 +1228,60 @@ describe("4b. try repro", () => {
     assert.ok(!open(sc).some((k) => k.startsWith("triage:") || k.startsWith("author:i-test-b:")));
   });
 
-  it("leaves out a waiting group whose DEBUG commits conflict with the others', and tells its author once the push is done", () => {
-    const sc = waitingStack(true);
-    const first = keyOf(sc, "try-branch:root:");
-    assert.deepEqual(sc.plan(first).cli?.args.slice(-2), [sha("d"), sha("e")]);
-    sc.complete(first, { output: { conflict: { sha: sha("e"), files: ["a/head.js"] } } });
+  it("a conflict on the try branch goes to resolve-conflict, then the rest is assembled; an unresolvable one asks you on the group's row and the push waits", () => {
+    const conflicted = () => {
+      const sc = waitingStack(true);
+      const tb = keyOf(sc, "try-branch:root:");
+      const h = tb.split(":")[2];
+      assert.deepEqual(sc.plan(tb).cli?.args.slice(-3), ["--leave-conflict", sha("d"), sha("e")]);
+      sc.complete(tb, { output: { commits: [], conflict: { sha: sha("d"), files: ["a/head.js"] }, remaining: [sha("e")] } });
+      const resolve = `resolve:root:try-${h}:${sha("d")}`;
+      assert.deepEqual(sc.settle(), [resolve]);
+      assert.deepEqual(sc.plan(resolve).agent?.vars, { sha: sha("d"), base: `${ID}-root-try-${h}`, files: "a/head.js" });
+      return { sc, h, resolve };
+    };
+    const plans = (sc: Scenario) => sc.view().jobs.filter((j) => j.purpose.what === "plan-pushes");
+
+    const { sc, h, resolve } = conflicted();
+    sc.complete(resolve, { report: { state: "resolved", commit: sha("f"), explanation: "kept both", feedback: [] } });
+    const rest = `try-branch:root:${h}:after:${sha("d").slice(0, 12)}`;
+    assert.deepEqual(sc.settle(), [rest]);
+    assert.deepEqual(sc.plan(rest).cli?.args, ["assemble", "--cwd", `/wt/${ID}-root`, "--branch", `${ID}-root-try-${h}`, "--leave-conflict", sha("e")]);
+    sc.complete(rest, { output: { commits: [{ sha: sha("e"), newSha: sha("9") }] } });
     sc.settle();
-    const second = keyOf(sc, "try-branch:root:");
-    assert.notEqual(second, first);
-    assert.deepEqual(sc.plan(second).cli?.args.slice(-3), ["--base", `${ID}-root`, sha("d")]);
-    sc.complete(second, { output: { branch: `${ID}-root-try-y`, head: sha("f"), commits: [{ sha: sha("d"), newSha: sha("f") }] } });
+    const [plan] = plans(sc);
+    assert.equal(sc.plan(plan.purpose.key).agent?.vars?.branch, `${ID}-root-try-${h}`);
+    const failures = JSON.parse(sc.plan(plan.purpose.key).files![0].content);
+    assert.deepEqual(failures.filter((f: { toReproduce?: boolean }) => f.toReproduce).map((f: { tests: string[] }) => f.tests), [["a/test_a.js"], ["a/test_c.js"]]);
+
+    const { sc: sc2, resolve: resolve2 } = conflicted();
+    sc2.complete(resolve2, { report: { state: "semantic", explanation: "both rewrite the same setup", feedback: [] } });
+    assert.deepEqual(sc2.settle(), []);
+    const n = sc2.state().needsUser.find((x) => x.key.startsWith("failed:"))!;
+    assert.deepEqual([n.action, n.item, n.detail], ["Its DEBUG commits don't apply on top of the stack", "i-test-a", "both rewrite the same setup"]);
+    assert.deepEqual(plans(sc2), [], "the push waits");
+  });
+
+  it("a group waiting for a try repro joins a group of its test that has a fix, whose author checks it once its run ends", () => {
+    // z, still investigating, keeps the request from ending.
+    const sc = workList([group("ka", "a/test_a.js", "boom"), group("kz", "a/test_z.js", "zap")]);
+    investigating(sc, "i-test-a");
+    // Out of the way (in the real flow: in the stack), so a later group of its test starts on its own.
+    sc.add({ type: "item-state", request: ID, item: "i-test-a", state: "left as-is", detail: "by you" });
+    sc.add({ type: "item-created", request: ID, item: "i-test-a-2", folder: "a", group: group("kb", "a/test_a.js", "bang") } as never);
+    investigating(sc, "i-test-a-2");
+    sc.complete("author:i-test-a-2:initial", { report: fixed([sha("d")], { state: "needs a try repro", summary: "mac only" }) });
     sc.settle();
-    const planKey = sc.view().jobs.find((j) => j.purpose.what === "plan-pushes")!.purpose.key;
-    assert.equal(sc.plan(planKey).agent?.vars?.branch, `${ID}-root-try-y`);
-    const failures = JSON.parse(sc.plan(planKey).files![0].content);
-    assert.deepEqual(failures.filter((f: { toReproduce?: boolean }) => f.toReproduce).map((f: { tests: string[] }) => f.tests), [["a/test_a.js"]]);
-    sc.complete(planKey, { report: { pushes: [{ purpose: "verify", tryArgs: ["fuzzy", "-q", "x"], rebuild: 5 }], feedback: [] } });
-    const [dry] = sc.settle();
-    const push = sc.purpose(dry).push!;
-    sc.complete(dry, { output: { command: ["./mach", "try", "fuzzy"], taskCount: 5, tasks: [], tryTaskConfig: {}, commits: [sha("f"), sha("b")], warnings: [] } });
-    // Resumed before the push, its group would hold the stack back, and the push's results would go nowhere.
-    assert.ok(!open(sc).some((k) => k.startsWith("author:i-test-c:")));
-    sc.add({ type: "user-done", request: ID, key: `approve-push:${push}` });
-    sc.add({ type: "try-pushed", request: ID, push, rev: "fed", url: "u" });
-    sc.add({ type: "try-finished", request: ID, push, result: "green", summary: "green" });
-    sc.settle();
-    const resumed = open(sc).filter((k) => k.startsWith("author:i-test-"));
-    assert.deepEqual(resumed.map((k) => k.replace(/:[0-9a-f]{8}$/, "")).sort(), ["author:i-test-a:repro", "author:i-test-c:repro-left"]);
-    assert.match(sc.plan(resumed.find((k) => k.includes("i-test-c"))!).agent?.message ?? "", /^Your DEBUG commits conflict/);
-    assert.match(sc.plan(resumed.find((k) => k.includes("i-test-a"))!).agent?.message ?? "", /fed \(green\)/);
+    assert.equal(sc.state().items["i-test-a-2"].state, "waiting for a try repro");
+    sc.complete("author:i-test-a:initial", { report: fixed([sha("1")]) });
+    sc.add({ type: "item-state", request: ID, item: "i-test-a", state: "reviewed", detail: "accepted by you" });
+    const started = sc.settle();
+    assert.equal(sc.state().items["i-test-a-2"].state, "left as-is");
+    assert.match(sc.state().items["i-test-a-2"].detail ?? "", /another group of test_a\.js has a fix: its author checks whether it covers this failure/);
+    assert.deepEqual(sc.state().items["i-test-a"].group.late, ["bang"]);
+    const late = started.find((k) => k.startsWith("author:i-test-a:late:"));
+    assert.match(late ?? String(started), /^author:i-test-a:late:[0-9a-f]{8}$/);
+    assert.match(sc.plan(late!).agent?.message ?? "", /also failed with: "bang"/);
   });
 });
 
@@ -2436,7 +2461,7 @@ function metaDrafted(sc: Scenario, description = "Reviewers: patch by patch."): 
 
 describe("burndown verification", () => {
   // A burndown whose stack was verified on try with the DEBUG commit on top, waiting for its meta bug.
-  const verified = (check = false, bug: number | null = null, result: "green" | "failures" = "green") => {
+  const verified = (check = false, bug: number | null = null, result: "green" | "failures" = "green", conflict = false) => {
     const sc = new Scenario("burndown", { folder: "a" });
     sc.step();
     sc.settle();
@@ -2491,8 +2516,13 @@ describe("burndown verification", () => {
     // The stack branch plus the DEBUG commit, on a branch of its own: that's what try gets.
     if (check) assert.match(tryBranch, /^try-branch:a:[0-9a-f]{6}$/);
     const args = sc.plan(tryBranch).cli!.args;
-    if (check) assert.deepEqual([args[0], args[4], ...args.slice(5)], ["assemble", `${ID}-a-try-${tryBranch.split(":")[2]}`, "--base", `${ID}-a`, sha("9")]);
-    sc.complete(tryBranch, { output: { branch: args[4], head: sha("b"), commits: [{ sha: sha("9"), newSha: sha("b") }] } });
+    if (check) assert.deepEqual([args[0], args[4], ...args.slice(5)], ["assemble", `${ID}-a-try-${tryBranch.split(":")[2]}`, "--base", `${ID}-a`, "--leave-conflict", sha("9")]);
+    if (conflict) {
+      // The DEBUG commit conflicts with the stack's fix: resolve-conflict's commit is what goes to try.
+      sc.complete(tryBranch, { output: { branch: args[4], head: sha("a"), commits: [], conflict: { sha: sha("9"), files: ["a/xpcshell.toml"] }, remaining: [] } });
+      const [resolve] = sc.settle();
+      sc.complete(resolve, { report: { state: "resolved", commit: sha("b"), explanation: "kept the fix's line", feedback: [] } });
+    } else sc.complete(tryBranch, { output: { branch: args[4], head: sha("b"), commits: [{ sha: sha("9"), newSha: sha("b") }] } });
     const [planKey] = sc.settle();
     if (check) assert.equal(sc.plan(planKey).agent?.vars?.branch, args[4]);
     if (check) assert.equal(sc.state().patches["p-test-a"].sha, sha("a"));
@@ -2528,6 +2558,10 @@ describe("burndown verification", () => {
     sc.complete("checkout:a", { output: "" });
     reviewersChecked(sc);
     assert.ok(sc.view().jobs.some((j) => !j.end && j.purpose.key.startsWith("check:a:")));
+  });
+  it("a DEBUG commit that conflicted on top of the stack: the removal starts from resolve-conflict's commit", () => {
+    const { sc } = verified(false, null, "green", true);
+    assert.match(sc.plan("author:i-annotations:removal").agent!.message!, new RegExp(`On top of the stack it became ${sha("b").slice(0, 12)} \\(branch ${ID}-a-try-`));
   });
   it("then has the skip-ifs' author replace the DEBUG commit and write the removal, a patch that needs the meta bug", () => {
     // Its own patch has a bug: nothing needs the meta bug until the removal.
