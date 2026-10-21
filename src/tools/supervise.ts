@@ -77,9 +77,18 @@ function main(): void {
   function stop(): Promise<void> {
     return new Promise((resolve) => {
       if (!child || child.exitCode !== null || child.signalCode !== null) return resolve();
-      child.once("exit", () => resolve());
-      stopped.add(child);
-      child.kill("SIGTERM");
+      const c = child;
+      // One whose event loop is stuck never runs its SIGTERM handler.
+      const kill = setTimeout(() => {
+        log(`${args[0]} didn't exit 10 s after SIGTERM: killing it`);
+        c.kill("SIGKILL");
+      }, 10_000);
+      c.once("exit", () => {
+        clearTimeout(kill);
+        resolve();
+      });
+      stopped.add(c);
+      c.kill("SIGTERM");
     });
   }
 
@@ -125,6 +134,11 @@ function main(): void {
   // The child goes with supervise; start() won't start another during an in-flight restart.
   for (const sig of ["SIGINT", "SIGTERM"] as const) {
     process.on(sig, () => {
+      // A second Ctrl-C doesn't wait any more.
+      if (exiting) {
+        child?.kill("SIGKILL");
+        process.exit(1);
+      }
       exiting = true;
       void stop().then(() => process.exit(0));
     });
