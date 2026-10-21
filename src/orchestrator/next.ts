@@ -148,6 +148,12 @@ export function similarMessages(a: string, b: string): boolean {
   return x.size > 0 && y.size > 0 && common * 4 >= Math.min(x.size, y.size) * 3;
 }
 
+// A patch event's fields from its view, to change one of them.
+function patchFields(p: PatchView): Omit<PatchView, "id" | "deps" | "review" | "replyDrafts"> & { patch: PatchId } {
+  const { id, deps: _d, review: _r, replyDrafts: _rd, ...rest } = p;
+  return { patch: id, ...rest };
+}
+
 export function folderOf(test: string): string {
   return dirname(test);
 }
@@ -1285,7 +1291,11 @@ class Planner {
     if (inStack.length < kept.length) return; // the handlers' patch events haven't landed yet
     const shaToPatch = Object.fromEntries(inStack.map((p) => [this.s.patches[p.id].sha.slice(0, 12), p.id]));
     const deps = this.want(`deps:${id}:${hash}`, () => this.cli("deps", "stack.ts", ["deps", "--cwd", wt, "--base", this.config.baseRef], { cwd: wt, purpose: { stack: id, patches: shaToPatch } }));
-    const efforts = inStack.map((p) =>
+    // Skip-if annotation changes take the least review: a few manifest lines that try showed safe.
+    const unrated = inStack.map((p) => this.s.patches[p.id]).filter((pv) => pv.item === ANNOTATIONS_ITEM && pv.effort !== 0);
+    for (const pv of unrated) this.event(this.ev("patch", { ...patchFields(pv), effort: 0 }));
+    if (unrated.length) return;
+    const efforts = inStack.filter((p) => this.s.patches[p.id].item !== ANNOTATIONS_ITEM).map((p) =>
       this.wantAgent(`effort:${p.id}:${this.codeOf(p.id) ?? p.source}`, "effort", "estimate-review-effort", { sha: this.s.patches[p.id].sha, worktree: wt }, { cwd: wt, purpose: { patch: p.id, stack: id } }),
     );
     if (!deps || efforts.some((x) => !x)) return;
@@ -1293,8 +1303,7 @@ class Planner {
     const orderInput = {
       patches: inStack.map((p) => {
         const pv = this.s.patches[p.id];
-        // Skip-if annotation changes are the easiest to review: they come first, before the easiest fix.
-        return { id: p.id, effort: pv.item === ANNOTATIONS_ITEM ? 0 : pv.effort, value: value(p.id), testOnly: pv.testOnly };
+        return { id: p.id, effort: pv.effort, value: value(p.id), testOnly: pv.testOnly };
       }),
       deps: inStack.flatMap((p) => this.s.patches[p.id].deps),
     };
@@ -2025,7 +2034,7 @@ class Planner {
               path: file,
               content:
                 JSON.stringify({
-                  patches: ps.map((p) => ({ id: p.id, effort: p.item === ANNOTATIONS_ITEM ? 0 : p.effort, value: this.s.items[p.item ?? ""]?.group.ratePerWeek, testOnly: p.testOnly, accepted: accepted(p), commentsAddressed: !fresh(p), landed: landed(p) })),
+                  patches: ps.map((p) => ({ id: p.id, effort: p.effort, value: this.s.items[p.item ?? ""]?.group.ratePerWeek, testOnly: p.testOnly, accepted: accepted(p), commentsAddressed: !fresh(p), landed: landed(p) })),
                   deps: ps.flatMap((p) => p.deps),
                   previous: st.order,
                 }) + "\n",
