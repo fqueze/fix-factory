@@ -1456,14 +1456,17 @@ describe("5. stack", () => {
     assert.ok(!sc.state().needsUser.some((n) => n.stack === "a"));
   });
 
-  it("goes on when an author reported its commit by a short sha", () => {
-    const sc = workList([group("ka", "a/test_a.js", "boom")]);
-    investigating(sc, "i-test-a");
-    reviewed(sc, "i-test-a", sha("1").slice(0, 12), "a/test_a.js");
-    sc.complete("wt:root", { output: { name: `${ID}-root`, path: `/wt/${ID}-root`, branch: `${ID}-root` } });
-    const [assemble] = sc.settle();
-    sc.complete(assemble, { output: { branch: `${ID}-root`, commits: [{ sha: sha("1"), newSha: sha("a") }], skipped: [], empty: [] } });
-    assert.ok(sc.settle().includes(`deps:root:${assemble.split(":")[2]}`));
+  it("goes on when an author reported its commit by a short sha (12 or 7 characters)", () => {
+    for (const length of [12, 7]) {
+      const sc = workList([group("ka", "a/test_a.js", "boom")]);
+      investigating(sc, "i-test-a");
+      reviewed(sc, "i-test-a", sha("1").slice(0, length), "a/test_a.js");
+      sc.complete("wt:root", { output: { name: `${ID}-root`, path: `/wt/${ID}-root`, branch: `${ID}-root` } });
+      const [assemble] = sc.settle();
+      sc.complete(assemble, { output: { branch: `${ID}-root`, commits: [{ sha: sha("1"), newSha: sha("a") }], skipped: [], empty: [] } });
+      assert.equal(sc.state().patches["p-test-a"].worktree, `/wt/${ID}-root`, `${length} characters`);
+      assert.ok(sc.settle().includes(`deps:root:${assemble.split(":")[2]}`));
+    }
   });
 
   it("drops the ⚑ of a job of an earlier version of the stack", () => {

@@ -73,9 +73,10 @@ export function handleFinished(input: HandlerInput): HandlerResult {
     const { deps: _d, review: _r, replyDrafts: _rd, id, ...rest } = { ...p, ...changes };
     ev("patch", { patch: id, ...rest });
   };
+  // Keyed by the sha an author reported, which may be shorter than 12 characters; the scripts answer with full ones.
   const byShaPrefix = (sha: string): PatchView | undefined => {
-    const id = purpose.patches?.[sha.slice(0, 12)];
-    return id === undefined ? undefined : s.patches[id];
+    const key = Object.keys(purpose.patches ?? {}).find((k) => sha.startsWith(k) || k.startsWith(sha.slice(0, 12)));
+    return key === undefined ? undefined : s.patches[purpose.patches![key]];
   };
 
   switch (purpose.what) {
