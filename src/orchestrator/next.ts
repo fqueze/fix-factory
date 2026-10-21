@@ -901,10 +901,14 @@ class Planner {
         this.raise(key, { action: `Someone else may be fixing ${basename(test)}`, detail: bug ? describePriorArt(bug) : v.quote.slice(0, 500), item: first.id });
         if (!this.view.done.has(key)) return;
       }
-      // Each worktree is ~6 GB: a request works on a few groups at a time, the others wait for one to close.
+      // Groups failing the same test go one at a time: the first one's fix often fixes the others' failures too.
+      const all = Object.values(this.s.items);
+      const earlier = all.slice(0, all.indexOf(item)).filter((i) => i.group.tests[0] === test);
+      if (earlier.some((i) => !SETTLED.includes(i.state))) return;
+      // Each worktree is ~6 GB: a request has no more than it can run agents in, the others wait for one to close.
       if (!this.view.byKey.has(`wt:${item.id}${e}`)) {
         const open = Object.values(this.s.items).filter((i) => i.id !== item.id && !TERMINAL.includes(i.state) && [...this.view.byKey.keys()].some((k) => k.startsWith(`wt:${i.id}`)));
-        if (open.length >= (this.config.maxWorktrees ?? 4)) return;
+        if (open.length >= (this.config.maxWorktrees ?? this.config.maxAgents)) return;
       }
       const wt = this.want(`wt:${item.id}${e}`, () => this.worktree(`${this.s.id}-${item.id}${e.replace("@", "-")}`, { item: item.id }));
       if (!wt) return;
@@ -913,11 +917,15 @@ class Planner {
       const rate = item.group.ratePerWeek === undefined ? "" : `, ${item.group.ratePerWeek} failures/week`;
       const reuse = v.verdict === "reuse" && v.bug ? ` Bug ${v.bug} is already open for it: use it in the commit message.` : "";
       const tests = item.group.tests.length > 1 ? `${test} (and ${item.group.tests.length - 1} other tests)` : test;
+      const fixed = earlier.filter((i) => WITH_PATCHES.includes(i.state)).map((i) => this.authorReport(i.id)?.job);
+      const before = fixed.length
+        ? ` This test already has a fix for another failure (${fixed.map((j) => `"${this.s.items[j!.item!].group.message}": the commits beyond origin/main in ${j!.cwd}`).join("; ")}). First check whether it fixes this failure too; if it does, change nothing and report "left as-is", saying so.`
+        : "";
       this.want(`${prefix}:initial`, () =>
         this.agent(
           "author",
           "investigate-and-fix",
-          { test: tests, worktree: path, failureSummary: `"${item.group.message}" on ${item.group.configs.length} configs${rate}; the full group, with its configs and task ids, is in ${groupFile}.${reuse}` },
+          { test: tests, worktree: path, failureSummary: `"${item.group.message}" on ${item.group.configs.length} configs${rate}; the full group, with its configs and task ids, is in ${groupFile}.${reuse}${before}` },
           {
             key: `${prefix}:initial`,
             item: item.id,

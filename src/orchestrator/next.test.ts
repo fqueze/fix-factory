@@ -675,7 +675,7 @@ describe("4. investigate and fix", () => {
     assert.equal(flag.item, "i-test-a");
     assert.equal(flag.detail, "assigned to janv", "no such bug in the prior art: its quote");
     sc.add({ type: "user-done", request: ID, key: "take-it:i-test-a" });
-    assert.deepEqual(sc.settle(), ["wt:i-test-a-2"]);
+    assert.deepEqual(sc.settle(), [], "the second group waits for the first");
   });
 
   it("two groups of one test ask once, on the first, with the bug the verdict names; take it lets both go on", () => {
@@ -691,7 +691,20 @@ describe("4. investigate and fix", () => {
     assert.equal(flag.detail, "Bug 77 - Intermittent test_a.js (ASSIGNED, assigned to janv).");
     assert.equal(flag.item, "i-test-a");
     sc.add({ type: "user-done", request: ID, key: "take-it:i-test-a" });
-    assert.deepEqual(sc.settle().sort(), ["wt:i-test-a", "wt:i-test-a-2"]);
+    assert.deepEqual(sc.settle(), ["wt:i-test-a"]);
+  });
+
+  it("a test's second group starts once the first is reviewed, told to check the first fix", () => {
+    const sc = workList([group("ka", "a/test_a.js", "boom"), group("kb", "a/test_a.js", "bang")]);
+    sc.complete("prior-art:i-test-a-2", { output: { bugs: [] } });
+    investigating(sc, "i-test-a");
+    sc.complete("prior-art-verdict:i-test-a-2", { report: none });
+    assert.ok(!sc.settle().includes("wt:i-test-a-2"));
+    reviewed(sc, "i-test-a", "c1", "a/test_a.js");
+    assert.ok(sc.view().byKey.has("wt:i-test-a-2"));
+    sc.complete("wt:i-test-a-2", { output: { name: `${ID}-i-test-a-2`, path: `/wt/${ID}-i-test-a-2`, branch: `${ID}-i-test-a-2` } });
+    sc.settle();
+    assert.match(String(sc.plan("author:i-test-a-2:initial").agent?.vars?.failureSummary), new RegExp(`already has a fix for another failure \\("boom": the commits beyond origin/main in /wt/${ID}-i-test-a\\)`));
   });
 
   it("investigates in the worktree, imports the commits, lints, reviews; a bug draft doesn't ask you to file it yet", () => {
