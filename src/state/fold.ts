@@ -148,6 +148,9 @@ export function foldEvents(events: readonly Event[]): RequestState {
         }
         item.lastReport = { prompt: e.prompt, report: e.report, job: e.job };
         if (e.prompt === "investigate-and-fix") item.investigation = e.report as InvestigateReport;
+        // Its fix's commits: a patch beyond them is one its author dropped (or squashed away).
+        const fix = e.report as { state?: string; commits?: string[] };
+        if ((e.prompt === "investigate-and-fix" && fix.state === "fix verified locally") || e.prompt === "address-review") item.commitCount = fix.commits?.length;
         break;
       }
       case "patch": {

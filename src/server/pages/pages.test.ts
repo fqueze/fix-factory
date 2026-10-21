@@ -524,6 +524,17 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.match(row, /Its DEBUG commits \(aaaaaaaaaaaa, bbbbbbbbbbbb\) go to try on top of the stack's next push\. <a href="\/requests\/r-20261013-dom-indexeddb\/items\/i-idb-upgrade\/debug"/);
   });
 
+  it("a stack's patch that its author dropped from its fix shows under dropped", () => {
+    const r = structuredClone(get("r-20261010-xpcshell-cwd"));
+    const st = Object.values(r.stacks)[0];
+    const p = r.patches[st.order[0]];
+    r.patches[`${p.id}-2`] = { ...p, id: `${p.id}-2`, title: "Bug XXXXXXX - The commit it dropped, r=smaug." };
+    st.order.push(`${p.id}-2`);
+    r.items[p.item!].commitCount = 1;
+    const h = renderRequest(r, ctx, true).value;
+    assert.match(h, /<summary>1 dropped<\/summary><div class="rows">[^]*The commit it dropped/);
+  });
+
   it("an open group can be closed from its row", () => {
     const h = expanded("r-20261013-dom-indexeddb");
     assert.ok(rowOf(h, "item-i-idb-upgrade").includes(cmd({ cmd: "hand-back", item: "i-idb-upgrade", request: "r-20261013-dom-indexeddb" })));

@@ -103,6 +103,8 @@ const NO_RETRY = new Set(["push"]);
 
 // A fix of its own, not in the stack yet.
 const FIXING: ItemState[] = ["fix verified locally", "in critical review", "review findings", "reviewed"];
+// The cherry-pick a conflict left in progress, if there's one: a rewrite may have left none.
+const ABORT_CHERRY_PICK = 'test ! -e "$(git rev-parse --git-path CHERRY_PICK_HEAD)" || git cherry-pick --abort';
 const STACKED: ItemState[] = ["in stack", "in try", "waiting for review", "addressing review comments", "fixed", "landed"];
 const SETTLED: ItemState[] = ["reviewed", "in stack", "in try", "waiting for review", "addressing review comments", "fixed", "landed", "left as-is", "handed back", "waiting for a try repro"];
 const WITH_PATCHES: ItemState[] = ["reviewed", "in stack", "in try", "waiting for review", "addressing review comments", "fixed", "landed"];
@@ -1353,7 +1355,7 @@ class Planner {
       // Fixed on the base already: the cherry-pick left in progress goes, its group closes, and the stack is
       // assembled again without it.
       if (r.state === "already fixed") {
-        if (!this.want(`abort:${res.job}`, () => this.cli("abort", "git", ["cherry-pick", "--abort"], { cwd: wt, purpose: { stack: id } }))) return;
+        if (!this.want(`abort:${res.job}`, () => this.cli("abort", "sh", ["-c", ABORT_CHERRY_PICK], { cwd: wt, purpose: { stack: id } }))) return;
         this.setItem(sourceOf(conflict.sha).item, "left as-is", `already fixed: ${r.explanation}`.slice(0, 300));
         return;
       }
@@ -1749,7 +1751,7 @@ class Planner {
       if (!res) return undefined;
       const r = this.rep<ResolveConflictReport>(res);
       if (r.state === "already fixed") {
-        if (!this.want(`abort:${res.job}`, () => this.cli("abort", "git", ["cherry-pick", "--abort"], { cwd: info.wt, purpose: { stack: info.id } }))) return undefined;
+        if (!this.want(`abort:${res.job}`, () => this.cli("abort", "sh", ["-c", ABORT_CHERRY_PICK], { cwd: info.wt, purpose: { stack: info.id } }))) return undefined;
         this.setItem(owner.item.id, "left as-is", `already fixed: ${r.explanation}`.slice(0, 300));
         return undefined;
       }

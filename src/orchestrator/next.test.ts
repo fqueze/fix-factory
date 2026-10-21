@@ -1532,7 +1532,7 @@ describe("5. stack", () => {
     sc.complete(`resolve:root:${hash}:${sha("1")}`, { report: { state: "already fixed", explanation: "bug 2075832 landed the same fix", feedback: [] } });
     const resolve = sc.view().byKey.get(`resolve:root:${hash}:${sha("1")}`)![0].job;
     assert.deepEqual(sc.settle(), [`abort:${resolve}`], "the cherry-pick left in progress goes first");
-    assert.deepEqual(sc.plan(`abort:${resolve}`).cli?.args, ["cherry-pick", "--abort"]);
+    assert.deepEqual(sc.plan(`abort:${resolve}`).cli, { tool: "sh", args: ["-c", 'test ! -e "$(git rev-parse --git-path CHERRY_PICK_HEAD)" || git cherry-pick --abort'] });
     sc.complete(`abort:${resolve}`, { output: "" });
     const started = sc.settle();
     assert.equal(sc.state().items["i-test-a"].state, "left as-is");

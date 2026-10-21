@@ -121,10 +121,13 @@ export function hasBug(p: { bug: number | null }): p is { bug: number } {
   return p.bug !== null && p.bug !== 0;
 }
 
-// The patch of a group that was left as-is or handed back: not part of the work anymore.
+// The patch of a group that was left as-is or handed back, or that its author dropped from its fix: not part of the
+// work anymore.
 export function isDropped(r: RequestState, p: PatchView): boolean {
   const item = itemOf(r, p);
-  return item !== undefined && stateClass(item.state) === "closed";
+  if (item === undefined) return false;
+  const index = p.id === `p-${item.id.replace(/^i-/, "")}` ? 0 : Number(p.id.slice(`p-${item.id.replace(/^i-/, "")}-`.length)) - 1;
+  return stateClass(item.state) === "closed" || (item.commitCount !== undefined && index >= item.commitCount);
 }
 
 const REVIEWED_OR_LATER: ItemState[] = ["reviewed", "in stack", "in try", "waiting for review", "addressing review comments", "fixed", "landed"];

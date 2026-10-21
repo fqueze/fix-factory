@@ -314,6 +314,7 @@ export interface ItemView {
   detail?: string;
   jobs: JobId[]; // oldest first
   lastReport?: { prompt: string; report: unknown; job: JobId };
+  commitCount?: number; // its latest fix's commits (patches p-<item>, p-<item>-2…)
   investigation?: InvestigateReport; // the latest investigate-and-fix report: cause, evidence, reproduction
 }
 
