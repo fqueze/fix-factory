@@ -1826,10 +1826,13 @@ class Planner {
     const key = (g: { item: ItemView; commits: string[] }, what: string) => `author:${g.item.id}${this.itemEpoch(g.item.id)}:${what}:${shortHash([...g.commits, ...plan.ids]).slice(0, 8)}`;
     if (!plan.ids.length || plan.made.some((id) => this.s.pushes[id]?.result === undefined)) return;
     const results = plan.made.map((id) => `${this.s.pushes[id].rev} (${this.s.pushes[id].result === "green" ? "green" : (this.s.pushes[id].summary ?? "failures")})`).join(", ");
-    const declined = plan.ids.map((id) => this.s.pushes[id]?.declined).filter((t) => t !== undefined && t !== "discarded");
+    // Pushes discarded (or withdrawn by the factory) say nothing: the DEBUG commits wait for the stack's next push.
+    // Only your reason for declining one goes to them.
+    const declined = plan.ids.map((id) => this.s.pushes[id]).filter((p) => p?.declined !== undefined && p.declined !== "discarded" && !p.withdrawn).map((p) => p.declined!);
+    if (!plan.made.length && !declined.length) return;
     const message = plan.made.length
       ? `The factory pushed your DEBUG commits to try on top of the stack: ${results}. Read the results with fx-tests (fx-tests try <rev>); the failed jobs' logs are under ${artifactsDir(this.config)}/<task id>. Say in your reproduction file whether it reproduced, and how often. Then drop your DEBUG commits and fix it as usual, with the reproduction "on try"; or, if it didn't reproduce, report "not reproduced". End with the JSON report again.`
-      : `The user didn't make the try push of the stack your DEBUG commits were on${declined.length ? `: “${declined[0]}”` : ""}. Drop your DEBUG commits; fix it from what you know if you can show the cause locally, or report "not reproduced". End with the JSON report again.`;
+      : `The user declined the stack's try push your DEBUG commits were to go on: “${declined[0]}”. Go on from what you know: fix it if you can show the cause, or report "not reproduced". End with the JSON report again.`;
     for (const g of groups) this.resumeAuthor(g.item.id, key(g, "repro"), "repro", message);
   }
 
