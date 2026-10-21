@@ -20,7 +20,7 @@
 // Worktrees live outside the checkout: worktrees inside it break `mach try`.
 
 import { spawn } from "node:child_process";
-import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, readlinkSync, realpathSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, readlinkSync, realpathSync, statfsSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { log, runCli, UsageError } from "../lib/cli.ts";
@@ -102,8 +102,14 @@ async function fetchRemoteBase(repo: string, base: string): Promise<void> {
   }
 }
 
+// A worktree and its build take ~6 GB: none is created on a disk with less than this free.
+const MIN_FREE_GB = 20;
+
 export async function create(name: string, opts: { base?: string; build: BuildKind; repo: string; worktreesDir: string }) {
   validateName(name);
+  const free = statfsSync(existsSync(opts.worktreesDir) ? opts.worktreesDir : dirname(opts.worktreesDir));
+  const gb = (free.bavail * free.bsize) / 1e9;
+  if (gb < MIN_FREE_GB) throw new Error(`only ${gb.toFixed(1)} GB free on the disk of ${opts.worktreesDir}: a worktree needs ~6 GB, and none is created under ${MIN_FREE_GB} GB`);
   const { repo } = opts;
   if (!existsSync(join(repo, "mach"))) throw new Error(`${repo} is not a Firefox checkout`);
   if (isInside(opts.worktreesDir, repo)) throw new Error(`worktreesDir ${opts.worktreesDir} is inside ${repo}`);

@@ -901,6 +901,11 @@ class Planner {
         this.raise(key, { action: `Someone else may be fixing ${basename(test)}`, detail: bug ? describePriorArt(bug) : v.quote.slice(0, 500), item: first.id });
         if (!this.view.done.has(key)) return;
       }
+      // Each worktree is ~6 GB: a request works on a few groups at a time, the others wait for one to close.
+      if (!this.view.byKey.has(`wt:${item.id}${e}`)) {
+        const open = Object.values(this.s.items).filter((i) => i.id !== item.id && !TERMINAL.includes(i.state) && [...this.view.byKey.keys()].some((k) => k.startsWith(`wt:${i.id}`)));
+        if (open.length >= (this.config.maxWorktrees ?? 4)) return;
+      }
       const wt = this.want(`wt:${item.id}${e}`, () => this.worktree(`${this.s.id}-${item.id}${e.replace("@", "-")}`, { item: item.id }));
       if (!wt) return;
       const path = this.out<{ path: string }>(wt).path;
