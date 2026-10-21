@@ -949,9 +949,16 @@ describe("4. investigate and fix", () => {
 
   const dryOut = { command: ["./mach", "try", "fuzzy"], taskCount: 5, tasks: [], tryTaskConfig: {}, commits: [], warnings: [] };
   // The author asks for a try push; returns its job and the push plan's key.
+  // An author you've been talking to: it gets the push it asks for.
   function asking(sc: Scenario): { job: string; planKey: string } {
-    sc.complete("author:i-test-a:initial", { report: fixed([sha("1")], { tryRequest: "test_a.js on linux debug, to see the race" }) });
-    const job = sc.view().byKey.get("author:i-test-a:initial")![0].job;
+    sc.complete("author:i-test-a:initial", { report: fixed([], { state: "blocked" }) });
+    sc.settle();
+    const plan = resumeAuthorPlan(ID, sc.view(), "i-test-a", "continue", { message: "push it on linux" }, "investigating");
+    assert.ok(plan && plan !== "busy");
+    plan.purpose.key = "author:i-test-a:continue:c-1";
+    sc.startJob(plan);
+    sc.complete("author:i-test-a:continue:c-1", { report: fixed([sha("1")], { tryRequest: "test_a.js on linux debug, to see the race" }) });
+    const job = sc.view().byKey.get("author:i-test-a:continue:c-1")![0].job;
     const planKey = `plan:asked:i-test-a:${job}`;
     assert.deepEqual(sc.settle(), [planKey], "no import, no review: the push first");
     return { job, planKey };
@@ -972,7 +979,7 @@ describe("4. investigate and fix", () => {
     assert.deepEqual(sc.settle(), [`dry-run:${push}`]);
     sc.complete(`dry-run:${push}`, { output: dryOut });
     sc.settle();
-    assert.deepEqual(sc.open(), [`approve-push:${push}`]);
+    assert.deepEqual(sc.open().filter((k) => k.startsWith("approve-push:")), [`approve-push:${push}`]);
     sc.add({ type: "user-done", request: ID, key: `approve-push:${push}` });
     assert.deepEqual(sc.settle(), [`push:${push}`]);
     sc.complete(`push:${push}`, { output: { rev: "fed" } });
@@ -991,6 +998,25 @@ describe("4. investigate and fix", () => {
     sc.complete(resumed, { report: fixed([sha("2")]) });
     const next = sc.view().byKey.get(resumed)![0].job;
     assert.ok(sc.settle().includes(`import:${next}`));
+  });
+
+  it("a try push its author asks for on its own isn't made: with commits it goes on to review, without it's told once to add DEBUG commits", () => {
+    const sc = workList([group("ka", "a/test_a.js", "boom")]);
+    investigating(sc, "i-test-a");
+    sc.complete("author:i-test-a:initial", { report: fixed([sha("1")], { tryRequest: "linux debug" }) });
+    const job = sc.view().byKey.get("author:i-test-a:initial")![0].job;
+    assert.ok(sc.settle().includes(`import:${job}`));
+    assert.ok(![...sc.view().byKey.keys()].some((k) => k.startsWith("plan:asked:")));
+
+    const sc2 = workList([group("ka", "a/test_a.js", "boom")]);
+    investigating(sc2, "i-test-a");
+    sc2.complete("author:i-test-a:initial", { report: fixed([], { state: "blocked", tryRequest: "linux debug" }) });
+    const job2 = sc2.view().byKey.get("author:i-test-a:initial")![0].job;
+    const told = `author:i-test-a:no-push:${job2}`;
+    assert.deepEqual(sc2.settle(), [told]);
+    assert.match(sc2.plan(told).agent?.message ?? "", /no try push for one fix[^]*"needs a try repro"/);
+    sc2.complete(told, { report: fixed([], { state: "blocked", tryRequest: "linux debug again" }) });
+    assert.deepEqual(sc2.settle(), [], "told once");
   });
 
   it("a try push its author asked for that you decline resumes it with your text; discarding one says nothing", () => {

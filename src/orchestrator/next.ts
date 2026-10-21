@@ -961,10 +961,28 @@ class Planner {
   // Undefined until every skip-if is listed and classified: a redone group exists before they are.
   // A try push its author asked for (it never pushes): planned from what it asked, approved by you, then the author
   // is resumed with the results, before any critical review: one would only ask for that verification.
+  // No try push for one fix: the stack goes to try as a whole, with the DEBUG commits of authors that need CI
+  // evidence. Only the skip-ifs group's, an address-review's (a reviewer asked) and one asked by an author you've
+  // been talking to are made.
   private askedPush(item: ItemView, author: JobRecord): boolean {
     const asked = this.rep<{ tryRequest?: string }>(author).tryRequest;
     if (!asked) return false;
     const e = this.itemEpoch(item.id);
+    if (item.id !== ANNOTATIONS_ITEM && author.name !== "address-review" && !this.authorJobs(item.id).some((j) => j.purpose.reason === "continue")) {
+      const own = `${item.id.replace(/^i-/, "").slice(0, 24)}-ask-`;
+      for (const p of Object.values(this.s.pushes)) {
+        if (p.id.startsWith(own) && !p.rev && p.declined === undefined) this.event(this.ev("try-declined", { push: p.id, text: "not needed anymore: the stack goes to try as a whole", by: "factory" }));
+      }
+      // Told once already: what it reported stands.
+      if (this.rep<{ commits: string[] }>(author).commits.length || author.purpose.reason === "no push of its own") return false;
+      this.resumeAuthor(
+        item.id,
+        `author:${item.id}${e}:no-push:${author.job}`,
+        "no push of its own",
+        "The factory makes no try push for one fix: the stack goes to try as a whole. If you need evidence only CI can give, commit \"DEBUG -\" logging (and widening) and report \"needs a try repro\": it goes in the next try push. Otherwise end with what you have (a fix and its evidence, or \"not reproduced\" or \"blocked\" and why). End with the JSON report again, without a tryRequest.",
+      );
+      return true;
+    }
     // The skip-ifs group works in the signal worktree.
     const wt = this.view.byKey.get(item.id === ANNOTATIONS_ITEM ? `wt:signal${this.annotationsEpoch()}` : `wt:${item.id}${e}`)?.find(succeeded);
     if (!wt) return false;
