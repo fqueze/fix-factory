@@ -207,6 +207,7 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.ok(h.includes(cmd({ cmd: "hand-back", request: "r-20261013-dom-indexeddb", item: "i-idb-quota" })));
     assert.match(h, />Fix it anyway</);
     assert.match(h, />Leave it to them</);
+    assert.match(h, /<a href="https:\/\/bugzilla.mozilla.org\/show_bug.cgi\?id=2079911"[^>]*>Bug 2079911<\/a> has a patch in review/);
   });
 
   it("4. investigate and fix: item states, running agent, recovery plan with a checkbox per command", () => {
