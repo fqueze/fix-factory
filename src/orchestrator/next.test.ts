@@ -1216,7 +1216,7 @@ function stacked(reportA?: object): Scenario {
   sc.settle();
   sc.complete(keyOf(sc, `reorder:root:${hash}:`), { output: { mapping: { [sha("b")]: sha("c"), [sha("a")]: sha("d") } } });
   sc.settle();
-  sc.complete(`review-stack:root:${hash}`, { report: { findings: [], addDeps: [], removeDeps: [], feedback: [] } });
+  sc.complete(keyOf(sc, `review-stack:root:${hash}:`), { report: { findings: [], addDeps: [], removeDeps: [], feedback: [] } });
   sc.settle();
   sc.complete(`summary:root:${hash}`, { output: { markdown: "| table |", metaComment: "This stack fixes 2 failures." } });
   sc.settle();
@@ -1252,7 +1252,7 @@ describe("4b. try repro", () => {
     sc.settle();
     sc.complete(keyOf(sc, `order:root:${hash}:`), { output: { order: ["p-test-b"], flippedSoftDeps: [] } });
     sc.settle();
-    sc.complete(`review-stack:root:${hash}`, { report: { findings: [], addDeps: [], removeDeps: [], feedback: [] } });
+    sc.complete(keyOf(sc, `review-stack:root:${hash}:`), { report: { findings: [], addDeps: [], removeDeps: [], feedback: [] } });
     sc.settle();
     sc.complete(`summary:root:${hash}`, { output: { markdown: "t", metaComment: "m" } });
     sc.settle();
@@ -1399,10 +1399,10 @@ describe("5. stack", () => {
     assert.deepEqual(sc.settle(), [`re${ord}`]);
     assert.deepEqual(sc.plan(`re${ord}`).cli?.args.slice(-2), ["--order", `${sha("b")},${sha("a")}`]);
     sc.complete(`re${ord}`, { output: { mapping: { [sha("b")]: sha("c"), [sha("a")]: sha("d") } } });
-    assert.deepEqual(sc.settle(), [`review-stack:root:${hash}`]);
+    assert.deepEqual(sc.settle(), [keyOf(sc, `review-stack:root:${hash}:`)]);
     assert.deepEqual(sc.state().stacks.root.order, ["p-test-b", "p-test-a"]);
     assert.equal(sc.state().patches["p-test-b"].sha, sha("c"));
-    sc.complete(`review-stack:root:${hash}`, { report: { findings: [{ patch: sha("c"), severity: "nit", text: "typo" }], addDeps: [], removeDeps: [], feedback: [] } });
+    sc.complete(keyOf(sc, `review-stack:root:${hash}:`), { report: { findings: [{ patch: sha("c"), severity: "nit", text: "typo" }], addDeps: [], removeDeps: [], feedback: [] } });
     assert.deepEqual(sc.settle(), [`summary:root:${hash}`]);
     sc.complete(`summary:root:${hash}`, { output: { markdown: "| table |", metaComment: "This stack fixes 2 failures." } });
     sc.settle();
@@ -1450,7 +1450,7 @@ describe("5. stack", () => {
     sc.settle();
     sc.complete(keyOf(sc, `order:root:${hash}:`), { output: { order: ["p-test-a", "p-test-b"], flippedSoftDeps: [] } });
     sc.settle();
-    sc.complete(`review-stack:root:${hash}`, { report: { findings: [], addDeps: [], removeDeps: [], feedback: [] } });
+    sc.complete(keyOf(sc, `review-stack:root:${hash}:`), { report: { findings: [], addDeps: [], removeDeps: [], feedback: [] } });
     sc.settle();
     sc.complete(`summary:root:${hash}`, { output: { markdown: "| table |", metaComment: "This stack fixes 2 failures." } });
     sc.settle();
@@ -1537,8 +1537,8 @@ describe("5. stack", () => {
     sc.complete(`effort:p-test-b:${sha("2")}`, { report: { effort: 1, reason: "r", feedback: [] } });
     sc.settle();
     sc.complete(keyOf(sc, `order:root:${hash}:`), { output: { order: ["p-test-a", "p-test-b"], flippedSoftDeps: [] } });
-    assert.deepEqual(sc.settle(), [`review-stack:root:${hash}`]);
-    const review = sc.complete(`review-stack:root:${hash}`, { report: { findings: [{ patch: sha("b"), severity: "must-fix", text: "same approach as test_a" }], addDeps: [], removeDeps: [], feedback: [] } });
+    assert.deepEqual(sc.settle(), [keyOf(sc, `review-stack:root:${hash}:`)]);
+    const review = sc.complete(keyOf(sc, `review-stack:root:${hash}:`), { report: { findings: [{ patch: sha("b"), severity: "must-fix", text: "same approach as test_a" }], addDeps: [], removeDeps: [], feedback: [] } });
     assert.deepEqual(sc.settle(), [`author:i-test-b:stack-review:${review}`]);
     assert.match(sc.plan(`author:i-test-b:stack-review:${review}`).agent?.message ?? "", /same approach as test_a/);
     assert.equal(sc.state().items["i-test-b"].state, "investigating");
@@ -2657,7 +2657,7 @@ describe("burndown verification", () => {
     sc.settle();
     sc.complete(keyOf(sc, `order:a:${hash}:`), { output: { order: ["p-test-a"], flippedSoftDeps: [] } });
     sc.settle();
-    sc.complete(`review-stack:a:${hash}`, { report: { findings: [], addDeps: [], removeDeps: [], feedback: [] } });
+    sc.complete(keyOf(sc, `review-stack:a:${hash}:`), { report: { findings: [], addDeps: [], removeDeps: [], feedback: [] } });
     sc.settle();
     sc.complete(`summary:a:${hash}`, { output: { markdown: "t", metaComment: "m" } });
     const started = sc.settle();
@@ -2760,7 +2760,7 @@ describe("burndown verification", () => {
     sc.settle();
     sc.complete(keyOf(sc, `order:a:${hash}:`), { output: { order: ["p-test-a", "p-annotations"], flippedSoftDeps: [] } });
     sc.settle();
-    sc.complete(`review-stack:a:${hash}`, { report: { findings: [], addDeps: [], removeDeps: [], feedback: [] } });
+    sc.complete(keyOf(sc, `review-stack:a:${hash}:`), { report: { findings: [], addDeps: [], removeDeps: [], feedback: [] } });
     sc.settle();
     const drafts = () => sc.view().jobs.filter((j) => j.purpose.what === "meta-draft").map((j) => j.purpose.key);
     assert.equal(drafts().length, 1, "not written again before the stack is ready");
@@ -2815,7 +2815,7 @@ describe("burndown verification", () => {
     sc.settle();
     sc.complete(keyOf(sc, `order:a:${hash}:`), { output: { order: ["p-test-a", "p-annotations"], flippedSoftDeps: [] } });
     sc.settle();
-    sc.complete(`review-stack:a:${hash}`, { report: { findings: [], addDeps: [], removeDeps: [], feedback: [] } });
+    sc.complete(keyOf(sc, `review-stack:a:${hash}:`), { report: { findings: [], addDeps: [], removeDeps: [], feedback: [] } });
     sc.settle();
     sc.complete(`summary:a:${hash}`, { output: { markdown: "t", metaComment: "m" } });
     sc.settle();

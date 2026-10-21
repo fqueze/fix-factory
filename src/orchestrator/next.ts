@@ -1438,7 +1438,8 @@ class Planner {
       return;
     }
     const depsFile = dataPath(this.config, this.s.id, `deps-${id}-${hash}.json`);
-    const review = this.wantAgent(`review-stack:${id}:${code}`, "review-stack", "review-stack", { base: this.config.baseRef, branch: info.branch, worktree: wt, depsFile }, {
+    // Reviewed again when its order changes (a dep the last review added): it reviews the stack as ordered.
+    const review = this.wantAgent(`review-stack:${id}:${code}:${shortHash(order).slice(0, 6)}`, "review-stack", "review-stack", { base: this.config.baseRef, branch: info.branch, worktree: wt, depsFile }, {
       cwd: wt,
       purpose: { stack: id },
       files: [
