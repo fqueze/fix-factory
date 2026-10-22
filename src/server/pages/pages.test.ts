@@ -99,7 +99,7 @@ describe("overview", () => {
     assert.match(page, new RegExp(`<div id="section-finished"><details class="req" id="req-${id}" data-request="${id}" data-section="finished">`));
     assert.doesNotMatch(page, new RegExp(`id="req-${id}"[^>]* open>`));
     assert.doesNotMatch(page, /title="Its patches, pushes, agents and costs"/, "no link");
-    const opened = String(renderOverview(source.listRequests(), { ...ctx, open: id }));
+    const opened = String(renderOverview(source.listRequests(), { ...ctx, open: [id] }));
     assert.match(opened, new RegExp(`<details class="req[^"]*" id="req-${id}"[^>]* open>`));
     assert.ok(opened.includes('<div class="rbody">'), "its body, not a lazy one");
   });

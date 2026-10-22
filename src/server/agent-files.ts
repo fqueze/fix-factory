@@ -5,20 +5,22 @@ import { tmpdir } from "node:os";
 import { join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { exec } from "../lib/exec.ts";
+import { keptPath } from "../lib/kept.ts";
 import type { InvestigateReport, ItemView, RequestState } from "../types.ts";
 
 export type AgentFile = keyof NonNullable<InvestigateReport["files"]>;
 export const AGENT_FILES: AgentFile[] = ["evidence", "reproduction", "widening"];
 
-// The file in the worktree of the group's latest investigation; never outside it, even through a symlink.
-export function agentFilePath(r: RequestState, i: ItemView, which: AgentFile): string | undefined {
+// The file in the worktree of the group's latest investigation (or its kept copy, once the worktree is gone);
+// never outside it, even through a symlink.
+export function agentFilePath(r: RequestState, i: ItemView, which: AgentFile, dirs: { stateDir: string; worktreesDir: string }): string | undefined {
   const rel = i.investigation?.files?.[which];
   const author = i.jobs.map((j) => r.jobs[j]).findLast((j) => j.name === "investigate-and-fix");
   if (!rel || !author) {
     return undefined;
   }
   try {
-    const root = realpathSync(author.cwd);
+    const root = realpathSync(keptPath(dirs, author.cwd));
     const path = realpathSync(resolve(root, rel));
     return path.startsWith(root + sep) ? path : undefined;
   } catch {

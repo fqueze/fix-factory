@@ -13,7 +13,7 @@ export interface RenderContext {
   maxBuilds?: number;
   runningBuilds?: number; // across requests, for "waiting for a build slot (N builds running)"
   runningAgents?: number; // across requests, for "waiting for an agent (N/M running)"
-  open?: string; // request id to show expanded
+  open?: string[]; // ids of the requests to show expanded
   bugzillaEmail?: string; // bugs to file are assigned to you
   // The text of a patch's interdiffFile, read by the server inside stateDir.
   interdiff?: (p: PatchView) => string | undefined;

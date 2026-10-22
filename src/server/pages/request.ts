@@ -46,7 +46,7 @@ import {
 } from "./common.ts";
 
 // One line per request; the body only when expanded, so the overview stays small.
-export function renderRequest(r: RequestState, ctx: RenderContext, open = ctx.open === r.id): Html {
+export function renderRequest(r: RequestState, ctx: RenderContext, open = ctx.open?.includes(r.id) ?? false): Html {
   const needs = needsYou(r);
   const cost = requestCost(r);
   const summary = requestSummary(r);

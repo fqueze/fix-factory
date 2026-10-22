@@ -73,7 +73,9 @@
   }
   function saveOpened() {
     pruneOpened(document);
-    history.replaceState(null, "", location.pathname + location.search + (opened.size ? "#" + Array.from(opened).map(encodeURIComponent).join(",") : ""));
+    // Only on a change: re-rendered parts call this on every update, and browsers throttle history calls.
+    var hash = opened.size ? "#" + Array.from(opened).map(encodeURIComponent).join(",") : "";
+    if (hash !== location.hash) history.replaceState(null, "", location.pathname + location.search + hash);
   }
   function reopenFolds(root) {
     root.querySelectorAll("details.req, details[data-fold]").forEach(function (d) {
@@ -107,7 +109,8 @@
     var open = Array.prototype.map.call(document.querySelectorAll("details.req[open]"), function (d) {
       return d.dataset.request;
     });
-    var url = "/fragments/main" + (open.length === 1 ? "?open=" + encodeURIComponent(open[0]) : "");
+    // All of them: a request that came collapsed would be reopened, and its opening refreshes the list again.
+    var url = "/fragments/main" + (open.length ? "?" + open.map(function (id) { return "open=" + encodeURIComponent(id); }).join("&") : "");
     var s = (mainLatest = ++seq);
     retryMain = false;
     return fetchText(url).then(

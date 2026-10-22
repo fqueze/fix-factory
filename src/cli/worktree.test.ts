@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execOk } from "../lib/exec.ts";
@@ -132,6 +132,15 @@ test("remove kills only the worktree's processes, removes the tree, keeps the br
   mkdirSync(sharedObjdir);
   writeFileSync(join(dest, "mozconfig"), `mk_add_options MOZ_OBJDIR=${sharedObjdir}\n`);
   mkdirSync(join(dest, "obj-dbg-artifact"));
+  mkdirSync(join(dest, "artifacts/logs"), { recursive: true });
+  writeFileSync(join(dest, "artifacts/evidence.md"), "why\n");
+  writeFileSync(join(dest, "artifacts/logs/run.log"), "log\n");
+  writeFileSync(join(dest, "f"), "1\n");
+  await execOk(["git", "add", "f"], { cwd: dest });
+  await execOk(["git", "commit", "-qm", "v1"], { cwd: dest });
+  const v1 = (await execOk(["git", "rev-parse", "HEAD"], { cwd: dest })).trim();
+  await execOk(["git", "commit", "-q", "--amend", "-m", "v2"], { cwd: dest });
+  const stateDir = join(root, "state");
   const spawnSleep = (marker: string, cwd = root) =>
     spawn(process.execPath, ["-e", "setTimeout(() => {}, 30000)", marker], { stdio: "ignore", cwd });
   const byPath = spawnSleep(join(dest, "obj-dbg-artifact/dist/bin/firefox"));
@@ -140,7 +149,7 @@ test("remove kills only the worktree's processes, removes the tree, keeps the br
   const exited = (p: ReturnType<typeof spawn>) =>
     p.exitCode !== null || p.signalCode !== null ? Promise.resolve() : new Promise((r) => p.on("exit", r));
   try {
-    const out = await remove("a", { repo, worktreesDir });
+    const out = await remove("a", { repo, worktreesDir, stateDir });
     assert.deepEqual(
       out.killed.map((p) => p.pid).sort(),
       [byPath.pid, byCwd.pid].sort(),
@@ -151,6 +160,9 @@ test("remove kills only the worktree's processes, removes the tree, keeps the br
     assert.ok(!existsSync(dest));
     assert.ok(existsSync(sharedObjdir));
     assert.equal((await git("branch", "--list", "a")).trim(), "a");
+    assert.equal(readFileSync(join(stateDir, "kept/a/artifacts/evidence.md"), "utf8"), "why\n");
+    assert.equal(readFileSync(join(stateDir, "kept/a/artifacts/logs/run.log"), "utf8"), "log\n");
+    assert.match(await git("for-each-ref", "--format=%(refname)", "refs/fix-factory/a/"), new RegExp(`refs/fix-factory/a/${v1}`));
   } finally {
     for (const p of [sibling, byPath, byCwd]) p.kill("SIGKILL");
     rmSync(root, { recursive: true, force: true });

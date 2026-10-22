@@ -12,15 +12,17 @@
 //     worktree at that path on branch <name>) and runs the build again, so a failed create can be retried.
 //
 //   node src/cli/worktree.ts remove <name>
-//     → {name, path, killed: [{pid, cmdline}], removed: true}
+//     → {name, path, killed: [{pid, cmdline}], removed: true, kept: {files, skipped}, refs}
 //     Kills the processes whose command line names the worktree or whose working directory is in it (and
 //     only those), then `git worktree remove --force`, which also deletes the in-tree objdir. The branch is
-//     kept. killed lists the processes actually signalled.
+//     kept, and so are artifacts/ and the worktree's own commits (see src/lib/kept.ts). killed lists the
+//     processes actually signalled.
 //
 // Worktrees live outside the checkout: worktrees inside it break `mach try`.
 
 import { spawn } from "node:child_process";
-import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, readlinkSync, realpathSync, statfsSync, writeFileSync } from "node:fs";
+import { closeSync, copyFileSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, readlinkSync, realpathSync, statfsSync, statSync, writeFileSync } from "node:fs";
+import { KEEP_MAX_BYTES, keptDir } from "../lib/kept.ts";
 import { basename, dirname, join, resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { log, runCli, UsageError } from "../lib/cli.ts";
@@ -243,15 +245,56 @@ async function killAll(procs: Proc[]): Promise<Proc[]> {
   return signalled;
 }
 
-export async function remove(name: string, opts: { repo: string; worktreesDir: string }) {
+export async function remove(name: string, opts: { repo: string; worktreesDir: string; stateDir: string }) {
   validateName(name);
   const dest = join(opts.worktreesDir, name);
   if (!existsSync(dest)) throw new Error(`${dest} does not exist`);
   const killed = await killAll(processesUnder(realpathSync(dest)));
+  const kept = keepArtifacts(dest, keptDir(opts.stateDir, name));
+  const refs = await keepCommits(dest, name, opts.repo);
   // --force: the objdir and mozconfig are untracked, git refuses without it. An objdir outside the tree
   // may be shared, so only the in-tree one goes, with the tree.
   await execOk(["git", "worktree", "remove", "--force", dest], { cwd: opts.repo });
-  return { name, path: dest, killed, removed: true };
+  return { name, path: dest, killed, removed: true, kept, refs };
+}
+
+// artifacts/, without files over KEEP_MAX_BYTES (listed in skipped.txt) or symlinks.
+function keepArtifacts(dest: string, to: string): { files: number; skipped: string[] } {
+  const from = join(dest, "artifacts");
+  const out = { files: 0, skipped: [] as string[] };
+  if (!existsSync(from)) return out;
+  const walk = (rel: string) => {
+    for (const e of readdirSync(join(from, rel), { withFileTypes: true })) {
+      const r = join(rel, e.name);
+      if (e.isDirectory()) walk(r);
+      else if (e.isFile()) {
+        if (statSync(join(from, r)).size > KEEP_MAX_BYTES) out.skipped.push(r);
+        else {
+          mkdirSync(dirname(join(to, "artifacts", r)), { recursive: true });
+          copyFileSync(join(from, r), join(to, "artifacts", r));
+          out.files++;
+        }
+      }
+    }
+  };
+  walk("");
+  if (out.skipped.length) {
+    mkdirSync(to, { recursive: true });
+    writeFileSync(join(to, "skipped.txt"), out.skipped.join("\n") + "\n");
+  }
+  return out;
+}
+
+// Every commit the worktree's HEAD pointed to that isn't upstream (earlier versions of its patches included)
+// gets a ref, so git gc keeps it once the worktree's reflog is gone.
+async function keepCommits(dest: string, name: string, repo: string): Promise<number> {
+  const reflog = await exec(["git", "reflog", "--format=%H", "HEAD"], { cwd: dest });
+  const tips = [...new Set(reflog.stdout.split("\n").filter(Boolean))];
+  if (reflog.code !== 0 || tips.length === 0) return 0;
+  const own = new Set((await execOk(["git", "rev-list", ...tips, "--not", "--remotes"], { cwd: repo })).split("\n"));
+  const keep = tips.filter((sha) => own.has(sha));
+  if (keep.length) await execOk(["git", "update-ref", "--stdin"], { cwd: repo, input: keep.map((sha) => `update refs/fix-factory/${name}/${sha} ${sha}\n`).join("") });
+  return keep.length;
 }
 
 async function main() {
@@ -268,7 +311,7 @@ async function main() {
       remove: async (args) => {
         if (args.length !== 1) throw new UsageError("usage: remove <name>");
         const config = loadConfig();
-        return remove(args[0], { repo: config.firefoxRepo, worktreesDir: config.worktreesDir });
+        return remove(args[0], { repo: config.firefoxRepo, worktreesDir: config.worktreesDir, stateDir: config.stateDir });
       },
     },
     { base: { type: "string" }, build: { type: "string" } },

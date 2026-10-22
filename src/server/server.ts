@@ -23,7 +23,7 @@ import type { CommandInput } from "../state/commands.ts";
 import type { CommandSink, StateSource } from "./state-source.ts";
 
 export interface ServerOptions {
-  config: Pick<FactoryConfig, "port" | "profilerOrigin" | "stackViewerCommand" | "mdViewerCommand" | "diffViewerCommand" | "stateDir" | "maxAgents" | "maxBuilds" | "allowedHosts" | "bugzillaEmail"> & Partial<Pick<FactoryConfig, "worktreesDir">>;
+  config: Pick<FactoryConfig, "port" | "profilerOrigin" | "stackViewerCommand" | "mdViewerCommand" | "diffViewerCommand" | "stateDir" | "maxAgents" | "maxBuilds" | "allowedHosts" | "bugzillaEmail" | "worktreesDir" | "firefoxRepo">;
   state: StateSource;
   sink: CommandSink;
   now?: () => number;
@@ -196,14 +196,14 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
   // Free space where the worktrees go: the factory stops creating them below 20 GB.
   function freeDiskGB(): number | undefined {
     const dir = opts.config.worktreesDir;
-    if (dir === undefined || !existsSync(dir)) {
+    if (!existsSync(dir)) {
       return undefined;
     }
     const fs = statfsSync(dir);
     return (fs.bavail * fs.bsize) / 1e9;
   }
 
-  function ctx(req: IncomingMessage, open?: string): RenderContext {
+  function ctx(req: IncomingMessage, open?: string[]): RenderContext {
     return {
       profilerOrigin: opts.config.profilerOrigin,
       // The profiler front end fetches the profile from the browser, so it needs the
@@ -266,7 +266,7 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
     if ((m = path.match(/^\/requests\/([^/]+)$/))) {
       const id = decodeURIComponent(m[1]);
       getRequest(id);
-      return send(res, 200, "text/html; charset=utf-8", page(renderOverview(opts.state.listRequests(), ctx(req, id))));
+      return send(res, 200, "text/html; charset=utf-8", page(renderOverview(opts.state.listRequests(), ctx(req, [id]))));
     }
     if ((m = path.match(/^\/fragments\/requests\/([^/]+)$/))) {
       const id = decodeURIComponent(m[1]);
@@ -274,7 +274,7 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
       return send(res, 200, "text/html; charset=utf-8", renderRequest(r, ctx(req), url.searchParams.get("open") === "1").value);
     }
     if (path === "/fragments/main") {
-      return send(res, 200, "text/html; charset=utf-8", renderMain(opts.state.listRequests(), ctx(req, url.searchParams.get("open") ?? undefined)).value);
+      return send(res, 200, "text/html; charset=utf-8", renderMain(opts.state.listRequests(), ctx(req, url.searchParams.getAll("open"))).value);
     }
     if (path === "/fragments/strip") {
       return send(res, 200, "text/html; charset=utf-8", renderStrip(opts.state.listRequests(), ctx(req)).value);
@@ -358,6 +358,7 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
       let page: string;
       try {
         page = await buildStackReview({
+          repo: opts.config.firefoxRepo,
           command: opts.config.stackViewerCommand,
           request: found.request,
           stack: found.stack,
@@ -376,7 +377,7 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
       }
       let page: string;
       try {
-        page = await buildPatchView({ command: opts.config.stackViewerCommand, request, patch });
+        page = await buildPatchView({ repo: opts.config.firefoxRepo, command: opts.config.stackViewerCommand, request, patch });
       } catch (e) {
         throw new HttpError(502, errorMessage(e));
       }
@@ -393,7 +394,7 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
       }
       let page: string;
       try {
-        page = await buildPushView({ command: opts.config.stackViewerCommand, cwd: request.jobs[last.job].cwd, commits: [...commits].reverse() });
+        page = await buildPushView({ repo: opts.config.firefoxRepo, command: opts.config.stackViewerCommand, cwd: request.jobs[last.job].cwd, commits: [...commits].reverse() });
       } catch (e) {
         throw new HttpError(502, errorMessage(e));
       }
@@ -406,7 +407,7 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
       }
       let page: string;
       try {
-        page = await buildPushView({ command: opts.config.stackViewerCommand, cwd: dry.cwd, commits: d.commits });
+        page = await buildPushView({ repo: opts.config.firefoxRepo, command: opts.config.stackViewerCommand, cwd: dry.cwd, commits: d.commits });
       } catch (e) {
         throw new HttpError(502, errorMessage(e));
       }
@@ -432,7 +433,7 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
       const request = opts.state.getRequest(decodeURIComponent(m[1]));
       const item = request?.items[decodeURIComponent(m[2])];
       const which = m[3] as AgentFile;
-      const file = request && item && AGENT_FILES.includes(which) ? agentFilePath(request, item, which) : undefined;
+      const file = request && item && AGENT_FILES.includes(which) ? agentFilePath(request, item, which, opts.config) : undefined;
       if (!request || !item || !file) {
         throw new HttpError(404, "no such file");
       }

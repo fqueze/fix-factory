@@ -27,6 +27,7 @@ const server = createFactoryServer({
     diffViewerCommand: [process.execPath, join(FIXTURES, "fake-md-viewer.js")],
     stateDir,
     worktreesDir: stateDir,
+    firefoxRepo: "/build/firefox",
     maxAgents: 10,
     maxBuilds: 3,
     allowedHosts: ["factory.example"],
@@ -164,7 +165,7 @@ describe("GET /events", () => {
   });
 
   it("ends the streams when the server closes", async () => {
-    const other = createFactoryServer({ config: { port: 0, profilerOrigin: "", stackViewerCommand: [], stateDir, maxAgents: 1, maxBuilds: 1 }, state, sink });
+    const other = createFactoryServer({ config: { port: 0, profilerOrigin: "", stackViewerCommand: [], worktreesDir: stateDir, firefoxRepo: stateDir, stateDir, maxAgents: 1, maxBuilds: 1 }, state, sink });
     await new Promise<void>((done) => other.listen(0, "127.0.0.1", done));
     const r = await fetch(`http://127.0.0.1:${(other.address() as AddressInfo).port}/events`);
     const reader = r.body!.getReader();
@@ -255,7 +256,7 @@ describe("agent activity, transcript and profile", () => {
   const R = "/api/requests/r-20261013-tab-failures/jobs";
   const make = (claudeProfiler: string | null) =>
     createFactoryServer({
-      config: { port: 0, profilerOrigin: "http://localhost:4242", stackViewerCommand: [], stateDir, maxAgents: 10, maxBuilds: 3 },
+      config: { port: 0, profilerOrigin: "http://localhost:4242", stackViewerCommand: [], worktreesDir: stateDir, firefoxRepo: stateDir, stateDir, maxAgents: 10, maxBuilds: 3 },
       state,
       sink,
       now: () => Date.parse("2026-10-15T09:00:00Z"),
@@ -314,13 +315,13 @@ describe("agent activity, transcript and profile", () => {
 });
 
 describe("GET /requests/:id/stacks/:stack/review", () => {
-  it("runs stack-viewer on the stack's range and injects the send button", async () => {
+  it("runs stack-viewer on the stack's range (in the main checkout once its worktree is gone) and injects the send button", async () => {
     const r = await fetch(`${base}/requests/r-20261010-xpcshell-cwd/stacks/storage-unit/review`);
     assert.equal(r.status, 200);
     const page = await r.text();
     const args = JSON.parse(page.match(/<pre id="args">(.*?)<\/pre>/)![1]);
     const first = state.getRequest("r-20261010-xpcshell-cwd")!.patches["p-prefs"].sha;
-    assert.deepEqual(args.slice(0, 4), ["--no-open", "-R", "/build/worktrees/storage-unit", "-o"]);
+    assert.deepEqual(args.slice(0, 4), ["--no-open", "-R", "/build/firefox", "-o"]);
     assert.equal(args[5], `${first}^..ff/storage-unit`);
     assert.ok(page.indexOf('id="ff-send"') < page.indexOf("</body>"));
     assert.match(page, /Send comments to the factory/);
@@ -333,10 +334,10 @@ describe("GET /requests/:id/stacks/:stack/review", () => {
 
   it("opens the stack of the request it's asked for when two requests have a stack of the same id", async () => {
     const other = structuredClone(state.getRequest("r-20261007-focus")!);
-    other.stacks["storage-unit"] = { ...other.stacks.focus, id: "storage-unit", worktree: "/build/worktrees/other" };
+    other.stacks["storage-unit"] = { ...other.stacks.focus, id: "storage-unit", worktree: stateDir };
     state.set(other);
     const page = await (await fetch(`${base}/requests/r-20261007-focus/stacks/storage-unit/review`)).text();
-    assert.equal(JSON.parse(page.match(/<pre id="args">(.*?)<\/pre>/)![1])[2], "/build/worktrees/other");
+    assert.equal(JSON.parse(page.match(/<pre id="args">(.*?)<\/pre>/)![1])[2], stateDir);
     assert.equal(JSON.parse(page.match(/<script type="application\/json" id="ff-review-config">(.*?)<\/script>/)![1]).request, "r-20261007-focus", "its comments go to that request");
     delete other.stacks["storage-unit"];
     state.set(other);
@@ -444,13 +445,13 @@ describe("GET /requests/:id/items/:item/files/:which", () => {
 });
 
 describe("GET /requests/:id/patches/:patch/view", () => {
-  it("runs stack-viewer on the patch alone, in its worktree, with a button sending comments to its author", async () => {
+  it("runs stack-viewer on the patch alone, in its worktree or the main checkout once that is gone, with a button sending comments to its author", async () => {
     const p = state.getRequest("r-20261010-xpcshell-cwd")!.patches["p-prefs"];
     const r = await fetch(`${base}/requests/r-20261010-xpcshell-cwd/patches/p-prefs/view`);
     assert.equal(r.status, 200);
     const page = await r.text();
     const args = JSON.parse(page.match(/<pre id="args">(.*?)<\/pre>/)![1]);
-    assert.deepEqual(args.slice(0, 3), ["--no-open", "-R", p.worktree]);
+    assert.deepEqual(args.slice(0, 3), ["--no-open", "-R", "/build/firefox"]);
     assert.equal(args.at(-1), `${p.sha}^..${p.sha}`);
     const cfg = JSON.parse(page.match(/<script type="application\/json" id="ff-review-config">(.*?)<\/script>/)![1]);
     assert.deepEqual(cfg, { request: "r-20261010-xpcshell-cwd", patch: "p-prefs", shas: { [p.sha]: "p-prefs" } });

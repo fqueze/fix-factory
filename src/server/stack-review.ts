@@ -2,6 +2,7 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { exec } from "../lib/exec.ts";
+import { gitDirFor } from "../lib/kept.ts";
 import type { PatchView, RequestState, StackView } from "../types.ts";
 
 // A git revision name that can't be taken for an option: a sha, a branch, HEAD~2, sha^.
@@ -11,7 +12,7 @@ export function isRevName(rev: string): boolean {
 
 // stack-viewer's output for the stack, with the button that sends its comments to
 // the factory. The base is `base`, else the stack's, else the parent of its first patch.
-export async function buildStackReview(opts: { command: string[]; request: RequestState; stack: StackView; base?: string }): Promise<string> {
+export async function buildStackReview(opts: { repo: string; command: string[]; request: RequestState; stack: StackView; base?: string }): Promise<string> {
   const { request, stack } = opts;
   const first = request.patches[stack.order[0]];
   const base = opts.base ?? stack.base ?? (first ? `${first.sha}^` : undefined);
@@ -28,7 +29,7 @@ export async function buildStackReview(opts: { command: string[]; request: Reque
   try {
     const file = join(dir, "review.html");
     // --no-open: with -o, stack-viewer would otherwise open a browser on the server.
-    const cmd = [...opts.command, "--no-open", "-R", stack.worktree, "-o", file, `${base}..${stack.branch}`];
+    const cmd = [...opts.command, "--no-open", "-R", gitDirFor({ firefoxRepo: opts.repo }, stack.worktree), "-o", file, `${base}..${stack.branch}`];
     const r = await exec(cmd);
     if (r.code !== 0) {
       throw new Error(`${cmd.join(" ")} exited with ${r.code}: ${r.stderr.trim().slice(-2000)}`);
@@ -41,7 +42,7 @@ export async function buildStackReview(opts: { command: string[]; request: Reque
 }
 
 // One patch (a commit in its author's worktree) in stack-viewer; comments go back to its author.
-export async function buildPatchView(opts: { command: string[]; request: RequestState; patch: PatchView }): Promise<string> {
+export async function buildPatchView(opts: { repo: string; command: string[]; request: RequestState; patch: PatchView }): Promise<string> {
   const { request, patch } = opts;
   if (!isRevName(patch.sha)) {
     throw new Error(`not a revision name: ${patch.sha}`);
@@ -49,7 +50,7 @@ export async function buildPatchView(opts: { command: string[]; request: Request
   const dir = mkdtempSync(join(tmpdir(), "fix-factory-stack-viewer-"));
   try {
     const file = join(dir, "patch.html");
-    const cmd = [...opts.command, "--no-open", "-R", patch.worktree, "-o", file, `${patch.sha}^..${patch.sha}`];
+    const cmd = [...opts.command, "--no-open", "-R", gitDirFor({ firefoxRepo: opts.repo }, patch.worktree), "-o", file, `${patch.sha}^..${patch.sha}`];
     const r = await exec(cmd);
     if (r.code !== 0) {
       throw new Error(`${cmd.join(" ")} exited with ${r.code}: ${r.stderr.trim().slice(-2000)}`);
@@ -61,7 +62,7 @@ export async function buildPatchView(opts: { command: string[]; request: Request
 }
 
 // What a try push would carry (the dry run's commits, newest first, in the worktree it pushes from), read-only.
-export async function buildPushView(opts: { command: string[]; cwd: string; commits: string[] }): Promise<string> {
+export async function buildPushView(opts: { repo: string; command: string[]; cwd: string; commits: string[] }): Promise<string> {
   const newest = opts.commits[0];
   const oldest = opts.commits.at(-1)!;
   for (const rev of [newest, oldest]) {
@@ -72,7 +73,7 @@ export async function buildPushView(opts: { command: string[]; cwd: string; comm
   const dir = mkdtempSync(join(tmpdir(), "fix-factory-stack-viewer-"));
   try {
     const file = join(dir, "push.html");
-    const cmd = [...opts.command, "--no-open", "-R", opts.cwd, "-o", file, `${oldest}^..${newest}`];
+    const cmd = [...opts.command, "--no-open", "-R", gitDirFor({ firefoxRepo: opts.repo }, opts.cwd), "-o", file, `${oldest}^..${newest}`];
     const r = await exec(cmd);
     if (r.code !== 0) {
       throw new Error(`${cmd.join(" ")} exited with ${r.code}: ${r.stderr.trim().slice(-2000)}`);

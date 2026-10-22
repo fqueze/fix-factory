@@ -14,7 +14,7 @@ export type PushId = string;
 export interface FactoryConfig {
   port: number; // web server, listens on all interfaces
   allowedHosts?: string[]; // extra Host header values accepted besides IPs, localhost and this machine's name
-  stateDir: string; // commands.jsonl, requests/, jobs/, feedback/, cache/
+  stateDir: string; // commands.jsonl, requests/, jobs/, feedback/, cache/, kept/
   firefoxRepo: string; // main checkout; worktrees are created next to it, never inside
   worktreesDir: string;
   baseRef: string; // central-based ref worktrees and stacks start from, e.g. "origin/main"

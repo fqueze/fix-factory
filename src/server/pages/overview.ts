@@ -74,7 +74,7 @@ export function renderMain(requests: RequestState[], ctx: RenderContext): Html {
   ${renderRecentPushes(requests)}
 
   ${finished.length ? html`<h2>Finished <span class="count">${finished.length}</span></h2>
-  <div id="section-finished">${finished.filter((r) => r.kind !== "unrouted").map((r) => renderRequest(r, ctx, r.id === ctx.open))}</div>
+  <div id="section-finished">${finished.filter((r) => r.kind !== "unrouted").map((r) => renderRequest(r, ctx, ctx.open?.includes(r.id)))}</div>
   ${finished.some((r) => r.kind === "unrouted") ? html`<div class="simple">${finished.filter((r) => r.kind === "unrouted").map(
     (r) =>
       html`<div class="row" data-request="${r.id}" data-section="finished"><span class="grow"><b>${requestName(r)}</b> <span class="sub">· ${routeOutcome(r)}</span></span><a class="btn small" href="${profileUrl(ctx, r.id)}" target="_blank" rel="noopener">Profile</a></div>`,
