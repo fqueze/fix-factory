@@ -443,10 +443,30 @@ function patchRow(r: RequestState, p: PatchView, ctx: RenderContext): Html {
     trust: item ? trustLine(r, item, ctx) : null,
     ask: item && asks ? askBlock(r, item, ctx, [], controls !== null) : undefined,
     under: bugBoxShown ? bugDraftBox(r, p, back) : null,
-    body: html`${item ? failure(r, item) : null}<h4 class="part">The fix</h4>${item ? investigationHtml(item) : null}${p.effort === undefined ? null : html`<div class="sub">review effort ${p.effort}/5</div>`}${reviewers(p)}${p.deps.map((d) => depLine(r, d))}${controls && !sentence?.ask ? html`<div class="jobctl">${controls}</div>` : null}${reviewBox(r, p, back, p.interdiffFile === undefined ? undefined : ctx.interdiff?.(p))}${
+    body: html`${item ? failure(r, item) : null}<h4 class="part">The fix</h4>${item ? investigationHtml(item) : null}${testPlanBox(r, p, back)}${p.effort === undefined ? null : html`<div class="sub">review effort ${p.effort}/5</div>`}${reviewers(p)}${p.deps.map((d) => depLine(r, d))}${controls && !sentence?.ask ? html`<div class="jobctl">${controls}</div>` : null}${reviewBox(r, p, back, p.interdiffFile === undefined ? undefined : ctx.interdiff?.(p))}${
       item ? html`<h4 class="part">What the factory did</h4>${talkBox(r, item, ctx)}${itemJobs(r, item, ctx)}` : null
     }`,
   });
+}
+
+// Its test plan for reviewers, editable: set on its revision with a click (the factory's one write to Phabricator),
+// or copied before it has one.
+function testPlanBox(r: RequestState, p: PatchView, back: string): Html | null {
+  const sent = p.testPlanSent;
+  const text = p.testPlan ?? sent?.text;
+  if (text === undefined) {
+    return null;
+  }
+  const id = `test-plan-${p.id}`;
+  const status = sent
+    ? html`<span class="sub"> · on D${sent.revision} since ${formatDate(sent.t)}${p.testPlan !== undefined && p.testPlan !== sent.text ? ", a newer draft below" : ""}</span>`
+    : null;
+  const area = html`<textarea name="text" id="${id}" required rows="${Math.min(8, text.split("\n").length + 1)}">${text}</textarea>`;
+  return html`<div class="box testplan"><h4>Test plan${status}</h4>${
+    p.revision === undefined
+      ? html`${area}<div class="row"><button type="button" class="btn small" data-copy="${id}">Copy</button><span class="sub">Set on its revision from here once it's submitted.</span></div>`
+      : html`<form class="cmd" method="post" action="/api/commands">${commandFields([{ cmd: "set-test-plan", request: r.id, patch: p.id }], back)}${area}<div class="row"><button class="btn small primary">${sent ? `Update D${p.revision}'s test plan` : `Set as D${p.revision}'s test plan`}</button></div></form>`
+  }</div>`;
 }
 
 // The bug its commit message starts with; the link of one to file opens Bugzilla's form prefilled with its draft.

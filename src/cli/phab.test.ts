@@ -4,7 +4,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
-import { arcToken, makeConduit, parseFileInfoReviewers, parseRevision, poll, reviewerStatus, reviewersCommand, stripBadge, unknownReviewers, type Conduit } from "./phab.ts";
+import { arcToken, makeConduit, parseFileInfoReviewers, parseRevision, poll, reviewerStatus, reviewersCommand, setTestPlan, stripBadge, unknownReviewers, type Conduit } from "./phab.ts";
 
 const fixtures = new URL("../../test/fixtures/phab/", import.meta.url);
 
@@ -134,4 +134,11 @@ test("unknownReviewers: names Phabricator doesn't know, groups by slug, blocking
     ["user.search", { constraints: { usernames: ["mkaply", "nobody"] } }],
     ["project.search", { constraints: { slugs: ["xpcshell-reviewers", "testing-reviewers"] } }],
   ]);
+});
+
+test("setTestPlan edits the revision's Test Plan field", async () => {
+  const calls: [string, Record<string, unknown>][] = [];
+  const conduit: Conduit = async (method, params) => (calls.push([method, params]), { object: { id: 5 } });
+  assert.deepEqual(await setTestPlan(335332, "- Green on try.", conduit), { revision: 335332, testPlan: "- Green on try." });
+  assert.deepEqual(calls, [["differential.revision.edit", { objectIdentifier: "D335332", transactions: [{ type: "testPlan", value: "- Green on try." }] }]]);
 });

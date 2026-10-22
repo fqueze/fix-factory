@@ -1,0 +1,41 @@
+{
+  "type": "object",
+  "properties": {
+    "testPlan": {
+      "type": "string",
+      "description": "The test plan: at most 5 short lines, plain text."
+    },
+    "feedback": {
+      "type": "array",
+      "description": "Problems with the tools or inputs you used, one entry per problem.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "target": {
+            "type": "string",
+            "enum": [
+              "fx-tests",
+              "profiler-cli",
+              "searchfox-cli",
+              "factory",
+              "inputs"
+            ]
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "target",
+          "text"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "testPlan",
+    "feedback"
+  ],
+  "additionalProperties": false
+}

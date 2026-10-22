@@ -77,6 +77,9 @@ export class Scenario {
     });
   }
 
+  // Test plans start alongside most late steps: the keys step() returns leave them out unless a test asks for them.
+  showTestPlans = false;
+
   // One pass of the loop: next()'s events, then its jobs started. Returns the started keys.
   step(): string[] {
     const actions = this.next();
@@ -86,7 +89,7 @@ export class Scenario {
     for (const a of actions) {
       if (a.type !== "start") continue;
       this.startJob(a.plan);
-      keys.push(a.plan.purpose.key);
+      if (this.showTestPlans || !a.plan.purpose.key.startsWith("test-plan:")) keys.push(a.plan.purpose.key);
     }
     return keys;
   }

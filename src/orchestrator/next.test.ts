@@ -180,7 +180,7 @@ describe("2. first signal", () => {
 
   it("lists the skips, classifies each, writes the annotation patches, reviews the run-if and plans the un-skip push", () => {
     const sc = burndown();
-    assert.deepEqual(sc.view().jobs.filter((j) => !j.end).map((j) => j.purpose.key), ["wt:signal"]);
+    assert.deepEqual(sc.view().jobs.filter((j) => !j.end && !j.purpose.key.startsWith("test-plan:")).map((j) => j.purpose.key), ["wt:signal"]);
     signalWorktree(sc);
     // Listed in the worktree, not in your checkout: it may be days behind.
     assert.deepEqual(sc.plan("annotations").cli?.args, ["list", "dom/base/test", "--repo", `/wt/${ID}-signal`]);
@@ -651,7 +651,7 @@ describe("3. work list", () => {
 describe("4. investigate and fix", () => {
   it("someone active: take-it waits for you, take it lets the item go on", () => {
     const sc = workList([group("ka", "a/test_a.js", "boom")]);
-    assert.deepEqual(sc.view().jobs.filter((j) => !j.end).map((j) => j.purpose.key), ["prior-art:i-test-a"]);
+    assert.deepEqual(sc.view().jobs.filter((j) => !j.end && !j.purpose.key.startsWith("test-plan:")).map((j) => j.purpose.key), ["prior-art:i-test-a"]);
     sc.complete("prior-art:i-test-a", { output: { bugs: [] } });
     sc.settle();
     assert.match(String(sc.plan("prior-art-verdict:i-test-a").agent?.vars?.facts), /^in \/state\/jobs\/j-\d+\/out.log$/);
@@ -672,7 +672,7 @@ describe("4. investigate and fix", () => {
     assert.equal(g.message, "boom | bang");
     assert.deepEqual(g.configs, ["linux/opt-xpcshell", "mac/opt-xpcshell"]);
     assert.deepEqual(g.taskIds, ["T1", "T2"]);
-    assert.deepEqual(sc.view().jobs.filter((j) => !j.end).map((j) => j.purpose.key), ["prior-art:i-test-a"]);
+    assert.deepEqual(sc.view().jobs.filter((j) => !j.end && !j.purpose.key.startsWith("test-plan:")).map((j) => j.purpose.key), ["prior-art:i-test-a"]);
   });
 
   it("a request has as many groups investigating in worktrees as it can run agents (4 here); reviewed ones don't count", () => {
@@ -1224,7 +1224,7 @@ function stacked(reportA?: object): Scenario {
 }
 
 describe("4b. try repro", () => {
-  const open = (sc: Scenario) => sc.view().jobs.filter((j) => !j.end).map((j) => j.purpose.key);
+  const open = (sc: Scenario) => sc.view().jobs.filter((j) => !j.end && !j.purpose.key.startsWith("test-plan:")).map((j) => j.purpose.key);
   // Groups a (and c, in a/test_c.js, given DEBUG commits) wait for a try repro with DEBUG commit d (and e); b is
   // reviewed: the stack is built with b's patch alone, up to its verify push's try branch.
   const waitingStack = (two = false) => {
@@ -1377,7 +1377,7 @@ describe("5. stack", () => {
   it("assembles a settled folder, finds deps and efforts, orders, reviews the stack and summarizes it", () => {
     const sc = twoReviewed();
     assert.equal(sc.state().step, "stack");
-    assert.deepEqual(sc.view().jobs.filter((j) => !j.end).map((j) => j.purpose.key), ["wt:root"]);
+    assert.deepEqual(sc.view().jobs.filter((j) => !j.end && !j.purpose.key.startsWith("test-plan:")).map((j) => j.purpose.key), ["wt:root"]);
     sc.complete("wt:root", { output: { name: `${ID}-root`, path: `/wt/${ID}-root`, branch: `${ID}-root` } });
     const [assemble] = sc.settle();
     assert.match(assemble, /^assemble:root:[0-9a-f]{10}$/);
@@ -2189,9 +2189,34 @@ const polled = (status: string, comments: unknown[] = [], reviewer = "accepted")
 ];
 
 describe("9. review comments", () => {
+  it("writes each accepted patch's test plan, which you set on its revision with a click", () => {
+    const sc = inReview();
+    const key = sc.view().jobs.find((j) => !j.end && j.purpose.key.startsWith("test-plan:p-test-a:"))!.purpose.key;
+    const plan = sc.plan(key);
+    assert.equal(plan.name, "write-test-plan");
+    assert.equal(plan.agent?.vars.firefoxRepo, config.firefoxRepo);
+    assert.deepEqual(plan.files?.map((f) => f.path.split("/").pop()), ["test-plan-p-test-a-investigation.json", "test-plan-p-test-a-pushes.json"]);
+    sc.complete(key, { report: { testPlan: "- Reproduced by widening the race: 6/6 failures, 0/20 with the fix.\n- Green on try.\n", feedback: [] } });
+    assert.equal(sc.state().patches["p-test-a"].testPlan, "- Reproduced by widening the race: 6/6 failures, 0/20 with the fix.\n- Green on try.");
+    assert.ok(!sc.settle().some((k) => k.startsWith("test-plan:p-test-a:")), "written once for the same investigation and try results");
+
+    const command = { v: 1, id: "c-plan", t: "2026-10-15T09:00:00.000Z", request: ID, cmd: "set-test-plan", patch: "p-test-a", text: "  Edited plan.\n" } as Command;
+    const effects = commandEffects(command, { config, state: sc.state(), view: sc.view(), exists: () => false, plan: (j) => sc.plans.get(j) });
+    const start = effects.find((e) => e.type === "start")!;
+    assert.ok(start.type === "start");
+    assert.deepEqual(start.plan.cli?.args.slice(0, 2), ["set-test-plan", "D101"]);
+    assert.equal(start.plan.files?.[0].content, "Edited plan.\n");
+    sc.startJob(start.plan);
+    sc.complete("set-test-plan:p-test-a:c-plan", { output: { revision: 101, testPlan: "Edited plan." } });
+    assert.deepEqual(sc.state().patches["p-test-a"].testPlanSent && { ...sc.state().patches["p-test-a"].testPlanSent, t: "" }, { revision: 101, text: "Edited plan.", t: "" });
+
+    const refused = commandEffects({ ...command, id: "c-plan-2", patch: "p-nope" } as Command, { config, state: sc.state(), view: sc.view(), exists: () => false, plan: () => undefined });
+    assert.ok(refused.some((e) => e.type === "event" && e.event.type === "command-executed" && !e.event.ok));
+  });
+
   it("polls Phabricator every 10 min while you're present, every 3 h while you're away", () => {
     const sc = inReview();
-    assert.deepEqual(sc.view().jobs.filter((j) => !j.end).map((j) => j.purpose.key), ["poll:0"]);
+    assert.deepEqual(sc.view().jobs.filter((j) => !j.end && !j.purpose.key.startsWith("test-plan:")).map((j) => j.purpose.key), ["poll:0"]);
     assert.deepEqual(sc.plan("poll:0").cli?.args, ["poll", "D100", "D101"]);
     assert.equal(sc.plan("poll:0").priority, 0);
     sc.complete("poll:0", { output: polled("needs-review", [], "pending") });
@@ -2711,7 +2736,7 @@ describe("burndown verification", () => {
 
     // Before submitting, the stack's own branch, without the DEBUG commit, is checked out again.
     assert.equal(sc.state().step, "submit");
-    assert.deepEqual(sc.view().jobs.filter((j) => !j.end && !j.purpose.key.startsWith("sync:")).map((j) => j.purpose.key), ["checkout:a"]);
+    assert.deepEqual(sc.view().jobs.filter((j) => !j.end && !j.purpose.key.startsWith("sync:") && !j.purpose.key.startsWith("test-plan:")).map((j) => j.purpose.key), ["checkout:a"]);
     const checkout = sc.plan("checkout:a");
     assert.deepEqual([checkout.cli, checkout.cwd], [{ tool: "git", args: ["checkout", `${ID}-a`] }, `/wt/${ID}-a`]);
     sc.complete("checkout:a", { output: "" });
@@ -2727,7 +2752,7 @@ describe("burndown verification", () => {
     const { sc } = verified(false, 22);
     assert.equal(sc.state().step, "meta bug", "waits for the removal before going on");
     const key = "author:i-annotations:removal";
-    const open = () => sc.view().jobs.filter((j) => !j.end).map((j) => j.purpose.key);
+    const open = () => sc.view().jobs.filter((j) => !j.end && !j.purpose.key.startsWith("test-plan:")).map((j) => j.purpose.key);
     assert.deepEqual(open(), [key]);
     const message = sc.plan(key).agent!.message!;
     assert.match(message, /DEBUG commit on top: fed \(green\)\. On top of the stack it became/);
@@ -2947,7 +2972,7 @@ describe("burndown verification", () => {
     assert.equal(flag.item, "i-annotations");
     assert.equal(s.step, "meta bug");
     assert.ok(!s.needsUser.some((n) => n.key.startsWith("meta-bug:")), "the meta bug waits");
-    assert.deepEqual(sc.view().jobs.filter((j) => !j.end && !j.purpose.key.startsWith("sync:")).map((j) => j.purpose.key), []);
+    assert.deepEqual(sc.view().jobs.filter((j) => !j.end && !j.purpose.key.startsWith("sync:") && !j.purpose.key.startsWith("test-plan:")).map((j) => j.purpose.key), []);
   });
 
   it("Keep them resumes its author, whose removal becomes the patch, and the question goes away", () => {

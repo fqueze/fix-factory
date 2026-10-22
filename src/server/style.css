@@ -319,3 +319,4 @@ hr.part { border: 0; border-top: 3px solid var(--border); margin: 10px -12px 0; 
 .fb { margin: 0 0 14px; }
 .fb .sub code { color: var(--text-muted); }
 header h1 a { color: inherit; text-decoration: none; }
+.box.testplan textarea { width: 100%; box-sizing: border-box; font: inherit; font-size: 13px; padding: 4px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-1); color: var(--text-primary); }

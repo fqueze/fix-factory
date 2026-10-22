@@ -1,0 +1,8 @@
+Write the test plan of commit {sha} ("{title}") for its Phabricator revision: what lets a reviewer trust that the fix works. Read the commit with `git -C {firefoxRepo} show {sha}`. What its author found, and how it verified the fix, is in {investigationFile}; its notes are {files} (if that worktree was removed, the same paths are under {keptDir}). The try pushes of its request, each with what it was for and its result, are in {pushesFile}: `fx-tests try <rev> --all-jobs` shows how its tests did in one, including failures that passed on retry.
+
+At most 5 short lines, plain text, "- " bullets if there are several points, in this order where it applies:
+- how the cause was found (the profile markers, log lines or code that show it);
+- how the failure was reproduced (the race widened, chaos mode, a loop of runs), with the failure rates without and with the fix;
+- the try runs that show it's fixed: which platforms and jobs, how many runs, and whether they were green. The push's Treeherder link may go there.
+
+Only what was actually done and shown. If the failure was never reproduced, a platform was never run, or the try push still had failures in these tests, say so plainly. Nothing internal to how the fix was made: no agents, groups, factory, sessions or job ids. A commit that only changes test manifests: one line on the try runs that show the tests pass.

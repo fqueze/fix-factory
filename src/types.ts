@@ -171,6 +171,8 @@ export type Event =
       testOnly?: boolean;
       interdiffFile?: string; // diff against the previously submitted version, relative to stateDir
     })
+  | (EventBase & { type: "test-plan"; patch: PatchId; text: string })
+  | (EventBase & { type: "test-plan-sent"; patch: PatchId; revision: number; text: string })
   | (EventBase & { type: "dep"; dep: Dep })
   | (EventBase & { type: "dep-removed"; patch: PatchId; needs: PatchId | string })
   | (EventBase & { type: "stack-dropped"; stack: string }) // made by an earlier rule (one per test folder), never submitted
@@ -217,6 +219,7 @@ export type Command =
   | (CommandBase & { cmd: "stack-comments"; stack: string; comments: { patch: PatchId; text: string }[] })
   | (CommandBase & { cmd: "take-it" | "hand-back"; item: ItemId })
   | (CommandBase & { cmd: "comment-fix"; patch: PatchId; text: string })
+  | (CommandBase & { cmd: "set-test-plan"; patch: PatchId; text: string }) // on its revision, as you edited it
   | (CommandBase & { cmd: "tell-factory"; text: string })
   | (CommandBase & { cmd: "reply-recovery"; job: JobId; text: string })
   | (CommandBase & { cmd: "start-now" })
@@ -339,6 +342,8 @@ export interface PatchView {
   deps: Dep[]; // deps where this patch is the dependent one
   review?: { revision: number; status: string; reviewers: ReviewerStatus[]; comments: InlineComment[] };
   replyDrafts: { commentId: number; text: string }[];
+  testPlan?: string; // for its revision's Test Plan field: how the fix was shown to work, a few lines
+  testPlanSent?: { revision: number; text: string; t: Iso }; // what you set on its revision
 }
 
 export interface StackView {
@@ -459,6 +464,11 @@ export interface JobPurpose {
 
 // ---------------------------------------------------------------------------
 // Reports of the other prompts
+
+export interface WriteTestPlanReport {
+  testPlan: string;
+  feedback: Feedback[];
+}
 
 // Either existing (the text is about that request), or kind and the rest (a new request). The schema
 // can't say "either", so the handler checks it.

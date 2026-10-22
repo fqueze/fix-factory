@@ -8,7 +8,7 @@ import type { ImportedCommit } from "../cli/stack/import.ts";
 import type { DryRunResult, WatchLine } from "../cli/try.ts";
 import type { CommandInput } from "../state/commands.ts";
 import type { EventInput } from "../state/events.ts";
-import type {
+import type { WriteTestPlanReport,
   AddressReviewReport,
   Dep,
   FactoryConfig,
@@ -296,6 +296,12 @@ export function handleFinished(input: HandlerInput): HandlerResult {
       if (!s.metaBug?.bug) ev("meta-bug", { bug: null, draft: { ...(purpose.draft as BugDraft), description: d.description, ...(d.summary ? { summary: d.summary } : {}) } });
       break;
     }
+    case "test-plan":
+      if (s.patches[purpose.patch!]) ev("test-plan", { patch: purpose.patch!, text: (input.report as WriteTestPlanReport).testPlan.trim() });
+      break;
+    case "set-test-plan":
+      ev("test-plan-sent", { patch: purpose.patch!, revision: Number(purpose.reason!.split("\n")[0]), text: purpose.reason!.split("\n").slice(1).join("\n") });
+      break;
     case "revise-draft": {
       const draft = (input.report as ReviseBugDraftReport).draft;
       if (purpose.patch === "meta") ev("meta-bug", { bug: s.metaBug?.bug ?? null, draft });

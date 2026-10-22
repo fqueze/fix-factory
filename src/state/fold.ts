@@ -178,9 +178,17 @@ export function foldEvents(events: readonly Event[]): RequestState {
           pastShas: before && before.sha !== e.sha ? [...(before.pastShas ?? []), before.sha] : before?.pastShas,
           deps: [],
           replyDrafts: [],
+          ...(before?.testPlan ? { testPlan: before.testPlan } : {}),
+          ...(before?.testPlanSent ? { testPlanSent: before.testPlanSent } : {}),
         };
         break;
       }
+      case "test-plan":
+        if (s.patches[e.patch]) s.patches[e.patch].testPlan = e.text;
+        break;
+      case "test-plan-sent":
+        if (s.patches[e.patch]) s.patches[e.patch].testPlanSent = { revision: e.revision, text: e.text, t: e.t };
+        break;
       case "dep": {
         const list = (deps.get(e.dep.patch) ?? []).filter((d) => d.needs !== e.dep.needs);
         list.push(e.dep);

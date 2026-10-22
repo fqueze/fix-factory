@@ -230,6 +230,7 @@ export const COMMAND_LABELS: Record<Command["cmd"], string> = {
   "take-it": "take it",
   "hand-back": "close",
   "comment-fix": "comment on the fix",
+  "set-test-plan": "setting the test plan on Phabricator",
   "tell-factory": "message to the factory",
   "reply-recovery": "reply to the recovery plan",
   "start-now": "start now",

@@ -1152,3 +1152,21 @@ describe("linkify", () => {
     assert.match(out, /id=123456"[^>]*>bug 123456<\/a>\.$/);
   });
 });
+
+describe("test plan", () => {
+  it("is editable and set on the revision with a click; before submission it's copied", () => {
+    const r = structuredClone(get("r-20261005-newtab"));
+    r.patches["p-panel"].testPlan = "- Widened the race: 6/6, 0/20 with the fix.";
+    let row = rowOf(renderRequest(r, ctx, true).value, "patch-p-panel");
+    assert.match(row, /<h4>Test plan<\/h4><form class="cmd"[^>]*>.*<textarea name="text" id="test-plan-p-panel" required rows="2">- Widened the race: 6\/6, 0\/20 with the fix\.<\/textarea>/);
+    assert.ok(row.includes(cmd({ cmd: "set-test-plan", request: r.id, patch: "p-panel" })));
+    assert.match(row, /Set as D327083&#39;s test plan|Set as D327083's test plan/);
+    r.patches["p-panel"].testPlanSent = { revision: 327083, text: "older", t: "2026-10-16T08:00:00.000Z" };
+    row = rowOf(renderRequest(r, ctx, true).value, "patch-p-panel");
+    assert.match(row, /on D327083 since Oct 16, a newer draft below/);
+    delete r.patches["p-panel"].revision;
+    row = rowOf(renderRequest(r, ctx, true).value, "patch-p-panel");
+    assert.match(row, /data-copy="test-plan-p-panel"/);
+    assert.doesNotMatch(row, /set-test-plan/);
+  });
+});

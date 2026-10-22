@@ -1,4 +1,4 @@
-// Phabricator, read-only.
+// Phabricator: read-only, except for the test plan you set.
 //
 //   node src/cli/phab.ts poll <D-number...>
 //     → [{revision, phid, title, status, reviewers: [{name, status}], comments: [{id, author, file, line,
@@ -13,6 +13,9 @@
 //   node src/cli/phab.ts reviewers <file...> [--repo <checkout>]   (default: config.firefoxRepo)
 //     →{files, suggestions: [{name, source: "mots"|"herald"|"recent", blocking?, modules?, count?}]}
 //     from `./mach file-info reviewers --format json`, in the order mach suggests them (mots groups first).
+//
+//   node src/cli/phab.ts set-test-plan <D-number> --file <text file>
+//     → {revision, testPlan}: sets the revision's Test Plan field. The one write: run when you click its button.
 //
 //   node src/cli/phab.ts check-reviewers <name...>   ("#group" or user name, as in r=)
 //     → {unknown: [name...]}: those Phabricator doesn't know, which moz-phab would refuse.
@@ -139,6 +142,12 @@ export async function unknownReviewers(names: string[], conduit: Conduit = makeC
   return names.filter((n) => !known.has(bare(n)));
 }
 
+// The revision's Test Plan field, which Phabricator shows when it isn't empty.
+export async function setTestPlan(revision: number, text: string, conduit: Conduit = makeConduit()): Promise<{ revision: number; testPlan: string }> {
+  await conduit("differential.revision.edit", { objectIdentifier: `D${revision}`, transactions: [{ type: "testPlan", value: text }] });
+  return { revision, testPlan: text };
+}
+
 export async function poll(revisions: number[], conduit: Conduit = makeConduit()): Promise<PollResult[]> {
   const revs = await searchAll(conduit, "differential.revision.search", {
     constraints: { ids: revisions },
@@ -261,6 +270,12 @@ async function main() {
         }
         return poll(revisions);
       },
+      "set-test-plan": async (args, values) => {
+        if (args.length !== 1 || typeof values.file !== "string") throw new UsageError("usage: set-test-plan <D-number> --file <text file>");
+        const text = readFileSync(values.file, "utf8").trim();
+        if (values["dry-run"]) return { revision: parseRevision(args[0]), testPlan: text, dryRun: true };
+        return setTestPlan(parseRevision(args[0]), text);
+      },
       "check-reviewers": async (args) => {
         if (!args.length) throw new UsageError("usage: check-reviewers <name...>");
         return { unknown: await unknownReviewers(args) };
@@ -271,7 +286,7 @@ async function main() {
         return reviewers(args, repo);
       },
     },
-    { repo: { type: "string" } },
+    { repo: { type: "string" }, file: { type: "string" } },
   );
 }
 

@@ -5,7 +5,7 @@ import type { EventInput } from "../state/events.ts";
 import { canDismiss, canRetry, isPushJob, reviewLimitFlag } from "../state/flags.ts";
 import type { Command, FactoryConfig, ItemId, JobId, PlannedCommand, RequestId, RequestState } from "../types.ts";
 import { ANNOTATIONS_ITEM, authorJobsOf, CANCELLED, itemEpochOf, TERMINAL, resumeAuthorPlan } from "./next.ts";
-import { requestDir, sessionIdFor, slug, type JobPlan } from "./plan.ts";
+import { dataPath, requestDir, sessionIdFor, slug, type JobPlan } from "./plan.ts";
 import type { View } from "./view.ts";
 
 // An event of this command's request, without repeating the request.
@@ -200,6 +200,29 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
       const item = s.patches[c.patch]?.item;
       const error = item ? resume(item, "comment", `A comment on your fix:\n${c.text}\n\nAddress it by amending your commit, then end with the JSON report again. If you think it is wrong, don't do it: leave your commits as they are and say why in \`disagreement\`.`) : "this patch has no group, so no author to tell";
       done(!error, error);
+      break;
+    }
+    case "set-test-plan": {
+      // On your click only: the factory's one write to Phabricator.
+      const p = s.patches[c.patch];
+      if (p?.revision === undefined) {
+        done(false, "this patch has no revision yet");
+        break;
+      }
+      const file = dataPath(ctx.config, s.id, `test-plan-${c.patch}-${c.id}.txt`);
+      effects.push({
+        type: "start",
+        plan: {
+          purpose: { key: `set-test-plan:${c.patch}:${c.id}`, what: "set-test-plan", patch: c.patch, reason: `${p.revision}\n${c.text.trim()}` },
+          kind: "script",
+          name: "phab.ts set-test-plan",
+          ...(p.item ? { item: p.item } : {}),
+          cwd: requestDir(ctx.config, s.id),
+          files: [{ path: file, content: c.text.trim() + "\n" }],
+          cli: { tool: "phab.ts", args: ["set-test-plan", `D${p.revision}`, "--file", file] },
+        },
+      });
+      done(true);
       break;
     }
     case "poll-phab":

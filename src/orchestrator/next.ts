@@ -17,6 +17,7 @@ import type { ImportedCommit } from "../cli/stack/import.ts";
 import type { MessageEdit } from "../cli/stack/message.ts";
 import type { OrderOutput } from "../cli/stack/order.ts";
 import { expectedTests, type DryRunResult } from "../cli/try.ts";
+import { keptDir } from "../lib/kept.ts";
 import { REQUEST_STEPS } from "../server/commands.ts";
 import { COMMITS_CHANGED } from "../state/flags.ts";
 import { ANNOTATIONS_ITEM, lacksBug, needsMetaBug } from "../state/meta-bug.ts";
@@ -100,6 +101,8 @@ export const CANCELLED = "cancelled by you";
 // Jobs with an external side effect that a failure doesn't undo: a try push can fail after mach try
 // pushed (a Lando timeout), and a retry would push again. They come to you instead.
 const NO_RETRY = new Set(["push"]);
+// A patch whose code was accepted gets a test plan; a landed one no longer needs it.
+const TEST_PLAN_STATES = new Set<ItemState>(["reviewed", "in stack", "in try", "waiting for review", "addressing review comments", "fixed"]);
 
 // A fix of its own, not in the stack yet.
 const FIXING: ItemState[] = ["fix verified locally", "in critical review", "review findings", "reviewed"];
@@ -256,6 +259,7 @@ class Planner {
   run(): void {
     if (this.s.step === "done") {
       this.cleanup();
+      this.testPlans();
       return;
     }
     // Agents read CI's profiles with profiler-cli: one too old to load them has them guess. Nothing starts
@@ -283,6 +287,50 @@ class Planner {
     this.submitted();
     this.reviewComments();
     this.landing();
+    this.testPlans();
+  }
+
+  // Each accepted patch's test plan for its revision: what showed the cause, the reproduction's rates, the try runs.
+  // Written once the stack went through try (or the patch has a revision), again when its investigation changes or its
+  // request has new try results.
+  private testPlans(): void {
+    const verified = at(this.s.step) >= at("meta bug");
+    const results = Object.values(this.s.pushes)
+      .filter((p) => p.result !== undefined)
+      .map((p) => ({ purpose: p.purpose, rev: p.rev, url: p.url, result: p.result, summary: p.summary }));
+    for (const p of Object.values(this.s.patches)) {
+      const item = p.item === undefined ? undefined : this.s.items[p.item];
+      if (!item || !TEST_PLAN_STATES.has(item.state) || (!verified && p.revision === undefined)) continue;
+      const author = item.jobs.map((j) => this.s.jobs[j]).findLast((j) => j?.name === "investigate-and-fix");
+      const inv = item.investigation ?? null;
+      const key = `test-plan:${p.id}:${shortHash([JSON.stringify([inv, results])]).slice(0, 8)}`;
+      const investigationFile = dataPath(this.config, this.s.id, `test-plan-${p.id}-investigation.json`);
+      const pushesFile = dataPath(this.config, this.s.id, `test-plan-${p.id}-pushes.json`);
+      const notes = Object.values(inv?.files ?? {});
+      const dir = author?.cwd ?? p.worktree;
+      this.wantAgent(
+        key,
+        "test-plan",
+        "write-test-plan",
+        {
+          sha: p.sha,
+          title: p.title,
+          firefoxRepo: this.config.firefoxRepo,
+          investigationFile,
+          files: notes.length ? notes.map((f) => `${dir}/${f}`).join(", ") : "(none written)",
+          keptDir: keptDir(this.config.stateDir, basename(dir)),
+          pushesFile,
+        },
+        {
+          item: item.id,
+          files: [
+            { path: investigationFile, content: JSON.stringify({ tests: item.group.tests, failure: item.group.message, ...inv }, null, 2) + "\n" },
+            { path: pushesFile, content: JSON.stringify(results, null, 2) + "\n" },
+          ],
+          purpose: { patch: p.id },
+        },
+      );
+    }
   }
 
   // -------------------------------------------------------------------------
