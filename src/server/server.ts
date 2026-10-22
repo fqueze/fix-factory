@@ -11,6 +11,7 @@ import { HostCheck } from "./host-check.ts";
 import { commandsFromForm, validateCommand } from "./commands.ts";
 import { conversationOf, jobUrl, renderActivity, type Activity } from "./pages/activity.ts";
 import type { RenderContext } from "./pages/common.ts";
+import { readFeedback, renderFeedback } from "./pages/feedback.ts";
 import { renderMain, renderOverview, renderStrip } from "./pages/overview.ts";
 import { renderRequest } from "./pages/request.ts";
 import { buildRequestProfile } from "./request-profile.ts";
@@ -275,6 +276,14 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
     }
     if (path === "/fragments/main") {
       return send(res, 200, "text/html; charset=utf-8", renderMain(opts.state.listRequests(), ctx(req, url.searchParams.getAll("open"))).value);
+    }
+    if (path === "/feedback") {
+      const target = url.searchParams.get("target") ?? "factory";
+      const byTarget = readFeedback(opts.config.stateDir);
+      if (!(target in byTarget)) {
+        throw new HttpError(404, "unknown feedback target");
+      }
+      return send(res, 200, "text/html; charset=utf-8", renderFeedback(byTarget, opts.state.listRequests(), target as keyof typeof byTarget));
     }
     if (path === "/fragments/strip") {
       return send(res, 200, "text/html; charset=utf-8", renderStrip(opts.state.listRequests(), ctx(req)).value);
