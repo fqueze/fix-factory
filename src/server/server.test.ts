@@ -197,20 +197,25 @@ describe("Host check", () => {
     }
   });
 
-  it("links profiles to the local front end from this machine, to profiler.firefox.com from another", async () => {
+  it("links profiles to the factory's own front end, on the host the page was opened with", async () => {
+    const own = createFactoryServer({ config: { port: 4300, stackViewerCommand: [], worktreesDir: stateDir, firefoxRepo: stateDir, stateDir, maxAgents: 1, maxBuilds: 1, allowedHosts: ["factory.example"] }, state, sink });
+    await new Promise<void>((done) => own.listen(0, "127.0.0.1", done));
+    const url = `http://127.0.0.1:${(own.address() as AddressInfo).port}/`;
     const page = (host: string) =>
       new Promise<string>((done, fail) => {
-        const req = request(`${base}/`, { headers: { Host: host } }, (res) => {
+        const req = request(url, { headers: { Host: host } }, (res) => {
           let body = "";
           res.setEncoding("utf8").on("data", (d: string) => (body += d)).on("end", () => done(body));
         });
         req.on("error", fail);
         req.end();
       });
-    assert.match(await page("localhost:4300"), /href="http:\/\/localhost:4242\/from-url\//);
-    const remote = await page("factory.example");
-    assert.match(remote, /href="https:\/\/profiler\.firefox\.com\/from-url\/http%3A%2F%2Ffactory\.example/);
-    assert.doesNotMatch(remote, /localhost:4242/);
+    try {
+      assert.match(await page("localhost:4300"), /href="http:\/\/localhost:4301\/from-url\/http%3A%2F%2Flocalhost%3A4300/);
+      assert.match(await page("factory.example:4300"), /href="http:\/\/factory\.example:4301\/from-url\/http%3A%2F%2Ffactory\.example%3A4300/);
+    } finally {
+      await new Promise((done) => own.close(done));
+    }
   });
 
   it("refuses other names, on every route", async () => {

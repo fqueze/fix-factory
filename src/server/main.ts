@@ -8,6 +8,8 @@ import { resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { loadConfig } from "../config.ts";
 import type { FactoryConfig } from "../types.ts";
+import { profilerWeb } from "../cli/tools.ts";
+import { createProfilerServer } from "./profiler-web.ts";
 import { createFactoryServer, type FactoryServer } from "./server.ts";
 import { StateDirCommandSink, StateDirSource } from "./state-dir.ts";
 import { FixtureStateSource, type CommandSink } from "./state-source.ts";
@@ -55,6 +57,13 @@ export function main(args: string[]): FactoryServer {
   server.listen(config.port, () => {
     process.stderr.write(`fix-factory page on http://localhost:${(server.address() as AddressInfo).port}/ (${what})\n`);
   });
+  if (config.profilerOrigin === undefined) {
+    const profiler = createProfilerServer(profilerWeb(config.stateDir));
+    // The page's links can't name a port picked at random: one beside a fixed port only.
+    profiler.on("error", (e) => process.stderr.write(`profiler front end not served: ${e.message}\n`));
+    profiler.listen(config.profilerPort ?? (config.port === 0 ? 0 : config.port + 1));
+    server.on("close", () => profiler.close());
+  }
   return server;
 }
 

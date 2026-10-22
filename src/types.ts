@@ -25,7 +25,8 @@ export interface FactoryConfig {
   stackViewerCommand?: string[];
   mdViewerCommand?: string[]; // for the authors' evidence and reproduction files
   diffViewerCommand?: string[]; // for their widening patches
-  profilerOrigin: string; // e.g. "http://localhost:4242" (a local profiler front end), for request profiles
+  profilerOrigin?: string; // a profiler front end for the profile links; by default the factory's own, on profilerPort
+  profilerPort?: number; // where the page server serves it, by default port + 1
   bugzillaEmail?: string; // the bugs to file are assigned to it, ASSIGNED: you attach their patches
   maxWorktrees?: number; // group worktrees a request keeps at a time (default 4): each is ~6 GB
   metaBugBlocks?: number[]; // what a burndown's meta bug blocks, e.g. the flakiness tracker

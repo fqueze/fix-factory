@@ -25,7 +25,7 @@ import type { CommandInput } from "../state/commands.ts";
 import type { CommandSink, StateSource } from "./state-source.ts";
 
 export interface ServerOptions {
-  config: Pick<FactoryConfig, "port" | "profilerOrigin" | "stackViewerCommand" | "mdViewerCommand" | "diffViewerCommand" | "stateDir" | "maxAgents" | "maxBuilds" | "allowedHosts" | "bugzillaEmail" | "worktreesDir" | "firefoxRepo">;
+  config: Pick<FactoryConfig, "port" | "profilerOrigin" | "profilerPort" | "stackViewerCommand" | "mdViewerCommand" | "diffViewerCommand" | "stateDir" | "maxAgents" | "maxBuilds" | "allowedHosts" | "bugzillaEmail" | "worktreesDir" | "firefoxRepo">;
   state: StateSource;
   sink: CommandSink;
   now?: () => number;
@@ -71,8 +71,6 @@ class HttpError extends Error {
     this.status = status;
   }
 }
-
-const PUBLIC_PROFILER = "https://profiler.firefox.com";
 
 export function createFactoryServer(opts: ServerOptions): FactoryServer {
   const now = opts.now ?? Date.now;
@@ -208,16 +206,13 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
     return (fs.bavail * fs.bsize) / 1e9;
   }
 
-  // The local front end (profilerOrigin) when the page is looked at from this machine; from another one,
-  // localhost would be that machine's: profiler.firefox.com then.
+  // The factory's profiler front end, on the host the page was opened with: plain http like the page, so it
+  // can fetch the profiles from any machine (profiler.firefox.com couldn't, over https).
   function profilerOrigin(req: IncomingMessage): string {
     const host = new URL(`http://${req.headers.host ?? "localhost"}`).hostname;
-    return ["localhost", "127.0.0.1", "[::1]"].includes(host) ? opts.config.profilerOrigin : PUBLIC_PROFILER;
+    return opts.config.profilerOrigin ?? `http://${host}:${opts.config.profilerPort ?? opts.config.port + 1}`;
   }
-  // Either front end may fetch the profiles.
-  function allowedOrigin(req: IncomingMessage): string {
-    return req.headers.origin === PUBLIC_PROFILER ? PUBLIC_PROFILER : opts.config.profilerOrigin;
-  }
+  const allowedOrigin = profilerOrigin;
 
   function ctx(req: IncomingMessage, open?: string[]): RenderContext {
     return {

@@ -6,7 +6,8 @@
 //     profiler-cli built from the profiler repository's main: a clone under <stateDir>/tools/profiler is
 //     fetched, and when main moved, rebuilt (yarn install, yarn build-cli). Each build goes to its own
 //     directory, tools/profiler-cli/<rev>, and tools/bin/profiler-cli is switched to it at once, so a run
-//     using the previous one isn't broken mid-build. Agents find tools/bin first on PATH (run.ts).
+//     using the previous one isn't broken mid-build. Agents find tools/bin first on PATH (run.ts). The same
+//     revision's front end goes to tools/profiler-web/<rev>, tools/profiler-web/current the one served.
 //     One update at a time: requests starting together wait for each other.
 //     fx-tests from mozilla/aretestsfastyet's main, in tools/fx-tests/<rev>.
 //     md-viewer (with diff-viewer and stack-viewer, which the page runs) the same way, from its repository's main,
@@ -26,6 +27,11 @@ const FX_TESTS_REPO = "https://github.com/mozilla/aretestsfastyet.git";
 const MD_VIEWER_REPO = "https://github.com/fqueze/md-viewer.git";
 export const VIEWERS = ["md-viewer", "diff-viewer", "stack-viewer"] as const;
 const LOCK_STALE_MS = 30 * 60_000;
+
+// The current build of the profiler front end, which the page server serves (profiler-web.ts).
+export function profilerWeb(stateDir: string): string {
+  return join(stateDir, "tools", "profiler-web", "current");
+}
 
 export function toolsBin(stateDir: string): string {
   return join(stateDir, "tools", "bin");
@@ -105,16 +111,22 @@ async function profilerCli(tools: string, firefox: { repo: string; ref: string }
   const out = join(tools, "profiler-cli", rev);
   const bin = join(tools, "bin", "profiler-cli");
   let built = false;
-  if (!existsSync(join(out, "profiler-cli.js"))) {
-    log(`building profiler-cli at ${rev.slice(0, 12)}`);
+  const web = join(tools, "profiler-web", rev);
+  if (!existsSync(join(out, "profiler-cli.js")) || !existsSync(join(web, "index.html"))) {
+    log(`building profiler-cli and the profiler front end at ${rev.slice(0, 12)}`);
     await execOk(["git", "checkout", "--quiet", "--detach", rev], { cwd: repo });
     await execOk(["yarn", "install", "--frozen-lockfile", "--silent"], { cwd: repo, env: YARN_ENV });
     await execOk(["yarn", "build-cli"], { cwd: repo, env: YARN_ENV });
-    rmSync(`${out}.tmp`, { recursive: true, force: true });
-    cpSync(join(repo, "profiler-cli", "dist"), `${out}.tmp`, { recursive: true });
-    renameSync(`${out}.tmp`, out);
+    await execOk(["yarn", "build-prod"], { cwd: repo, env: YARN_ENV });
+    for (const [from, to] of [[join(repo, "profiler-cli", "dist"), out], [join(repo, "dist"), web]]) {
+      rmSync(`${to}.tmp`, { recursive: true, force: true });
+      cpSync(from, `${to}.tmp`, { recursive: true });
+      rmSync(to, { recursive: true, force: true });
+      renameSync(`${to}.tmp`, to);
+    }
     built = true;
   }
+  pointTo(profilerWeb(join(tools, "..")), web);
   // Node resolves the link, so the build finds its mappings.wasm next to it.
   pointTo(bin, join(out, "profiler-cli.js"));
   pointTo(join(tools, "bin", "pq"), join(out, "profiler-cli.js"));
