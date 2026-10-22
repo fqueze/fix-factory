@@ -9,8 +9,11 @@
 //   try_task_config.json, possibly chunk patterns ending in "*" (see warnings).
 //   taskCount counts --rebuild (a number, or a per-label dict). tryTaskConfig is
 //   the try_task_config of try_task_config.json. commits are the stack's shas,
-//   newest first. jobs: the expanded labels and their builds with their Treeherder platform,
-//   collection, group, symbol and tier, from mach's cached task set (left out when unreadable).
+//   newest first. jobs: the tasks the push would run and their builds, with their Treeherder platform,
+//   collection, group, symbol and tier, from the graph `mach taskgraph target-graph` makes with the push's
+//   parameters (the decision task's chunks, restricted to the test paths' manifests); when that fails, from
+//   mach's cached task set with a warning that it's approximate (left out when unreadable). dropped: the
+//   selected labels that graph doesn't have, which won't run.
 //   --pending is a JSON list of PendingPush ({push?, tryTaskConfig, commits}), e.g.
 //   the dry-run outputs of pending pushes with `push` added; duplicateOf is set (to
 //   `push`, or the list index) when one has the same try config and commits.
@@ -48,7 +51,7 @@ import { loadConfig } from "../config.ts";
 import { log, runCli, UsageError } from "../lib/cli.ts";
 import { COMMITS_CHANGED } from "../state/flags.ts";
 import { exec, type ExecResult } from "../lib/exec.ts";
-import { dryRunJobs, type TryJob } from "./task-set.ts";
+import { dryRunJobs, taskgraphJobs, type TryJob } from "./task-set.ts";
 
 export const TREEHERDER = "https://treeherder.mozilla.org";
 // The Lando instance mach uses by default (section lando-prod-new of .lando.ini).
@@ -135,10 +138,12 @@ export interface DryRunResult {
   commits: string[];
   warnings: string[];
   duplicateOf?: string;
-  jobs?: TryJob[]; // from mach's cached task set, when it could be read
+  jobs?: TryJob[]; // from the decision task's graph, else (approximate) from mach's cached task set, when it could be read
+  dropped?: string[]; // selected labels that the decision task's graph doesn't have: they won't run
 }
 
 export interface ParsedDryRun {
+  parameters: Record<string, unknown>; // the parameters of try_task_config.json, try_task_config among them
   tasks: string[];
   taskCount: number;
   tryTaskConfig: Record<string, unknown>;
@@ -156,7 +161,8 @@ export function parseDryRunOutput(stdout: string): ParsedDryRun {
     throw new Error(`no try_task_config.json in mach try output: ${stdout.trim().slice(-1000)}`);
   }
   const config = JSON.parse(stdout.slice(at + CONFIG_MARKER.length)) as { parameters?: { try_task_config?: Record<string, unknown> } };
-  const tryTaskConfig = config.parameters?.try_task_config ?? {};
+  const parameters = config.parameters ?? {};
+  const tryTaskConfig = parameters.try_task_config ?? {};
   const tasks = (tryTaskConfig.tasks as string[] | undefined) ?? [];
   const rebuild = (tryTaskConfig.rebuild as number | Record<string, number> | undefined) ?? 1;
   const taskCount = typeof rebuild === "object" ? tasks.reduce((n, t) => n + (rebuild[t] ?? 1), 0) : tasks.length * rebuild;
@@ -177,7 +183,7 @@ export function parseDryRunOutput(stdout: string): ParsedDryRun {
   if (tryTaskConfig.priority === "low") {
     warnings.push("--chemspill-priority needs the user's permission, for this push only.");
   }
-  return { tasks, taskCount, tryTaskConfig, warnings };
+  return { parameters, tasks, taskCount, tryTaskConfig, warnings };
 }
 
 // Same as mach's base_ref: commits of HEAD that no remote has.
@@ -188,9 +194,10 @@ export async function stackCommits(cwd: string, run = exec): Promise<string[]> {
 
 const NATIVE_FILE = /\.(c|cc|cpp|cxx|h|hh|hpp|m|mm|rs|idl|webidl)$|(^|\/)Cargo\.(toml|lock)$/;
 
-async function nativeFiles(cwd: string, run: typeof exec): Promise<string[]> {
+// The files the stack changes.
+async function stackFiles(cwd: string, run: typeof exec): Promise<string[]> {
   const out = await runOk(run, ["git", "log", "--name-only", "--format=", "HEAD", "--not", "--remotes"], cwd);
-  return [...new Set(out.split("\n").filter((f) => NATIVE_FILE.test(f)))];
+  return [...new Set(out.split("\n").filter(Boolean))].sort();
 }
 
 function canonicalJson(value: unknown): string {
@@ -232,8 +239,9 @@ export async function dryRun(cwd: string, args: string[], opts: { pending?: Pend
   if (commits.length === 0) {
     warnings.push("The stack has no commits that aren't on a remote: the push would only carry the try config.");
   }
+  const files = await stackFiles(cwd, run);
   if (parsed.tryTaskConfig["use-artifact-builds"]) {
-    const native = await nativeFiles(cwd, run);
+    const native = files.filter((f) => NATIVE_FILE.test(f));
     if (native.length > 0) {
       warnings.push(
         `Artifact push, but the stack changes native code (${native.slice(0, 5).join(", ")}${native.length > 5 ? ", …" : ""}): ` +
@@ -249,11 +257,29 @@ export async function dryRun(cwd: string, args: string[], opts: { pending?: Pend
     commits,
     warnings,
   };
-  const jobs = dryRunJobs(cwd, args, parsed.tryTaskConfig);
-  if (jobs) {
+  const chunkWarning = (w: string) => w.includes("labels are chunk patterns");
+  try {
+    const { jobs, dropped } = await taskgraphJobs(cwd, args, parsed.parameters, files, { exec: run });
     result.jobs = jobs;
-    // The chunks are known: the count isn't a lower bound anymore.
-    result.warnings = result.warnings.filter((w) => !w.includes("labels are chunk patterns"));
+    // The chunks are known.
+    result.warnings = result.warnings.filter((w) => !chunkWarning(w));
+    if (dropped.length > 0) {
+      result.dropped = dropped;
+      result.warnings.push(
+        `${dropped.length} selected labels won't run: the decision task's graph doesn't have them (e.g. no manifest of theirs holds the test paths): ` +
+          `${dropped.slice(0, 5).join(", ")}${dropped.length > 5 ? ", …" : ""}.`,
+      );
+    }
+  } catch (e) {
+    const jobs = dryRunJobs(cwd, args, parsed.tryTaskConfig);
+    if (jobs) {
+      result.jobs = jobs;
+      result.warnings = result.warnings.filter((w) => !chunkWarning(w));
+      result.warnings.push(
+        `Approximate job list: mach taskgraph failed (${(e as Error).message.slice(-300)}), so it comes from mach try's fast task set, ` +
+          "with default chunk counts and without the decision task's test path restriction: the push may run more or fewer chunks, and not every label.",
+      );
+    }
   }
   const duplicateOf = opts.pending ? findDuplicate(result, opts.pending) : undefined;
   if (duplicateOf !== undefined) {

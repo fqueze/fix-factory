@@ -1,12 +1,14 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import { UsageError } from "../lib/cli.ts";
 import type { ExecResult } from "../lib/exec.ts";
+import { fakeTaskSet } from "../../test/fixtures/try/task-set.ts";
+import { taskSetPath } from "./task-set.ts";
 import {
   checkTryArgs,
   dryRun,
@@ -48,11 +50,19 @@ function response(body: unknown, status = 200): FetchResponse {
   return { ok: status < 400, status, json: async () => body };
 }
 
-// A fake exec: mach returns the given dry-run fixture, git returns the stack.
-function fakeExec(machStdout: string, files = "") {
+// A fake exec: mach try returns the given dry-run fixture, mach taskgraph writes the given graph (or fails without
+// one), git returns the stack.
+function fakeExec(machStdout: string, files = "", graph?: string) {
   const calls: { cmd: string[]; input?: string }[] = [];
   const run = async (cmd: string[], opts: { input?: string } = {}): Promise<ExecResult> => {
     calls.push({ cmd, input: opts.input });
+    if (cmd.includes("taskgraph")) {
+      if (graph === undefined) {
+        return { code: 1, stdout: "", stderr: "Traceback: no graph" };
+      }
+      writeFileSync(cmd[cmd.indexOf("-o") + 1], graph);
+      return { code: 0, stdout: "", stderr: "" };
+    }
     if (cmd[0] === "timeout") {
       return { code: 0, stdout: machStdout, stderr: "" };
     }
@@ -130,6 +140,53 @@ test("dryRun puts --no-push right after the selector and reports the stack", asy
   assert.deepEqual(r.commits, COMMITS);
   assert.deepEqual(r.warnings, []);
   assert.equal(r.duplicateOf, undefined);
+});
+
+// The chunk patterns dry run, with the labels of a mochitest-plain push.
+function mochitestDryRun(tasks: string[]): string {
+  return text("dry-run-chunk-patterns.txt").replace('"test-linux2404-64/opt-xpcshell-*"', tasks.map((t) => JSON.stringify(t)).join(", "));
+}
+const MOCHITEST_TASKS = ["test-linux2404-64/debug-mochitest-plain-*", "test-linux2404-64/debug-mochitest-plain-gpu", "test-linux2404-64/debug-mochitest-plain-standalone-*"];
+
+test("dryRun gets the jobs from the decision task's graph, and tells the labels that won't run", async () => {
+  const graph = readFileSync(new URL("taskgraph-target-graph.json", FIXTURES), "utf8");
+  const { run, calls } = fakeExec(mochitestDryRun(MOCHITEST_TASKS), "dom/base/test/a.js\ndom/base/b.cpp\n", graph);
+  const r = await dryRun("/wt", ["fuzzy", "-q", "x"], { exec: run });
+  assert.deepEqual(r.jobs?.map((j) => j.label), [
+    "test-linux2404-64/debug-mochitest-plain", "build-linux64/debug", "test-linux2404-64/debug-mochitest-plain-standalone-1",
+    "test-linux2404-64/debug-mochitest-plain-standalone-2", "test-linux2404-64-shippable/opt-mochitest-plain-headless", "build-linux64-shippable/opt",
+  ]);
+  assert.deepEqual(r.dropped, ["test-linux2404-64/debug-mochitest-plain-gpu"]);
+  assert.equal(r.warnings.length, 1, "no chunk pattern warning");
+  assert.match(r.warnings[0], /1 selected labels won't run.*debug-mochitest-plain-gpu/);
+  const tg = calls.find((c) => c.cmd.includes("taskgraph"))!.cmd;
+  assert.deepEqual(tg.slice(3, 6), ["./mach", "taskgraph", "target-graph"]);
+});
+
+test("dryRun falls back on mach's task set when mach taskgraph fails, and says the jobs are approximate", async () => {
+  const state = mkdtempSync(join(tmpdir(), "ff-mozbuild-"));
+  const wt = mkdtempSync(join(tmpdir(), "ff-wt-"));
+  const { run } = fakeExec(text("dry-run-chunk-patterns.txt"));
+  const saved = process.env.MOZBUILD_STATE_PATH;
+  process.env.MOZBUILD_STATE_PATH = state;
+  try {
+    const none = await dryRun(wt, ["fuzzy", "-q", "x"], { exec: run });
+    assert.equal(none.jobs, undefined);
+    assert.match(none.warnings[0], /chunk patterns/, "the count from the labels stays a lower bound");
+    const file = taskSetPath(wt, false, state);
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(file, fakeTaskSet().replaceAll("debug-xpcshell", "opt-xpcshell"));
+    const r = await dryRun(wt, ["fuzzy", "-q", "x"], { exec: run });
+    assert.deepEqual(r.jobs?.map((j) => j.label), ["test-linux2404-64/opt-xpcshell-1", "build-linux64/debug", "test-linux2404-64/opt-xpcshell-2"]);
+    assert.equal(r.warnings.length, 1);
+    assert.match(r.warnings[0], /^Approximate job list: mach taskgraph failed \(.*Traceback: no graph\).*default chunk counts/);
+  } finally {
+    if (saved === undefined) {
+      delete process.env.MOZBUILD_STATE_PATH;
+    } else {
+      process.env.MOZBUILD_STATE_PATH = saved;
+    }
+  }
 });
 
 test("dryRun never runs mach with a -- in the arguments", async () => {

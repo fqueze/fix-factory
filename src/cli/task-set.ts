@@ -1,10 +1,12 @@
-// The tasks a try push would run, as Treeherder will show them, from the task set
-// that `mach try` cached for the worktree.
+// The tasks a try push would run, as Treeherder will show them: from the graph the decision task would make
+// (`mach taskgraph target-graph` with the push's parameters), or else from the task set that `mach try` cached
+// for the worktree, which has the default chunk counts: it's made without loading the test manifests.
 
 import { createHash } from "node:crypto";
-import { readFileSync, realpathSync } from "node:fs";
-import { homedir } from "node:os";
+import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import { basename, join } from "node:path";
+import { exec } from "../lib/exec.ts";
 
 export interface TryJob {
   label: string;
@@ -14,7 +16,7 @@ export interface TryJob {
   symbol: string;
   tier: number;
   build?: string; // the label of the build a test needs
-  artifact?: true; // a build that becomes an artifact build under use-artifact-builds
+  artifact?: true; // a build that becomes an artifact build under use-artifact-builds (from the task set: the graph says Ba already)
 }
 
 // mach's get_state_dir(specific_to_topsrcdir=True), then tryselect's cache.
@@ -49,65 +51,159 @@ function indexTasks(buf: Buffer): Map<string, [number, number]> {
 }
 
 interface Task {
-  attributes: { build_platform?: string; build_type?: string };
+  attributes: { build_platform?: string; build_type?: string; always_target?: boolean };
   dependencies: Record<string, string>;
   task: { extra?: { treeherder?: { machine: { platform: string }; collection: Record<string, boolean>; groupSymbol?: string; symbol: string; tier?: number; jobKind?: string } } };
 }
 
+// fromGraph: the task is from a graph made with the push's parameters, so its symbol is already Ba for an artifact build.
+function jobOf(label: string, t: Task, fromGraph: boolean): TryJob {
+  const th = t.task.extra!.treeherder!;
+  const artifact = !fromGraph && th.jobKind === "build" && ARTIFACT_JOBS.has(`${t.attributes.build_platform}-${t.attributes.build_type}`);
+  const build = t.dependencies.build;
+  return {
+    label, platform: th.machine.platform, collection: Object.keys(th.collection)[0], group: th.groupSymbol ?? "", symbol: th.symbol, tier: th.tier ?? 1,
+    ...(build ? { build } : {}), ...(artifact ? { artifact: true as const } : {}),
+  };
+}
+
+// The jobs of the labels, each followed by the build it needs when that isn't listed yet.
+function jobsWithBuilds(labels: string[], task: (label: string) => Task | undefined, fromGraph = false): TryJob[] {
+  const jobs = new Map<string, TryJob>();
+  for (const label of labels) {
+    const j = jobOf(label, task(label)!, fromGraph);
+    jobs.set(label, j);
+    const build = j.build && !jobs.has(j.build) && task(j.build);
+    if (build) {
+      jobs.set(j.build!, jobOf(j.build!, build, fromGraph));
+    }
+  }
+  return [...jobs.values()];
+}
+
 // Like gecko's _try_task_config: a pattern (label-*) is every label it has with a chunk number, or the label without one
-// when there is a single chunk. With test paths or a tag, only the first chunk runs: it runs them all.
-export function expandLabels(selected: string[], labels: Iterable<string>, env: Record<string, string> = {}): string[] {
+// when there is a single chunk. The decision task may then drop chunks; only its graph tells.
+export function expandLabels(selected: string[], labels: Iterable<string>): string[] {
   const all = [...labels];
   const out = new Set(selected.filter((t) => !t.endsWith("-*")));
-  const firstOnly = "MOZHARNESS_TEST_PATHS" in env || "MOZHARNESS_TEST_TAG" in env;
   for (const pattern of selected.filter((t) => t.endsWith("-*"))) {
     const prefix = pattern.slice(0, -1);
     let found = all.filter((l) => l.startsWith(prefix) && /^\d+$/.test(l.slice(prefix.length)));
     if (!found.length && all.includes(prefix.slice(0, -1))) {
       found = [prefix.slice(0, -1)];
     }
-    for (const l of found) {
-      if (!firstOnly || l.endsWith("-1") || !/-\d+$/.test(l)) {
-        out.add(l);
-      }
-    }
+    found.forEach((l) => out.add(l));
   }
   return [...out];
 }
 
-// The jobs of the selected labels, and the builds they need. Throws when the file can't be read or parsed.
-export function readJobs(file: string, selected: string[], env: Record<string, string> = {}): TryJob[] {
+function readTaskSet(file: string) {
   const buf = readFileSync(file);
   const index = indexTasks(buf);
-  const task = (label: string): Task => {
-    const [start, end] = index.get(label)!;
-    return JSON.parse(buf.toString("utf8", start, end)) as Task;
+  return {
+    labels: () => index.keys(),
+    task: (label: string): Task | undefined => {
+      const at = index.get(label);
+      return at && (JSON.parse(buf.toString("utf8", at[0], at[1])) as Task);
+    },
+    // Each task starts with {"kind":"
+    kind: (label: string): string | undefined => {
+      const at = index.get(label);
+      return at && buf.toString("utf8", at[0] + 9, buf.indexOf(0x22, at[0] + 9));
+    },
   };
-  const job = (label: string, t: Task): TryJob => {
-    const th = t.task.extra!.treeherder!;
-    const artifact = th.jobKind === "build" && ARTIFACT_JOBS.has(`${t.attributes.build_platform}-${t.attributes.build_type}`);
-    const build = t.dependencies.build;
-    return {
-      label, platform: th.machine.platform, collection: Object.keys(th.collection)[0], group: th.groupSymbol ?? "", symbol: th.symbol, tier: th.tier ?? 1,
-      ...(build ? { build } : {}), ...(artifact ? { artifact: true as const } : {}),
-    };
-  };
-  const jobs = new Map<string, TryJob>();
-  for (const label of expandLabels(selected, index.keys(), env).filter((l) => index.has(l))) {
-    const j = job(label, task(label));
-    jobs.set(label, j);
-    if (j.build && !jobs.has(j.build) && index.has(j.build)) {
-      jobs.set(j.build, job(j.build, task(j.build)));
-    }
-  }
-  return [...jobs.values()];
+}
+
+// The jobs of the selected labels, and the builds they need. Throws when the file can't be read or parsed.
+export function readJobs(file: string, selected: string[]): TryJob[] {
+  const set = readTaskSet(file);
+  return jobsWithBuilds(expandLabels(selected, set.labels()).filter((l) => set.task(l)), set.task);
+}
+
+// The kinds of the selected labels, for mach taskgraph to generate only those (and what they depend on).
+export function readKinds(file: string, selected: string[]): string[] {
+  const set = readTaskSet(file);
+  return [...new Set(expandLabels(selected, set.labels()).flatMap((l) => set.kind(l) ?? []))].sort();
 }
 
 // The jobs of a dry run in a worktree, or undefined when mach's cache of its task set is missing or unreadable.
 export function dryRunJobs(cwd: string, args: string[], tryTaskConfig: Record<string, unknown>, stateDir?: string): TryJob[] | undefined {
   try {
-    return readJobs(taskSetPath(cwd, args.includes("--full"), stateDir), (tryTaskConfig.tasks as string[] | undefined) ?? [], tryTaskConfig.env as Record<string, string> | undefined);
+    return readJobs(taskSetPath(cwd, args.includes("--full"), stateDir), (tryTaskConfig.tasks as string[] | undefined) ?? []);
   } catch {
     return undefined;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// The decision task's graph
+
+export type TaskGraph = Record<string, Task>;
+
+// Whether the graph's label is what the selected label asked for: one of the chunks of a pattern, the label itself, or
+// another chunk count of the same task (the decision task renumbers the chunks that no longer exist).
+function answers(selected: string, label: string): boolean {
+  const base = selected.endsWith("-*") ? selected.slice(0, -2) : selected.replace(/-\d+$/, "");
+  return label === selected || label === base || (label.startsWith(`${base}-`) && /^\d+$/.test(label.slice(base.length + 1)));
+}
+
+// The jobs of a target graph (`mach taskgraph target-graph --json`): its target tasks, which nothing else in it
+// needs, without those every try push adds (always_target docker images, which are cached), and the builds they
+// need. dropped: the selected labels with nothing in the graph, which won't run.
+export function graphJobs(graph: TaskGraph, selected: string[]): { jobs: TryJob[]; dropped: string[] } {
+  const needed = new Set(Object.values(graph).flatMap((t) => Object.values(t.dependencies)));
+  const exact = new Set(selected);
+  const targets = Object.keys(graph).filter((l) => exact.has(l) || (!needed.has(l) && !graph[l].attributes.always_target));
+  return {
+    jobs: jobsWithBuilds(targets, (l) => graph[l], true),
+    dropped: selected.filter((s) => !targets.some((l) => answers(s, l))),
+  };
+}
+
+// The parameters the decision task would have for the push: mach try's, over the try project's, with the files
+// the stack changes (which chunk counts of test-verify depend on).
+export function decisionParameters(parameters: Record<string, unknown>, filesChanged: string[]): Record<string, unknown> {
+  return {
+    project: "try",
+    level: "1",
+    target_tasks_method: "try_tasks",
+    enable_always_target: true,
+    release_type: "nightly",
+    files_changed: filesChanged,
+    ...parameters,
+    try_mode: "try_task_config",
+  };
+}
+
+// The jobs of a dry run from the graph the decision task would make, with its manifests and chunks. Takes 10 to
+// 20 s. Throws when mach fails.
+export async function taskgraphJobs(
+  cwd: string,
+  args: string[],
+  parameters: Record<string, unknown>,
+  filesChanged: string[],
+  opts: { exec?: typeof exec; stateDir?: string; timeoutS?: number } = {},
+): Promise<{ jobs: TryJob[]; dropped: string[] }> {
+  const selected = ((parameters.try_task_config as Record<string, unknown> | undefined)?.tasks as string[] | undefined) ?? [];
+  let kinds: string[] = [];
+  try {
+    kinds = readKinds(taskSetPath(cwd, args.includes("--full"), opts.stateDir), selected);
+  } catch {
+    // Without mach's cache, every kind: slower, same graph.
+  }
+  const dir = mkdtempSync(join(tmpdir(), "ff-taskgraph-"));
+  try {
+    const params = join(dir, "parameters.json");
+    const out = join(dir, "target-graph.json");
+    writeFileSync(params, JSON.stringify(decisionParameters(parameters, filesChanged)));
+    const timeoutS = String(opts.timeoutS ?? 600);
+    const cmd = ["timeout", "--kill-after=30", timeoutS, "./mach", "taskgraph", "target-graph", "-p", params, ...kinds.flatMap((k) => ["-k", k]), "--json", "-o", out];
+    const r = await (opts.exec ?? exec)(cmd, { cwd });
+    if (r.code !== 0) {
+      throw new Error(`mach taskgraph target-graph exited with ${r.code}: ${(r.stdout + r.stderr).trim().slice(-1000)}`);
+    }
+    return graphJobs(JSON.parse(readFileSync(out, "utf8")) as TaskGraph, selected);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
   }
 }

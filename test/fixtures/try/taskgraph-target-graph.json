@@ -1,0 +1,265 @@
+{
+  "test-linux2404-64/debug-mochitest-plain": {
+    "kind": "mochitest",
+    "label": "test-linux2404-64/debug-mochitest-plain",
+    "attributes": {
+      "build_platform": "linux64",
+      "build_type": "debug",
+      "unittest_suite": "mochitest-plain",
+      "test-manifests-restricted": true,
+      "always_target": false
+    },
+    "dependencies": {
+      "build": "build-linux64/debug",
+      "docker-image": "docker-image-ubuntu2404-test",
+      "toolchain-linux64-uv": "toolchain-linux64-uv"
+    },
+    "task": {
+      "extra": {
+        "treeherder": {
+          "collection": {
+            "debug": true
+          },
+          "groupName": "Mochitests",
+          "groupSymbol": "M",
+          "jobKind": "test",
+          "machine": {
+            "platform": "linux2404-64"
+          },
+          "symbol": "1",
+          "tier": 1
+        }
+      }
+    }
+  },
+  "test-linux2404-64/debug-mochitest-plain-standalone-1": {
+    "kind": "mochitest",
+    "label": "test-linux2404-64/debug-mochitest-plain-standalone-1",
+    "attributes": {
+      "build_platform": "linux64",
+      "build_type": "debug",
+      "unittest_suite": "mochitest-plain",
+      "test-manifests-restricted": true,
+      "always_target": false
+    },
+    "dependencies": {
+      "build": "build-linux64/debug",
+      "docker-image": "docker-image-ubuntu2404-test",
+      "toolchain-linux64-uv": "toolchain-linux64-uv"
+    },
+    "task": {
+      "extra": {
+        "treeherder": {
+          "collection": {
+            "debug": true
+          },
+          "groupName": "Mochitest with a browser restart between every test",
+          "groupSymbol": "M-sa",
+          "jobKind": "test",
+          "machine": {
+            "platform": "linux2404-64"
+          },
+          "symbol": "1",
+          "tier": 1
+        }
+      }
+    }
+  },
+  "test-linux2404-64/debug-mochitest-plain-standalone-2": {
+    "kind": "mochitest",
+    "label": "test-linux2404-64/debug-mochitest-plain-standalone-2",
+    "attributes": {
+      "build_platform": "linux64",
+      "build_type": "debug",
+      "unittest_suite": "mochitest-plain",
+      "test-manifests-restricted": true,
+      "always_target": false
+    },
+    "dependencies": {
+      "build": "build-linux64/debug",
+      "docker-image": "docker-image-ubuntu2404-test",
+      "toolchain-linux64-uv": "toolchain-linux64-uv"
+    },
+    "task": {
+      "extra": {
+        "treeherder": {
+          "collection": {
+            "debug": true
+          },
+          "groupName": "Mochitest with a browser restart between every test",
+          "groupSymbol": "M-sa",
+          "jobKind": "test",
+          "machine": {
+            "platform": "linux2404-64"
+          },
+          "symbol": "2",
+          "tier": 1
+        }
+      }
+    }
+  },
+  "test-linux2404-64-shippable/opt-mochitest-plain-headless": {
+    "kind": "mochitest",
+    "label": "test-linux2404-64-shippable/opt-mochitest-plain-headless",
+    "attributes": {
+      "build_platform": "linux64-shippable",
+      "build_type": "opt",
+      "unittest_suite": "mochitest-plain",
+      "test-manifests-restricted": true,
+      "always_target": false
+    },
+    "dependencies": {
+      "build": "build-linux64-shippable/opt",
+      "docker-image": "docker-image-ubuntu2404-test",
+      "toolchain-linux64-uv": "toolchain-linux64-uv"
+    },
+    "task": {
+      "extra": {
+        "treeherder": {
+          "collection": {
+            "opt": true
+          },
+          "groupName": "Mochitests without a window",
+          "groupSymbol": "M-headless",
+          "jobKind": "test",
+          "machine": {
+            "platform": "linux2404-64-shippable"
+          },
+          "symbol": "1",
+          "tier": 2
+        }
+      }
+    }
+  },
+  "build-linux64/debug": {
+    "kind": "build",
+    "label": "build-linux64/debug",
+    "attributes": {
+      "build_platform": "linux64",
+      "build_type": "debug",
+      "always_target": false
+    },
+    "dependencies": {
+      "toolchain-linux64-uv": "toolchain-linux64-uv"
+    },
+    "task": {
+      "extra": {
+        "treeherder": {
+          "collection": {
+            "debug": true
+          },
+          "jobKind": "build",
+          "machine": {
+            "platform": "linux64"
+          },
+          "symbol": "Ba",
+          "tier": 1
+        }
+      }
+    }
+  },
+  "build-linux64-shippable/opt": {
+    "kind": "build",
+    "label": "build-linux64-shippable/opt",
+    "attributes": {
+      "build_platform": "linux64-shippable",
+      "build_type": "opt",
+      "always_target": false
+    },
+    "dependencies": {
+      "toolchain-linux64-uv": "toolchain-linux64-uv"
+    },
+    "task": {
+      "extra": {
+        "treeherder": {
+          "collection": {
+            "opt": true
+          },
+          "groupName": "Profile-guided optimization builds",
+          "groupSymbol": "Bpgo",
+          "jobKind": "build",
+          "machine": {
+            "platform": "linux64-shippable"
+          },
+          "symbol": "Ba",
+          "tier": 1
+        }
+      }
+    }
+  },
+  "docker-image-ubuntu2404-test": {
+    "kind": "docker-image",
+    "label": "docker-image-ubuntu2404-test",
+    "attributes": {
+      "always_target": true
+    },
+    "dependencies": {},
+    "task": {
+      "extra": {
+        "treeherder": {
+          "collection": {
+            "opt": true
+          },
+          "groupName": "Docker Image Builds",
+          "groupSymbol": "I",
+          "jobKind": "other",
+          "machine": {
+            "platform": "taskcluster-images"
+          },
+          "symbol": "ub24-test",
+          "tier": 1
+        }
+      }
+    }
+  },
+  "docker-image-lint": {
+    "kind": "docker-image",
+    "label": "docker-image-lint",
+    "attributes": {
+      "always_target": true
+    },
+    "dependencies": {},
+    "task": {
+      "extra": {
+        "treeherder": {
+          "collection": {
+            "opt": true
+          },
+          "groupName": "Docker Image Builds",
+          "groupSymbol": "I",
+          "jobKind": "other",
+          "machine": {
+            "platform": "taskcluster-images"
+          },
+          "symbol": "lnt",
+          "tier": 1
+        }
+      }
+    }
+  },
+  "toolchain-linux64-uv": {
+    "kind": "toolchain",
+    "label": "toolchain-linux64-uv",
+    "attributes": {
+      "always_target": false
+    },
+    "dependencies": {},
+    "task": {
+      "extra": {
+        "treeherder": {
+          "collection": {
+            "opt": true
+          },
+          "groupName": "Toolchain builds for Linux 64-bits",
+          "groupSymbol": "TL",
+          "jobKind": "build",
+          "machine": {
+            "platform": "toolchains"
+          },
+          "symbol": "uv",
+          "tier": 1
+        }
+      }
+    }
+  }
+}
