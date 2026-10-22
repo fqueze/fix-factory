@@ -2194,7 +2194,7 @@ describe("9. review comments", () => {
     const key = sc.view().jobs.find((j) => !j.end && j.purpose.key.startsWith("test-plan:p-test-a:"))!.purpose.key;
     const plan = sc.plan(key);
     assert.equal(plan.name, "write-test-plan");
-    assert.equal(plan.agent?.vars.firefoxRepo, config.firefoxRepo);
+    assert.equal(plan.agent?.vars?.firefoxRepo, config.firefoxRepo);
     assert.deepEqual(plan.files?.map((f) => f.path.split("/").pop()), ["test-plan-p-test-a-investigation.json", "test-plan-p-test-a-pushes.json"]);
     sc.complete(key, { report: { testPlan: "- Reproduced by widening the race: 6/6 failures, 0/20 with the fix.\n- Green on try.\n", feedback: [] } });
     assert.equal(sc.state().patches["p-test-a"].testPlan, "- Reproduced by widening the race: 6/6 failures, 0/20 with the fix.\n- Green on try.");
