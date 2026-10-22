@@ -2,12 +2,13 @@
 //
 //   node src/cli/tools.ts update
 //     → {profilerCli: {rev, version, built, path, supported: {gecko, processed}, made: {gecko, processed}, ciProfilerRev},
-//        mdViewer: {rev, built}}
+//        fxTests: {rev, built}, mdViewer: {rev, built}}
 //     profiler-cli built from the profiler repository's main: a clone under <stateDir>/tools/profiler is
 //     fetched, and when main moved, rebuilt (yarn install, yarn build-cli). Each build goes to its own
 //     directory, tools/profiler-cli/<rev>, and tools/bin/profiler-cli is switched to it at once, so a run
 //     using the previous one isn't broken mid-build. Agents find tools/bin first on PATH (run.ts).
 //     One update at a time: requests starting together wait for each other.
+//     fx-tests from mozilla/aretestsfastyet's main, in tools/fx-tests/<rev>.
 //     md-viewer (with diff-viewer and stack-viewer, which the page runs) the same way, from its repository's main,
 //     in tools/md-viewer-at/<rev>.
 //     Then the profile versions it supports are compared with those Firefox's CI makes (see profileVersions):
@@ -21,6 +22,7 @@ import { exec, execOk } from "../lib/exec.ts";
 import { loadConfig } from "../config.ts";
 
 const PROFILER_REPO = "https://github.com/firefox-devtools/profiler.git";
+const FX_TESTS_REPO = "https://github.com/mozilla/aretestsfastyet.git";
 const MD_VIEWER_REPO = "https://github.com/fqueze/md-viewer.git";
 export const VIEWERS = ["md-viewer", "diff-viewer", "stack-viewer"] as const;
 const LOCK_STALE_MS = 30 * 60_000;
@@ -125,6 +127,23 @@ async function profilerCli(tools: string, firefox: { repo: string; ref: string }
   return { rev, version, built, path: bin, ...versions };
 }
 
+// fx-tests: its repository commits the bundle, which reads its docs.
+async function fxTests(tools: string) {
+  const repo = join(tools, "aretestsfastyet");
+  const rev = await fetched(FX_TESTS_REPO, repo);
+  const out = join(tools, "fx-tests", rev);
+  let built = false;
+  if (!existsSync(out)) {
+    await execOk(["git", "checkout", "--quiet", "--detach", rev], { cwd: repo });
+    rmSync(`${out}.tmp`, { recursive: true, force: true });
+    for (const dir of ["dist", "docs"]) cpSync(join(repo, dir), join(`${out}.tmp`, dir), { recursive: true });
+    renameSync(`${out}.tmp`, out);
+    built = true;
+  }
+  pointTo(join(tools, "bin", "fx-tests"), join(out, "dist", "fx-tests.js"));
+  return { rev, built };
+}
+
 // md-viewer, diff-viewer and stack-viewer, for the page: a checkout per revision with its node_modules.
 async function mdViewer(tools: string) {
   const repo = join(tools, "md-viewer");
@@ -146,7 +165,7 @@ async function mdViewer(tools: string) {
 export async function update(stateDir: string, firefox: { repo: string; ref: string }) {
   const tools = join(stateDir, "tools");
   mkdirSync(join(tools, "bin"), { recursive: true });
-  return locked(join(tools, "update.lock"), async () => ({ profilerCli: await profilerCli(tools, firefox), mdViewer: await mdViewer(tools) }));
+  return locked(join(tools, "update.lock"), async () => ({ profilerCli: await profilerCli(tools, firefox), fxTests: await fxTests(tools), mdViewer: await mdViewer(tools) }));
 }
 
 // The viewers' commands the page runs, unless the config names others.

@@ -197,6 +197,22 @@ describe("Host check", () => {
     }
   });
 
+  it("links profiles to the local front end from this machine, to profiler.firefox.com from another", async () => {
+    const page = (host: string) =>
+      new Promise<string>((done, fail) => {
+        const req = request(`${base}/`, { headers: { Host: host } }, (res) => {
+          let body = "";
+          res.setEncoding("utf8").on("data", (d: string) => (body += d)).on("end", () => done(body));
+        });
+        req.on("error", fail);
+        req.end();
+      });
+    assert.match(await page("localhost:4300"), /href="http:\/\/localhost:4242\/from-url\//);
+    const remote = await page("factory.example");
+    assert.match(remote, /href="https:\/\/profiler\.firefox\.com\/from-url\/http%3A%2F%2Ffactory\.example/);
+    assert.doesNotMatch(remote, /localhost:4242/);
+  });
+
   it("refuses other names, on every route", async () => {
     for (const host of ["evil.example", "buildbox.evil.example", "localhost.evil.example:4300", "1.2.3.4.evil.example", "127.0.0.1.nip.io"]) {
       assert.equal(await get(host), 421, host);

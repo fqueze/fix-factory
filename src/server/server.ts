@@ -72,6 +72,8 @@ class HttpError extends Error {
   }
 }
 
+const PUBLIC_PROFILER = "https://profiler.firefox.com";
+
 export function createFactoryServer(opts: ServerOptions): FactoryServer {
   const now = opts.now ?? Date.now;
   const homeDir = opts.homeDir ?? homedir();
@@ -168,7 +170,7 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
       turns: conversationOf(log),
       summary: parseStreamJson(log),
       transcript,
-      profileUrl: transcript && loadProfiler() ? `${opts.config.profilerOrigin}/from-url/${encodeURIComponent(api)}?thread=0` : undefined,
+      profileUrl: transcript && loadProfiler() ? `${profilerOrigin(req)}/from-url/${encodeURIComponent(api)}?thread=0` : undefined,
     };
   }
 
@@ -206,9 +208,20 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
     return (fs.bavail * fs.bsize) / 1e9;
   }
 
+  // The local front end (profilerOrigin) when the page is looked at from this machine; from another one,
+  // localhost would be that machine's: profiler.firefox.com then.
+  function profilerOrigin(req: IncomingMessage): string {
+    const host = new URL(`http://${req.headers.host ?? "localhost"}`).hostname;
+    return ["localhost", "127.0.0.1", "[::1]"].includes(host) ? opts.config.profilerOrigin : PUBLIC_PROFILER;
+  }
+  // Either front end may fetch the profiles.
+  function allowedOrigin(req: IncomingMessage): string {
+    return req.headers.origin === PUBLIC_PROFILER ? PUBLIC_PROFILER : opts.config.profilerOrigin;
+  }
+
   function ctx(req: IncomingMessage, open?: string[]): RenderContext {
     return {
-      profilerOrigin: opts.config.profilerOrigin,
+      profilerOrigin: profilerOrigin(req),
       // The profiler front end fetches the profile from the browser, so it needs the
       // address the browser used, not the interface the server listens on.
       baseUrl: `http://${req.headers.host ?? `localhost:${opts.config.port}`}`,
@@ -243,7 +256,7 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
     }
 
     if (method === "OPTIONS" && path.startsWith("/api/requests/")) {
-      res.writeHead(204, { "Access-Control-Allow-Origin": opts.config.profilerOrigin, "Access-Control-Allow-Headers": "*", "Access-Control-Max-Age": "86400" });
+      res.writeHead(204, { "Access-Control-Allow-Origin": allowedOrigin(req), "Access-Control-Allow-Headers": "*", "Access-Control-Max-Age": "86400" });
       res.end();
       return;
     }
@@ -307,7 +320,7 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
       res.writeHead(200, {
         "Content-Type": "application/json; charset=utf-8",
         "Content-Length": body.length,
-        "Access-Control-Allow-Origin": opts.config.profilerOrigin,
+        "Access-Control-Allow-Origin": allowedOrigin(req),
       });
       res.end(method === "HEAD" ? undefined : body);
       return;
@@ -330,7 +343,7 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
           throw new HttpError(404, `no ${m[3]} for ${id}`);
         }
         const body = readFileSync(file);
-        res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Content-Length": body.length, "Access-Control-Allow-Origin": opts.config.profilerOrigin });
+        res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Content-Length": body.length, "Access-Control-Allow-Origin": allowedOrigin(req) });
         res.end(method === "HEAD" ? undefined : body);
         return;
       }
@@ -349,7 +362,7 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
         throw new HttpError(404, "claude-profiler isn't installed");
       }
       const body = Buffer.from(JSON.stringify(profiler.createFirefoxProfile(profiler.readJsonlFile(transcript))), "utf8");
-      res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Content-Length": body.length, "Access-Control-Allow-Origin": opts.config.profilerOrigin });
+      res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Content-Length": body.length, "Access-Control-Allow-Origin": allowedOrigin(req) });
       res.end(method === "HEAD" ? undefined : body);
       return;
     }

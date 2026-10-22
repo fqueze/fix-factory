@@ -8,8 +8,9 @@
 // --dry-run (or "dryRun" in the config): starts no agents, and passes --dry-run to every CLI,
 // which then refuses try pushes and Phabricator or Bugzilla writes.
 import { existsSync, mkdirSync, readFileSync, watch, writeFileSync, type FSWatcher } from "node:fs";
-import { join, resolve } from "node:path";
+import { delimiter, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
+import { toolsBin } from "../cli/tools.ts";
 import { loadConfig } from "../config.ts";
 import { execOk } from "../lib/exec.ts";
 import { processNewCommands, readCommands } from "../state/commands.ts";
@@ -390,6 +391,8 @@ if (import.meta.main) {
   const { values } = parseArgs({ options: { "dry-run": { type: "boolean" } } });
   const configPath = resolve(process.env.FACTORY_CONFIG ?? "factory.config.json");
   const config = loadConfig(configPath);
+  // The factory's own tools (tools.ts update) for its scripts too: failures.ts runs fx-tests.
+  process.env.PATH = `${toolsBin(config.stateDir)}${delimiter}${process.env.PATH ?? ""}`;
   const factoryRoot = resolve(import.meta.dirname, "..", "..");
   const codeVersion = (await execOk(["git", "rev-parse", "HEAD"], { cwd: factoryRoot })).trim();
   const o = new Orchestrator({ config, configPath, codeVersion, factoryRoot, dryRun: values["dry-run"] ?? config.dryRun });
