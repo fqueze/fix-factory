@@ -46,6 +46,9 @@ export class Scenario {
 
   constructor(kind: RequestKind, fields: { folder?: string; rev?: string; text?: string } = {}) {
     this.add({ type: "request-created", request: ID, kind, text: fields.text ?? "", ...fields });
+    // The tools check every request starts with, passed.
+    this.add({ type: "job-started", request: ID, job: "j-tools", kind: "script", name: "tools.ts update", pid: 1, pidStartTime: 1, cmd: ["tools.ts", "update"], cwd: "/state", codeVersion: "test", purpose: { key: "tools:v1", what: "tools" } } as EventInput);
+    this.add({ type: "job-finished", request: ID, job: "j-tools", exitCode: 0, durationMs: 1 });
   }
 
   add(e: EventInput): void {

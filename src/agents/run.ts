@@ -4,6 +4,7 @@
 import { createHash } from "node:crypto";
 import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { toolsBin } from "../cli/tools.ts";
 import type { FactoryConfig, Feedback, JobId } from "../types.ts";
 
 // ---------------------------------------------------------------------------
@@ -44,12 +45,16 @@ export type AgentCommandOptions = {
 // refuses any push: an instruction alone isn't enough. Agents never need ssh: without your ssh-agent, Claude
 // Code's own ssh probes (ssh -T -o BatchMode=yes…) can't make your keyring ask for the key.
 // It reads the one-push allowances you give (allow-push/<session> in the state directory).
+// The SessionStart hook puts the factory's own tools (tools.ts update) first on the PATH of the agent's commands.
 // The hook command is a shell line; paths may have spaces.
 const shellQuote = (s: string) => `'${s.replaceAll("'", "'\\''")}'`;
 const agentSettings = (stateDir: string) =>
   JSON.stringify({
     env: { BASH_DEFAULT_TIMEOUT_MS: "7200000", BASH_MAX_TIMEOUT_MS: "7200000", SSH_AUTH_SOCK: "", CLAUDE_CODE_PLUGIN_PREFER_HTTPS: "1" },
-    hooks: { PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: [process.execPath, join(import.meta.dirname, "no-push.ts"), stateDir].map(shellQuote).join(" ") }] }] },
+    hooks: {
+      PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: [process.execPath, join(import.meta.dirname, "no-push.ts"), stateDir].map(shellQuote).join(" ") }] }],
+      SessionStart: [{ hooks: [{ type: "command", command: `echo ${shellQuote(`export PATH=${shellQuote(toolsBin(stateDir))}:"$PATH"`)} >> "$CLAUDE_ENV_FILE"` }] }],
+    },
   });
 
 export function buildAgentCommand(config: Pick<FactoryConfig, "claudeCommand" | "stateDir">, opts: AgentCommandOptions): string[] {

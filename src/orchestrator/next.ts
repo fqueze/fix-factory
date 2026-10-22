@@ -258,6 +258,10 @@ class Planner {
       this.cleanup();
       return;
     }
+    // Agents read CI's profiles with profiler-cli: one too old to load them has them guess. Nothing starts
+    // before the tools are checked (and updated) for the request; a failed check is a flag to retry.
+    // Routing a request needs none.
+    if (this.s.kind !== "unrouted" && !this.want("tools:v1", () => this.cli("tools", "tools.ts", ["update"]))) return;
     this.pruneWorktrees();
     this.computeStacks();
     this.staleFileBugs();

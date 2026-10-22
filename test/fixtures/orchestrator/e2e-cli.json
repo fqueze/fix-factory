@@ -1,4 +1,5 @@
 [
+  { "match": "^tools\\.ts update", "out": {} },
   {
     "match": "^try\\.ts watch abcdef123456",
     "lines": [

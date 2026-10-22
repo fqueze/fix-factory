@@ -34,6 +34,7 @@ jobs/<jobId>/pid.json             # {pid, pidStartTime}, written when the job st
 jobs/<jobId>/exit.json            # {exitCode, endedAt}, written by the wrapper when the job ends
 feedback/<target>.md              # agent feedback, one file per Feedback.target
 kept/<worktree>/artifacts/...      # a removed worktree's artifacts/ (files over 20 MB listed in skipped.txt); its commits stay as refs/fix-factory/<worktree>/<sha>
+tools/profiler/ tools/profiler-cli/<rev>/ tools/bin/   # profiler-cli built from the profiler repo's main (tools.ts update); agents get tools/bin first on PATH
 cache/artifacts/<taskId>/...      # downloaded try logs and profiles
 ```
 

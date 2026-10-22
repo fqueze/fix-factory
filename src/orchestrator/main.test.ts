@@ -34,12 +34,18 @@ function setup(overrides: Partial<FactoryConfig> = {}, now = () => Date.now()) {
   };
   mkdirSync(config.stateDir, { recursive: true });
   writeFileSync(join(root, "claude.json"), "[]");
-  writeFileSync(join(root, "cli.json"), "[]");
+  writeFileSync(join(root, "cli.json"), JSON.stringify([{ match: "^tools\\.ts update", out: {} }]));
   const o = new Orchestrator({ config, configPath: join(root, "factory.config.json"), codeVersion: "test", now, cliCommand: (tool) => [process.execPath, join(fixtures, "fake-cli.js"), join(root, "cli.json"), tool] });
   return { root, config, o };
 }
 
-const add = (stateDir: string, e: EventInput) => appendEvent(stateDir, e);
+// A request comes with its tools check passed, as testkit's do.
+const add = (stateDir: string, e: EventInput) => {
+  appendEvent(stateDir, e);
+  if (e.type !== "request-created" || e.kind === "unrouted") return;
+  appendEvent(stateDir, { type: "job-started", request: e.request, job: `j-tools-${e.request}`, kind: "script", name: "tools.ts update", pid: 1, pidStartTime: 1, cmd: ["tools.ts", "update"], cwd: stateDir, codeVersion: "test", purpose: { key: "tools:v1", what: "tools" } } as EventInput);
+  appendEvent(stateDir, { type: "job-finished", request: e.request, job: `j-tools-${e.request}`, exitCode: 0, durationMs: 1 });
+};
 
 describe("Orchestrator", () => {
   it("starts agents within maxAgents, review comments first", async () => {
@@ -186,7 +192,7 @@ describe("Orchestrator", () => {
       process.kill(job.pid, "SIGKILL");
       while (groupMembers(job.pid, job.pidStartTime).length !== 1) await new Promise((r) => setTimeout(r, 20));
       await o.startup();
-      const finished = readEvents(config.stateDir, "r-a").filter((e): e is Extract<Event, { type: "job-finished" }> => e.type === "job-finished");
+      const finished = readEvents(config.stateDir, "r-a").filter((e): e is Extract<Event, { type: "job-finished" }> => e.type === "job-finished" && !e.job.startsWith("j-tools"));
       assert.deepEqual(finished.map((e) => [e.job, e.error]), [
         ["j-lost", "lost: no process and no exit.json"],
         ["j-orphan", "orphaned at restart: cancelled, the step starts again"],
@@ -272,14 +278,14 @@ describe("Orchestrator", () => {
       await o.tick();
       const events = readEvents(config.stateDir, "r-a");
       const started = events.filter((e): e is Extract<Event, { type: "job-started" }> => e.type === "job-started");
-      assert.deepEqual(started.map((e) => e.name), ["worktree.ts create"]);
-      assert.equal(started[0].cmd.at(-1), "--dry-run");
+      assert.deepEqual(started.map((e) => e.name), ["tools.ts update", "worktree.ts create"]);
+      assert.equal(started[1].cmd.at(-1), "--dry-run");
       // A raw command can't be given --dry-run: refused.
       appendCommand(config.stateDir, { cmd: "shell", request: "r-a", cwd: root, command: "touch pushed", reason: "r" });
       await o.tick();
       await o.tick();
       const after = readEvents(config.stateDir, "r-a");
-      assert.equal(after.filter((e) => e.type === "job-started").length, 1);
+      assert.equal(after.filter((e) => e.type === "job-started").length, 2);
       assert.equal(after.filter((e) => e.type === "note" && e.text.startsWith("Dry run: shell not started")).length, 1);
       const plan = (tool: string, args: string[]) => ({ purpose: { key: "k", what: "w" }, kind: "script" as const, name: "n", cwd: "/", cli: { tool, args } });
       assert.deepEqual(withDryRun(plan("try.ts", ["push", "--cwd", "/w", "--", "fuzzy", "-q", "x"])).cli?.args, ["push", "--cwd", "/w", "--dry-run", "--", "fuzzy", "-q", "x"]);
