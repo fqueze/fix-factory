@@ -1,16 +1,19 @@
 // The tools agents rely on, kept by the factory and up to date before a request starts.
 //
 //   node src/cli/tools.ts update
-//     → {profilerCli: {rev, version, built, path, supported: {gecko, processed}, made: {gecko, processed}, ciProfilerRev}}
+//     → {profilerCli: {rev, version, built, path, supported: {gecko, processed}, made: {gecko, processed}, ciProfilerRev},
+//        mdViewer: {rev, built}}
 //     profiler-cli built from the profiler repository's main: a clone under <stateDir>/tools/profiler is
 //     fetched, and when main moved, rebuilt (yarn install, yarn build-cli). Each build goes to its own
 //     directory, tools/profiler-cli/<rev>, and tools/bin/profiler-cli is switched to it at once, so a run
 //     using the previous one isn't broken mid-build. Agents find tools/bin first on PATH (run.ts).
 //     One update at a time: requests starting together wait for each other.
+//     md-viewer (with diff-viewer and stack-viewer, which the page runs) the same way, from its repository's main,
+//     in tools/md-viewer-at/<rev>.
 //     Then the profile versions it supports are compared with those Firefox's CI makes (see profileVersions):
 //     an older build fails the update.
 
-import { existsSync, mkdirSync, renameSync, rmSync, statSync, symlinkSync, cpSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, renameSync, rmSync, statSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { log, runCli } from "../lib/cli.ts";
@@ -18,6 +21,8 @@ import { exec, execOk } from "../lib/exec.ts";
 import { loadConfig } from "../config.ts";
 
 const PROFILER_REPO = "https://github.com/firefox-devtools/profiler.git";
+const MD_VIEWER_REPO = "https://github.com/fqueze/md-viewer.git";
+export const VIEWERS = ["md-viewer", "diff-viewer", "stack-viewer"] as const;
 const LOCK_STALE_MS = 30 * 60_000;
 
 export function toolsBin(stateDir: string): string {
@@ -79,43 +84,74 @@ export async function profileVersions(repo: string, rev: string, firefox: string
   return { supported, made: { gecko, processed: ci.processed }, ciProfilerRev: pinned };
 }
 
+// A clone under tools/, at its remote's main.
+async function fetched(url: string, repo: string): Promise<string> {
+  if (!existsSync(repo)) {
+    log(`cloning ${url}`);
+    await execOk(["git", "clone", "--quiet", url, repo]);
+  } else {
+    await execOk(["git", "fetch", "--quiet", "origin", "main"], { cwd: repo });
+  }
+  return (await execOk(["git", "rev-parse", "origin/main"], { cwd: repo })).trim();
+}
+
+const YARN_ENV = { ...process.env, COREPACK_ENABLE_DOWNLOAD_PROMPT: "0" };
+
+async function profilerCli(tools: string, firefox: { repo: string; ref: string }) {
+  const repo = join(tools, "profiler");
+  const rev = await fetched(PROFILER_REPO, repo);
+  const out = join(tools, "profiler-cli", rev);
+  const bin = join(tools, "bin", "profiler-cli");
+  let built = false;
+  if (!existsSync(join(out, "profiler-cli.js"))) {
+    log(`building profiler-cli at ${rev.slice(0, 12)}`);
+    await execOk(["git", "checkout", "--quiet", "--detach", rev], { cwd: repo });
+    await execOk(["yarn", "install", "--frozen-lockfile", "--silent"], { cwd: repo, env: YARN_ENV });
+    await execOk(["yarn", "build-cli"], { cwd: repo, env: YARN_ENV });
+    rmSync(`${out}.tmp`, { recursive: true, force: true });
+    cpSync(join(repo, "profiler-cli", "dist"), `${out}.tmp`, { recursive: true });
+    renameSync(`${out}.tmp`, out);
+    built = true;
+  }
+  // Node resolves the link, so the build finds its mappings.wasm next to it.
+  pointTo(bin, join(out, "profiler-cli.js"));
+  pointTo(join(tools, "bin", "pq"), join(out, "profiler-cli.js"));
+  const version = (await execOk([bin, "--version"])).trim();
+  const versions = await profileVersions(repo, rev, firefox.repo, firefox.ref);
+  const { supported, made } = versions;
+  if (!(supported.gecko >= made.gecko && supported.processed >= made.processed)) {
+    throw new Error(`profiler-cli at ${rev.slice(0, 12)} reads profiles up to version ${supported.processed} (gecko format ${supported.gecko}), but Firefox's CI makes version ${made.processed} (gecko format ${made.gecko})`);
+  }
+  return { rev, version, built, path: bin, ...versions };
+}
+
+// md-viewer, diff-viewer and stack-viewer, for the page: a checkout per revision with its node_modules.
+async function mdViewer(tools: string) {
+  const repo = join(tools, "md-viewer");
+  const rev = await fetched(MD_VIEWER_REPO, repo);
+  const out = join(tools, "md-viewer-at", rev);
+  let built = false;
+  if (!existsSync(join(out, "node_modules"))) {
+    log(`installing md-viewer at ${rev.slice(0, 12)}`);
+    rmSync(out, { recursive: true, force: true });
+    await execOk(["git", "worktree", "prune"], { cwd: repo });
+    await execOk(["git", "worktree", "add", "--quiet", "--detach", out, rev], { cwd: repo });
+    await execOk(["npm", "ci", "--omit=dev", "--silent"], { cwd: out });
+    built = true;
+  }
+  for (const name of VIEWERS) pointTo(join(tools, "bin", name), join(out, `${name}.js`));
+  return { rev, built };
+}
+
 export async function update(stateDir: string, firefox: { repo: string; ref: string }) {
   const tools = join(stateDir, "tools");
   mkdirSync(join(tools, "bin"), { recursive: true });
-  return locked(join(tools, "update.lock"), async () => {
-    const repo = join(tools, "profiler");
-    if (!existsSync(repo)) {
-      log(`cloning ${PROFILER_REPO}`);
-      await execOk(["git", "clone", "--quiet", PROFILER_REPO, repo]);
-    } else {
-      await execOk(["git", "fetch", "--quiet", "origin", "main"], { cwd: repo });
-    }
-    const rev = (await execOk(["git", "rev-parse", "origin/main"], { cwd: repo })).trim();
-    const out = join(tools, "profiler-cli", rev);
-    const bin = join(tools, "bin", "profiler-cli");
-    let built = false;
-    if (!existsSync(join(out, "profiler-cli.js"))) {
-      log(`building profiler-cli at ${rev.slice(0, 12)}`);
-      await execOk(["git", "checkout", "--quiet", "--detach", rev], { cwd: repo });
-      await execOk(["yarn", "install", "--frozen-lockfile", "--silent"], { cwd: repo, env: { ...process.env, COREPACK_ENABLE_DOWNLOAD_PROMPT: "0" } });
-      await execOk(["yarn", "build-cli"], { cwd: repo, env: { ...process.env, COREPACK_ENABLE_DOWNLOAD_PROMPT: "0" } });
-      rmSync(`${out}.tmp`, { recursive: true, force: true });
-      cpSync(join(repo, "profiler-cli", "dist"), `${out}.tmp`, { recursive: true });
-      renameSync(`${out}.tmp`, out);
-      built = true;
-    }
-    // Node resolves the link, so the build finds its mappings.wasm next to it.
-    pointTo(bin, join(out, "profiler-cli.js"));
-    pointTo(join(tools, "bin", "pq"), join(out, "profiler-cli.js"));
-    writeFileSync(join(tools, "profiler-cli.json"), JSON.stringify({ rev, at: new Date().toISOString() }) + "\n");
-    const version = (await execOk([bin, "--version"])).trim();
-    const versions = await profileVersions(repo, rev, firefox.repo, firefox.ref);
-    const { supported, made } = versions;
-    if (!(supported.gecko >= made.gecko && supported.processed >= made.processed)) {
-      throw new Error(`profiler-cli at ${rev.slice(0, 12)} reads profiles up to version ${supported.processed} (gecko format ${supported.gecko}), but Firefox's CI makes version ${made.processed} (gecko format ${made.gecko})`);
-    }
-    return { profilerCli: { rev, version, built, path: bin, ...versions } };
-  });
+  return locked(join(tools, "update.lock"), async () => ({ profilerCli: await profilerCli(tools, firefox), mdViewer: await mdViewer(tools) }));
+}
+
+// The viewers' commands the page runs, unless the config names others.
+export function viewerCommand(stateDir: string, name: (typeof VIEWERS)[number]): string[] {
+  return [join(toolsBin(stateDir), name)];
 }
 
 if (import.meta.main) {

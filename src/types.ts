@@ -21,9 +21,10 @@ export interface FactoryConfig {
   phabPollMinutes?: number; // default 10, while you are present
   phabPollHours?: number; // default 3, while you are away
   claudeCommand: string[]; // e.g. ["mozsb", "claude"]; the runner appends -p and its flags
-  stackViewerCommand: string[]; // e.g. ["stack-viewer"]
-  mdViewerCommand?: string[]; // default ["md-viewer"], for the authors' evidence and reproduction files
-  diffViewerCommand?: string[]; // default ["diff-viewer"], for their widening patches
+  // The viewers the page runs; by default the factory's own (tools.ts update).
+  stackViewerCommand?: string[];
+  mdViewerCommand?: string[]; // for the authors' evidence and reproduction files
+  diffViewerCommand?: string[]; // for their widening patches
   profilerOrigin: string; // e.g. "http://localhost:4242" (a local profiler front end), for request profiles
   bugzillaEmail?: string; // the bugs to file are assigned to it, ASSIGNED: you attach their patches
   maxWorktrees?: number; // group worktrees a request keeps at a time (default 4): each is ~6 GB

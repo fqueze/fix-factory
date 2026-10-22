@@ -5,6 +5,7 @@ import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import { delimiter, isAbsolute, join, relative, resolve } from "node:path";
 import { parseStreamJson, transcriptPath } from "../agents/run.ts";
+import { viewerCommand } from "../cli/tools.ts";
 import { jobDir } from "../state/jobs.ts";
 import type { FactoryConfig, JobView, PatchView } from "../types.ts";
 import { HostCheck } from "./host-check.ts";
@@ -78,6 +79,7 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
   void hosts.addFqdn(opts.machineName);
   const bootId = String(now());
   // client.js reloads a page served by an earlier run of the server once it hears this one's id.
+  const stackViewer = opts.config.stackViewerCommand ?? viewerCommand(opts.config.stateDir, "stack-viewer");
   const page = (text: string) => text.replace("<body>", `<body data-boot="${bootId}">`);
   // The jobs of dry runs that didn't record them, by dry run job: reading a task set takes a while.
   const pushJobs = new Map<string, TryJob[] | undefined>();
@@ -368,7 +370,7 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
       try {
         page = await buildStackReview({
           repo: opts.config.firefoxRepo,
-          command: opts.config.stackViewerCommand,
+          command: stackViewer,
           request: found.request,
           stack: found.stack,
           base,
@@ -386,7 +388,7 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
       }
       let page: string;
       try {
-        page = await buildPatchView({ repo: opts.config.firefoxRepo, command: opts.config.stackViewerCommand, request, patch });
+        page = await buildPatchView({ repo: opts.config.firefoxRepo, command: stackViewer, request, patch });
       } catch (e) {
         throw new HttpError(502, errorMessage(e));
       }
@@ -403,7 +405,7 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
       }
       let page: string;
       try {
-        page = await buildPushView({ repo: opts.config.firefoxRepo, command: opts.config.stackViewerCommand, cwd: request.jobs[last.job].cwd, commits: [...commits].reverse() });
+        page = await buildPushView({ repo: opts.config.firefoxRepo, command: stackViewer, cwd: request.jobs[last.job].cwd, commits: [...commits].reverse() });
       } catch (e) {
         throw new HttpError(502, errorMessage(e));
       }
@@ -416,7 +418,7 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
       }
       let page: string;
       try {
-        page = await buildPushView({ repo: opts.config.firefoxRepo, command: opts.config.stackViewerCommand, cwd: dry.cwd, commits: d.commits });
+        page = await buildPushView({ repo: opts.config.firefoxRepo, command: stackViewer, cwd: dry.cwd, commits: d.commits });
       } catch (e) {
         throw new HttpError(502, errorMessage(e));
       }
@@ -449,8 +451,8 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
       let page: string;
       try {
         page = await renderAgentFile({
-          mdViewer: opts.config.mdViewerCommand ?? ["md-viewer"],
-          diffViewer: opts.config.diffViewerCommand ?? ["diff-viewer"],
+          mdViewer: opts.config.mdViewerCommand ?? viewerCommand(opts.config.stateDir, "md-viewer"),
+          diffViewer: opts.config.diffViewerCommand ?? viewerCommand(opts.config.stateDir, "diff-viewer"),
           path: file,
           title: `${which}: ${item.group.tests.join(", ")}`,
         });
