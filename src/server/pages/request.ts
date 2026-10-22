@@ -125,6 +125,8 @@ export function renderRequestBody(r: RequestState, ctx: RenderContext): Html {
   const recovering = running.filter((j) => j.name === "recover");
   const others = running.filter((j) => j.name !== "recover");
 
+  const repro = items.filter((i) => i.state === "waiting for a try repro");
+  const toStack = items.filter((i) => i.state !== "waiting for a try repro");
   return html`<div class="rbody">
     ${others.length ? html`<div class="jobs">${others.map((j) => jobLine(r, j, ctx))}</div>` : null}
     ${configLine(r)}
@@ -134,7 +136,11 @@ export function renderRequestBody(r: RequestState, ctx: RenderContext): Html {
     ${r.metaBug && !(hasBug(r.metaBug) && (stacks.length || landed.length)) ? metaBugLine(r, back, ctx) : null}
     ${stacks.map((s) => stackSection(r, s, ctx))}
     ${loose.length ? html`<h3>Patches</h3><div class="rows">${loose.map((p) => patchRow(r, p, ctx))}</div>` : null}
-    ${items.some((i) => itemBucket(r, i, ctx) !== "closed") ? html`${stacks.length || loose.length ? html`<h3>Not in a stack yet</h3>` : null}${groupRows(r, items, ctx, false)}` : null}
+    ${
+      // Groups with only DEBUG commits aren't on their way into the stack: those commits ride on top of its next push.
+      repro.length ? html`<h3>DEBUG commits for the stack's next try push</h3>${groupRows(r, repro, ctx, false)}` : null
+    }
+    ${toStack.some((i) => itemBucket(r, i, ctx) !== "closed") ? html`${stacks.length || loose.length ? html`<h3>Not in a stack yet</h3>` : null}${groupRows(r, toStack, ctx, false)}` : null}
     ${landed.length ? html`<h3>Landed${r.metaBug && hasBug(r.metaBug) && !stacks.length ? html` · <a class="bug" href="${bugUrl(r.metaBug.bug)}" target="_blank" rel="noopener">Bug ${r.metaBug.bug}</a> ${metaSummary}` : null}</h3>${groupRows(r, landed, ctx)}` : null}
     ${closedFold(r, items.filter((i) => itemBucket(r, i, ctx) === "closed"), ctx)}
     ${stacks.length || loose.length || items.length || landed.length ? html`<hr class="part">` : null}
