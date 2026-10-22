@@ -1201,5 +1201,13 @@ describe("a push after an earlier one of the stack", () => {
     assert.doesNotMatch(row, /href="#patch-p-glean"/, "unchanged patches aren't listed");
     assert.match(row, /<summary>Interdiff<\/summary>/);
     assert.match(row, /<b>gone<\/b>: DEBUG - log/);
+
+    // A push planned before, waiting for you: the stack's changes since its last push all the same.
+    r.pushes.older = { id: "older", purpose: "planned before", command: [] };
+    r.jobs["j-dry-older"] = { job: "j-dry-older", kind: "script", name: "try.ts dry-run", purpose: { key: "dry-run:older", what: "dry-run", push: "older", stack: "root" }, startedAt: "2026-10-15T08:00:00.000Z" } as unknown as RequestState["jobs"][string];
+    r.needsUser.push({ key: "approve-push:older", action: "a", detail: "d", push: "older", since: "2026-10-15T08:00:00.000Z" });
+    const waiting = rowOf(renderRequest(r, { ...ctx, readData: () => "-old\n+new\n" }, true).value, "push-older");
+    assert.match(waiting, /Changed since push .*<b>changed<\/b>: <a href="#patch-p-panel">/s);
+    assert.doesNotMatch(waiting, /The regressions of push/);
   });
 });

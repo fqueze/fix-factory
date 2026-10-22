@@ -714,20 +714,24 @@ function pushRowOf(r: RequestState, p: PushView, ctx: RenderContext): Html {
 // What it's judged by: what changed in the stack since its previous push (each changed patch's interdiff and what its
 // author said it fixes), and that push's regressions with the patch that claims to fix each.
 function sinceSection(r: RequestState, p: PushView, ctx: RenderContext): Html | null {
-  if (p.since === undefined) {
+  // A push planned before the planner knew of the changes still shows them while it waits for you.
+  const stack = Object.values(r.jobs).find((j) => j.purpose?.what === "dry-run" && j.purpose.push === p.id)?.purpose?.stack;
+  const latest = stack === undefined ? undefined : r.pushChanges[stack];
+  const since = p.since ?? (isWaiting(r, p) && latest?.since !== p.id ? latest?.since : undefined);
+  if (since === undefined) {
     return null;
   }
-  const prev = r.pushes[p.since];
-  const changes = Object.values(r.pushChanges).find((c) => c.since === p.since);
+  const prev = r.pushes[since];
+  const changes = Object.values(r.pushChanges).find((c) => c.since === since);
   const title = (id: string) => (r.patches[id] ? patchTitle(r.patches[id]) : id);
   const regressions = p.regressions?.length
-    ? html`<h4 class="part">The regressions of push ${pushName(r, p.since)}</h4><ul class="regressions">${p.regressions.map(
+    ? html`<h4 class="part">The regressions of push ${pushName(r, since)}</h4><ul class="regressions">${p.regressions.map(
         (g) => html`<li>${md(g.failure)}<div class="sub">${g.fixedBy ? html`fixed by <a href="#patch-${g.fixedBy}">${title(g.fixedBy)}</a>: ` : html`<b>not fixed yet</b>: `}${g.how}</div></li>`,
       )}</ul>`
     : null;
   const changed = changes?.changes.filter((c) => c.status !== "same") ?? [];
   const list = changes
-    ? html`<h4 class="part">Changed since push ${pushName(r, p.since)}${prev?.rev ? html` (<a href="${pushUrl(prev)}" target="_blank" rel="noopener">${prev.summary ?? prev.result}</a>)` : null}</h4>${
+    ? html`<h4 class="part">Changed since push ${pushName(r, since)}${prev?.rev ? html` (<a href="${pushUrl(prev)}" target="_blank" rel="noopener">${prev.summary ?? prev.result}</a>)` : null}</h4>${
         changed.length === 0 && changes.removed.length === 0
           ? html`<div class="sub">Nothing: the same patches.</div>`
           : html`<ul class="changes">${changed.map((c) => {
