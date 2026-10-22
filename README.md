@@ -40,7 +40,10 @@ npm run orchestrator   # in another terminal
 ```
 
 `npm run tools` clones and builds what agents and the page use, under `<stateDir>/tools/`: profiler-cli and the
-profiler front end (from firefox-devtools/profiler), fx-tests (mozilla/aretestsfastyet), md-viewer and claude-profiler.
+profiler front end (from [firefox-devtools/profiler](https://github.com/firefox-devtools/profiler)), fx-tests
+([mozilla/aretestsfastyet](https://github.com/mozilla/aretestsfastyet)), md-viewer, diff-viewer and stack-viewer
+([fqueze/md-viewer](https://github.com/fqueze/md-viewer)), and claude-profiler
+([fqueze/claude-profiler](https://github.com/fqueze/claude-profiler)).
 They follow their repositories' main; nothing from your PATH is used for them.
 
 ## Running
