@@ -1765,7 +1765,7 @@ class Planner {
     const dry = this.view.byKey.get(`dry-run:${last}`)!.find(succeeded)!;
     const patches = info.patches.map((x) => ({ id: x.id, title: this.s.patches[x.id].title, shas: [x.source, ...[...(this.s.patches[x.id].pastShas ?? [])].reverse()] }));
     const input = dataPath(this.config, this.s.id, `since-${info.id}-${last}-input.json`);
-    const key = `since:${info.id}:${last}:${shortHash(patches.map((x) => x.shas[0])).slice(0, 8)}`;
+    const key = `since:${info.id}:${last}:v2:${shortHash(patches.map((x) => x.shas[0])).slice(0, 8)}`;
     const job = this.want(key, () =>
       this.cli("since", "stack.ts", ["since", "--cwd", info.wt!, input], {
         cwd: info.wt!,

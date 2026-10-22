@@ -33,8 +33,10 @@ export async function since(cwd: string, input: SinceInput): Promise<SinceResult
       continue;
     }
     used.add(match.sha);
-    if (match.id === ids[0]) changes.push({ patch: p.id, status: "same", old: match.sha, new: p.shas[0] });
-    else changes.push({ patch: p.id, status: "changed", old: match.sha, new: p.shas[0], interdiff: await interdiff(cwd, match.sha, p.shas[0]) });
+    // A patch-id counts the context lines: a rebase alone changes it, and leaves the interdiff empty.
+    const d = match.id === ids[0] ? undefined : await interdiff(cwd, match.sha, p.shas[0]);
+    if (!d?.diff.trim()) changes.push({ patch: p.id, status: "same", old: match.sha, new: p.shas[0] });
+    else changes.push({ patch: p.id, status: "changed", old: match.sha, new: p.shas[0], interdiff: d });
   }
   return { changes, removed: old.filter((o) => !used.has(o.sha)).map((o) => ({ sha: o.sha, title: o.title })) };
 }

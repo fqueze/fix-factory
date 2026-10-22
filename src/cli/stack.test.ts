@@ -276,10 +276,11 @@ test("since matches an earlier push's commits with the patches: same, changed (w
   const a1 = await repo.commit({ "a.txt": lines(20, { 2: "fix a" }) }, "Bug 1 - A, r=x.");
   const b1 = await repo.commit({ "b.txt": lines(5, { 1: "fix b" }) }, "Bug 2 - B, r=x.");
   const dbg = await repo.commit({ "b.txt": lines(5, { 1: "fix b", 4: "log" }) }, "Bug 2 - DEBUG - log, r=x.");
-  // Now: A rebased onto upstream, unchanged; B fixed further; C new.
+  // Now: A rebased onto an upstream change next to it (other context lines, other patch-id), unchanged; B fixed
+  // further; C new.
   await repo.git(["checkout", "-q", "--detach", base]);
-  await repo.commit({ "a.txt": lines(20, { 18: "upstream" }) }, "upstream");
-  const a2 = await repo.commit({ "a.txt": lines(20, { 2: "fix a", 18: "upstream" }) }, "Bug 1 - A, r=x.");
+  await repo.commit({ "a.txt": lines(20, { 4: "upstream" }) }, "upstream");
+  const a2 = await repo.commit({ "a.txt": lines(20, { 2: "fix a", 4: "upstream" }) }, "Bug 1 - A, r=x.");
   const b2 = await repo.commit({ "b.txt": lines(5, { 1: "fix b better" }) }, "Bug 2 - B, r=x.");
   const c = await repo.commit({ "c.txt": "c\n" }, "Bug 3 - C, r=x.");
   const r = await since(repo.dir, { old: [dbg, b1, a1], patches: [{ id: "p-a", title: "Bug 1 - A, r=x.", shas: [a2] }, { id: "p-b", title: "Bug 2 - B, r=x.", shas: [b2] }, { id: "p-c", title: "Bug 3 - C, r=x.", shas: [c] }] });
