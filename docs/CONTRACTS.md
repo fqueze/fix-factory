@@ -33,6 +33,7 @@ jobs/<jobId>/err.log
 jobs/<jobId>/pid.json             # {pid, pidStartTime}, written when the job starts
 jobs/<jobId>/exit.json            # {exitCode, endedAt}, written by the wrapper when the job ends
 feedback/<target>.md              # agent feedback, one file per Feedback.target
+kept/<worktree>/artifacts/...      # a removed worktree's artifacts/ (files over 20 MB listed in skipped.txt); its commits stay as refs/fix-factory/<worktree>/<sha>
 cache/artifacts/<taskId>/...      # downloaded try logs and profiles
 ```
 
