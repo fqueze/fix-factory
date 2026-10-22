@@ -3,9 +3,9 @@ import { existsSync, readFileSync, realpathSync, statfsSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { createRequire } from "node:module";
 import { homedir } from "node:os";
-import { delimiter, isAbsolute, join, relative, resolve } from "node:path";
+import { isAbsolute, join, relative, resolve } from "node:path";
 import { parseStreamJson, transcriptPath } from "../agents/run.ts";
-import { viewerCommand } from "../cli/tools.ts";
+import { toolsBin, viewerCommand } from "../cli/tools.ts";
 import { jobDir } from "../state/jobs.ts";
 import type { FactoryConfig, JobView, PatchView } from "../types.ts";
 import { HostCheck } from "./host-check.ts";
@@ -31,7 +31,7 @@ export interface ServerOptions {
   now?: () => number;
   machineName?: string; // os.hostname() by default
   homeDir?: string; // where agent transcripts are, under .claude/projects; os.homedir() by default
-  claudeProfiler?: string | null; // its main module, null when not installed; looked up on PATH by default
+  claudeProfiler?: string | null; // its main module, null when not installed; the factory's own by default
   mozbuildStateDir?: string; // where mach caches try task sets; $MOZBUILD_STATE_PATH or ~/.mozbuild by default
 }
 
@@ -41,16 +41,14 @@ interface Profiler {
   createFirefoxProfile(entries: unknown[]): unknown;
 }
 
-// claude-profiler is an optional tool, not a dependency: its command on PATH is a link to its main module.
-function findClaudeProfiler(): string | null {
-  for (const dir of (process.env.PATH ?? "").split(delimiter)) {
-    try {
-      return realpathSync(join(dir, "claude-profiler"));
-    } catch {
-      // not in this directory
-    }
+// The factory's claude-profiler (tools.ts update): its command is a link to its main module. Missing until the
+// first update.
+function findClaudeProfiler(stateDir: string): string | null {
+  try {
+    return realpathSync(join(toolsBin(stateDir), "claude-profiler"));
+  } catch {
+    return null;
   }
-  return null;
 }
 
 export type FactoryServer = Server & { sseClientCount(): number };
@@ -190,7 +188,7 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
   let profiler: Profiler | null | undefined;
   function loadProfiler(): Profiler | null {
     if (profiler === undefined) {
-      const main = opts.claudeProfiler === undefined ? findClaudeProfiler() : opts.claudeProfiler;
+      const main = opts.claudeProfiler === undefined ? findClaudeProfiler(opts.config.stateDir) : opts.claudeProfiler;
       profiler = main === null ? null : (createRequire(main)(main) as Profiler);
     }
     return profiler;

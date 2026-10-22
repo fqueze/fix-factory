@@ -34,7 +34,7 @@ jobs/<jobId>/pid.json             # {pid, pidStartTime}, written when the job st
 jobs/<jobId>/exit.json            # {exitCode, endedAt}, written by the wrapper when the job ends
 feedback/<target>.md              # agent feedback, one file per Feedback.target
 kept/<worktree>/artifacts/...      # a removed worktree's artifacts/ (files over 20 MB listed in skipped.txt); its commits stay as refs/fix-factory/<worktree>/<sha>
-tools/profiler/ tools/profiler-cli/<rev>/ tools/fx-tests/<rev>/ tools/md-viewer-at/<rev>/ tools/bin/   # profiler-cli, fx-tests and md-viewer from their repos' main (tools.ts update); agents get tools/bin first on PATH, the page runs its viewers
+tools/profiler/ tools/profiler-cli/<rev>/ tools/fx-tests/<rev>/ tools/md-viewer-at/<rev>/ tools/claude-profiler-at/<rev>/ tools/profiler-web/ tools/bin/   # profiler-cli (and the profiler front end), fx-tests, md-viewer and claude-profiler from their repos' main (tools.ts update); agents get tools/bin first on PATH, the page runs its viewers
 cache/artifacts/<taskId>/...      # downloaded try logs and profiles
 ```
 

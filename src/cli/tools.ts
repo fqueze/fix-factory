@@ -2,7 +2,7 @@
 //
 //   node src/cli/tools.ts update
 //     → {profilerCli: {rev, version, built, path, supported: {gecko, processed}, made: {gecko, processed}, ciProfilerRev},
-//        fxTests: {rev, built}, mdViewer: {rev, built}}
+//        fxTests: {rev, built}, mdViewer: {rev, built}, claudeProfiler: {rev, built}}
 //     profiler-cli built from the profiler repository's main: a clone under <stateDir>/tools/profiler is
 //     fetched, and when main moved, rebuilt (yarn install, yarn build-cli). Each build goes to its own
 //     directory, tools/profiler-cli/<rev>, and tools/bin/profiler-cli is switched to it at once, so a run
@@ -11,7 +11,7 @@
 //     One update at a time: requests starting together wait for each other.
 //     fx-tests from mozilla/aretestsfastyet's main, in tools/fx-tests/<rev>.
 //     md-viewer (with diff-viewer and stack-viewer, which the page runs) the same way, from its repository's main,
-//     in tools/md-viewer-at/<rev>.
+//     in tools/md-viewer-at/<rev>; claude-profiler, whose library the page uses, in tools/claude-profiler-at/<rev>.
 //     Then the profile versions it supports are compared with those Firefox's CI makes (see profileVersions):
 //     an older build fails the update.
 
@@ -24,6 +24,7 @@ import { loadConfig } from "../config.ts";
 
 const PROFILER_REPO = "https://github.com/firefox-devtools/profiler.git";
 const FX_TESTS_REPO = "https://github.com/mozilla/aretestsfastyet.git";
+const CLAUDE_PROFILER_REPO = "https://github.com/fqueze/claude-profiler.git";
 const MD_VIEWER_REPO = "https://github.com/fqueze/md-viewer.git";
 export const VIEWERS = ["md-viewer", "diff-viewer", "stack-viewer"] as const;
 const LOCK_STALE_MS = 30 * 60_000;
@@ -156,6 +157,22 @@ async function fxTests(tools: string) {
   return { rev, built };
 }
 
+// claude-profiler, whose library the page uses for the agents' profiles: plain files, no dependencies.
+async function claudeProfiler(tools: string) {
+  const repo = join(tools, "claude-profiler");
+  const rev = await fetched(CLAUDE_PROFILER_REPO, repo);
+  const out = join(tools, "claude-profiler-at", rev);
+  let built = false;
+  if (!existsSync(join(out, "index.js"))) {
+    rmSync(out, { recursive: true, force: true });
+    await execOk(["git", "worktree", "prune"], { cwd: repo });
+    await execOk(["git", "worktree", "add", "--quiet", "--detach", out, rev], { cwd: repo });
+    built = true;
+  }
+  pointTo(join(tools, "bin", "claude-profiler"), join(out, "index.js"));
+  return { rev, built };
+}
+
 // md-viewer, diff-viewer and stack-viewer, for the page: a checkout per revision with its node_modules.
 async function mdViewer(tools: string) {
   const repo = join(tools, "md-viewer");
@@ -177,7 +194,7 @@ async function mdViewer(tools: string) {
 export async function update(stateDir: string, firefox: { repo: string; ref: string }) {
   const tools = join(stateDir, "tools");
   mkdirSync(join(tools, "bin"), { recursive: true });
-  return locked(join(tools, "update.lock"), async () => ({ profilerCli: await profilerCli(tools, firefox), fxTests: await fxTests(tools), mdViewer: await mdViewer(tools) }));
+  return locked(join(tools, "update.lock"), async () => ({ profilerCli: await profilerCli(tools, firefox), fxTests: await fxTests(tools), mdViewer: await mdViewer(tools), claudeProfiler: await claudeProfiler(tools) }));
 }
 
 // The viewers' commands the page runs, unless the config names others.
