@@ -1175,3 +1175,31 @@ describe("test plan", () => {
     assert.doesNotMatch(row, /set-test-plan/, "no revision to set it on");
   });
 });
+
+describe("a push after an earlier one of the stack", () => {
+  it("shows that push's regressions with what claims to fix each, then what changed since, with interdiffs", () => {
+    const r = structuredClone(get("r-20261005-newtab"));
+    r.pushes.prev = { id: "prev", purpose: "verify", command: [], rev: "abc", url: "https://treeherder.mozilla.org/jobs?repo=try&revision=abc", result: "failures", summary: "20 failed" };
+    r.pushes.next = {
+      id: "next",
+      purpose: "verify again",
+      command: [],
+      since: "prev",
+      regressions: [
+        { failure: "`window.promiseDocumentFlushed is not a function` in toolkit/content/tests/chrome", fixedBy: "p-panel", how: "guards the call in chrome windows" },
+        { failure: "timeout in test_x.html", how: "nothing changed for it" },
+      ],
+    };
+    r.pushChanges = { root: { since: "prev", changes: [{ patch: "p-panel", status: "changed", old: "a", new: "b", interdiffFile: "x.diff" }, { patch: "p-glean", status: "same", old: "c", new: "c" }], removed: [{ sha: "d", title: "DEBUG - log" }] } };
+    const row = rowOf(renderRequest(r, { ...ctx, readData: (f) => (f === "x.diff" ? "-old\n+new\n" : undefined) }, true).value, "push-next");
+    assert.match(row, /The regressions of push/);
+    assert.match(row, /<code>window\.promiseDocumentFlushed is not a function<\/code>/);
+    assert.match(row, /fixed by <a href="#patch-p-panel">[^<]*<\/a>: guards the call in chrome windows/);
+    assert.match(row, /<b>not fixed yet<\/b>: nothing changed for it/);
+    assert.match(row, /Changed since push .*20 failed/);
+    assert.match(row, /<b>changed<\/b>: <a href="#patch-p-panel">/);
+    assert.doesNotMatch(row, /href="#patch-p-glean"/, "unchanged patches aren't listed");
+    assert.match(row, /<summary>Interdiff<\/summary>/);
+    assert.match(row, /<b>gone<\/b>: DEBUG - log/);
+  });
+});

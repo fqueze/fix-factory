@@ -26,6 +26,10 @@
 //      make no commit and are listed in `empty`.
 // interdiff <old-sha> <new-sha>
 //   → {diff, method: "same-parent" | "old-rebased" | "new-rebased" | "diff-of-diffs"}
+// since <input.json>
+//   input: {old: [sha...] (an earlier push's commits), patches: [{id, title, shas: [current, earlier...]}]}
+//   → {changes: [{patch, status: "same" | "changed" | "new", old?, new, interdiff?}], removed: [{sha, title}]}:
+//     each patch matched with the earlier commit by patch-id, else title; changed ones with their interdiff.
 // check --base <ref> --try <pushes.json> [--revisions <sha-to-D-number.json>] [--bugzilla-url <url>]
 //   pushes: [{push, complete, result}] for the stack; fails unless non-empty, all complete and "green".
 //   → {ok, failures: [{rule, message, sha?, title?}]}. Reads Bugzilla anonymously, never writes.
@@ -41,6 +45,7 @@ import { detectDeps } from "./stack/deps.ts";
 import { importStack } from "./stack/import.ts";
 import { interdiff } from "./stack/interdiff.ts";
 import { orderLandable, orderPatches, type OrderInput } from "./stack/order.ts";
+import { since, type SinceInput } from "./stack/since.ts";
 import { summary, type SummaryInput } from "./stack/summary.ts";
 
 export { assemble, rewrite } from "./stack/build.ts";
@@ -49,6 +54,7 @@ export { detectDeps } from "./stack/deps.ts";
 export { importStack } from "./stack/import.ts";
 export { interdiff } from "./stack/interdiff.ts";
 export { orderLandable, orderPatches } from "./stack/order.ts";
+export { since } from "./stack/since.ts";
 export { summary } from "./stack/summary.ts";
 
 function readJson<T>(path: string): T {
@@ -98,6 +104,7 @@ const subcommands: Record<string, Subcommand> = {
     if (pos.length !== 2) throw new UsageError("expected <old-sha> <new-sha>");
     return interdiff(cwdOf(values), pos[0], pos[1]);
   },
+  since: async (pos, values) => since(cwdOf(values), readJson<SinceInput>(onePositional(pos, "an input file"))),
   check: async (_pos, values) =>
     check(cwdOf(values), str(values, "base"), {
       revisions: typeof values.revisions === "string" ? readJson(values.revisions) : undefined,

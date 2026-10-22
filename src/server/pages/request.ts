@@ -705,10 +705,47 @@ function pushRowOf(r: RequestState, p: PushView, ctx: RenderContext): Html {
     }`,
     warn: waiting ? dryRunWarnings(r, p) : null,
     // While it waits for you, what it would run; once made, what came of it, its jobs and command folded under it.
-    body: html`${waiting ? null : pushAnalysis(r, p)}${
+    body: html`${sinceSection(r, p, ctx)}${waiting ? null : pushAnalysis(r, p)}${
       waiting ? pushJobs(p) : html`<details class="fold" data-fold="pushjobs-${p.id}"><summary>Its jobs, commits and command</summary>${pushJobs(p)}</details>`
     }${revisable(r, p) ? reviseBox(r, p) : null}`,
   });
+}
+
+// What it's judged by: what changed in the stack since its previous push (each changed patch's interdiff and what its
+// author said it fixes), and that push's regressions with the patch that claims to fix each.
+function sinceSection(r: RequestState, p: PushView, ctx: RenderContext): Html | null {
+  if (p.since === undefined) {
+    return null;
+  }
+  const prev = r.pushes[p.since];
+  const changes = Object.values(r.pushChanges).find((c) => c.since === p.since);
+  const title = (id: string) => (r.patches[id] ? patchTitle(r.patches[id]) : id);
+  const regressions = p.regressions?.length
+    ? html`<h4 class="part">The regressions of push ${pushName(r, p.since)}</h4><ul class="regressions">${p.regressions.map(
+        (g) => html`<li>${md(g.failure)}<div class="sub">${g.fixedBy ? html`fixed by <a href="#patch-${g.fixedBy}">${title(g.fixedBy)}</a>: ` : html`<b>not fixed yet</b>: `}${g.how}</div></li>`,
+      )}</ul>`
+    : null;
+  const changed = changes?.changes.filter((c) => c.status !== "same") ?? [];
+  const list = changes
+    ? html`<h4 class="part">Changed since push ${pushName(r, p.since)}${prev?.rev ? html` (<a href="${pushUrl(prev)}" target="_blank" rel="noopener">${prev.summary ?? prev.result}</a>)` : null}</h4>${
+        changed.length === 0 && changes.removed.length === 0
+          ? html`<div class="sub">Nothing: the same patches.</div>`
+          : html`<ul class="changes">${changed.map((c) => {
+              const text = c.interdiffFile ? ctx.readData?.(c.interdiffFile) : undefined;
+              const said = authorSaid(r, c.patch);
+              return html`<li><b>${c.status === "new" ? "new" : "changed"}</b>: <a href="#patch-${c.patch}">${title(c.patch)}</a>${said ? html`<div class="sub clamp1" title="${said}">${said}</div>` : null}${
+                text === undefined ? null : html`<details class="fold" data-fold="since-${p.id}-${c.patch}"><summary>Interdiff</summary>${diff(text)}</details>`
+              }</li>`;
+            })}${changes.removed.map((x) => html`<li><b>gone</b>: ${x.title}</li>`)}</ul>`
+      }`
+    : null;
+  return html`${regressions}${list}`;
+}
+
+// What the latest run of a patch's author said it did.
+function authorSaid(r: RequestState, patch: string): string | undefined {
+  const item = r.patches[patch]?.item;
+  return item === undefined ? undefined : (r.items[item]?.lastReport?.report as { summary?: string } | undefined)?.summary;
 }
 
 // Planned, and its approval is still asked.

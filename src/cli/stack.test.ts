@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { assemble, check, detectDeps, importStack, interdiff, rewrite } from "./stack.ts";
+import { assemble, check, detectDeps, importStack, interdiff, rewrite, since } from "./stack.ts";
 import { currentBranch, git, gitTry } from "./stack/git.ts";
 import { lines, makeRepo, type TestRepo } from "./stack/testutil.ts";
 
@@ -266,6 +266,30 @@ test("interdiff ignores what the base contributed", async (t) => {
   assert.match(r.diff, /^-old$/m);
   assert.match(r.diff, /^\+new$/m);
   assert.doesNotMatch(r.diff, /^\+upstream$/m);
+});
+
+test("since matches an earlier push's commits with the patches: same, changed (with its interdiff), new, removed", async (t) => {
+  const repo = await makeRepo();
+  t.after(() => repo.cleanup());
+  const base = await repo.commit({ "a.txt": lines(20), "b.txt": lines(5) }, "base");
+  // The earlier push: cherry-picks of the authors' commits, plus a DEBUG commit.
+  const a1 = await repo.commit({ "a.txt": lines(20, { 2: "fix a" }) }, "Bug 1 - A, r=x.");
+  const b1 = await repo.commit({ "b.txt": lines(5, { 1: "fix b" }) }, "Bug 2 - B, r=x.");
+  const dbg = await repo.commit({ "b.txt": lines(5, { 1: "fix b", 4: "log" }) }, "Bug 2 - DEBUG - log, r=x.");
+  // Now: A rebased onto upstream, unchanged; B fixed further; C new.
+  await repo.git(["checkout", "-q", "--detach", base]);
+  await repo.commit({ "a.txt": lines(20, { 18: "upstream" }) }, "upstream");
+  const a2 = await repo.commit({ "a.txt": lines(20, { 2: "fix a", 18: "upstream" }) }, "Bug 1 - A, r=x.");
+  const b2 = await repo.commit({ "b.txt": lines(5, { 1: "fix b better" }) }, "Bug 2 - B, r=x.");
+  const c = await repo.commit({ "c.txt": "c\n" }, "Bug 3 - C, r=x.");
+  const r = await since(repo.dir, { old: [dbg, b1, a1], patches: [{ id: "p-a", title: "Bug 1 - A, r=x.", shas: [a2] }, { id: "p-b", title: "Bug 2 - B, r=x.", shas: [b2] }, { id: "p-c", title: "Bug 3 - C, r=x.", shas: [c] }] });
+  assert.deepEqual(
+    r.changes.map((x) => [x.patch, x.status, x.old]),
+    [["p-a", "same", a1], ["p-b", "changed", b1], ["p-c", "new", undefined]],
+  );
+  assert.match(r.changes[1].interdiff!.diff, /^-fix b$/m);
+  assert.match(r.changes[1].interdiff!.diff, /^\+fix b better$/m);
+  assert.deepEqual(r.removed, [{ sha: dbg, title: "Bug 2 - DEBUG - log, r=x." }]);
 });
 
 test("check reports every pre-submit problem", async (t) => {

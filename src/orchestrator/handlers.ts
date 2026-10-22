@@ -5,10 +5,11 @@ import { relative } from "node:path";
 import type { ClusterGroup } from "../cli/failures.ts";
 import type { PollResult } from "../cli/phab.ts";
 import type { ImportedCommit } from "../cli/stack/import.ts";
+import type { SinceResult } from "../cli/stack/since.ts";
 import type { DryRunResult, WatchLine } from "../cli/try.ts";
 import type { CommandInput } from "../state/commands.ts";
 import type { EventInput } from "../state/events.ts";
-import type { WriteTestPlanReport,
+import type {
   AddressReviewReport,
   Dep,
   FactoryConfig,
@@ -20,6 +21,7 @@ import type { WriteTestPlanReport,
   RecoverReport,
   RequestState,
   ReviewPatchReport,
+  WriteTestPlanReport,
 } from "../types.ts";
 import { patchId } from "./next.ts";
 import { dataPath } from "./plan.ts";
@@ -294,6 +296,18 @@ export function handleFinished(input: HandlerInput): HandlerResult {
       // The meta bug's text, rewritten as the stack changes, until it's filed.
       const d = input.report as WriteMetaBugReport;
       if (!s.metaBug?.bug) ev("meta-bug", { bug: null, draft: { ...(purpose.draft as BugDraft), description: d.description, ...(d.summary ? { summary: d.summary } : {}) } });
+      break;
+    }
+    case "since": {
+      // The interdiffs go to files: the page shows them, the try planner reads them.
+      const o = json<SinceResult>();
+      const changes = o.changes.map(({ interdiff, ...c }) => {
+        if (!interdiff) return c;
+        const path = dataPath(config, s.id, `interdiff-${c.patch}-since-${purpose.push}-${job.job}.diff`);
+        files.push({ path, content: interdiff.diff });
+        return { ...c, interdiffFile: relative(config.stateDir, path) };
+      });
+      ev("push-changes", { stack: purpose.stack!, since: purpose.push!, changes, removed: o.removed });
       break;
     }
     case "test-plan":

@@ -33,6 +33,7 @@ export function foldEvents(events: readonly Event[]): RequestState {
     patches: {},
     stacks: {},
     pushes: {},
+    pushChanges: {},
     jobs: {},
     needsUser: [],
     recoveryPlans: [],
@@ -181,6 +182,15 @@ export function foldEvents(events: readonly Event[]): RequestState {
           ...(before?.testPlan ? { testPlan: before.testPlan } : {}),
           ...(before?.testPlanSent ? { testPlanSent: before.testPlanSent } : {}),
         };
+        break;
+      }
+      case "push-changes":
+        s.pushChanges[e.stack] = { since: e.since, changes: e.changes, removed: e.removed };
+        break;
+      case "try-context": {
+        const p = push(e.push);
+        p.since = e.since;
+        p.regressions = e.regressions;
         break;
       }
       case "test-plan":

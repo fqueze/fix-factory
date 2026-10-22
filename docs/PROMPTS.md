@@ -52,10 +52,10 @@ Here are the skip-ifs of {folder}, each classified as scoping or flakiness: {ann
 
 ## plan-try-pushes
 
-sonnet · 2. First signal, 6. Verify on try · inputs: `goal`, `failuresFile`, `initialPushFile`, `branch`, `worktree`, `base`
+sonnet · 2. First signal, 6. Verify on try · inputs: `goal`, `failuresFile`, `initialPushFile`, `branch`, `worktree`, `base`, `since`
 
 ```
-Plan the try pushes for: {goal}. Inputs are files: the failures to cover with their per-config rates ({failuresFile}), and the pushes already made: the un-skip push and this stack's earlier ones, with their commands, local commits and results ({initialPushFile}); the stack is the branch {branch} in {worktree} (start from `git log --stat {base}..{branch}`). Follow the push-to-try skill. Keep the configs and paths comparable with the un-skip push, and add a separate push when a patch changes product code that those jobs don't cover. Give each push its `mach try` command, rebuild count, and one-line purpose; plan nothing (an empty list) for what earlier pushes of the same changes (compare their commits with `git diff`) or the user's reasons already cover.
+Plan the try pushes for: {goal}. Inputs are files: the failures to cover with their per-config rates ({failuresFile}), and the pushes already made: the un-skip push and this stack's earlier ones, with their commands, local commits and results ({initialPushFile}); the stack is the branch {branch} in {worktree} (start from `git log --stat {base}..{branch}`).{since} Follow the push-to-try skill. Keep the configs and paths comparable with the un-skip push, and add a separate push when a patch changes product code that those jobs don't cover. Give each push its `mach try` command, rebuild count, and one-line purpose; plan nothing (an empty list) for what earlier pushes of the same changes (compare their commits with `git diff`) or the user's reasons already cover.
 ```
 
 ## triage-try

@@ -55,6 +55,32 @@
         ],
         "additionalProperties": false
       }
+    },
+    "regressions": {
+      "type": "array",
+      "description": "Only when the stack was pushed before: each failure of that push the stack caused, and the patch whose change since then claims to fix it.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "failure": {
+            "type": "string",
+            "description": "The failure, with its tests and configs."
+          },
+          "fixedBy": {
+            "type": "string",
+            "description": "The id of the patch whose change since that push fixes it; absent if nothing does."
+          },
+          "how": {
+            "type": "string",
+            "description": "What that change does about it, from its interdiff; or why nothing fixes it yet."
+          }
+        },
+        "required": [
+          "failure",
+          "how"
+        ],
+        "additionalProperties": false
+      }
     }
   },
   "required": [

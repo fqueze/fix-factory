@@ -172,6 +172,10 @@ export type Event =
       interdiffFile?: string; // diff against the previously submitted version, relative to stateDir
     })
   | (EventBase & { type: "test-plan"; patch: PatchId; text: string })
+  // What changed in a stack since its last push: each patch's commit then and now, the interdiff of those that changed.
+  | (EventBase & { type: "push-changes"; stack: string; since: PushId; changes: PushChange[]; removed: { sha: string; title: string }[] })
+  // What a planned push is for, against the stack's previous push: its regressions, and the patch that claims each fix.
+  | (EventBase & { type: "try-context"; push: PushId; since: PushId; regressions: Regression[] })
   | (EventBase & { type: "test-plan-sent"; patch: PatchId; revision: number; text: string })
   | (EventBase & { type: "dep"; dep: Dep })
   | (EventBase & { type: "dep-removed"; patch: PatchId; needs: PatchId | string })
@@ -359,8 +363,24 @@ export interface StackView {
   submittedOrder?: PatchId[]; // its order when you last copied its moz-phab (or reorg) command: Phabricator's
 }
 
+export interface PushChange {
+  patch: PatchId;
+  status: "same" | "changed" | "new";
+  old?: string;
+  new: string;
+  interdiffFile?: string; // relative to stateDir
+}
+
+export interface Regression {
+  failure: string; // the failure on the previous push, with its tests
+  fixedBy?: PatchId; // the patch whose change since then claims to fix it; none: not fixed yet
+  how: string; // what that change does about it, or why nothing does
+}
+
 export interface PushView {
   id: PushId;
+  since?: PushId; // the stack's push it follows: its changes since then are in RequestState.pushChanges
+  regressions?: Regression[];
   purpose: string;
   command: string[];
   taskCount?: number;
@@ -414,6 +434,7 @@ export interface RequestState {
   patches: Record<PatchId, PatchView>;
   stacks: Record<string, StackView>;
   pushes: Record<PushId, PushView>; // in creation order
+  pushChanges: Record<string, { since: PushId; changes: PushChange[]; removed: { sha: string; title: string }[] }>; // per stack, the latest
   jobs: Record<JobId, JobView>;
   needsUser: NeedsUser[]; // open ones only
   metaBug?: { bug: number | null; draft?: BugDraft };
@@ -501,6 +522,7 @@ export interface WriteAnnotationPatchesReport {
 
 export interface PlanTryPushesReport {
   pushes: { purpose: string; tryArgs: string[]; rebuild: number }[];
+  regressions?: Regression[]; // when the stack had an earlier push: each of its regressions, and what fixes it
   feedback: Feedback[];
 }
 

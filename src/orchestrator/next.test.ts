@@ -1892,7 +1892,19 @@ describe("6. verify on try, again", () => {
     sc.add({ type: "try-pushed", request: ID, push, rev: "fed", url: "u" });
     sc.add({ type: "try-finished", request: ID, push, result: "green", summary: "green" });
     sc.add({ type: "step", request: ID, step: "verify on try" });
+    // A new plan after an earlier push first finds what changed since.
+    const sinceKey = sc.settle().find((k) => k.startsWith("since:"))!;
+    assert.ok(sinceKey, "the stack's changes since its last push");
+    assert.deepEqual(sc.plan(sinceKey).cli?.args.slice(0, 1), ["since"]);
+    const p = Object.keys(sc.state().patches)[0];
+    sc.complete(sinceKey, { output: { changes: [{ patch: p, status: "changed", old: "a".repeat(40), new: "b".repeat(40), interdiff: { diff: "-old\n+new\n", method: "same-parent" } }], removed: [] } });
+    assert.equal(sc.state().pushChanges.root.since, push);
+    assert.match(sc.state().pushChanges.root.changes[0].interdiffFile!, /^requests\/.*interdiff-.*-since-/);
     const plan3 = sc.settle().find((k) => k.startsWith("plan:verify:"))!;
+    assert.match(String(sc.plan(plan3).agent?.vars?.since), /The stack was pushed before \(fed: green\)/);
+    const sinceFile = JSON.parse(String(sc.plan(plan3).files?.find((f) => f.path.includes("/since-"))?.content));
+    assert.equal(sinceFile.previousPush.rev, "fed");
+    assert.equal(sinceFile.changes[0].status, "changed");
     sc.complete(plan3, { report: { pushes: [], feedback: [] } });
     sc.settle();
     assert.equal(sc.state().step, "meta bug");

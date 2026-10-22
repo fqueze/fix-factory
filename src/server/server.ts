@@ -133,12 +133,13 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
   });
 
   function readInterdiff(p: PatchView): string | undefined {
-    if (p.interdiffFile === undefined) {
-      return undefined;
-    }
+    return p.interdiffFile === undefined ? undefined : readData(p.interdiffFile);
+  }
+
+  function readData(path: string): string | undefined {
     try {
       const root = realpathSync(opts.config.stateDir);
-      const file = realpathSync(resolve(root, p.interdiffFile));
+      const file = realpathSync(resolve(root, path));
       const rel = relative(root, file);
       // Inside stateDir only, symlinks included.
       if (rel.startsWith("..") || isAbsolute(rel)) {
@@ -226,6 +227,7 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
       open,
       bugzillaEmail: opts.config.bugzillaEmail,
       interdiff: readInterdiff,
+      readData,
       freeDiskGB: freeDiskGB(),
     };
   }

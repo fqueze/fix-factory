@@ -626,6 +626,7 @@ class Planner {
         branch: wt.branch,
         worktree: wt.path,
         base: this.config.baseRef,
+        since: "",
       },
       { cwd: wt.path, files: [{ path: dataPath(this.config, this.s.id, "no-initial-push.json"), content: '{"note": "none: this is the un-skip push"}\n' }] },
       (i, count) => `unskip${e.replaceAll("@", "-")}${count === 1 ? "" : `-${i + 1}`}`,
@@ -663,6 +664,7 @@ class Planner {
     idOf: (i: number, count: number) => string,
     cwd: string,
     stack?: string,
+    since?: PushId,
   ): { ids: PushId[]; dry: DryRunResult[]; made: PushId[] } | undefined {
     const ids: PushId[] = [];
     const dry: DryRunResult[] = [];
@@ -677,6 +679,9 @@ class Planner {
       const these = planned.map((_, i) => (r === 0 ? idOf(i, planned.length) : `${idOf(0, 1)}-v${r}${planned.length === 1 ? "" : `-${i + 1}`}`));
       const d = planned.map((push, i) => this.dryRun(these[i], push.tryArgs, push.purpose, cwd, stack));
       if (d.some((x) => !x)) return undefined;
+      // What you judge it by: the previous push's regressions, and what claims to fix each.
+      const regressions = this.rep<PlanTryPushesReport>(plan).regressions;
+      if (since && regressions) for (const id of these) if (this.s.pushes[id] && this.s.pushes[id].since === undefined) this.event({ type: "try-context", request: this.s.id, push: id, since, regressions });
       ids.push(...these);
       dry.push(...(d as DryRunResult[]));
       const pending = ids.filter((p) => this.s.pushes[p]?.replan && !handled.has(p));
@@ -687,7 +692,7 @@ class Planner {
       for (const p of revise) handled.add(p);
       const prev = plan;
       const asks = revise.map((p) => `push ${p} (\`${this.s.pushes[p].command.join(" ")}\`): “${this.s.pushes[p].declined}”`).join("\n");
-      const message = `The user reviewed what you planned and wants it revised:\n${asks}\n\nDo exactly what they ask. Return only what replaces ${revise.length === 1 ? "that push" : "those pushes"} (the plan's other pushes stand), or an empty list if they want none. End with the JSON report again.`;
+      const message = `The user reviewed what you planned and wants it revised:\n${asks}\n\nDo exactly what they ask.${vars.since} Return only what replaces ${revise.length === 1 ? "that push" : "those pushes"} (the plan's other pushes stand), or an empty list if they want none. End with the JSON report again.`;
       const k = `${key}:revise:${shortHash(revise).slice(0, 8)}`;
       plan = this.want(k, () => ({
         purpose: { key: k, what: "plan-pushes", pushes: revise },
@@ -1124,7 +1129,7 @@ class Planner {
     const none = dataPath(this.config, this.s.id, "no-initial-push.json");
     const planned = this.planPushes(
       `plan:asked:${item.id}${e}:${author.job}`,
-      { goal: `what the author of ${item.group.tests[0]} asked for: ${asked}`, failuresFile: groupFile, initialPushFile: none, branch, worktree: path, base: this.config.baseRef },
+      { goal: `what the author of ${item.group.tests[0]} asked for: ${asked}`, failuresFile: groupFile, initialPushFile: none, branch, worktree: path, base: this.config.baseRef, since: "" },
       { cwd: path, item: item.id, purpose: { item: item.id }, files: [{ path: none, content: '{"note": "none"}\n' }] },
       (i, count) => `${item.id.replace(/^i-/, "").slice(0, 24)}-ask-${h}${count === 1 ? "" : `-${i + 1}`}`,
       path,
@@ -1690,13 +1695,20 @@ class Planner {
     const initialFile = dataPath(this.config, this.s.id, "initial-pushes.json");
     const debug = this.debugGroups().flatMap((g) => g.commits);
     const planKey = `plan:verify:${info.id}:${info.code}${e}${debug.length ? `:${shortHash(debug).slice(0, 6)}` : ""}`;
+    // After an earlier push of the stack: what changed since, and what it claims to fix, before planning the next.
+    // Only a new plan waits for it; the current plan's own pushes aren't earlier ones.
+    const since = this.sinceLastPush(info);
+    if (since === null && !this.view.byKey.has(planKey)) return undefined;
     const planned = this.planPushes(planKey, {
-      goal: `verify the fixes of the ${info.folder} stack: every failure below should be gone, with no new one`,
+      goal: `verify the fixes of the ${info.folder ? `${info.folder} ` : ""}stack: every failure below should be gone, with no new one`,
       failuresFile,
       initialPushFile: initialFile,
       branch,
       worktree: info.wt,
       base: stack.base ?? this.config.baseRef,
+      since: since && since !== null
+        ? ` The stack was pushed before (${since.rev}: ${since.summary}). What changed since, each changed patch with its interdiff and what its author said it fixes, and that push's failures, are in ${since.file}. Return \`regressions\`: each failure of that push the stack caused (not pre-existing, not infra), with the patch whose change since then claims to fix it (\`fixedBy\`, its id) and how, from its interdiff, not only its author's word; none if nothing fixes it. A regression nothing fixes isn't worth a push: plan none for it, and say so in its \`how\`.`
+        : "",
     }, {
       cwd: info.wt,
       purpose: { stack: info.id },
@@ -1738,9 +1750,50 @@ class Planner {
               2,
             ) + "\n",
         },
+        ...(since ? [{ path: since.file, content: JSON.stringify(since.content, null, 2) + "\n" }] : []),
       ],
-    }, (i) => `${this.verifyPrefix(info)}-${i + 1}`, info.wt, info.id);
+    }, (i) => `${this.verifyPrefix(info)}-${i + 1}`, info.wt, info.id, since?.push);
     return planned && { ids: planned.ids, made: planned.made };
+  }
+
+  // The stack's latest push with results, what changed since (stack.ts since: interdiffs), and what its authors were
+  // told and said. undefined: no earlier push; null: still finding out.
+  private sinceLastPush(info: StackInfo): { push: PushId; rev: string; summary: string; file: string; content: unknown } | null | undefined {
+    const last = this.madePushes(info.id).filter((id) => this.s.pushes[id].result !== undefined && !id.startsWith(this.verifyPrefix(info))).at(-1);
+    if (!last || !info.wt) return undefined;
+    const p = this.s.pushes[last];
+    const dry = this.view.byKey.get(`dry-run:${last}`)!.find(succeeded)!;
+    const patches = info.patches.map((x) => ({ id: x.id, title: this.s.patches[x.id].title, shas: [x.source, ...[...(this.s.patches[x.id].pastShas ?? [])].reverse()] }));
+    const input = dataPath(this.config, this.s.id, `since-${info.id}-${last}-input.json`);
+    const key = `since:${info.id}:${last}:${shortHash(patches.map((x) => x.shas[0])).slice(0, 8)}`;
+    const job = this.want(key, () =>
+      this.cli("since", "stack.ts", ["since", "--cwd", info.wt!, input], {
+        cwd: info.wt!,
+        files: [{ path: input, content: JSON.stringify({ old: this.out<DryRunResult>(dry).commits, patches }, null, 2) + "\n" }],
+        purpose: { stack: info.id, push: last },
+      }),
+    );
+    if (!job) return null;
+    const changes = this.s.pushChanges[info.id]?.since === last ? this.s.pushChanges[info.id] : undefined;
+    if (!changes) return null;
+    const pushedAt = this.view.jobs.find((j) => j.purpose.what === "push" && j.purpose.push === last)?.startedAt ?? 0;
+    const table = this.view.byKey.get(`try-table:${last}:final`)?.find(succeeded);
+    const content = {
+      previousPush: { id: last, rev: p.rev, url: p.url, result: p.result, summary: p.summary, resultsTable: table ? outPath(this.config, table.job) : undefined, triage: p.analysis },
+      changes: changes.changes.map((c) => {
+        const item = this.s.patches[c.patch].item;
+        // Its author's runs since that push: why each ran, and what it said.
+        const runs = item === undefined ? [] : this.view.jobs.filter((j) => j.item === item && j.purpose.what === "author" && j.startedAt > pushedAt && succeeded(j));
+        return {
+          ...c,
+          title: this.s.patches[c.patch].title,
+          interdiffFile: c.interdiffFile && resolve(this.config.stateDir, c.interdiffFile),
+          authorRuns: runs.map((j) => ({ why: j.purpose.reason, said: this.rep<{ summary?: string; disagreement?: string }>(j).summary, disagreement: this.rep<{ disagreement?: string }>(j).disagreement })),
+        };
+      }),
+      removedSinceThen: changes.removed,
+    };
+    return { push: last, rev: p.rev!, summary: p.summary ?? p.result!, file: dataPath(this.config, this.s.id, `since-${info.id}-${last}.json`), content };
   }
 
   // Once the stack is verified with the DEBUG commit on top, the skips it removed whose tests passed are removed for
