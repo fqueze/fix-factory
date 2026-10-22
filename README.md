@@ -9,8 +9,10 @@ You need:
 - A Firefox checkout set up with `./mach bootstrap`. That also installs moz-phab and searchfox-cli.
 - Claude Code, logged in. Agents run it through `claudeCommand`, ideally in a sandbox wrapper (`["mozsb", "claude"]`)
   so they can't read your credentials or push anything themselves.
-- To submit patches and push to try (the factory does both, only after you approve): a Phabricator token in
-  `~/.arcrc` (`moz-phab install-certificate`) and a Lando login for `./mach try` (run one try push by hand once).
+- A Phabricator token in `~/.arcrc` (`moz-phab install-certificate`): the factory reads reviews with it. It never
+  submits: the page gives you the `moz-phab submit` command to run.
+- A Lando login for `./mach try` (run one try push by hand once): the factory pushes to try, only after you approve
+  each push on the page.
 - Disk: each agent's worktree is about 6 GB. The factory stops creating them below 20 GB free.
 
 Then:
