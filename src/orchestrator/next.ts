@@ -303,7 +303,7 @@ class Planner {
       if (!item || !TEST_PLAN_STATES.has(item.state) || (!verified && p.revision === undefined)) continue;
       const author = item.jobs.map((j) => this.s.jobs[j]).findLast((j) => j?.name === "investigate-and-fix");
       const inv = item.investigation ?? null;
-      const key = `test-plan:${p.id}:${shortHash([JSON.stringify([inv, results])]).slice(0, 8)}`;
+      const key = `test-plan:${p.id}:v2:${shortHash([JSON.stringify([inv, results])]).slice(0, 8)}`;
       const investigationFile = dataPath(this.config, this.s.id, `test-plan-${p.id}-investigation.json`);
       const pushesFile = dataPath(this.config, this.s.id, `test-plan-${p.id}-pushes.json`);
       const notes = Object.values(inv?.files ?? {});
