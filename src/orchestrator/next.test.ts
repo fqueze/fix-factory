@@ -1232,7 +1232,7 @@ describe("4b. try repro", () => {
     const sc = workList(groups);
     for (const g of groups) investigating(sc, `i-${g.tests[0].slice(2, -3).replace("_", "-")}`);
     const repro = (item: string, commit: string) => {
-      sc.complete(`author:${item}:initial`, { report: fixed([commit], { state: "needs a try repro", summary: "the race only shows on mac debug" }) });
+      sc.complete(`author:${item}:initial`, { report: fixed([commit], { state: "needs a try repro", summary: "the race only shows on mac debug", profiles: [{ profile: "profile_test_a.js.json.gz", finding: "no marker says which race" }] }) });
       sc.settle();
       assert.equal(sc.state().items[item].state, "waiting for a try repro");
     };
@@ -1259,6 +1259,13 @@ describe("4b. try repro", () => {
     assert.equal(sc.state().step, "verify on try");
     return sc;
   };
+
+  it("refuses a DEBUG push from an author that didn't read the failing jobs' profiles", () => {
+    const sc = new Scenario("try-push", { rev: "abc" });
+    sc.add({ type: "item-created", request: ID, item: "i-x", folder: "x", group: { message: "m", tests: ["x/test_x.js"], configs: [] } });
+    sc.add({ type: "job-started", request: ID, job: "j-a", item: "i-x", kind: "agent", name: "investigate-and-fix", pid: 1, pidStartTime: 1, cmd: [], cwd: "/wt/x", codeVersion: "t", sessionId: "s", purpose: { key: "author:i-x:initial", what: "author", item: "i-x", reason: "initial" } } as never);
+    assert.throws(() => sc.complete("author:i-x:initial", { report: fixed([sha("d")], { state: "needs a try repro", summary: "logs only" }) }), (e: Error) => e instanceof InvalidReport && /profiles of the failing tasks first/.test(e.message));
+  });
 
   it("puts a waiting group's DEBUG commits on top of the stack's verify push, then gives its author the results", () => {
     const sc = waitingStack();
@@ -1357,7 +1364,7 @@ describe("4b. try repro", () => {
     sc.add({ type: "item-state", request: ID, item: "i-test-a", state: "left as-is", detail: "by you" });
     sc.add({ type: "item-created", request: ID, item: "i-test-a-2", folder: "a", group: group("kb", test, "bang") } as never);
     investigating(sc, "i-test-a-2");
-    sc.complete("author:i-test-a-2:initial", { report: fixed([sha("d")], { state: "needs a try repro", summary: "mac only" }) });
+    sc.complete("author:i-test-a-2:initial", { report: fixed([sha("d")], { state: "needs a try repro", summary: "mac only", profiles: [{ profile: "none", finding: "the failing tasks have none" }] }) });
     sc.settle();
     assert.equal(sc.state().items["i-test-a-2"].state, "waiting for a try repro");
     sc.complete("author:i-test-a:initial", { report: fixed([sha("1")]) });

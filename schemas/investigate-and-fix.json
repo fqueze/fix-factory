@@ -208,6 +208,27 @@
     "tryRequest": {
       "type": "string",
       "description": "Only a try push the user asked you for in a message: what it should run and why. The factory plans it, the user approves it, and you're resumed with the results. Any other is ignored: the stack goes to try as a whole."
+    },
+    "profiles": {
+      "type": "array",
+      "description": "The profiles of the failing jobs you read (the test's profile_<test>.json.gz artifact of each failing task), each with what it shows. Required before asking for a DEBUG push: what they show and why that isn't enough. If the failing tasks have none, one entry saying so and how you checked.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "profile": {
+            "type": "string",
+            "description": "The file or artifact URL, and the task it came from."
+          },
+          "finding": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "profile",
+          "finding"
+        ],
+        "additionalProperties": false
+      }
     }
   },
   "required": [

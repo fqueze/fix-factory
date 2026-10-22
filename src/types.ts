@@ -269,6 +269,7 @@ export interface InvestigateReport {
   verification: string;
   reproduction?: { reproduced: boolean; where?: "locally" | "on try"; widened?: boolean; command?: string; before: string; after?: string }; // command: in the first reports, before files
   files?: { evidence: string; reproduction: string; widening?: string }; // relative to the worktree
+  profiles?: { profile: string; finding: string }[]; // the failing jobs' profiles read, and what each shows
   commits: string[]; // shas in the agent's worktree, oldest first
   bugDraft?: BugDraft; // when the fix needs its own bug
   tryRequest?: string; // a try push it needs: what to run and why; the factory plans it and asks you
