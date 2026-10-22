@@ -3,7 +3,7 @@
   "properties": {
     "testPlan": {
       "type": "string",
-      "description": "The test plan: at most 5 short lines, plain text."
+      "description": "The test plan: at most 5 short lines, Markdown."
     },
     "feedback": {
       "type": "array",

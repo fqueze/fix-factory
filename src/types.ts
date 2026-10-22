@@ -219,7 +219,8 @@ export type Command =
   | (CommandBase & { cmd: "stack-comments"; stack: string; comments: { patch: PatchId; text: string }[] })
   | (CommandBase & { cmd: "take-it" | "hand-back"; item: ItemId })
   | (CommandBase & { cmd: "comment-fix"; patch: PatchId; text: string })
-  | (CommandBase & { cmd: "set-test-plan"; patch: PatchId; text: string }) // on its revision, as you edited it
+  | (CommandBase & { cmd: "set-test-plan"; patch: PatchId; text: string }) // on its revision
+  | (CommandBase & { cmd: "revise-test-plan"; patch: PatchId; text: string }) // what its agent should change
   | (CommandBase & { cmd: "tell-factory"; text: string })
   | (CommandBase & { cmd: "reply-recovery"; job: JobId; text: string })
   | (CommandBase & { cmd: "start-now" })

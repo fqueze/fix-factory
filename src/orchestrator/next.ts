@@ -101,6 +101,7 @@ export const CANCELLED = "cancelled by you";
 // Jobs with an external side effect that a failure doesn't undo: a try push can fail after mach try
 // pushed (a Lando timeout), and a retry would push again. They come to you instead.
 const NO_RETRY = new Set(["push"]);
+const TEST_PLAN_VERSION = "v3";
 // A patch whose code was accepted gets a test plan; a landed one no longer needs it.
 const TEST_PLAN_STATES = new Set<ItemState>(["reviewed", "in stack", "in try", "waiting for review", "addressing review comments", "fixed"]);
 
@@ -303,11 +304,31 @@ class Planner {
       if (!item || !TEST_PLAN_STATES.has(item.state) || (!verified && p.revision === undefined)) continue;
       const author = item.jobs.map((j) => this.s.jobs[j]).findLast((j) => j?.name === "investigate-and-fix");
       const inv = item.investigation ?? null;
-      const key = `test-plan:${p.id}:v2:${shortHash([JSON.stringify([inv, results])]).slice(0, 8)}`;
+      // The version changes with the prompt: an earlier version's session isn't resumed.
+      const version = `test-plan:${p.id}:${TEST_PLAN_VERSION}:`;
+      const key = `${version}${shortHash([JSON.stringify([inv, results])]).slice(0, 8)}`;
       const investigationFile = dataPath(this.config, this.s.id, `test-plan-${p.id}-investigation.json`);
       const pushesFile = dataPath(this.config, this.s.id, `test-plan-${p.id}-pushes.json`);
       const notes = Object.values(inv?.files ?? {});
       const dir = author?.cwd ?? p.worktree;
+      const files = [
+        { path: investigationFile, content: JSON.stringify({ tests: item.group.tests, failure: item.group.message, ...inv }, null, 2) + "\n" },
+        { path: pushesFile, content: JSON.stringify(results, null, 2) + "\n" },
+      ];
+      // New results go to the session that wrote it, which keeps what you asked of it.
+      const last = this.view.jobs.findLast((j) => j.purpose.what === "test-plan" && j.purpose.patch === p.id && j.purpose.key.startsWith(version) && j.sessionId && succeeded(j));
+      if (last) {
+        this.want(key, () => ({
+          purpose: { key: "", what: "test-plan", patch: p.id },
+          kind: "agent",
+          name: "write-test-plan",
+          item: item.id,
+          cwd: last.cwd,
+          files,
+          agent: { sessionId: last.sessionId!, resume: true, message: `Its investigation or its request's try results changed: ${investigationFile} and ${pushesFile} are up to date. Write the test plan again, keeping what you were asked before, then end with the JSON report.` },
+        }));
+        continue;
+      }
       this.wantAgent(
         key,
         "test-plan",
@@ -321,14 +342,7 @@ class Planner {
           keptDir: keptDir(this.config.stateDir, basename(dir)),
           pushesFile,
         },
-        {
-          item: item.id,
-          files: [
-            { path: investigationFile, content: JSON.stringify({ tests: item.group.tests, failure: item.group.message, ...inv }, null, 2) + "\n" },
-            { path: pushesFile, content: JSON.stringify(results, null, 2) + "\n" },
-          ],
-          purpose: { patch: p.id },
-        },
+        { item: item.id, files, purpose: { patch: p.id } },
       );
     }
   }

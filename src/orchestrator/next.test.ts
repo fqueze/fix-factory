@@ -2212,6 +2212,17 @@ describe("9. review comments", () => {
 
     const refused = commandEffects({ ...command, id: "c-plan-2", patch: "p-nope" } as Command, { config, state: sc.state(), view: sc.view(), exists: () => false, plan: () => undefined });
     assert.ok(refused.some((e) => e.type === "event" && e.event.type === "command-executed" && !e.event.ok));
+
+    // Revised by the agent that wrote it, in its session.
+    const revise = commandEffects({ ...command, id: "c-rev", cmd: "revise-test-plan", text: "Name the platform." } as Command, { config, state: sc.state(), view: sc.view(), exists: () => false, plan: (j) => sc.plans.get(j) });
+    const again = revise.find((e) => e.type === "start");
+    assert.ok(again?.type === "start");
+    assert.equal(again.plan.agent?.resume, true);
+    assert.equal(again.plan.agent?.sessionId, sc.view().jobs.find((j) => j.purpose.key === key)!.sessionId);
+    assert.match(again.plan.agent?.message ?? "", /Name the platform\./);
+    sc.startJob(again.plan);
+    sc.complete(again.plan.purpose.key, { report: { testPlan: "- Locally on Ubuntu 24.04 (debug): 6/6, 0/20 with the fix.", feedback: [] } });
+    assert.equal(sc.state().patches["p-test-a"].testPlan, "- Locally on Ubuntu 24.04 (debug): 6/6, 0/20 with the fix.");
   });
 
   it("polls Phabricator every 10 min while you're present, every 3 h while you're away", () => {

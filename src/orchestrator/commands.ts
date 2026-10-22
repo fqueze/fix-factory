@@ -225,6 +225,31 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
       done(true);
       break;
     }
+    case "revise-test-plan": {
+      // The agent that wrote it, in its session.
+      const last = view.jobs.findLast((j) => j.purpose.what === "test-plan" && j.purpose.patch === c.patch && j.sessionId);
+      if (!last) {
+        done(false, "no test plan to revise");
+        break;
+      }
+      if (!last.end) {
+        done(false, "its test plan is being written: send it again when it's done");
+        break;
+      }
+      effects.push({
+        type: "start",
+        plan: {
+          purpose: { key: `${last.purpose.key.split(":").slice(0, 3).join(":")}:revise:${c.id}`, what: "test-plan", patch: c.patch, reason: c.text },
+          kind: "agent",
+          name: "write-test-plan",
+          ...(last.item ? { item: last.item } : {}),
+          cwd: last.cwd,
+          agent: { sessionId: last.sessionId!, resume: true, message: `Revise the test plan: ${c.text}\n\nThen end with the JSON report again.` },
+        },
+      });
+      done(true);
+      break;
+    }
     case "poll-phab":
       ev({ type: "poll-requested" });
       done(true);

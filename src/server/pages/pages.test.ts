@@ -1154,19 +1154,24 @@ describe("linkify", () => {
 });
 
 describe("test plan", () => {
-  it("is editable and set on the revision with a click; before submission it's copied", () => {
+  it("comes first, formatted, to copy, set on the revision with a click, or revise", () => {
     const r = structuredClone(get("r-20261005-newtab"));
-    r.patches["p-panel"].testPlan = "- Widened the race: 6/6, 0/20 with the fix.";
+    r.patches["p-panel"].testPlan = "- Widened the race in `foo()`: 6/6, 0/20 with the fix.";
     let row = rowOf(renderRequest(r, ctx, true).value, "patch-p-panel");
-    assert.match(row, /<h4>Test plan<\/h4><form class="cmd"[^>]*>.*<textarea name="text" id="test-plan-p-panel" required rows="2">- Widened the race: 6\/6, 0\/20 with the fix\.<\/textarea>/);
-    assert.ok(row.includes(cmd({ cmd: "set-test-plan", request: r.id, patch: "p-panel" })));
-    assert.match(row, /Set as D327083&#39;s test plan|Set as D327083's test plan/);
-    r.patches["p-panel"].testPlanSent = { revision: 327083, text: "older", t: "2026-10-16T08:00:00.000Z" };
+    assert.ok(row.indexOf('<h4 class="part">Test plan</h4>') < row.indexOf('<h4 class="part">The failure'), "before the failure");
+    assert.match(row, /<div class="testplan"><div class="md"><ul><li>Widened the race in <code>foo\(\)<\/code>: 6\/6, 0\/20 with the fix\.<\/li><\/ul><\/div><\/div>/);
+    assert.match(row, /<textarea hidden id="test-plan-p-panel">- Widened the race in `foo\(\)`: 6\/6, 0\/20 with the fix\.<\/textarea><button type="button" class="btn small" data-copy="test-plan-p-panel">Copy<\/button>/);
+    assert.ok(row.includes(cmd({ cmd: "set-test-plan", request: r.id, patch: "p-panel", text: r.patches["p-panel"].testPlan })));
+    assert.match(row, /Set as D327083(&#39;|')s test plan/);
+    assert.ok(row.includes(cmd({ cmd: "revise-test-plan", request: r.id, patch: "p-panel" })));
+    r.patches["p-panel"].testPlanSent = { revision: 327083, text: r.patches["p-panel"].testPlan, t: "2026-10-16T08:00:00.000Z" };
     row = rowOf(renderRequest(r, ctx, true).value, "patch-p-panel");
-    assert.match(row, /on D327083 since Oct 16, a newer draft below/);
+    assert.match(row, /on D327083 since Oct 16<\/span>/);
+    assert.doesNotMatch(row, /set-test-plan/, "already there");
+    r.patches["p-panel"].testPlan = "newer";
     delete r.patches["p-panel"].revision;
     row = rowOf(renderRequest(r, ctx, true).value, "patch-p-panel");
-    assert.match(row, /data-copy="test-plan-p-panel"/);
-    assert.doesNotMatch(row, /set-test-plan/);
+    assert.match(row, /since Oct 16, not this version/);
+    assert.doesNotMatch(row, /set-test-plan/, "no revision to set it on");
   });
 });
