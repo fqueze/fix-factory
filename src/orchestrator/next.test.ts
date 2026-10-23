@@ -1673,6 +1673,27 @@ describe("6. verify on try", () => {
     assert.equal(sc.state().step, "verify on try");
   });
 
+  it("a push whose only failures are pre-existing or infra passes, and the request moves on", () => {
+    const sc = stacked();
+    const planKey = sc.view().jobs.find((j) => j.purpose.what === "plan-pushes")!.purpose.key;
+    sc.complete(planKey, { report: { pushes: [{ purpose: "verify", tryArgs: ["fuzzy", "-q", "x"], rebuild: 5 }], feedback: [] } });
+    const [dry] = sc.settle();
+    const push = sc.purpose(dry).push!;
+    sc.complete(dry, { output: { command: ["./mach", "try", "fuzzy", "-q", "x"], taskCount: 5, tasks: [], tryTaskConfig: {}, commits: [], warnings: [] } });
+    sc.add({ type: "user-done", request: ID, key: `approve-push:${push}` });
+    sc.settle();
+    sc.complete(`push:${push}`, { output: { rev: "fed", landoJobId: 1, treeherderUrl: "t" } });
+    sc.settle();
+    sc.add({ type: "try-finished", request: ID, push, result: "failures", summary: "s" });
+    sc.settle();
+    sc.complete(`try-table:${push}:final`, { output: table([{ test: "z/test_z.js", config: "linux", result: "fail", failures: ["zap"], taskIds: ["T2"] }]) });
+    sc.settle();
+    assert.equal(sc.state().step, "verify on try", "not before its triage");
+    sc.complete(`triage:${push}:final:v2`, { report: { cells: [{ test: "z/test_z.js", config: "linux", verdict: "pre-existing", evidence: "fails on central too" }], feedback: [] } });
+    sc.settle();
+    assert.equal(sc.state().step, "meta bug");
+  });
+
   it("moves to the meta bug once every push is green", () => {
     const sc = stacked();
     const planKey = sc.view().jobs.find((j) => j.purpose.what === "plan-pushes")!.purpose.key;
@@ -2990,9 +3011,8 @@ describe("burndown verification", () => {
   });
   it("with failures, has the author cherry-pick the same commit and list the skips whose tests still fail", () => {
     const { sc } = verified(false, 22, "failures");
-    // Its failures pointed at no patch: you move the request on.
-    assert.equal(sc.state().step, "verify on try");
-    sc.add({ type: "step", request: ID, step: "meta bug" });
+    // No failure of its result table is the stack's: it passes, and the request moves on.
+    assert.equal(sc.state().step, "meta bug");
     sc.settle();
     const message = sc.plan("author:i-annotations:removal").agent!.message!;
     assert.match(message, /DEBUG commit on top: fed \(failures\)/);

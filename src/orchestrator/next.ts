@@ -66,6 +66,7 @@ import type {
   ResolveConflictReport,
   ReviewStackReport,
   TriageTryReport,
+  TriageVerdict,
   WriteAnnotationPatchesReport,
 } from "../types.ts";
 import { succeeded, type JobRecord, type View } from "./view.ts";
@@ -102,6 +103,8 @@ export const CANCELLED = "cancelled by you";
 // pushed (a Lando timeout), and a retry would push again. They come to you instead.
 const NO_RETRY = new Set(["push"]);
 const TEST_PLAN_VERSION = "v4";
+// A push whose failures triage found only these passes: they aren't the stack's.
+const BENIGN = new Set<TriageVerdict>(["pre-existing", "infra", "fixed"]);
 // A patch whose code was accepted gets a test plan; a landed one no longer needs it.
 const TEST_PLAN_STATES = new Set<ItemState>(["reviewed", "in stack", "in try", "waiting for review", "addressing review comments", "fixed"]);
 
@@ -236,6 +239,8 @@ interface StackInfo {
 class Planner {
   readonly actions: Action[] = [];
   private readonly startedKeys = new Set<string>();
+  // Pushes whose failures are all pre-existing or infra (routeTryFailures, before stackGreen reads it).
+  private readonly passing = new Set<PushId>();
   private readonly raisedKeys = new Set<string>();
   private readonly itemStates = new Map<ItemId, ItemState>();
   private readonly newItems = new Map<ItemId, FailureGroup>();
@@ -1683,7 +1688,7 @@ class Planner {
     const pushes = made.length ? made : this.madePushes(info.id);
     if (!pushes.length) this.raise(`unverified:${info.id}`, { action: "Nothing verifies this stack on try", detail: "every planned push was declined, and none was made before: tell the factory what to do", stack: info.id });
     else this.clear(`unverified:${info.id}`);
-    return pushes.length > 0 && pushes.every((push) => this.s.pushes[push]?.result === "green");
+    return pushes.length > 0 && pushes.every((push) => this.s.pushes[push]?.result === "green" || this.passing.has(push));
   }
 
   private madePushes(stack: string): PushId[] {
@@ -2010,19 +2015,28 @@ class Planner {
       const line = (r: TryRow) => `- ${r.test} on ${r.config}: ${r.failures.join(" | ").slice(0, 300)} (tasks ${r.taskIds.join(", ")})`;
       const early = run.startsWith("final") ? this.view.byKey.get(`try-table:${push}:${run.replace(/^final/, "early")}`)?.find(succeeded) : undefined;
       const told = new Set(early ? this.out<TryTable>(early).rows.filter((r) => r.result === "fail").map((r) => `${r.test} ${r.config}`) : []);
+      let authorsOwn = false;
       for (const [item, rows] of byItem) {
         const fresh = rows.filter((r) => !told.has(`${r.test} ${r.config}`));
         if (fresh.length) this.routeToAuthor(item, push, fresh.map(line), early ? ":final" : "");
         // An author that says they aren't its patch's: triaged like the others.
+        let disowned = false;
         for (const suffix of ["", ":final"]) {
           const r = this.view.byKey.get(`author:${item}${this.itemEpoch(item)}:try:${push}${suffix}`)?.find(succeeded);
           if (r && this.rep<{ disagreement?: string }>(r).disagreement) {
             unmatched.push(...rows.filter((x) => !unmatched.includes(x)));
             rejected = true;
+            disowned = true;
           }
         }
+        if (!disowned) authorsOwn = true;
       }
-      if (unmatched.length === 0 && t.unparsed.length === 0) continue;
+      // The final run passes when its only failures are pre-existing or infra: no author's to fix.
+      const final = run.startsWith("final");
+      if (unmatched.length === 0 && t.unparsed.length === 0) {
+        if (final && !authorsOwn) this.passing.add(push);
+        continue;
+      }
       const file = dataPath(this.config, this.s.id, `triage-${push}-${run}.json`);
       // Rows an author handed back come after the first triage of the run: a triage of their own.
       // v2: with the stack's patches, and pre-existing only when shown on central.
@@ -2033,6 +2047,7 @@ class Planner {
       });
       if (!triage) continue;
       const report = this.rep<TriageTryReport>(triage);
+      if (final && !authorsOwn && report.cells.every((c) => BENIGN.has(c.verdict))) this.passing.add(push);
       for (const c of report.cells) {
         // By id; earlier reports gave a sha.
         const item = c.verdict === "broken by patch" && c.patch ? (this.s.patches[c.patch] ?? this.patchBySha(c.patch))?.item : undefined;
