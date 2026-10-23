@@ -8,6 +8,7 @@ import { jobLabel, linkify, pushStatus, type RenderContext } from "./common.ts";
 import { renderOverview, renderRecentPushes } from "./overview.ts";
 import { IDLE, itemBucket, progressLine, requestProgress, runningSentence } from "./progress.ts";
 import { configTable, parseConfig, renderRequest, requestSummary } from "./request.ts";
+import { flagText } from "./actions.ts";
 import { conversationOf, renderActivity } from "./activity.ts";
 import { ITEM_STATES } from "../commands.ts";
 
@@ -482,16 +483,28 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.match(rowOf(reviewed, "patch-p-drag"), /<span class="name" title="[^"]*"><a class="bug tofile" href="https:\/\/bugzilla\.mozilla\.org\/enter_bug\.cgi\?[^"]*Drag\+session\+left\+open[^"]*"[^>]*>Bug to file<\/a> Close the drag session/);
     assert.match(reviewed, /<span class="ready">2 ready<\/span>/);
   });
-  it("names a try push named after its stack by its number", () => {
+  it("names a try push by what it's for, numbered", () => {
     const r = structuredClone(get("r-20261010-xpcshell-cwd"));
-    r.needsUser.push({ key: "approve-push:storage-unit-a62d-3", action: "Approve try push storage-unit-a62d-3", detail: "6 tasks · why", push: "storage-unit-a62d-3", since: r.createdAt });
-    assert.match(renderRequest(r, ctx).value, /<span class="flag">Approve try push 3<\/span>/);
-    r.pushes["storage-unit-a62d-3"] = { ...r.pushes.A, id: "storage-unit-a62d-3" };
-    r.pushes["dom-quota-b71e-3"] = { ...r.pushes.A, id: "dom-quota-b71e-3" };
+    const dry = (push: string, stack: string) =>
+      ({ job: `j-dry-${push}`, kind: "script", name: "try.ts dry-run", purpose: { key: `dry-run:${push}`, what: "dry-run", push, stack }, startedAt: r.createdAt }) as unknown as RequestState["jobs"][string];
+    r.pushes = {};
+    r.stacks = { root: { ...Object.values(r.stacks)[0], id: "root" } };
+    r.pushChanges = {};
+    for (const [id, stack] of [["root-a62d-1", "root"], ["root-b71e-1", "root"], ["root-b71e-1-v1", "root"]]) {
+      r.pushes[id] = { id, purpose: "verify", command: [] };
+      r.jobs[`j-dry-${id}`] = dry(id, stack);
+    }
+    r.pushes["root-a62d-1"].rev = "abc";
+    r.items["i-prefs"].group.tests = ["dom/test/test_windowminmaxsize.xhtml"];
+    r.pushes["prefs-ask-1234"] = { id: "prefs-ask-1234", purpose: "Run the DEBUG commit's logging on Linux", command: [] };
+    r.pushes.initial = { id: "initial", purpose: "", command: [] };
+    r.needsUser.push({ key: "approve-push:root-b71e-1-v1", action: "Approve try push root-b71e-1-v1", detail: "6 tasks · why", push: "root-b71e-1-v1", since: r.createdAt });
     const h = renderRequest(r, ctx, true).value;
-    assert.match(rowOf(h, "push-storage-unit-a62d-3"), /<span class="name" title="[^"]*">push a62d-3: /, "two stacks' pushes 3 told apart");
-    assert.match(rowOf(h, "push-dom-quota-b71e-3"), /<span class="name" title="[^"]*">push b71e-3: /);
-    assert.match(rowOf(h, "push-A"), /<span class="name" title="[^"]*">push A: /);
+    assert.match(rowOf(h, "push-root-a62d-1"), /<span class="name" title="[^"]*">push verify-stack-1: /);
+    assert.match(rowOf(h, "push-root-b71e-1"), /<span class="name" title="[^"]*">push verify-fixes-1: /, "after a push of the stack that was made");
+    assert.match(rowOf(h, "push-root-b71e-1-v1"), /<span class="name" title="[^"]*">push verify-fixes-2: /);
+    assert.match(rowOf(h, "push-prefs-ask-1234"), /<span class="name" title="[^"]*">push debug-test_windowminmaxsize-1: /);
+    assert.equal(flagText(r, r.needsUser.at(-1)!), "Approve try push verify-fixes-2", "its flag names it the same way");
   });
 
   it("shows a planned push's dry-run warnings on its row, without its task count and purpose again", () => {

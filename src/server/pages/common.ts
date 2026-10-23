@@ -277,21 +277,35 @@ export function actionKind(n: NeedsUser, r: RequestState): ActionKind {
   return "other";
 }
 
-// Pushes named after their stack ("browser-components-…-a62d-3") go by their number; when another stack's push has
-// the same number, by as many of their last segments as tell them apart.
+// A push by what it's for, numbered in order among those for the same thing: verify-stack (the whole stack),
+// verify-fixes (the stack again after an earlier push of it), debug-<test> or check-<test> (what a group's author
+// asked for), unskip, initial. Its id stays what the factory keys it by.
 export function pushName(r: RequestState, id: string): string {
-  if (id.length <= 12) {
-    return id;
+  const ids = Object.keys(r.pushes);
+  const base = pushKind(r, id);
+  // One the factory can't tell the purpose of keeps its id.
+  if (base === undefined || base === "initial") return base ?? id;
+  return `${base}-${ids.filter((x) => pushKind(r, x) === base).indexOf(id) + 1}`;
+}
+
+function pushKind(r: RequestState, id: string): string | undefined {
+  const p = r.pushes[id];
+  if (id === "initial") return "initial";
+  if (id.startsWith("unskip")) return "unskip";
+  const stack = Object.values(r.jobs).find((j) => j.purpose?.what === "dry-run" && j.purpose.push === id)?.purpose?.stack;
+  if (stack !== undefined) {
+    const name = Object.keys(r.stacks).length > 1 ? `verify-${stack}` : "verify";
+    // After a push of the stack that was made, it verifies fixes.
+    const ids = Object.keys(r.pushes);
+    const earlier = ids.slice(0, ids.indexOf(id)).some((x) => r.pushes[x].rev && Object.values(r.jobs).some((j) => j.purpose?.what === "dry-run" && j.purpose.push === x && j.purpose.stack === stack));
+    return `${name}-${earlier ? "fixes" : "stack"}`;
   }
-  const parts = id.split("-");
-  const others = Object.keys(r.pushes).filter((x) => x !== id).map((x) => x.split("-"));
-  for (let k = 1; k < parts.length; k++) {
-    const short = parts.slice(-k).join("-");
-    if (!others.some((o) => o.slice(-k).join("-") === short)) {
-      return short;
-    }
-  }
-  return id;
+  const ask = id.indexOf("-ask-");
+  if (ask < 0 && !id.startsWith("repro-")) return undefined;
+  const debug = /\b(debug|reproduce|repro|log|logging|profile)\b/i.test(p?.purpose ?? "") || id.startsWith("repro-");
+  const item = ask < 0 ? undefined : Object.values(r.items).find((i) => i.id.replace(/^i-/, "").slice(0, 24) === id.slice(0, ask));
+  const test = item?.group.tests[0]?.split("/").pop()?.replace(/\.[^.]+$/, "");
+  return `${debug ? "debug" : "check"}${test ? `-${test}` : ""}`;
 }
 
 export function pushStatus(p: PushView): string {
