@@ -321,3 +321,5 @@ hr.part { border: 0; border-top: 3px solid var(--border); margin: 10px -12px 0; 
 header h1 a { color: inherit; text-decoration: none; }
 .testplan { border-left: 3px solid var(--border); padding-left: 8px; }
 .testplanctl { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin: 4px 0; }
+h5.verdict { margin: 8px 0 2px; font-size: 12px; font-weight: 600; }
+h5.verdict .count { font-weight: 400; color: var(--text-muted); }

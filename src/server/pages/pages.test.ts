@@ -1072,7 +1072,8 @@ describe("a made push's row", () => {
     r.pushes.initial.analysis = [cell("test_a.js", "infra"), cell("test_b.js", "infra", "mac"), cell("test_c.js", "pre-existing")];
     const row = rowOf(renderRequest(r, ctx, true).value, "push-initial");
     assert.equal(stateOf(row), "14 failures, 2 groups · 2 infra · 1 pre-existing");
-    assert.match(row, /<h4 class="part">What the factory made of its failures<\/h4><ul class="analysis"><li><b>infra<\/b>: test_a\.js <span class="sub">on linux<\/span><div class="sub clamp1"[^>]*>why test_a\.js<\/div><\/li>/);
+    assert.match(row, /<h4 class="part">What the factory made of its failures<\/h4><h5 class="verdict">infra <span class="count">2 tests<\/span><\/h5><ul class="analysis"><li>test_a\.js <span class="sub">on linux<\/span><div class="sub clamp1"[^>]*>why test_a\.js<\/div><\/li>/);
+    assert.ok(row.indexOf(">infra <") < row.indexOf(">pre-existing <"), "by verdict, what needs attention first");
     assert.match(row, /<details class="fold" data-fold="pushjobs-initial"><summary>Its jobs, commits and command<\/summary><pre class="mono command">/);
   });
 
@@ -1209,6 +1210,24 @@ describe("a push after an earlier one of the stack", () => {
     const waiting = rowOf(renderRequest(r, { ...ctx, readData: () => "-old\n+new\n" }, true).value, "push-older");
     assert.match(waiting, /Changed since push .*<b>changed<\/b>: <a href="#patch-p-panel">/s);
     assert.doesNotMatch(waiting, /The regressions of push/);
+  });
+});
+
+describe("a push's failures as triaged", () => {
+  it("one row per test with its configs, by verdict, broken by patch first naming the patch, more than 5 folded", () => {
+    const r = structuredClone(get("r-20261005-newtab"));
+    const sha = r.patches["p-panel"].sha;
+    const cells = [
+      ...Array.from({ length: 7 }, (_, i) => ({ test: `t/test_${i}.js`, config: "linux", verdict: "pre-existing", evidence: "on central too" })),
+      { test: "t/test_b.js", config: "linux", verdict: "broken by patch", patch: sha.slice(0, 12), evidence: "TypeError" },
+      { test: "t/test_b.js", config: "mac", verdict: "broken by patch", patch: sha.slice(0, 12), evidence: "TypeError" },
+    ] as NonNullable<RequestState["pushes"][string]["analysis"]>;
+    r.pushes.x = { id: "x", purpose: "verify", command: [], rev: "abc", url: "u", result: "failures", summary: "9 failed", analysis: cells };
+    const row = rowOf(renderRequest(r, ctx, true).value, "push-x");
+    assert.ok(row.indexOf(">broken by patch <") < row.indexOf(">pre-existing <"));
+    assert.match(row, /<li>t\/test_b\.js <span class="sub">on linux, mac<\/span> <span class="sub">· <a href="#patch-p-panel">/);
+    assert.match(row, /pre-existing <span class="count">7 tests<\/span>/);
+    assert.match(row, /<summary>\+2 more<\/summary>/);
   });
 });
 

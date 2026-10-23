@@ -825,11 +825,31 @@ function pushAnalysis(r: RequestState, p: PushView): Html | null {
   if (!p.analysis?.length) {
     return null;
   }
-  return html`<h4 class="part">What the factory made of its failures</h4><ul class="analysis">${p.analysis.map(
-    (c) =>
-      html`<li><b>${c.verdict}</b>${c.patch ? html` (${c.patch.slice(0, 12)})` : null}: ${c.test ? relativeTest(r, c.test) : (c.taskId ?? "a job")}${c.config ? html` <span class="sub">on ${c.config}</span>` : null}<div class="sub clamp1" data-expand title="Click to see all of it">${c.evidence}</div></li>`,
-  )}</ul>`;
+  // One row per test (its configs together), by verdict, what needs attention first; long lists folded after 5.
+  const groups = new Map<string, { verdict: string; test: string; patch?: string; configs: string[]; evidence: string }>();
+  for (const c of p.analysis) {
+    const test = c.test ? relativeTest(r, c.test) : (c.taskId ?? "a job");
+    const key = `${c.verdict}\n${test}\n${c.patch ?? ""}`;
+    const g = groups.get(key) ?? { verdict: c.verdict, test, patch: c.patch, configs: [], evidence: c.evidence };
+    if (c.config && !g.configs.includes(c.config)) g.configs.push(c.config);
+    groups.set(key, g);
+  }
+  const patchName = (sha: string) => {
+    const pv = Object.values(r.patches).find((x) => [x.sha, ...(x.pastShas ?? [])].some((s) => s.startsWith(sha) || sha.startsWith(s)));
+    return pv ? html`<a href="#patch-${pv.id}">${patchTitle(pv)}</a>` : html`<span class="mono">${sha.slice(0, 12)}</span>`;
+  };
+  const li = (g: { test: string; patch?: string; configs: string[]; evidence: string }) =>
+    html`<li>${g.test}${g.configs.length ? html` <span class="sub">on ${g.configs.join(", ")}</span>` : null}${g.patch ? html` <span class="sub">· ${patchName(g.patch)}</span>` : null}<div class="sub clamp1" data-expand title="Click to see all of it">${g.evidence}</div></li>`;
+  const all = [...groups.values()];
+  return html`<h4 class="part">What the factory made of its failures</h4>${VERDICT_ORDER.filter((v) => all.some((g) => g.verdict === v)).map((v) => {
+    const these = all.filter((g) => g.verdict === v);
+    return html`<h5 class="verdict">${v} <span class="count">${plural(these.length, "test")}</span></h5><ul class="analysis">${these.slice(0, 5).map(li)}</ul>${
+      these.length > 5 ? html`<details class="fold" data-fold="analysis-${p.id}-${v}"><summary>+${these.length - 5} more</summary><ul class="analysis">${these.slice(5).map(li)}</ul></details>` : null
+    }`;
+  })}`;
 }
+
+const VERDICT_ORDER = ["broken by patch", "still failing", "fixed", "infra", "pre-existing"];
 
 function relativeTest(r: RequestState, t: string): string {
   return r.folder && t.startsWith(`${r.folder}/`) ? t.slice(r.folder.length + 1) : t;
