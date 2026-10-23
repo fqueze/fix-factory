@@ -134,7 +134,11 @@ export function pushTasks(d: DryRunResult, commits: { sha: string; subject: stri
     return join(Array.from({ length: runsOf(j) }, () => s), " ");
   };
   const tier = (g: Group) => (g.tier > 1 ? html`<span class="tier">[tier ${g.tier}]</span>` : null);
-  return html`<details class="fold"><summary>${commits.length} ${commits.length === 1 ? "commit" : "commits"}</summary><ul class="pcommits" title="The commits it would push, newest first">${commits.map((c) => html`<li><span class="mono">${c.sha.slice(0, 12)}</span> ${c.subject}</li>`)}</ul></details><table class="jobs">${rowsOf(jobs).map(
+  // The top of the stack shows; the rest folded.
+  const commit = (c: { sha: string; subject: string }) => html`<li><span class="mono">${c.sha.slice(0, 12)}</span> ${c.subject}</li>`;
+  return html`<ul class="pcommits" title="The commits it would push, newest first">${commits.slice(0, 5).map(commit)}</ul>${
+    commits.length > 5 ? html`<details class="fold"><summary>+${commits.length - 5} more</summary><ul class="pcommits">${commits.slice(5).map(commit)}</ul></details>` : null
+  }<table class="jobs">${rowsOf(jobs).map(
     (row) =>
       html`<tr><th>${row.name} <span class="btype">${row.collection}</span></th><td>${join(
         row.groups.map((g) =>

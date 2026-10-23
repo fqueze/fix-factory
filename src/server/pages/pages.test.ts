@@ -1187,8 +1187,9 @@ describe("a push after an earlier one of the stack", () => {
       command: [],
       since: "prev",
       regressions: [
-        { failure: "`window.promiseDocumentFlushed is not a function` in toolkit/content/tests/chrome", fixedBy: "p-panel", how: "guards the call in chrome windows" },
-        { failure: "timeout in test_x.html", how: "nothing changed for it" },
+        { failure: "`window.promiseDocumentFlushed is not a function` in toolkit/content/tests/chrome", status: "fixed", fixedBy: "p-panel", how: "guards the call in chrome windows" },
+        { failure: "timeout in test_x.html", status: "not fixed", causedBy: "p-nimbus", how: "nothing changed for it" },
+        { failure: "1x1 window in test_windowminmaxsize.xhtml", status: "patch removed", how: "its author dropped the patch" },
       ],
     };
     r.pushChanges = { root: { since: "prev", changes: [{ patch: "p-panel", status: "changed", old: "a", new: "b", interdiffFile: "x.diff" }, { patch: "p-glean", status: "same", old: "c", new: "c" }], removed: [{ sha: "d", title: "DEBUG - log" }] } };
@@ -1197,6 +1198,10 @@ describe("a push after an earlier one of the stack", () => {
     assert.match(row, /<code>window\.promiseDocumentFlushed is not a function<\/code>/);
     assert.match(row, /fixed by <a href="#patch-p-panel">[^<]*<\/a>: guards the call in chrome windows/);
     assert.ok(row.indexOf("not fixed yet") < row.indexOf("fixed since"), "what nothing fixes first");
+    assert.match(row, /gone with the patch that caused it <span class="count">1<\/span><\/h5><ul class="regressions"><li>[^]*1x1 window/);
+    // Its author is told from right there.
+    assert.ok(row.includes(cmd({ cmd: "continue", request: r.id, item: r.patches["p-nimbus"].item })));
+    assert.match(row, /<button class="btn small">Tell its author<\/button>/);
     assert.match(row, /not fixed yet <span class="count">1<\/span>: this push won't fix them<\/h5><ul class="regressions"><li>[^]*timeout in test_x\.html[^]*nothing changed for it/);
     assert.match(row, /Changed since push .*20 failed/);
     assert.match(row, /<b>changed<\/b>: <a href="#patch-p-panel">/);

@@ -77,10 +77,21 @@
           "how": {
             "type": "string",
             "description": "What that change does about it, from its interdiff; or why nothing fixes it yet."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "fixed",
+              "not fixed",
+              "patch removed",
+              "pre-existing"
+            ],
+            "description": "fixed: a change since that push fixes it (fixedBy). patch removed: the patch that caused it is no longer in the stack. pre-existing: shown failing the same way on central (cite it in how). not fixed: none of these."
           }
         },
         "required": [
           "failure",
+          "status",
           "how"
         ],
         "additionalProperties": false

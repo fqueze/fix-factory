@@ -1716,7 +1716,7 @@ class Planner {
       worktree: info.wt,
       base: stack.base ?? this.config.baseRef,
       since: since && since !== null
-        ? ` The stack was pushed before (${since.rev}: ${since.summary}). What changed since, each changed patch with its interdiff and what its author said it fixes, and that push's failures, are in ${since.file}. Return \`regressions\`: each failure of that push the stack caused (not pre-existing, not infra), in one line, with the patch that broke it (\`causedBy\`) and the patch whose change since then claims to fix it (\`fixedBy\`, its id) and how, from its interdiff, not only its author's word; none if nothing fixes it. A regression nothing fixes isn't worth a push: plan none for it, and say so in its \`how\`.`
+        ? ` The stack was pushed before (${since.rev}: ${since.summary}). What changed since, each changed patch with its interdiff and what its author said it fixes, and that push's failures, are in ${since.file}. Return \`regressions\`: each failure of that push the stack caused (not pre-existing, not infra), in one line, with the patch that broke it (\`causedBy\`), its \`status\`, and how: for "fixed", the patch whose change since then fixes it (\`fixedBy\`, its id), judged from its interdiff, not only its author's word; "patch removed" when the patch that caused it left the stack; "pre-existing" only when central shows the same failure. A regression nothing fixes isn't worth a push: plan none for it, and say so in its \`how\`.`
         : "",
     }, {
       cwd: info.wt,

@@ -1,5 +1,5 @@
 import { basename } from "node:path";
-import type { BugDraft, Command, ItemState, ItemView, NeedsUser, PatchView, PushView, RefusedCommand, RequestState, StackView } from "../../types.ts";
+import type { BugDraft, Command, ItemState, ItemView, NeedsUser, PatchView, PushView, RefusedCommand, Regression, RequestState, StackView } from "../../types.ts";
 import { REQUEST_STEPS } from "../commands.ts";
 import { html, join, type Html } from "../html.ts";
 import { needsMetaBug as stackNeedsMetaBug } from "../../state/meta-bug.ts";
@@ -502,3 +502,9 @@ export function commandFields(commands: object[], back: string): Html {
 }
 
 export const PHAB_ICON = html`<svg><use href="#phab"/></svg>`;
+
+// A regression's status; plans from before it was reported: fixed when a patch claims it, gone when the patch that
+// caused it left the stack.
+export function regressionStatus(r: RequestState, g: Regression): NonNullable<Regression["status"]> {
+  return g.status ?? (g.fixedBy ? "fixed" : g.causedBy && !Object.values(r.stacks).some((st) => st.order.includes(g.causedBy!)) ? "patch removed" : "not fixed");
+}

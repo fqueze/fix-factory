@@ -1,7 +1,7 @@
 import { ANNOTATIONS_ITEM, needsMetaBug as stackNeedsMetaBug } from "../../state/meta-bug.ts";
 import { md } from "./md.ts";
 import { REQUEST_STEPS } from "../commands.ts";
-import type { BugDraft, ItemView, JobView, PatchView, PushView, RequestState, StackView } from "../../types.ts";
+import type { BugDraft, ItemView, JobView, PatchView, PushView, Regression, RequestState, StackView } from "../../types.ts";
 import { html, join, type Html } from "../html.ts";
 import { actionsSummary, recoveryAnswers, pollPhabButton, redoAnnotationsButton, approvePushControls, bugBox, continueBox, copyButton, handBackButton, flagControls, flagItemOf, flagText, plannedLabel, recoveryPlanFor, hasAuthorSession, stackViewerLink, submitControls, summaryId } from "./actions.ts";
 import { groupJobs, jobLine } from "./activity.ts";
@@ -43,6 +43,7 @@ import {
   pushUrl,
   type RenderContext,
   type StateClass,
+  regressionStatus,
 } from "./common.ts";
 
 // One line per request; the body only when expanded, so the overview stays small.
@@ -730,16 +731,23 @@ function sinceSection(r: RequestState, p: PushView, ctx: RenderContext): Html | 
   const prev = r.pushes[since];
   const changes = Object.values(r.pushChanges).find((c) => c.since === since);
   const title = (id: string) => (r.patches[id] ? patchTitle(r.patches[id]) : id);
-  // Those nothing fixes first: this push won't fix them. Each in one line, its details on click.
+  // Those nothing fixes first: this push won't fix them; each with a box to tell the author of the patch that broke it.
   const link = (id: string) => html`<a href="#patch-${id}">${title(id)}</a>`;
-  const regression = (g: NonNullable<PushView["regressions"]>[number]) =>
-    html`<li><div class="clamp1" data-expand title="Click to see all of it">${md(g.failure)}</div><div class="sub clamp1" data-expand title="Click to see all of it">${g.causedBy ? html`broken by ${link(g.causedBy)} · ` : null}${g.fixedBy ? html`fixed by ${link(g.fixedBy)}: ` : null}${g.how}</div></li>`;
-  const unfixed = p.regressions?.filter((g) => !g.fixedBy) ?? [];
-  const fixed = p.regressions?.filter((g) => g.fixedBy) ?? [];
+  const statusOf = (g: Regression) => regressionStatus(r, g);
+  const tell = (g: Regression) => {
+    const item = g.causedBy ? r.patches[g.causedBy]?.item : undefined;
+    return item === undefined
+      ? null
+      : html`<form class="cmd inline-tell" method="post" action="/api/commands">${commandFields([{ cmd: "continue", request: r.id, item }], requestUrl(r.id))}<input type="text" name="text" required value="${`The stack's last try push still has this regression from your patch, and nothing since fixes it: ${g.failure} Fix it, or show it fails the same way on central.`}"><button class="btn small">Tell its author</button></form>`;
+  };
+  const regression = (g: Regression) =>
+    html`<li><div class="clamp1" data-expand title="Click to see all of it">${md(g.failure)}</div><div class="sub clamp1" data-expand title="Click to see all of it">${g.causedBy ? html`broken by ${link(g.causedBy)} · ` : null}${g.fixedBy ? html`fixed by ${link(g.fixedBy)}: ` : null}${g.how}</div>${statusOf(g) === "not fixed" ? tell(g) : null}</li>`;
+  const STATUSES: [string, string][] = [["not fixed", "not fixed yet"], ["fixed", "fixed since"], ["patch removed", "gone with the patch that caused it"], ["pre-existing", "fails the same way on central"]];
   const regressions = p.regressions?.length
-    ? html`<h4 class="part">The regressions of push ${pushName(r, since)}</h4>${
-        unfixed.length ? html`<h5 class="verdict">not fixed yet <span class="count">${unfixed.length}</span>: this push won't fix them</h5><ul class="regressions">${unfixed.map(regression)}</ul>` : null
-      }${fixed.length ? html`<h5 class="verdict">fixed since <span class="count">${fixed.length}</span></h5><ul class="regressions">${fixed.map(regression)}</ul>` : null}`
+    ? html`<h4 class="part">The regressions of push ${pushName(r, since)}</h4>${STATUSES.map(([st, label]) => {
+        const these = p.regressions!.filter((g) => statusOf(g) === st);
+        return these.length ? html`<h5 class="verdict">${label} <span class="count">${these.length}</span>${st === "not fixed" ? html`: this push won't fix them` : null}</h5><ul class="regressions">${these.map(regression)}</ul>` : null;
+      })}`
     : null;
   const changed = changes?.changes.filter((c) => c.status !== "same") ?? [];
   const list = changes

@@ -60,7 +60,7 @@ describe("pushTasks", () => {
     assert.ok(h.includes(`<tr><th>Linux <span class="btype">debug</span></th><td>${s(`${B.label} (artifact build)`, "Ba")}</td></tr>`), h);
     const nofis = s(NOFIS.label, "X1");
     assert.ok(h.includes(`<tr><th>Linux 24.04 <span class="btype">debug</span></th><td><span class="jgroup">X( ${x1} ${x1} ${x1} )</span> <span class="jgroup"><span class="tier">[tier 2]</span>X-nofis( ${nofis} ${nofis} ${nofis} )</span></td></tr>`), h);
-    assert.match(h, /^<details class="fold"><summary>\d+ commits?<\/summary><ul class="pcommits"/, "its commits folded");
+    assert.match(h, /^<ul class="pcommits"/, "its commits first, the top of the stack shown");
     assert.match(h, /<\/table>\n<details class="fold"><summary>Its command and try_task_config\.json<\/summary><pre class="mono command">\.\/mach try fuzzy<\/pre>\n<pre class="mono ttc"[^>]*>\{\n  &quot;use-artifact-builds&quot;: true,/, "the jobs, then the command and its try_task_config, folded");
   });
 

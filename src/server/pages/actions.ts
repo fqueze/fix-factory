@@ -2,7 +2,7 @@ import type { JobView, NeedsUser, PlannedCommand, PushView, RefusedCommand, Requ
 import { md } from "./md.ts";
 import { canDismiss, canRetry, reviewLimitFlag } from "../../state/flags.ts";
 import { html, join, type Html } from "../html.ts";
-import { actionKind, COMMAND_LABELS, linkify, commandFields, enterBugUrl, metaBugUrl, groupLabel, jobLabel, pushName, jobNoun, refusedOf, needsMetaBug, plural, requestUrl, stackOfPatch, submitChecks, type RenderContext } from "./common.ts";
+import { actionKind, COMMAND_LABELS, linkify, commandFields, enterBugUrl, metaBugUrl, groupLabel, jobLabel, pushName, jobNoun, refusedOf, needsMetaBug, plural, requestUrl, stackOfPatch, submitChecks, regressionStatus, type RenderContext } from "./common.ts";
 
 // The ⚑ area of one open needs-user entry: what you're asked, why, and the buttons.
 export function renderAction(r: RequestState, n: NeedsUser, ctx: RenderContext): Html {
@@ -208,7 +208,7 @@ function findStack(r: RequestState, n: NeedsUser): StackView | undefined {
 // One button for these pushes; their commands and tasks are on their rows.
 export function approvePushControls(r: RequestState, pushes: PushView[], back: string): Html {
   // A push after regressions nothing fixes yet won't fix them: pushing is your call.
-  const anyway = pushes.some((p) => p.regressions?.some((g) => !g.fixedBy));
+  const anyway = pushes.some((p) => p.regressions?.some((g) => regressionStatus(r, g) === "not fixed"));
   const label = anyway ? (pushes.length === 1 ? "Push anyway" : "Push all anyway") : pushes.length === 1 ? "Approve" : pushes.length === 2 ? "Approve both" : `Approve all ${pushes.length}`;
   return html`<form class="inline cmd" method="post" action="/api/commands">${commandFields(
     pushes.map((p) => ({ cmd: "approve-push", request: r.id, push: p.id })),
