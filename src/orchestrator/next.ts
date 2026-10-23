@@ -1464,7 +1464,16 @@ class Planner {
     // Authors may report short shas; the stack scripts answer with full ones.
     const among = (set: Set<string>, sha: string) => [...set].some((x) => x.startsWith(sha) || sha.startsWith(x));
     if (!cur || sources.some((sha) => !among(mapped, sha))) return;
-    // A change already in the base makes no commit: that patch is left out.
+    // A change already in the base, or made by another patch of the stack, makes no commit: that patch is left out,
+    // and its author keeps only what isn't covered, or drops it ("left as-is", naming what covers it).
+    for (const p of info.patches.filter((x) => among(empty, x.source))) {
+      this.resumeAuthor(
+        p.item,
+        `author:${p.item}${this.itemEpoch(p.item)}:empty:${p.source.slice(0, 12)}`,
+        "covered",
+        `Assembling the stack, your commit ${p.source.slice(0, 12)} made no change: the stack's other patches (on branch ${info.branch}) or the base already do what it does. Find which commit does (\`git log -p ${this.config.baseRef}..${info.branch}\` in this repository), then keep only what it doesn't already do (each part you keep has to be needed on its own), or, if nothing is left, drop your commits and report "left as-is", saying which commit covers your fix. Then end with the JSON report again.`,
+      );
+    }
     const kept = info.patches.filter((p) => !among(empty, p.source));
     const inStack = kept.filter((p) => this.s.patches[p.id].worktree === wt);
     if (inStack.length < kept.length) return; // the handlers' patch events haven't landed yet

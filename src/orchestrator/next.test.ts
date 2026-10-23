@@ -1601,6 +1601,19 @@ describe("5. stack", () => {
     assert.match(flag?.detail ?? "", /duplicates test_a's fix/);
   });
 
+  it("a patch whose commit comes out empty in the stack goes back to its author, told another commit covers it", () => {
+    const sc = twoReviewed();
+    sc.complete("wt:root", { output: { path: `/wt/${ID}-root` } });
+    sc.settle();
+    const key = sc.view().jobs.find((j) => j.purpose.what === "assemble")!.purpose.key;
+    sc.complete(key, { output: { commits: [{ sha: sha("1"), newSha: sha("a") }], empty: [sha("2")] } });
+    const started = sc.settle();
+    const told = started.find((k) => k.startsWith("author:i-test-b:empty:"))!;
+    assert.ok(told, String(started));
+    assert.match(sc.plan(told).agent?.message ?? "", /made no change[^]*report "left as-is", saying which commit covers your fix/);
+    assert.equal(sc.state().items["i-test-b"].state, "investigating");
+  });
+
   it("hands a text conflict to resolve-conflict, then assembles the rest", () => {
     const sc = twoReviewed();
     sc.complete("wt:root", { output: { path: `/wt/${ID}-root` } });
