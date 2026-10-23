@@ -73,6 +73,7 @@ export function foldEvents(events: readonly Event[]): RequestState {
         break;
       case "step":
         s.step = e.step;
+        if (e.step === "done") s.finishedAt = e.t;
         break;
       case "item-created": {
         const existing = s.items[e.item];

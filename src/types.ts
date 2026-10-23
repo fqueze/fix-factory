@@ -429,6 +429,7 @@ export interface RequestState {
   supersededBy?: RequestId; // route-request failed, and you rephrased it in the main box as that request
   createdAt: Iso;
   updatedAt: Iso;
+  finishedAt?: Iso; // when its step became done
   step: RequestStep;
   config: Record<string, unknown>;
   items: Record<ItemId, ItemView>;

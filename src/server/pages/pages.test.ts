@@ -1211,3 +1211,12 @@ describe("a push after an earlier one of the stack", () => {
     assert.doesNotMatch(waiting, /The regressions of push/);
   });
 });
+
+describe("request order", () => {
+  it("is stable: active newest first, whatever their latest activity or flags", () => {
+    const a = { ...structuredClone(get("r-20261005-newtab")), id: "r-a", createdAt: "2026-10-01T00:00:00.000Z", updatedAt: "2026-10-23T00:00:00.000Z" };
+    const b = { ...structuredClone(get("r-20261005-newtab")), id: "r-b", createdAt: "2026-10-02T00:00:00.000Z", updatedAt: "2026-10-03T00:00:00.000Z", needsUser: [] };
+    const h = renderOverview([a, b], ctx);
+    assert.ok(h.indexOf('data-request="r-b"') < h.indexOf('data-request="r-a"'));
+  });
+});

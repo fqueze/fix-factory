@@ -1,6 +1,6 @@
 import type { RequestState } from "../../types.ts";
 import { html, type Html } from "../html.ts";
-import { commandFields, formatDate, isDraft, isDropped, needsYou, plural, profileUrl, pushResultClass, pushStatus, pushUrl, requestCost, requestName, requestUrl, routeOutcome, sectionOf, shortName, type RenderContext } from "./common.ts";
+import { commandFields, formatDate, isDraft, isDropped, plural, profileUrl, pushResultClass, pushStatus, pushUrl, requestCost, requestName, requestUrl, routeOutcome, sectionOf, shortName, type RenderContext } from "./common.ts";
 import { progressLine, requestProgress, sumProgress } from "./progress.ts";
 import { renderRequest } from "./request.ts";
 
@@ -52,12 +52,13 @@ function diskSize(gb: number): string {
 // Everything under the header, also served alone so the client can refresh it
 // when a request appears or moves between sections.
 export function renderMain(requests: RequestState[], ctx: RenderContext): Html {
-  const byUpdate = [...requests].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-  // Requests that need you first, the rest by latest activity.
-  const active = byUpdate.filter((r) => sectionOf(r) === "active").sort((a, b) => Number(needsYou(b)) - Number(needsYou(a)));
-  const queued = byUpdate.filter((r) => sectionOf(r) === "queued").reverse();
+  // A stable order: by latest activity, or with those needing you first, requests kept moving with every event.
+  // Active ones newest first, queued ones in the order they start, finished ones latest finished first.
+  const byCreation = [...requests].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const active = byCreation.filter((r) => sectionOf(r) === "active");
+  const queued = byCreation.filter((r) => sectionOf(r) === "queued").reverse();
   // Finished requests open like the active ones; text that was forwarded or rephrased is one line.
-  const finished = byUpdate.filter((r) => sectionOf(r) === "finished");
+  const finished = byCreation.filter((r) => sectionOf(r) === "finished").sort((a, b) => (b.finishedAt ?? b.updatedAt).localeCompare(a.finishedAt ?? a.updatedAt));
   return html`<form class="ask cmd" method="post" action="/api/commands">${commandFields([{ cmd: "tell-factory" }], "/")}<input type="text" name="text" required placeholder="Tell the factory… (e.g. “burn down dom/base/test”, or “Lando was down this morning, re-push what failed”)"><button class="btn">Send</button></form>
 
   <h2>Active <span class="count">${active.length}</span></h2>
