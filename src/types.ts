@@ -271,7 +271,8 @@ export interface InvestigateReport {
   files?: { evidence: string; reproduction: string; widening?: string }; // relative to the worktree
   profiles?: { profile: string; finding: string }[]; // the failing jobs' profiles read, and what each shows
   commits: string[]; // shas in the agent's worktree, oldest first
-  bugDraft?: BugDraft; // when the fix needs its own bug
+  bugDrafts?: { commits: string[]; draft: BugDraft }[]; // one per bug to file, with the commits it's for
+  bugDraft?: BugDraft; // reports from before 2026-10-23: one draft, for its first commit without a bug
   tryRequest?: string; // a try push it needs: what to run and why; the factory plans it and asks you
   landsAfter: { what: string; reason: string }[];
   feedback: Feedback[];

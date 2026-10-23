@@ -9,6 +9,7 @@ import type { SinceResult } from "../cli/stack/since.ts";
 import type { DryRunResult, WatchLine } from "../cli/try.ts";
 import type { CommandInput } from "../state/commands.ts";
 import type { EventInput } from "../state/events.ts";
+import { sameBugDraft } from "../state/meta-bug.ts";
 import type {
   AddressReviewReport,
   Dep,
@@ -132,7 +133,10 @@ export function handleFinished(input: HandlerInput): HandlerResult {
       const commits = json<ImportedCommit[]>();
       const author = input.view.jobs.find((j) => `import:${j.job}` === purpose.key);
       const report = author ? (input.reportOf(author.job) as Partial<InvestigateReport>) : {};
+      // Each bug draft goes to the commits it's for; an older report's single draft to its first commit without a bug.
       const draftIndex = commits.findIndex((c) => c.bug === null);
+      const draftOf = (c: ImportedCommit, i: number) =>
+        report.bugDrafts?.find((d) => d.commits.some((x) => c.sha.startsWith(x) || x.startsWith(c.sha.slice(0, 12))))?.draft ?? (!report.bugDrafts && i === draftIndex ? report.bugDraft : undefined);
       commits.forEach((c, i) => {
         const id = patchId(purpose.item!, i);
         const existing = s.patches[id];
@@ -146,7 +150,7 @@ export function handleFinished(input: HandlerInput): HandlerResult {
           // patch id reused for another commit) doesn't.
           bug: c.bug ?? (existing?.bugFromYou ? existing.bug : null),
           ...(c.bug === null && existing?.bugFromYou ? { bugFromYou: true } : {}),
-          ...(report.bugDraft && i === draftIndex ? { bugDraft: report.bugDraft } : existing?.bugDraft ? { bugDraft: existing.bugDraft } : {}),
+          ...(c.bug === null && draftOf(c, i) ? { bugDraft: draftOf(c, i) } : existing?.bugDraft ? { bugDraft: existing.bugDraft } : {}),
           ...(c.revision ?? existing?.revision ? { revision: c.revision ?? existing?.revision } : {}),
           ...(existing?.effort ? { effort: existing.effort } : {}),
           testOnly: c.testOnly,
@@ -319,7 +323,7 @@ export function handleFinished(input: HandlerInput): HandlerResult {
     case "revise-draft": {
       const draft = (input.report as ReviseBugDraftReport).draft;
       if (purpose.patch === "meta") ev("meta-bug", { bug: s.metaBug?.bug ?? null, draft });
-      else if (s.patches[purpose.patch!]) patchEvent(s.patches[purpose.patch!], { bugDraft: draft });
+      else if (s.patches[purpose.patch!]) for (const p of sameBugDraft(s, purpose.patch!)) patchEvent(p, { bugDraft: draft });
       break;
     }
     case "recover": {

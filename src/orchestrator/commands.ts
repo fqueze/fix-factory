@@ -2,6 +2,7 @@
 // caps: you asked for them. Recovery commands come from an approved plan and run exactly as written.
 import { isDeepStrictEqual } from "node:util";
 import type { EventInput } from "../state/events.ts";
+import { sameBugDraft } from "../state/meta-bug.ts";
 import { canDismiss, canRetry, isPushJob, reviewLimitFlag } from "../state/flags.ts";
 import type { Command, FactoryConfig, ItemId, JobId, PlannedCommand, RequestId, RequestState } from "../types.ts";
 import { ANNOTATIONS_ITEM, authorJobsOf, CANCELLED, itemEpochOf, TERMINAL, resumeAuthorPlan } from "./next.ts";
@@ -159,9 +160,12 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
         ev({ type: "meta-bug", bug: c.bug, ...(s.metaBug?.draft ? { draft: s.metaBug.draft } : {}) });
         for (const n of s.needsUser.filter((x) => x.key.startsWith("meta-bug:"))) ev({ type: "user-done", key: n.key });
       } else {
-        const { deps: _d, review: _r, replyDrafts: _rd, id, ...p } = s.patches[c.patch];
-        ev({ type: "patch", patch: id, ...p, bug: c.bug, bugFromYou: true });
-        for (const n of s.needsUser.filter((x) => x.key.startsWith("file-bug:") && x.patch === c.patch)) ev({ type: "user-done", key: n.key });
+        // The bug filed from a draft is that of every patch the draft is for.
+        for (const patch of sameBugDraft(s, c.patch)) {
+          const { deps: _d, review: _r, replyDrafts: _rd, id, ...p } = patch;
+          ev({ type: "patch", patch: id, ...p, bug: c.bug, bugFromYou: true });
+          for (const n of s.needsUser.filter((x) => x.key.startsWith("file-bug:") && x.patch === id)) ev({ type: "user-done", key: n.key });
+        }
       }
       done(true);
       break;

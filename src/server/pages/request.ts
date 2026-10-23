@@ -1,4 +1,4 @@
-import { ANNOTATIONS_ITEM, needsMetaBug as stackNeedsMetaBug } from "../../state/meta-bug.ts";
+import { ANNOTATIONS_ITEM, needsMetaBug as stackNeedsMetaBug, sameBugDraft } from "../../state/meta-bug.ts";
 import { md } from "./md.ts";
 import { REQUEST_STEPS } from "../commands.ts";
 import type { BugDraft, ItemView, JobView, PatchView, PushView, Regression, RequestState, StackView } from "../../types.ts";
@@ -433,7 +433,9 @@ function patchRow(r: RequestState, p: PatchView, ctx: RenderContext): Html {
   const item = itemOf(r, p);
   const sentence = item ? itemSentence(r, item, ctx) : undefined;
   const landable = isLandable(r, p);
-  const bugBoxShown = !hasBug(p) && p.bugDraft !== undefined;
+  // Patches sharing a bug draft have it filed once, from the first one's row.
+  const first = sameBugDraft(r, p.id)[0];
+  const bugBoxShown = !hasBug(p) && p.bugDraft !== undefined && first.id === p.id;
   // A "file the bug" ⚑'s buttons are the bug box's.
   const controls = bugBoxShown && r.needsUser.some((n) => n.patch === p.id && actionKind(n, r) === "file-bug") ? null : sentence?.controls;
   // A group's question is asked once, on the row of its first patch.
@@ -442,7 +444,9 @@ function patchRow(r: RequestState, p: PatchView, ctx: RenderContext): Html {
     anchor: html`id="patch-${p.id}" data-patch="${p.id}"`,
     fold: `patch-${p.id}`,
     cls: item ? rowClass(r, item, ctx) : landable ? "ok" : "wait",
-    name: html`${p.revision ? html`<a class="phab" href="${phabUrl(p.revision)}" title="D${p.revision}" target="_blank" rel="noopener">${PHAB_ICON}</a>` : null}${bugLabel(p, ctx)} ${patchTitle(p)}`,
+    name: html`${p.revision ? html`<a class="phab" href="${phabUrl(p.revision)}" title="D${p.revision}" target="_blank" rel="noopener">${PHAB_ICON}</a>` : null}${
+      first.id === p.id ? bugLabel(p, ctx) : html`<a class="bug tofile" href="#patch-${first.id}" title="Filed from ${first.title}">same bug</a>`
+    } ${patchTitle(p)}`,
     title: p.title,
     end: html`${viewLink(r, p)}${item ? costLabel(itemCost(r, item)) : null}`,
     // "in the stack" says nothing a patch row in its stack's section doesn't.

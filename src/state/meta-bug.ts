@@ -1,5 +1,5 @@
 // Shared by the page and the orchestrator: when a request's stacks need a meta bug.
-import type { PatchView } from "../types.ts";
+import type { PatchId, PatchView, RequestState } from "../types.ts";
 
 // The skip-ifs group: its annotation patches are the only ones that go under the meta bug.
 export const ANNOTATIONS_ITEM = "i-annotations";
@@ -14,4 +14,12 @@ export function needsMetaBug(patches: Pick<PatchView, "bug" | "item">[]): boolea
 // A patch that isn't an annotation patch and has neither a bug nor a draft: its author still has to give it one.
 export function lacksBug(p: Pick<PatchView, "bug" | "bugDraft" | "item">): boolean {
   return p.item !== ANNOTATIONS_ITEM && (p.bug === null || p.bug === 0) && !p.bugDraft;
+}
+
+// A patch, and the others of its group without a bug that share its bug draft: one bug for all of them.
+export function sameBugDraft(s: RequestState, patch: PatchId): PatchView[] {
+  const p = s.patches[patch];
+  if (!p.bugDraft || p.bug !== null) return [p];
+  const draft = JSON.stringify(p.bugDraft);
+  return Object.values(s.patches).filter((x) => x.id === patch || (x.item === p.item && x.bug === null && x.bugDraft && JSON.stringify(x.bugDraft) === draft));
 }

@@ -29,7 +29,7 @@
       "files": { "evidence": "artifacts/evidence.md", "reproduction": "artifacts/reproduction.md" },
       "verification": "Passed 50 times with --verify.",
       "commits": ["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
-      "bugDraft": { "product": "Core", "component": "DOM: Core & HTML", "summary": "Intermittent test_a.html | Test timed out", "description": "It times out.", "bugType": "defect" },
+      "bugDrafts": [{ "commits": ["aaaaaaaaaaaa"], "draft": { "product": "Core", "component": "DOM: Core & HTML", "summary": "Intermittent test_a.html | Test timed out", "description": "It times out.", "bugType": "defect" } }],
       "landsAfter": [],
       "feedback": [{ "target": "fx-tests", "text": "the failure list missed a config" }]
     }

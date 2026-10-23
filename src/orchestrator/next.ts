@@ -20,7 +20,7 @@ import { expectedTests, type DryRunResult } from "../cli/try.ts";
 import { keptDir } from "../lib/kept.ts";
 import { REQUEST_STEPS } from "../server/commands.ts";
 import { COMMITS_CHANGED } from "../state/flags.ts";
-import { ANNOTATIONS_ITEM, lacksBug, needsMetaBug } from "../state/meta-bug.ts";
+import { ANNOTATIONS_ITEM, lacksBug, needsMetaBug, sameBugDraft } from "../state/meta-bug.ts";
 import type { EventInput } from "../state/events.ts";
 import type {
   AddressReviewReport,
@@ -1183,7 +1183,7 @@ class Planner {
         item.id,
         `author:${item.id}${e}:bug:${author.job}`,
         "bug",
-        `${bugless.length === 1 ? `Your commit ${bugless[0].sha.slice(0, 12)} has` : `Your commits ${bugless.map((p) => p.sha.slice(0, 12)).join(", ")} have`} no bug: only annotation patches go under the meta bug. If an open bug covers this failure, put its number in the commit message; otherwise add a \`bugDraft\` to your report for the user to file (keep \`Bug XXXXXXX\`). Change nothing else, then end with the JSON report again.`,
+        `${bugless.length === 1 ? `Your commit ${bugless[0].sha.slice(0, 12)} has` : `Your commits ${bugless.map((p) => p.sha.slice(0, 12)).join(", ")} have`} no bug: only annotation patches go under the meta bug. If an open bug covers this failure, put its number in the commit message; otherwise add a draft for each one to \`bugDrafts\` in your report, for the user to file (keep \`Bug XXXXXXX\`): separate fixes get separate bugs. Change nothing else, then end with the JSON report again.`,
       );
       return;
     }
@@ -1196,15 +1196,18 @@ class Planner {
       else pending = true;
     }
     const report = this.rep<InvestigateReport & AddressReviewReport>(author);
-    const draftPatch = Object.values(this.s.patches).find((p) => p.item === item.id && p.bug === null && p.bugDraft);
-    if (author.name === "investigate-and-fix" && report.bugDraft && draftPatch) {
-      const file = dataPath(this.config, this.s.id, `drafts/${author.job}.json`);
-      const lint = this.want(`lint-bug:${author.job}`, () =>
-        this.cli("lint", "lint-text.ts", ["--kind", "bug", file], { item: item.id, files: [{ path: file, content: JSON.stringify(report.bugDraft) + "\n" }], purpose: { item: item.id, patch: draftPatch.id } }),
+    // Each patch's bug draft, as its author wrote it.
+    const drafts = author.name === "investigate-and-fix" ? (report.bugDrafts ?? (report.bugDraft ? [{ commits: [], draft: report.bugDraft }] : [])) : [];
+    drafts.forEach((d, i) => {
+      const patch = Object.values(this.s.patches).find((p) => p.item === item.id && p.bug === null && p.bugDraft && (d.commits.length === 0 || d.commits.some((x) => p.sha.startsWith(x) || x.startsWith(p.sha.slice(0, 12)))));
+      if (!patch) return;
+      const file = dataPath(this.config, this.s.id, `drafts/${author.job}${i ? `-${i}` : ""}.json`);
+      const lint = this.want(`lint-bug:${author.job}${i ? `:${i}` : ""}`, () =>
+        this.cli("lint", "lint-text.ts", ["--kind", "bug", file], { item: item.id, files: [{ path: file, content: JSON.stringify(d.draft) + "\n" }], purpose: { item: item.id, patch: patch.id } }),
       );
-      if (lint) lints.push({ job: lint, what: "the bug draft" });
+      if (lint) lints.push({ job: lint, what: drafts.length > 1 ? `the bug draft “${d.draft.summary}”` : "the bug draft" });
       else pending = true;
-    }
+    });
     if (author.name === "address-review") {
       for (const reply of report.replies) {
         const file = dataPath(this.config, this.s.id, `replies/${author.job}-${reply.commentId}.txt`);
@@ -2139,7 +2142,8 @@ class Planner {
     for (const p of stacks.flatMap((st) => st.order).map((pid) => this.s.patches[pid])) {
       if (!p.bugDraft) continue;
       const key = fileBugKey(p.id, this.stepEpoch("meta bug"));
-      if (p.bug !== null) this.clear(key);
+      // Patches sharing a draft: one bug to file, asked on the first.
+      if (p.bug !== null || sameBugDraft(this.s, p.id)[0].id !== p.id) this.clear(key);
       else this.raise(key, { action: `File the bug for ${p.title.replace(/^Bug X+\s*-\s*/i, "")}`, detail: `${p.bugDraft.product}::${p.bugDraft.component}, checked by lint-text.ts`, patch: p.id, ...(p.item ? { item: p.item } : {}) });
     }
     if (needsMeta && !this.s.metaBug?.bug) return;

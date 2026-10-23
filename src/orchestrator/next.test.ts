@@ -709,6 +709,27 @@ describe("4. investigate and fix", () => {
     assert.ok(sc.settle().includes(`import:${next}`), "told once");
   });
 
+  it("gives each bug draft to the commits it's for: 3 patches, 2 bugs; filing one sets it on all the patches it's for", () => {
+    const sc = workList([group("ka", "a/test_a.js", "boom", 2)]);
+    investigating(sc, "i-test-a");
+    const product = { product: "Core", component: "DOM: Navigation", summary: "Fix", description: "d", bugType: "defect" };
+    const harness = { product: "Testing", component: "Mochitest", summary: "Leak paths", description: "d", bugType: "enhancement" };
+    sc.complete("author:i-test-a:initial", { report: fixed([sha("1"), sha("2"), sha("3")], { bugDrafts: [{ commits: [sha("1").slice(0, 12), sha("2").slice(0, 12)], draft: product }, { commits: [sha("3")], draft: harness }] }) });
+    const job = sc.view().byKey.get("author:i-test-a:initial")![0].job;
+    sc.settle();
+    sc.complete(`import:${job}`, {
+      output: [...imported(sha("1"), "Bug XXXXXXX - Part 1, r=a.", ["a.cpp"]), ...imported(sha("2"), "Bug XXXXXXX - Part 2, r=a.", ["b.cpp"]), ...imported(sha("3"), "Bug XXXXXXX - Leak paths, r=b.", ["c.py"])],
+    });
+    const p = sc.state().patches;
+    assert.deepEqual([p["p-test-a"].bugDraft, p["p-test-a-2"].bugDraft, p["p-test-a-3"].bugDraft], [product, product, harness]);
+    assert.deepEqual(sc.settle().filter((k) => k.startsWith("lint-bug:")).sort(), [`lint-bug:${job}`, `lint-bug:${job}:1`]);
+    for (const e of commandEffects({ v: 1, id: "c-bug", t: "2026-10-15T09:00:00.000Z", request: ID, cmd: "set-bug", patch: "p-test-a-2", bug: 777 } as Command, { config, state: sc.state(), view: sc.view(), exists: () => false, plan: () => undefined })) {
+      if (e.type === "event") sc.add(e.event);
+    }
+    const after = sc.state().patches;
+    assert.deepEqual([after["p-test-a"].bug, after["p-test-a-2"].bug, after["p-test-a-3"].bug], [777, 777, null]);
+  });
+
   it("investigates in the worktree, imports the commits, lints, reviews; a bug draft doesn't ask you to file it yet", () => {
     const sc = workList([group("ka", "a/test_a.js", "boom", 2)]);
     investigating(sc, "i-test-a");

@@ -72,7 +72,10 @@ const investigateSample: InvestigateReport = {
   reproduction: { reproduced: true, where: "locally", widened: false, before: "6 of 20 runs", after: "0 of 100" },
   files: { evidence: "artifacts/evidence.md", reproduction: "artifacts/reproduction.md" },
   commits: ["0123abc", "4567def"],
-  bugDraft: { product: "Firefox", component: "General", summary: "Intermittent foo", description: "...", blocks: [123], bugType: "defect" },
+  bugDrafts: [
+    { commits: ["0123abc"], draft: { product: "Firefox", component: "General", summary: "Intermittent foo", description: "...", blocks: [123], bugType: "defect" } },
+    { commits: ["4567def"], draft: { product: "Testing", component: "Mochitest", summary: "Print leak paths", description: "...", bugType: "enhancement" } },
+  ],
   landsAfter: [{ what: "D12345", reason: "uses its helper" }],
   feedback,
 };
@@ -103,7 +106,7 @@ const recoverSample: RecoverReport = {
 
 test("schemas accept valid samples", () => {
   assert.deepEqual(validateReport(investigate, investigateSample), []);
-  const { bugDraft: _, ...noBugDraft } = investigateSample;
+  const { bugDrafts: _, ...noBugDraft } = investigateSample;
   assert.deepEqual(validateReport(investigate, noBugDraft), []);
   assert.deepEqual(validateReport(review, reviewSample), []);
   assert.deepEqual(validateReport(review, { verdict: "ok", findings: [], feedback: [] }), []);
@@ -116,12 +119,13 @@ test("investigate-and-fix schema rejects common mistakes", () => {
   assert.deepEqual(validateReport(investigate, { ...investigateSample, state: "fixed" }).length, 1);
   assert.deepEqual(validateReport(investigate, { ...investigateSample, commits: "0123abc" }), ["$.commits: expected array, got string"]);
   assert.deepEqual(validateReport(investigate, { ...investigateSample, landsAfter: ["D12345"] }), ["$.landsAfter[0]: expected object, got string"]);
-  assert.deepEqual(validateReport(investigate, { ...investigateSample, bugDraft: { product: "Firefox" } }), [
-    "$.bugDraft.component: required",
-    "$.bugDraft.summary: required",
-    "$.bugDraft.description: required",
-    "$.bugDraft.bugType: required",
+  assert.deepEqual(validateReport(investigate, { ...investigateSample, bugDrafts: [{ commits: ["0123abc"], draft: { product: "Firefox" } }] }), [
+    "$.bugDrafts[0].draft.component: required",
+    "$.bugDrafts[0].draft.summary: required",
+    "$.bugDrafts[0].draft.description: required",
+    "$.bugDrafts[0].draft.bugType: required",
   ]);
+  assert.deepEqual(validateReport(investigate, { ...investigateSample, bugDraft: investigateSample.bugDrafts![0].draft }), ["$.bugDraft: unexpected property"], "one draft per commit now");
   assert.deepEqual(validateReport(investigate, { ...investigateSample, feedback: [{ target: "mach", text: "x" }] }).length, 1);
   assert.deepEqual(validateReport(investigate, { ...investigateSample, bug: 123 }), ["$.bug: unexpected property"]);
   assert.deepEqual(validateReport(investigate, { ...investigateSample, evidence: [{ source: "hunch", finding: "x" }] }).length, 1);
