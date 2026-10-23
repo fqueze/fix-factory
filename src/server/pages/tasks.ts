@@ -134,9 +134,18 @@ export function pushTasks(d: DryRunResult, commits: { sha: string; subject: stri
     return join(Array.from({ length: runsOf(j) }, () => s), " ");
   };
   const tier = (g: Group) => (g.tier > 1 ? html`<span class="tier">[tier ${g.tier}]</span>` : null);
+  // The folders it runs (mach try's test paths, per suite), or all of its suites' tests.
+  const env = config.env as Record<string, string> | undefined;
+  let folders: string[] = [];
+  try {
+    folders = [...new Set(Object.values(JSON.parse(env?.MOZHARNESS_TEST_PATHS ?? "{}") as Record<string, string[]>).flat())].sort();
+  } catch {
+    folders = []; // not JSON: shown in the config below
+  }
+  const where = folders.length ? html`<div class="pfolders"><b>${folders.length === 1 ? "Folder" : `${folders.length} folders`}</b>: ${join(folders.map((f) => html`<span class="mono">${f}</span>`), ", ")}</div>` : html`<div class="pfolders"><b>All the tests</b> of the selected suites</div>`;
   // The top of the stack shows; the rest folded.
   const commit = (c: { sha: string; subject: string }) => html`<li><span class="mono">${c.sha.slice(0, 12)}</span> ${c.subject}</li>`;
-  return html`<ul class="pcommits" title="The commits it would push, newest first">${commits.slice(0, 5).map(commit)}</ul>${
+  return html`${where}<ul class="pcommits" title="The commits it would push, newest first">${commits.slice(0, 5).map(commit)}</ul>${
     commits.length > 5 ? html`<details class="fold"><summary>+${commits.length - 5} more</summary><ul class="pcommits">${commits.slice(5).map(commit)}</ul></details>` : null
   }<table class="jobs">${rowsOf(jobs).map(
     (row) =>

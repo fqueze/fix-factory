@@ -278,8 +278,8 @@ export function actionKind(n: NeedsUser, r: RequestState): ActionKind {
 }
 
 // A push by what it's for, numbered in order among those for the same thing: verify-stack (the whole stack),
-// verify-fixes (the stack again after an earlier push of it), debug-<test> or check-<test> (what a group's author
-// asked for), unskip, initial. Its id stays what the factory keys it by.
+// verify-fixes (what specific fixes need), debug (logs or profiles), as its planner said; debug-<test> or
+// check-<test> (what a group's author asked for), unskip, initial. Its id stays what the factory keys it by.
 export function pushName(r: RequestState, id: string): string {
   const ids = Object.keys(r.pushes);
   const base = pushKind(r, id);
@@ -295,7 +295,10 @@ function pushKind(r: RequestState, id: string): string | undefined {
   const stack = Object.values(r.jobs).find((j) => j.purpose?.what === "dry-run" && j.purpose.push === id)?.purpose?.stack;
   if (stack !== undefined) {
     const name = Object.keys(r.stacks).length > 1 ? `verify-${stack}` : "verify";
-    // After a push of the stack that was made, it verifies fixes.
+    if (p?.scope === "debug") return Object.keys(r.stacks).length > 1 ? `debug-${stack}` : "debug";
+    if (p?.scope) return `${name}-${p.scope}`;
+    // Planned before planners said: the whole stack by its purpose, else fixes after a push of it that was made.
+    if (/\b(whole|entire) stack\b/i.test(p?.purpose ?? "")) return `${name}-stack`;
     const ids = Object.keys(r.pushes);
     const earlier = ids.slice(0, ids.indexOf(id)).some((x) => r.pushes[x].rev && Object.values(r.jobs).some((j) => j.purpose?.what === "dry-run" && j.purpose.push === x && j.purpose.stack === stack));
     return `${name}-${earlier ? "fixes" : "stack"}`;

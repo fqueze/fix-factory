@@ -175,7 +175,7 @@ export type Event =
   // What changed in a stack since its last push: each patch's commit then and now, the interdiff of those that changed.
   | (EventBase & { type: "push-changes"; stack: string; since: PushId; changes: PushChange[]; removed: { sha: string; title: string }[] })
   // What a planned push is for, against the stack's previous push: its regressions, and the patch that claims each fix.
-  | (EventBase & { type: "try-context"; push: PushId; since: PushId; regressions: Regression[] })
+  | (EventBase & { type: "try-context"; push: PushId; since?: PushId; regressions?: Regression[]; scope?: PushScope })
   | (EventBase & { type: "test-plan-sent"; patch: PatchId; revision: number; text: string })
   | (EventBase & { type: "dep"; dep: Dep })
   | (EventBase & { type: "dep-removed"; patch: PatchId; needs: PatchId | string })
@@ -380,8 +380,11 @@ export interface Regression {
   how: string; // what that change does about it, or why nothing does
 }
 
+export type PushScope = "stack" | "fixes" | "debug";
+
 export interface PushView {
   id: PushId;
+  scope?: PushScope; // what its planner said it covers
   since?: PushId; // the stack's push it follows: its changes since then are in RequestState.pushChanges
   regressions?: Regression[];
   purpose: string;
@@ -525,7 +528,7 @@ export interface WriteAnnotationPatchesReport {
 }
 
 export interface PlanTryPushesReport {
-  pushes: { purpose: string; tryArgs: string[]; rebuild: number }[];
+  pushes: { purpose: string; tryArgs: string[]; rebuild: number; scope?: PushScope }[];
   regressions?: Regression[]; // when the stack had an earlier push: each of its regressions, and what fixes it
   feedback: Feedback[];
 }

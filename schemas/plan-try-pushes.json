@@ -19,6 +19,15 @@
           },
           "rebuild": {
             "type": "integer"
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "stack",
+              "fixes",
+              "debug"
+            ],
+            "description": "stack: a large push checking the whole stack is ready (first verification, last one before review). fixes: targeted, only what specific fixes need, typically for what failed on an earlier push. debug: to get logs or profiles."
           }
         },
         "required": [

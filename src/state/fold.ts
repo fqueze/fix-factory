@@ -190,8 +190,9 @@ export function foldEvents(events: readonly Event[]): RequestState {
         break;
       case "try-context": {
         const p = push(e.push);
-        p.since = e.since;
-        p.regressions = e.regressions;
+        if (e.since !== undefined) p.since = e.since;
+        if (e.regressions !== undefined) p.regressions = e.regressions;
+        if (e.scope !== undefined) p.scope = e.scope;
         break;
       }
       case "test-plan":

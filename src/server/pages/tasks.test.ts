@@ -60,7 +60,7 @@ describe("pushTasks", () => {
     assert.ok(h.includes(`<tr><th>Linux <span class="btype">debug</span></th><td>${s(`${B.label} (artifact build)`, "Ba")}</td></tr>`), h);
     const nofis = s(NOFIS.label, "X1");
     assert.ok(h.includes(`<tr><th>Linux 24.04 <span class="btype">debug</span></th><td><span class="jgroup">X( ${x1} ${x1} ${x1} )</span> <span class="jgroup"><span class="tier">[tier 2]</span>X-nofis( ${nofis} ${nofis} ${nofis} )</span></td></tr>`), h);
-    assert.match(h, /^<ul class="pcommits"/, "its commits first, the top of the stack shown");
+    assert.match(h, /^<div class="pfolders"><b>All the tests<\/b> of the selected suites<\/div><ul class="pcommits"/, "what it runs, then its commits, the top of the stack shown");
     assert.match(h, /<\/table>\n<details class="fold"><summary>Its command and try_task_config\.json<\/summary><pre class="mono command">\.\/mach try fuzzy<\/pre>\n<pre class="mono ttc"[^>]*>\{\n  &quot;use-artifact-builds&quot;: true,/, "the jobs, then the command and its try_task_config, folded");
   });
 
@@ -75,4 +75,9 @@ describe("pushTasks", () => {
     assert.match(h, /<th>Linux 24\.04 <span class="btype">debug<\/span><\/th><td><span class="jgroup">X\( <span class="job" title="test-linux2404-64\/debug-xpcshell-\*">X\*<\/span> \)/);
     assert.match(h, /<th>Other <span class="btype">opt<\/span><\/th><td><span class="job" title="toolchain-thing">toolchain-thing<\/span><\/td>/);
   });
+});
+
+it("a push's folders show, from mach try's test paths", () => {
+  const h = pushTasks({ command: ["./mach", "try"], taskCount: 1, tasks: [], commits: [], warnings: [], tryTaskConfig: { env: { MOZHARNESS_TEST_PATHS: JSON.stringify({ "mochitest-chrome": ["layout/xul/test", "toolkit/content/tests/chrome"], "mochitest-browser-chrome": ["layout/xul/test"] }) } } } as never).value;
+  assert.match(h, /<div class="pfolders"><b>2 folders<\/b>: <span class="mono">layout\/xul\/test<\/span>, <span class="mono">toolkit\/content\/tests\/chrome<\/span><\/div>/);
 });

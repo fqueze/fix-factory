@@ -681,7 +681,12 @@ class Planner {
       if (d.some((x) => !x)) return undefined;
       // What you judge it by: the previous push's regressions, and what claims to fix each.
       const regressions = this.rep<PlanTryPushesReport>(plan).regressions;
-      if (since && regressions) for (const id of these) if (this.s.pushes[id] && this.s.pushes[id].since === undefined) this.event({ type: "try-context", request: this.s.id, push: id, since, regressions });
+      these.forEach((id, i) => {
+        const p = this.s.pushes[id];
+        if (!p || p.scope !== undefined || p.since !== undefined) return;
+        const scope = planned[i].scope;
+        if (scope || (since && regressions)) this.event({ type: "try-context", request: this.s.id, push: id, ...(since && regressions ? { since, regressions } : {}), ...(scope ? { scope } : {}) });
+      });
       ids.push(...these);
       dry.push(...(d as DryRunResult[]));
       const pending = ids.filter((p) => this.s.pushes[p]?.replan && !handled.has(p));
