@@ -1527,12 +1527,9 @@ class Planner {
     });
     if (!review) return;
     const mustFix = this.rep<ReviewStackReport>(review).findings.filter((f) => f.severity === "must-fix");
+    // An earlier version counted every review of the stack, whatever they were about.
+    this.clear(`failed:${review.job}`);
     if (mustFix.length > 0) {
-      const rounds = this.view.jobs.filter((j) => j.purpose.what === "review-stack" && j.purpose.stack === id && j.end).length;
-      if (rounds >= STACK_REVIEW_ROUNDS) {
-        this.raise(`failed:${review.job}`, { action: `Stack review still has findings after ${STACK_REVIEW_ROUNDS} rounds`, detail: mustFix.map((f) => f.text).join("; ").slice(0, 500), job: review.job, stack: id });
-        return;
-      }
       const byItem = new Map<ItemId, string[]>();
       for (const f of mustFix) {
         const p = this.patchBySha(f.patch);
@@ -1540,7 +1537,19 @@ class Planner {
         byItem.set(item, [...(byItem.get(item) ?? []), `- ${p ? `${p.title}: ` : ""}${f.text}`]);
       }
       for (const [item, lines] of byItem) {
-        this.resumeAuthor(item, `author:${item}${this.itemEpoch(item)}:stack-review:${review.job}`, "stack review", `The review of the whole stack found problems with your patch:\n${lines.join("\n")}\n\nAddress them by amending your commit, then end with the JSON report again.`);
+        // An author that already answered stack reviews of its patch this many times, and is still flagged, comes to
+        // you on its group's row, where you can tell it what to do or close it.
+        const asked = this.view.jobs.filter((j) => j.item === item && j.purpose.key.startsWith(`author:${item}${this.itemEpoch(item)}:stack-review:`) && j.end).length;
+        if (asked >= STACK_REVIEW_ROUNDS) {
+          this.raise(`stack-review:${item}:${review.job}`, { action: `The stack review still flags its patch after ${asked} rounds with its author`, detail: lines.join("\n").slice(0, 1000), job: review.job, item });
+          continue;
+        }
+        this.resumeAuthor(
+          item,
+          `author:${item}${this.itemEpoch(item)}:stack-review:${review.job}`,
+          "stack review",
+          `The review of the whole stack found problems with your patch:\n${lines.join("\n")}\n\nAddress them by amending your commit. If another patch of the stack already does what yours does, drop your commits and report "left as-is", saying which commit covers your fix. Then end with the JSON report again.`,
+        );
       }
       return;
     }

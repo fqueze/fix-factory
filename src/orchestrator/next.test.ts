@@ -1547,8 +1547,37 @@ describe("5. stack", () => {
     assert.deepEqual(sc.settle(), [keyOf(sc, `review-stack:root:${hash}:`)]);
     const review = sc.complete(keyOf(sc, `review-stack:root:${hash}:`), { report: { findings: [{ patch: sha("b"), severity: "must-fix", text: "same approach as test_a" }], addDeps: [], removeDeps: [], feedback: [] } });
     assert.deepEqual(sc.settle(), [`author:i-test-b:stack-review:${review}`]);
-    assert.match(sc.plan(`author:i-test-b:stack-review:${review}`).agent?.message ?? "", /same approach as test_a/);
+    assert.match(sc.plan(`author:i-test-b:stack-review:${review}`).agent?.message ?? "", /same approach as test_a[^]*drop your commits and report "left as-is"/);
     assert.equal(sc.state().items["i-test-b"].state, "investigating");
+  });
+
+  it("a patch the stack review keeps flagging after rounds with its author comes to you on its group's row; the others' authors are still told", () => {
+    const sc = twoReviewed();
+    sc.complete("wt:root", { output: { path: `/wt/${ID}-root` } });
+    sc.settle();
+    const key = sc.view().jobs.find((j) => j.purpose.what === "assemble")!.purpose.key;
+    const hash = key.split(":")[2];
+    sc.complete(key, { output: { commits: [{ sha: sha("1"), newSha: sha("a") }, { sha: sha("2"), newSha: sha("b") }] } });
+    sc.settle();
+    sc.complete(`deps:root:${hash}`, { output: [] });
+    sc.complete(`effort:p-test-a:${sha("1")}`, { report: { effort: 2, reason: "r", feedback: [] } });
+    sc.complete(`effort:p-test-b:${sha("2")}`, { report: { effort: 1, reason: "r", feedback: [] } });
+    sc.settle();
+    sc.complete(keyOf(sc, `order:root:${hash}:`), { output: { order: ["p-test-a", "p-test-b"], flippedSoftDeps: [] } });
+    sc.settle();
+    // Its author already answered three stack reviews (other reviews of the stack don't count).
+    for (const n of [1, 2, 3]) {
+      sc.add({ type: "job-started", request: ID, job: `j-sr${n}`, item: "i-test-b", kind: "agent", name: "investigate-and-fix", pid: 1, pidStartTime: 1, cmd: [], cwd: "/wt", codeVersion: "t", sessionId: "s", purpose: { key: `author:i-test-b:stack-review:j-r${n}`, what: "author", item: "i-test-b", reason: "stack review" } } as never);
+      sc.reports.set(`j-sr${n}`, fixed([sha("2")]));
+      sc.add({ type: "job-finished", request: ID, job: `j-sr${n}`, exitCode: 0, durationMs: 1 });
+    }
+    const review = sc.complete(keyOf(sc, `review-stack:root:${hash}:`), {
+      report: { findings: [{ patch: sha("b"), severity: "must-fix", text: "duplicates test_a's fix" }, { patch: sha("a"), severity: "must-fix", text: "typo in the message" }], addDeps: [], removeDeps: [], feedback: [] },
+    });
+    assert.deepEqual(sc.settle().filter((k) => k.startsWith("author:")), [`author:i-test-a:stack-review:${review}`]);
+    const flag = sc.state().needsUser.find((n) => n.key === `stack-review:i-test-b:${review}`);
+    assert.equal(flag?.item, "i-test-b");
+    assert.match(flag?.detail ?? "", /duplicates test_a's fix/);
   });
 
   it("hands a text conflict to resolve-conflict, then assembles the rest", () => {
