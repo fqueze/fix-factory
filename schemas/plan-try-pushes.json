@@ -64,7 +64,11 @@
         "properties": {
           "failure": {
             "type": "string",
-            "description": "The failure, with its tests and configs."
+            "description": "The failure in one line: its tests, configs and message."
+          },
+          "causedBy": {
+            "type": "string",
+            "description": "The id of the patch that broke it."
           },
           "fixedBy": {
             "type": "string",

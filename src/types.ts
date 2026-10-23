@@ -374,6 +374,7 @@ export interface PushChange {
 
 export interface Regression {
   failure: string; // the failure on the previous push, with its tests
+  causedBy?: PatchId; // the patch that broke it
   fixedBy?: PatchId; // the patch whose change since then claims to fix it; none: not fixed yet
   how: string; // what that change does about it, or why nothing does
 }

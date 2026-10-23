@@ -207,7 +207,9 @@ function findStack(r: RequestState, n: NeedsUser): StackView | undefined {
 
 // One button for these pushes; their commands and tasks are on their rows.
 export function approvePushControls(r: RequestState, pushes: PushView[], back: string): Html {
-  const label = pushes.length === 1 ? "Approve" : pushes.length === 2 ? "Approve both" : `Approve all ${pushes.length}`;
+  // A push after regressions nothing fixes yet won't fix them: pushing is your call.
+  const anyway = pushes.some((p) => p.regressions?.some((g) => !g.fixedBy));
+  const label = anyway ? (pushes.length === 1 ? "Push anyway" : "Push all anyway") : pushes.length === 1 ? "Approve" : pushes.length === 2 ? "Approve both" : `Approve all ${pushes.length}`;
   return html`<form class="inline cmd" method="post" action="/api/commands">${commandFields(
     pushes.map((p) => ({ cmd: "approve-push", request: r.id, push: p.id })),
     back,

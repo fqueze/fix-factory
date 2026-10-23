@@ -730,14 +730,20 @@ function sinceSection(r: RequestState, p: PushView, ctx: RenderContext): Html | 
   const prev = r.pushes[since];
   const changes = Object.values(r.pushChanges).find((c) => c.since === since);
   const title = (id: string) => (r.patches[id] ? patchTitle(r.patches[id]) : id);
+  // Those nothing fixes first: this push won't fix them. Each in one line, its details on click.
+  const link = (id: string) => html`<a href="#patch-${id}">${title(id)}</a>`;
+  const regression = (g: NonNullable<PushView["regressions"]>[number]) =>
+    html`<li><div class="clamp1" data-expand title="Click to see all of it">${md(g.failure)}</div><div class="sub clamp1" data-expand title="Click to see all of it">${g.causedBy ? html`broken by ${link(g.causedBy)} · ` : null}${g.fixedBy ? html`fixed by ${link(g.fixedBy)}: ` : null}${g.how}</div></li>`;
+  const unfixed = p.regressions?.filter((g) => !g.fixedBy) ?? [];
+  const fixed = p.regressions?.filter((g) => g.fixedBy) ?? [];
   const regressions = p.regressions?.length
-    ? html`<h4 class="part">The regressions of push ${pushName(r, since)}</h4><ul class="regressions">${p.regressions.map(
-        (g) => html`<li>${md(g.failure)}<div class="sub">${g.fixedBy ? html`fixed by <a href="#patch-${g.fixedBy}">${title(g.fixedBy)}</a>: ` : html`<b>not fixed yet</b>: `}${g.how}</div></li>`,
-      )}</ul>`
+    ? html`<h4 class="part">The regressions of push ${pushName(r, since)}</h4>${
+        unfixed.length ? html`<h5 class="verdict">not fixed yet <span class="count">${unfixed.length}</span>: this push won't fix them</h5><ul class="regressions">${unfixed.map(regression)}</ul>` : null
+      }${fixed.length ? html`<h5 class="verdict">fixed since <span class="count">${fixed.length}</span></h5><ul class="regressions">${fixed.map(regression)}</ul>` : null}`
     : null;
   const changed = changes?.changes.filter((c) => c.status !== "same") ?? [];
   const list = changes
-    ? html`<h4 class="part">Changed since push ${pushName(r, since)}${prev?.rev ? html` (<a href="${pushUrl(prev)}" target="_blank" rel="noopener">${prev.summary ?? prev.result}</a>)` : null}</h4>${
+    ? html`<h4 class="part">Changed since push ${pushName(r, since)}${prev?.rev ? html` (<a href="${pushUrl(prev)}" target="_blank" rel="noopener">${(prev.summary ?? prev.result ?? "").split(":")[0]}</a>)` : null}</h4>${
         changed.length === 0 && changes.removed.length === 0
           ? html`<div class="sub">Nothing: the same patches.</div>`
           : html`<ul class="changes">${changed.map((c) => {
@@ -825,21 +831,32 @@ function pushAnalysis(r: RequestState, p: PushView): Html | null {
   if (!p.analysis?.length) {
     return null;
   }
-  // One row per test (its configs together), by verdict, what needs attention first; long lists folded after 5.
-  const groups = new Map<string, { verdict: string; test: string; patch?: string; configs: string[]; evidence: string }>();
+  // One row per test (its configs and patches together), by verdict, what needs attention first; long lists folded
+  // after 5. Triage names a test by its path or its file name, sometimes with a note, and a config by a job name or
+  // a list: grouped by file name, the longest name shown.
+  const testKey = (t: string) => t.replace(/\s*\([^)]*\)/g, "").trim().split("/").pop()!;
+  const configsOf = (c: string | undefined) => (c ?? "").split(/[;,]\s*/).map((x) => x.trim().replace(/^test-/, "")).filter(Boolean);
+  const patchOf = (ref: string) => r.patches[ref] ?? Object.values(r.patches).find((x) => [x.sha, ...(x.pastShas ?? [])].some((s) => s.startsWith(ref) || ref.startsWith(s)));
+  const groups = new Map<string, { verdict: string; test: string; patches: Html[]; seen: Set<string>; configs: string[]; evidence: string }>();
   for (const c of p.analysis) {
     const test = c.test ? relativeTest(r, c.test) : (c.taskId ?? "a job");
-    const key = `${c.verdict}\n${test}\n${c.patch ?? ""}`;
-    const g = groups.get(key) ?? { verdict: c.verdict, test, patch: c.patch, configs: [], evidence: c.evidence };
-    if (c.config && !g.configs.includes(c.config)) g.configs.push(c.config);
+    const key = `${c.verdict}\n${testKey(test)}`;
+    const g = groups.get(key) ?? { verdict: c.verdict, test, patches: [], seen: new Set<string>(), configs: [], evidence: c.evidence };
+    if (test.replace(/\s*\([^)]*\)/g, "").length > g.test.length) g.test = test.replace(/\s*\([^)]*\)/g, "").trim();
+    for (const x of configsOf(c.config)) if (!g.configs.includes(x)) g.configs.push(x);
+    if (c.patch) {
+      const pv = patchOf(c.patch);
+      const id = pv?.id ?? c.patch;
+      if (!g.seen.has(id)) {
+        g.seen.add(id);
+        g.patches.push(pv ? html`<a href="#patch-${pv.id}">${patchTitle(pv)}</a>` : html`<span class="mono">${c.patch.slice(0, 12)}</span>`);
+      }
+    }
+    g.evidence = c.evidence; // the latest triage's
     groups.set(key, g);
   }
-  const patchName = (sha: string) => {
-    const pv = Object.values(r.patches).find((x) => [x.sha, ...(x.pastShas ?? [])].some((s) => s.startsWith(sha) || sha.startsWith(s)));
-    return pv ? html`<a href="#patch-${pv.id}">${patchTitle(pv)}</a>` : html`<span class="mono">${sha.slice(0, 12)}</span>`;
-  };
-  const li = (g: { test: string; patch?: string; configs: string[]; evidence: string }) =>
-    html`<li>${g.test}${g.configs.length ? html` <span class="sub">on ${g.configs.join(", ")}</span>` : null}${g.patch ? html` <span class="sub">· ${patchName(g.patch)}</span>` : null}<div class="sub clamp1" data-expand title="Click to see all of it">${g.evidence}</div></li>`;
+  const li = (g: { test: string; patches: Html[]; configs: string[]; evidence: string }) =>
+    html`<li>${g.test}${g.configs.length ? html` <span class="sub">on ${g.configs.join(", ")}</span>` : null}${g.patches.length ? html` <span class="sub">· ${join(g.patches, ", ")}</span>` : null}<div class="sub clamp1" data-expand title="Click to see all of it">${g.evidence}</div></li>`;
   const all = [...groups.values()];
   return html`<h4 class="part">What the factory made of its failures</h4>${VERDICT_ORDER.filter((v) => all.some((g) => g.verdict === v)).map((v) => {
     const these = all.filter((g) => g.verdict === v);

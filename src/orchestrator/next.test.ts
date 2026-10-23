@@ -1664,8 +1664,8 @@ describe("6. verify on try", () => {
     const input = JSON.parse(sc.plan(`triage:${push}:final:v2`).files![0].content);
     // The push's patches and their files, so triage can tell a failure one of them caused.
     assert.deepEqual(input.patches, [
-      { sha: sha("c"), title: "Bug 22 - Fix test_b, r=smaug.", files: ["a/test_b.js"] },
-      { sha: sha("d"), title: "Bug XXXXXXX - Fix a/test_a.js, r=smaug.", files: ["a/test_a.js"] },
+      { id: "p-test-b", sha: sha("c"), title: "Bug 22 - Fix test_b, r=smaug.", files: ["a/test_b.js"] },
+      { id: "p-test-a", sha: sha("d"), title: "Bug XXXXXXX - Fix a/test_a.js, r=smaug.", files: ["a/test_a.js"] },
     ]);
     assert.deepEqual([input.rev, input.rows.map((r: { test: string }) => r.test), input.unparsed], ["fed", ["z/test_z.js"], []]);
     sc.complete(`triage:${push}:final:v2`, { report: { cells: [{ test: "z/test_z.js", verdict: "broken by patch", patch: sha("c"), evidence: "TypeError" }], feedback: [] } });

@@ -1716,7 +1716,7 @@ class Planner {
       worktree: info.wt,
       base: stack.base ?? this.config.baseRef,
       since: since && since !== null
-        ? ` The stack was pushed before (${since.rev}: ${since.summary}). What changed since, each changed patch with its interdiff and what its author said it fixes, and that push's failures, are in ${since.file}. Return \`regressions\`: each failure of that push the stack caused (not pre-existing, not infra), with the patch whose change since then claims to fix it (\`fixedBy\`, its id) and how, from its interdiff, not only its author's word; none if nothing fixes it. A regression nothing fixes isn't worth a push: plan none for it, and say so in its \`how\`.`
+        ? ` The stack was pushed before (${since.rev}: ${since.summary}). What changed since, each changed patch with its interdiff and what its author said it fixes, and that push's failures, are in ${since.file}. Return \`regressions\`: each failure of that push the stack caused (not pre-existing, not infra), in one line, with the patch that broke it (\`causedBy\`) and the patch whose change since then claims to fix it (\`fixedBy\`, its id) and how, from its interdiff, not only its author's word; none if nothing fixes it. A regression nothing fixes isn't worth a push: plan none for it, and say so in its \`how\`.`
         : "",
     }, {
       cwd: info.wt,
@@ -2024,12 +2024,13 @@ class Planner {
       const key = rejected ? `triage:${push}:${run}:v2:${shortHash(unmatched.map((r) => `${r.test} ${r.config}`)).slice(0, 6)}` : `triage:${push}:${run}:v2`;
       const triage = this.wantAgent(key, "triage", "triage-try", { rev: p.rev!, goal: p.purpose || "verify the stack", tableFile: file, logsDir: artifactsDir(this.config) }, {
         purpose: { push },
-        files: [{ path: file, content: JSON.stringify({ rev: p.rev, patches: patches.map((x) => ({ sha: x.sha, title: x.title, files: this.patchFiles(x) })), rows: unmatched, unparsed: t.unparsed }, null, 2) + "\n" }],
+        files: [{ path: file, content: JSON.stringify({ rev: p.rev, patches: patches.map((x) => ({ id: x.id, sha: x.sha, title: x.title, files: this.patchFiles(x) })), rows: unmatched, unparsed: t.unparsed }, null, 2) + "\n" }],
       });
       if (!triage) continue;
       const report = this.rep<TriageTryReport>(triage);
       for (const c of report.cells) {
-        const item = c.verdict === "broken by patch" && c.patch ? this.patchBySha(c.patch)?.item : undefined;
+        // By id; earlier reports gave a sha.
+        const item = c.verdict === "broken by patch" && c.patch ? (this.s.patches[c.patch] ?? this.patchBySha(c.patch))?.item : undefined;
         if (item) this.routeToAuthor(item, push, [`- ${c.test ?? c.taskId ?? "a job"}${c.config ? ` on ${c.config}` : ""}: ${c.evidence}`]);
       }
       this.itemsFromTriage(report);

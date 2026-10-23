@@ -134,7 +134,7 @@ export function pushTasks(d: DryRunResult, commits: { sha: string; subject: stri
     return join(Array.from({ length: runsOf(j) }, () => s), " ");
   };
   const tier = (g: Group) => (g.tier > 1 ? html`<span class="tier">[tier ${g.tier}]</span>` : null);
-  return html`<ul class="pcommits" title="The commits it would push, newest first">${commits.map((c) => html`<li><span class="mono">${c.sha.slice(0, 12)}</span> ${c.subject}</li>`)}</ul><table class="jobs">${rowsOf(jobs).map(
+  return html`<details class="fold"><summary>${commits.length} ${commits.length === 1 ? "commit" : "commits"}</summary><ul class="pcommits" title="The commits it would push, newest first">${commits.map((c) => html`<li><span class="mono">${c.sha.slice(0, 12)}</span> ${c.subject}</li>`)}</ul></details><table class="jobs">${rowsOf(jobs).map(
     (row) =>
       html`<tr><th>${row.name} <span class="btype">${row.collection}</span></th><td>${join(
         row.groups.map((g) =>
@@ -145,6 +145,6 @@ export function pushTasks(d: DryRunResult, commits: { sha: string; subject: stri
         " ",
       )}</td></tr>`,
   )}</table>
-<pre class="mono command">${d.command.join(" ")}</pre>
-<pre class="mono ttc" title="The try_task_config.json it would push">${JSON.stringify(config, null, 2)}</pre>`;
+<details class="fold"><summary>Its command and try_task_config.json</summary><pre class="mono command">${d.command.join(" ")}</pre>
+<pre class="mono ttc" title="The try_task_config.json it would push">${JSON.stringify(config, null, 2)}</pre></details>`;
 }

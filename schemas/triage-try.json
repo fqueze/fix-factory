@@ -7,7 +7,8 @@
         "type": "object",
         "properties": {
           "test": {
-            "type": "string"
+            "type": "string",
+            "description": "The full path, nothing else (no notes in parentheses)."
           },
           "config": {
             "type": "string"
@@ -27,7 +28,7 @@
           },
           "patch": {
             "type": "string",
-            "description": "For \"broken by patch\": the sha of the commit that broke it."
+            "description": "For \"broken by patch\": the id of the patch that broke it, as given in the table file."
           },
           "evidence": {
             "type": "string",
