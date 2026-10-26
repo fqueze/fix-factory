@@ -458,7 +458,7 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
           name: "write-hand-off",
           cwd: requestDir(ctx.config, s.id),
           files: [{ path: referencesFile, content: JSON.stringify(handOffReferences(ctx.config, s, c.items), null, 2) + "\n" }],
-          agent: { sessionId: sessionIdFor(s.id, `hand-off:${c.id}`), resume: false, vars: { id: s.id, firefoxRepo: ctx.config.firefoxRepo, referencesFile } },
+          agent: { sessionId: sessionIdFor(s.id, `hand-off:${c.id}`), resume: false, vars: { id: s.id, firefoxRepo: ctx.config.firefoxRepo, referencesFile, why: c.reason } },
         },
       });
       done(true, c.reason);

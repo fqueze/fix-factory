@@ -1168,14 +1168,16 @@ describe("linkify", () => {
 });
 
 describe("hand-off", () => {
-  it("the prompt for your session, to copy, under the groups it takes over", () => {
+  it("the groups you took over, with their patches, and the prompt for your session to copy", () => {
     const r = structuredClone(get("r-20261005-newtab"));
-    const item = Object.keys(r.items)[0];
+    const item = r.patches["p-panel"].item!;
+    r.items[item].state = "taken over";
     r.handOffs = [{ job: "j-h", items: [item], text: "Take over `foo`.", t: "2026-10-26T10:00:00.000Z" }];
     const out = renderRequest(r, ctx, true).value;
-    assert.match(out, /<h3>Taken over by you<\/h3>/);
-    assert.match(out, /<textarea hidden id="hand-off-j-h">Take over `foo`\.<\/textarea><button type="button" class="btn small primary" data-copy="hand-off-j-h">Copy the prompt for your session<\/button>/);
-    assert.match(out, /<summary>the prompt<\/summary><div class="testplan"><div class="md"><p>Take over <code>foo<\/code>\.<\/p>/);
+    const section = out.slice(out.indexOf("<h3>Taken over by you</h3>"));
+    assert.match(section, /<textarea hidden id="hand-off-j-h">Take over `foo`\.<\/textarea><button type="button" class="btn small primary" data-copy="hand-off-j-h">Copy the prompt for your session<\/button>/);
+    assert.match(section, /<summary>the prompt<\/summary><div class="testplan"><div class="md"><p>Take over <code>foo<\/code>\.<\/p>/);
+    assert.ok(section.includes('id="patch-p-panel"'), "its patch, under the section");
   });
 });
 

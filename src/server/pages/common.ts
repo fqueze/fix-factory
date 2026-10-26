@@ -129,7 +129,8 @@ export function isDropped(r: RequestState, p: PatchView): boolean {
   const item = itemOf(r, p);
   if (item === undefined) return false;
   const index = p.id === `p-${item.id.replace(/^i-/, "")}` ? 0 : Number(p.id.slice(`p-${item.id.replace(/^i-/, "")}-`.length)) - 1;
-  return stateClass(item.state) === "closed" || (item.commitCount !== undefined && index >= item.commitCount);
+  // Patches you took over are yours to go on with, not dropped.
+  return (stateClass(item.state) === "closed" && item.state !== "taken over") || (item.commitCount !== undefined && index >= item.commitCount);
 }
 
 const REVIEWED_OR_LATER: ItemState[] = ["reviewed", "in stack", "in try", "waiting for review", "addressing review comments", "fixed", "landed"];
