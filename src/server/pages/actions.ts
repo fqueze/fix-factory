@@ -284,6 +284,8 @@ function plannedText(c: PlannedCommand, r: RequestState): string {
       return `change the request config: ${JSON.stringify(c.config)}`;
     case "shell":
       return `run in ${c.cwd}: ${c.command}`;
+    case "hand-off":
+      return `hand ${c.items.map((i) => itemLabel(r, i)).join(", ")} over to a session of your own, writing its prompt`;
   }
 }
 

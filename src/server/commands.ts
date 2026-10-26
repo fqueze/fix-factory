@@ -20,6 +20,7 @@ export const ITEM_STATES = [
   "fixed",
   "left as-is",
   "handed back",
+  "taken over",
   "landed",
 ] as const satisfies readonly ItemState[];
 
@@ -84,6 +85,7 @@ const SPECS: Record<Command["cmd"], Record<string, Field>> = {
   "redo-step": { item: "string?", step: { oneOf: REQUEST_STEPS }, reason: "string" },
   "edit-config": { config: "object", reason: "string" },
   shell: { cwd: "string", command: "string", reason: "string" },
+  "hand-off": { items: "string[]", reason: "string" },
   "accept-review": { item: "string" },
   "allow-push": { item: "string" },
   continue: { item: "string", text: "string" },
@@ -201,7 +203,7 @@ export function validateCommand(input: unknown, getRequest: (id: string) => Requ
   return { ok: true, command: out as unknown as CommandInput };
 }
 
-const PLANNED = new Set<string>(["retry-job", "cancel-job", "resume-agent", "start-agent", "set-state", "redo-step", "edit-config", "shell"] satisfies PlannedCommand["cmd"][]);
+const PLANNED = new Set<string>(["retry-job", "cancel-job", "resume-agent", "start-agent", "set-state", "redo-step", "edit-config", "shell", "hand-off"] satisfies PlannedCommand["cmd"][]);
 
 function project(c: object, spec: Record<string, Field>): Record<string, unknown> {
   const o = c as Record<string, unknown>;
@@ -218,6 +220,10 @@ function checkIds(c: Record<string, unknown>, state: RequestState): string | nul
   }
   if (typeof c.item === "string" && !Object.hasOwn(state.items, c.item)) {
     return `unknown item ${c.item}`;
+  }
+  const unknownItem = Array.isArray(c.items) ? (c.items as string[]).find((i) => !Object.hasOwn(state.items, i)) : undefined;
+  if (unknownItem !== undefined) {
+    return `unknown item ${unknownItem}`;
   }
   if (typeof c.job === "string" && !Object.hasOwn(state.jobs, c.job)) {
     return `unknown job ${c.job}`;

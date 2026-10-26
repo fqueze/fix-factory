@@ -1167,6 +1167,18 @@ describe("linkify", () => {
   });
 });
 
+describe("hand-off", () => {
+  it("the prompt for your session, to copy, under the groups it takes over", () => {
+    const r = structuredClone(get("r-20261005-newtab"));
+    const item = Object.keys(r.items)[0];
+    r.handOffs = [{ job: "j-h", items: [item], text: "Take over `foo`.", t: "2026-10-26T10:00:00.000Z" }];
+    const out = renderRequest(r, ctx, true).value;
+    assert.match(out, /<h3>Taken over by you<\/h3>/);
+    assert.match(out, /<textarea hidden id="hand-off-j-h">Take over `foo`\.<\/textarea><button type="button" class="btn small primary" data-copy="hand-off-j-h">Copy the prompt for your session<\/button>/);
+    assert.match(out, /<summary>the prompt<\/summary><div class="testplan"><div class="md"><p>Take over <code>foo<\/code>\.<\/p>/);
+  });
+});
+
 describe("test plan", () => {
   it("comes first, formatted, to copy, set on the revision with a click, or revise", () => {
     const r = structuredClone(get("r-20261005-newtab"));

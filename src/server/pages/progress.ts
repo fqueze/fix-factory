@@ -65,9 +65,10 @@ export const IDLE: Record<ItemState, { text: (i: ItemView, builds: number) => st
   landed: { text: () => "done: landed", active: false },
   "left as-is": { text: () => "closed", active: false },
   "handed back": { text: () => "closed by you", active: false },
+  "taken over": { text: () => "taken over by you", active: false },
 };
 
-const DONE: ItemState[] = ["fixed", "landed", "left as-is", "handed back"];
+const DONE: ItemState[] = ["fixed", "landed", "left as-is", "handed back", "taken over"];
 
 export interface ItemSentence {
   text: Html;

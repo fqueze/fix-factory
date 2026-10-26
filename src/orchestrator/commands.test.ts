@@ -253,6 +253,29 @@ describe("commands", () => {
     assert.deepEqual([plan.cwd, plan.cmd], ["/wt/a", ["sh", "-c", "git status"]]);
   });
 
+  it("hand-off stops the factory's work on the groups, keeps them out of its hands, and writes the prompt for your session from all it knows", () => {
+    const sc = withPatch();
+    const resume = cmd({ cmd: "resume-agent", item: "i-a", message: "look again", reason: "r" });
+    run(sc, resume);
+    const running = sc.view().byKey.get(`author:i-a:recovery:${resume.id}`)![0].job;
+    sc.add({ type: "needs-user", request: ID, key: "file-bug:p-a", action: "file", detail: "d", patch: "p-a", item: "i-a" });
+    const c = cmd({ cmd: "hand-off", items: ["i-a"], reason: "GC/CC is mine now" });
+    const effects = run(sc, c);
+    assert.deepEqual(effects.find((e) => e.type === "cancel"), { type: "cancel", job: running, request: ID, detail: "cancelled by you" });
+    assert.equal(sc.state().items["i-a"].state, "taken over");
+    assert.deepEqual(sc.open(), []);
+    const plan = sc.plan(`hand-off:${c.id}`);
+    assert.equal(plan.name, "write-hand-off");
+    const refs = JSON.parse(plan.files![0].content);
+    assert.equal(plan.agent?.vars?.referencesFile, plan.files![0].path);
+    assert.deepEqual(refs.groups[0].patches.map((p: { sha: string }) => p.sha), [sha("1")]);
+    assert.deepEqual(refs.groups[0].sessions.map((x: { sessionId: string }) => x.sessionId), ["s-1", "s-1"]);
+    assert.match(refs.groups[0].sessions[0].transcript, /\/\.claude\/projects\/-wt-a\/s-1\.jsonl$/);
+    assert.equal(refs.groups[0].worktrees[0].keptCommits, "refs/fix-factory/a/");
+    sc.complete(`hand-off:${c.id}`, { report: { prompt: "Take over test_a.js.\n", feedback: [] } });
+    assert.deepEqual(sc.state().handOffs.map((h) => [h.items, h.text]), [[["i-a"], "Take over test_a.js."]]);
+  });
+
   it("start-agent starts a fresh session on the item, which later resumes use", () => {
     const sc = withPatch();
     const c = cmd({ cmd: "start-agent", item: "i-a", prompt: "Fix it in the product, not with a wait.", reason: "avoid the timeout approach" });

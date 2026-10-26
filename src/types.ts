@@ -56,6 +56,7 @@ export type ItemState =
   | "fixed"
   | "left as-is"
   | "handed back"
+  | "taken over" // by you, in a session of your own: the factory leaves it, and its worktree, alone
   | "landed";
 
 export type RequestStep =
@@ -177,6 +178,7 @@ export type Event =
   // What a planned push is for, against the stack's previous push: its regressions, and the patch that claims each fix.
   | (EventBase & { type: "try-context"; push: PushId; since?: PushId; regressions?: Regression[]; scope?: PushScope })
   | (EventBase & { type: "test-plan-sent"; patch: PatchId; revision: number; text: string })
+  | (EventBase & { type: "hand-off"; job: JobId; items: ItemId[]; text: string }) // the prompt for your session taking them over
   | (EventBase & { type: "dep"; dep: Dep })
   | (EventBase & { type: "dep-removed"; patch: PatchId; needs: PatchId | string })
   | (EventBase & { type: "stack-dropped"; stack: string }) // made by an earlier rule (one per test folder), never submitted
@@ -249,7 +251,8 @@ export type PlannedCommand =
   | { cmd: "set-state"; item: ItemId; state: ItemState; reason: string }
   | { cmd: "redo-step"; item?: ItemId; step: RequestStep; reason: string }
   | { cmd: "edit-config"; config: Record<string, unknown>; reason: string }
-  | { cmd: "shell"; cwd: string; command: string; reason: string };
+  | { cmd: "shell"; cwd: string; command: string; reason: string }
+  | { cmd: "hand-off"; items: ItemId[]; reason: string }; // you take them over in a session of your own: the factory writes its prompt
 
 // ---------------------------------------------------------------------------
 // Agent reports: the structured_output of each prompt. The JSON schemas in
@@ -452,6 +455,7 @@ export interface RequestState {
   // Optional: folded states saved before it existed don't have it.
   refused?: RefusedCommand[];
   notes: { t: Iso; text: string }[];
+  handOffs: { job: JobId; items: ItemId[]; text: string; t: Iso }[]; // prompts for your sessions taking groups over
 }
 
 export interface AddressReviewReport {
@@ -494,6 +498,11 @@ export interface JobPurpose {
 
 // ---------------------------------------------------------------------------
 // Reports of the other prompts
+
+export interface WriteHandOffReport {
+  prompt: string;
+  feedback: Feedback[];
+}
 
 export interface WriteTestPlanReport {
   testPlan: string;

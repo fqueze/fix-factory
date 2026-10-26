@@ -6,6 +6,7 @@ import { sameBugDraft } from "../state/meta-bug.ts";
 import { canDismiss, canRetry, isPushJob, reviewLimitFlag } from "../state/flags.ts";
 import type { Command, FactoryConfig, ItemId, JobId, PlannedCommand, RequestId, RequestState } from "../types.ts";
 import { ANNOTATIONS_ITEM, authorJobsOf, CANCELLED, itemEpochOf, TERMINAL, resumeAuthorPlan } from "./next.ts";
+import { handOffReferences } from "./hand-off.ts";
 import { dataPath, requestDir, sessionIdFor, slug, type JobPlan } from "./plan.ts";
 import type { View } from "./view.ts";
 
@@ -441,6 +442,28 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
       ev({ type: "config-set", config: { ...s.config, ...c.config } });
       done(true, c.reason);
       break;
+    case "hand-off": {
+      // The factory stops working on them first: their running jobs stop, and their state keeps next() away.
+      for (const item of c.items) {
+        for (const j of Object.values(s.jobs).filter((x) => x.item === item && x.endedAt === undefined && !isPushJob(x))) effects.push({ type: "cancel", job: j.job, request: s.id, detail: CANCELLED });
+        ev({ type: "item-state", item, state: "taken over", detail: c.reason.slice(0, 300) });
+        for (const n of s.needsUser.filter((x) => x.item === item || (x.job !== undefined && s.jobs[x.job]?.item === item))) ev({ type: "user-done", key: n.key });
+      }
+      const referencesFile = dataPath(ctx.config, s.id, `hand-off-${c.id}.json`);
+      effects.push({
+        type: "start",
+        plan: {
+          purpose: { key: `hand-off:${c.id}`, what: "hand-off", reason: c.items.join(" ") },
+          kind: "agent",
+          name: "write-hand-off",
+          cwd: requestDir(ctx.config, s.id),
+          files: [{ path: referencesFile, content: JSON.stringify(handOffReferences(ctx.config, s, c.items), null, 2) + "\n" }],
+          agent: { sessionId: sessionIdFor(s.id, `hand-off:${c.id}`), resume: false, vars: { id: s.id, firefoxRepo: ctx.config.firefoxRepo, referencesFile } },
+        },
+      });
+      done(true, c.reason);
+      break;
+    }
     case "shell":
       effects.push({ type: "start", plan: { purpose: { key: `shell:${c.id}`, what: "shell" }, kind: "script", name: "shell", cwd: c.cwd, cmd: ["sh", "-c", c.command] } });
       done(true, c.reason);
@@ -449,7 +472,7 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
   return effects;
 }
 
-const PLANNED = new Set<string>(["retry-job", "cancel-job", "resume-agent", "start-agent", "set-state", "redo-step", "edit-config", "shell"] satisfies PlannedCommand["cmd"][]);
+const PLANNED = new Set<string>(["retry-job", "cancel-job", "resume-agent", "start-agent", "set-state", "redo-step", "edit-config", "shell", "hand-off"] satisfies PlannedCommand["cmd"][]);
 
 export const STOPPED = "stopped by you";
 

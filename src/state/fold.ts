@@ -37,6 +37,7 @@ export function foldEvents(events: readonly Event[]): RequestState {
     jobs: {},
     needsUser: [],
     recoveryPlans: [],
+    handOffs: [],
     notes: [],
   };
   const deps = new Map<string, Dep[]>();
@@ -198,6 +199,9 @@ export function foldEvents(events: readonly Event[]): RequestState {
       case "test-plan":
         // Phabricator doesn't render code in link text: [`foo.js`](url) becomes [foo.js](url), earlier plans included.
         if (s.patches[e.patch]) s.patches[e.patch].testPlan = e.text.replace(/\[`([^`\]]+)`\]\(/g, "[$1](");
+        break;
+      case "hand-off":
+        s.handOffs.push({ job: e.job, items: e.items, text: e.text, t: e.t });
         break;
       case "test-plan-sent":
         if (s.patches[e.patch]) s.patches[e.patch].testPlanSent = { revision: e.revision, text: e.text, t: e.t };

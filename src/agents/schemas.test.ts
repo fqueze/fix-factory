@@ -23,12 +23,12 @@ const investigateStates = exact<InvestigateReport["state"]>()(["fix verified loc
 const verdicts = exact<ReviewPatchReport["verdict"]>()(["ok", "findings"]);
 const severities = exact<ReviewPatchReport["findings"][number]["severity"]>()(["must-fix", "nit"]);
 const plannedCmds = exact<PlannedCommand["cmd"]>()([
-  "retry-job", "cancel-job", "resume-agent", "start-agent", "set-state", "redo-step", "edit-config", "shell",
+  "retry-job", "cancel-job", "resume-agent", "start-agent", "set-state", "redo-step", "edit-config", "shell", "hand-off",
 ]);
 const itemStates = exact<ItemState>()([
   "not started", "waiting for a build slot", "investigating", "fix verified locally", "in critical review",
   "review findings", "reviewed", "in stack", "in try", "waiting for review", "addressing review comments", "blocked", "waiting for a try repro",
-  "fixed", "left as-is", "handed back", "landed",
+  "fixed", "left as-is", "handed back", "taken over", "landed",
 ]);
 const requestSteps = exact<RequestStep>()([
   "request", "first signal", "work list", "investigate and fix", "stack", "verify on try", "meta bug", "submit",

@@ -141,6 +141,7 @@
                   "fixed",
                   "left as-is",
                   "handed back",
+                  "taken over",
                   "landed"
                 ]
               },
@@ -241,6 +242,33 @@
               "cmd",
               "cwd",
               "command",
+              "reason"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "cmd": {
+                "type": "string",
+                "enum": [
+                  "hand-off"
+                ]
+              },
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "The groups the user takes over."
+              },
+              "reason": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "cmd",
+              "items",
               "reason"
             ],
             "additionalProperties": false

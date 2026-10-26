@@ -14,5 +14,6 @@
   "needsUser": [],
   "recoveryPlans": [],
   "notes": [],
-  "folder": "browser/base/content/test/popups"
+  "folder": "browser/base/content/test/popups",
+  "handOffs": []
 }

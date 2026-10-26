@@ -22,6 +22,7 @@ import type {
   RecoverReport,
   RequestState,
   ReviewPatchReport,
+  WriteHandOffReport,
   WriteTestPlanReport,
 } from "../types.ts";
 import { patchId } from "./next.ts";
@@ -316,6 +317,9 @@ export function handleFinished(input: HandlerInput): HandlerResult {
     }
     case "test-plan":
       if (s.patches[purpose.patch!]) ev("test-plan", { patch: purpose.patch!, text: (input.report as WriteTestPlanReport).testPlan.trim() });
+      break;
+    case "hand-off":
+      ev("hand-off", { job: job.job, items: purpose.reason!.split(" "), text: (input.report as WriteHandOffReport).prompt.trim() });
       break;
     case "set-test-plan":
       ev("test-plan-sent", { patch: purpose.patch!, revision: Number(purpose.reason!.split("\n")[0]), text: purpose.reason!.split("\n").slice(1).join("\n") });

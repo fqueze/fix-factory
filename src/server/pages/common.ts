@@ -245,6 +245,7 @@ export const COMMAND_LABELS: Record<Command["cmd"], string> = {
   "redo-step": "redo step",
   "edit-config": "config change",
   shell: "shell command",
+  "hand-off": "hand-off to your session",
   "accept-review": "accept as reviewed",
   "allow-push": "one try push allowed",
   continue: "continue",
@@ -364,6 +365,7 @@ export function stateClass(s: ItemState): StateClass {
       return "ok";
     case "left as-is":
     case "handed back":
+    case "taken over":
       return "closed";
   }
 }

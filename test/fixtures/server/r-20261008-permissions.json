@@ -150,5 +150,6 @@
       ],
       "description": "Tests that leave permissions changed make later tests fail.\n\n| patch | effort | value |\n|---|---|---|\n| webrtc | 1 | 8/wk |"
     }
-  }
+  },
+  "handOffs": []
 }

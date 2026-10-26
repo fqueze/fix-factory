@@ -171,5 +171,6 @@
       "text": "23 skip-ifs: 6 scoping → run-if, 17 flakiness → removed in the DEBUG commit"
     }
   ],
-  "folder": "toolkit/components/extensions/test/xpcshell"
+  "folder": "toolkit/components/extensions/test/xpcshell",
+  "handOffs": []
 }

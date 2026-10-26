@@ -143,6 +143,7 @@ export function renderRequestBody(r: RequestState, ctx: RenderContext): Html {
     }
     ${toStack.some((i) => itemBucket(r, i, ctx) !== "closed") ? html`${stacks.length || loose.length ? html`<h3>Not in a stack yet</h3>` : null}${groupRows(r, toStack, ctx, false)}` : null}
     ${landed.length ? html`<h3>Landed${r.metaBug && hasBug(r.metaBug) && !stacks.length ? html` · <a class="bug" href="${bugUrl(r.metaBug.bug)}" target="_blank" rel="noopener">Bug ${r.metaBug.bug}</a> ${metaSummary}` : null}</h3>${groupRows(r, landed, ctx)}` : null}
+    ${handOffs(r)}
     ${closedFold(r, items.filter((i) => itemBucket(r, i, ctx) === "closed"), ctx)}
     ${stacks.length || loose.length || items.length || landed.length ? html`<hr class="part">` : null}
     ${requestJobs(r, ctx)}
@@ -314,6 +315,17 @@ function groupRows(r: RequestState, items: ItemView[], ctx: RenderContext, withC
   }</div>`;
 }
 
+// The prompts for your sessions taking groups over, to copy into one; the prompt itself folded.
+function handOffs(r: RequestState): Html | null {
+  return r.handOffs.length
+    ? html`<h3>Taken over by you</h3><div class="rows">${r.handOffs.map((h) => {
+        const id = `hand-off-${h.job}`;
+        const names = h.items.map((i) => r.items[i]?.group.tests.map((t) => t.split("/").pop()).join(", ") ?? i).join("; ");
+        return html`<div class="row testplanctl"><span>${names}</span><span class="sub">${formatDate(h.t)}</span><textarea hidden id="${id}">${h.text}</textarea><button type="button" class="btn small primary" data-copy="${id}">Copy the prompt for your session</button></div><details class="fold" data-fold="${id}"><summary>the prompt</summary><div class="testplan">${md(h.text)}</div></details>`;
+      })}</div>`
+    : null;
+}
+
 function closedFold(r: RequestState, closed: ItemView[], ctx: RenderContext): Html | null {
   return closed.length ? html`<details class="fold" data-fold="closed-groups"><summary>${closed.length} closed</summary><div class="rows">${closed.map((i) => itemRows(r, i, ctx))}</div></details>` : null;
 }
@@ -378,7 +390,7 @@ function groupRow(r: RequestState, i: ItemView, ctx: RenderContext): Html {
 // question, a closed one Reopen.
 function talkBox(r: RequestState, i: ItemView, ctx: RenderContext): Html | null {
   const s = itemSentence(r, i, ctx);
-  if (s.ask || s.cls === "run" || ["fixed", "landed", "left as-is", "handed back"].includes(i.state)) {
+  if (s.ask || s.cls === "run" || ["fixed", "landed", "left as-is", "handed back", "taken over"].includes(i.state)) {
     return null;
   }
   return html`<div class="jobctl">${hasAuthorSession(r, i.id) ? continueBox(r.id, i.id, requestUrl(r.id)) : null}${handBackButton(r.id, i.id, requestUrl(r.id))}</div>`;

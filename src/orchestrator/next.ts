@@ -113,11 +113,11 @@ const FIXING: ItemState[] = ["fix verified locally", "in critical review", "revi
 // The cherry-pick a conflict left in progress, if there's one: a rewrite may have left none.
 const ABORT_CHERRY_PICK = 'test ! -e "$(git rev-parse --git-path CHERRY_PICK_HEAD)" || git cherry-pick --abort';
 const STACKED: ItemState[] = ["in stack", "in try", "waiting for review", "addressing review comments", "fixed", "landed"];
-const SETTLED: ItemState[] = ["reviewed", "in stack", "in try", "waiting for review", "addressing review comments", "fixed", "landed", "left as-is", "handed back", "waiting for a try repro"];
+const SETTLED: ItemState[] = ["reviewed", "in stack", "in try", "waiting for review", "addressing review comments", "fixed", "landed", "left as-is", "handed back", "taken over", "waiting for a try repro"];
 const WITH_PATCHES: ItemState[] = ["reviewed", "in stack", "in try", "waiting for review", "addressing review comments", "fixed", "landed"];
 // Author runs that can change a patch after it was submitted (besides address-review).
 const CHANGES_AFTER_SUBMIT = ["continue", "comment", "stack comments", "asked push", "try"];
-export const TERMINAL: ItemState[] = ["left as-is", "handed back", "landed", "fixed"];
+export const TERMINAL: ItemState[] = ["left as-is", "handed back", "taken over", "landed", "fixed"];
 
 const at = (step: RequestStep) => REQUEST_STEPS.indexOf(step);
 
@@ -2530,12 +2530,12 @@ class Planner {
     }
   }
 
-  // Once a request is done, its worktrees go. The cwd is the main checkout: worktree.ts remove
-  // kills every process under the worktree, which would include a job running inside it.
+  // Once a request is done, its worktrees go, except those of groups you took over: yours now. The cwd is the main
+  // checkout: worktree.ts remove kills every process under the worktree, which would include a job running inside it.
   private cleanup(): void {
     const names = new Set(
       this.view.jobs
-        .filter((j) => j.purpose.what === "worktree" && succeeded(j))
+        .filter((j) => j.purpose.what === "worktree" && succeeded(j) && !(j.purpose.item !== undefined && this.s.items[j.purpose.item]?.state === "taken over"))
         .map((j) => this.out<{ name: string }>(j).name),
     );
     for (const name of names) {

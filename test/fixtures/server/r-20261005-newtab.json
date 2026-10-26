@@ -341,5 +341,6 @@
   ],
   "recoveryPlans": [],
   "notes": [],
-  "folder": "browser/extensions/newtab/test/browser"
+  "folder": "browser/extensions/newtab/test/browser",
+  "handOffs": []
 }
