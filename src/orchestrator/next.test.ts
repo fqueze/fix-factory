@@ -2172,6 +2172,18 @@ describe("8. submit", () => {
   };
   const orderKeys = (sc: Scenario) => sc.view().jobs.filter((j) => j.purpose.key.startsWith("order:root:")).map((j) => j.purpose.key);
 
+  it("a stack you submitted before the factory asked (at verify on try) goes to review once its revisions show up", () => {
+    const sc = stacked();
+    assert.equal(sc.state().step, "verify on try");
+    setPatch(sc, "p-test-a", { revision: 11 });
+    sc.settle();
+    assert.equal(sc.state().step, "verify on try", "not all its patches are on Phabricator yet");
+    setPatch(sc, "p-test-b", { revision: 12 });
+    sc.settle();
+    assert.equal(sc.state().step, "review comments");
+    assert.equal(sc.state().items["i-test-a"].state, "waiting for review");
+  });
+
   it("orders an unsubmitted stack again when a patch's effort changes, and reorders it", () => {
     const sc = submitting();
     assert.equal(sc.state().step, "submit");

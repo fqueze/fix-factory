@@ -2254,6 +2254,10 @@ class Planner {
   }
 
   private submit(): void {
+    // You may submit before the factory asks you to (submitted() finds the revisions): once every patch has its
+    // revision, the request goes on from the submit step, which moves it to review.
+    const patches = this.liveStacks().flatMap((st) => st.order.map((pid) => this.s.patches[pid]));
+    if (at(this.s.step) >= at("stack") && at(this.s.step) < at("submit") && patches.length && patches.every((p) => p.revision !== undefined)) this.setStep("submit");
     if (this.s.step !== "submit") return;
     const e = this.stepEpoch("submit");
     let submitted = true;
