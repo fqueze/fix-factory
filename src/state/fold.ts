@@ -196,7 +196,8 @@ export function foldEvents(events: readonly Event[]): RequestState {
         break;
       }
       case "test-plan":
-        if (s.patches[e.patch]) s.patches[e.patch].testPlan = e.text;
+        // Phabricator doesn't render code in link text: [`foo.js`](url) becomes [foo.js](url), earlier plans included.
+        if (s.patches[e.patch]) s.patches[e.patch].testPlan = e.text.replace(/\[`([^`\]]+)`\]\(/g, "[$1](");
         break;
       case "test-plan-sent":
         if (s.patches[e.patch]) s.patches[e.patch].testPlanSent = { revision: e.revision, text: e.text, t: e.t };

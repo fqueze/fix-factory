@@ -102,7 +102,7 @@ export const CANCELLED = "cancelled by you";
 // Jobs with an external side effect that a failure doesn't undo: a try push can fail after mach try
 // pushed (a Lando timeout), and a retry would push again. They come to you instead.
 const NO_RETRY = new Set(["push"]);
-const TEST_PLAN_VERSION = "v5";
+const TEST_PLAN_VERSION = "v4";
 // A push whose failures triage found only these passes: they aren't the stack's.
 const BENIGN = new Set<TriageVerdict>(["pre-existing", "infra", "fixed"]);
 // A patch whose code was accepted gets a test plan; a landed one no longer needs it.
