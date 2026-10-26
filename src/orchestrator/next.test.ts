@@ -1440,6 +1440,20 @@ describe("5. stack", () => {
     assert.equal(s.step, "verify on try");
   });
 
+  it("assembles a stack again when it comes back to patches it had before: its branch was rewritten since", () => {
+    const sc = twoReviewed();
+    sc.complete("wt:root", { output: { name: `${ID}-root`, path: `/wt/${ID}-root`, branch: `${ID}-root` } });
+    const [both] = sc.settle();
+    sc.complete(both, { output: { branch: `${ID}-root`, commits: [{ sha: sha("1"), newSha: sha("a") }, { sha: sha("2"), newSha: sha("b") }], skipped: [], empty: [] } });
+    sc.add({ type: "item-state", request: ID, item: "i-test-b", state: "taken over" });
+    const alone = sc.settle().find((k) => k.startsWith("assemble:root:"))!;
+    assert.notEqual(alone, both);
+    sc.complete(alone, { output: { mapping: { [sha("a")]: sha("c") } } });
+    sc.add({ type: "item-state", request: ID, item: "i-test-b", state: "reviewed" });
+    const again = sc.settle().find((k) => k.startsWith("assemble:root:"));
+    assert.equal(again, `${both}-2`);
+  });
+
   it("names a stack after its folder, cutting its first parts to one letter so the last ones fit", () => {
     assert.equal(stackId("dom/base/test"), "dom-base-test");
     assert.equal(stackId("browser/components/enterprisepolicies/tests/browser"), "b-c-enterprisepolicies-tests-browser");

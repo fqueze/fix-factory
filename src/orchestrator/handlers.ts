@@ -259,7 +259,10 @@ export function handleFinished(input: HandlerInput): HandlerResult {
     case "refresh": {
       // The stack's commits in branch order, which is the stack's order.
       const st = s.stacks[purpose.stack!];
-      json<ImportedCommit[]>().forEach((c, i) => {
+      const commits = json<ImportedCommit[]>();
+      // Matched by position: a branch that isn't the stack's patches would put one patch's commit on another.
+      if (commits.length !== st.order.length) throw new Error(`the branch has ${commits.length} commits, the stack ${st.order.length} patches`);
+      commits.forEach((c, i) => {
         const p = s.patches[st.order[i]];
         if (!p) return;
         if (p.sha === c.sha && p.title === c.title && p.revision === c.revision) return;

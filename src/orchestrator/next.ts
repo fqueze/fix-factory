@@ -1356,13 +1356,28 @@ class Planner {
       }
       if (patches.length === 0) continue;
       const wtJob = this.view.byKey.get(`wt:${id}`)?.find(succeeded);
-      const hash = shortHash(patches.map((p) => `${p.id}=${p.source}`)) + this.stepEpoch("stack");
+      const hash = this.assembled(id, shortHash(patches.map((p) => `${p.id}=${p.source}`)) + this.stepEpoch("stack"));
       const code = shortHash(patches.map((p) => `${p.id}=${this.codeOf(p.id) ?? p.source}`)) + this.stepEpoch("stack");
       const info: StackInfo = { id, folder, hash, code, patches, branch: `${this.s.id}-${id}`, ready: false };
       if (wtJob) info.wt = this.out<{ path: string }>(wtJob).path;
       info.ready = this.view.byKey.get(`summary:${id}:${hash}`)?.some(succeeded) ?? false;
       this.stackInfos.set(id, info);
     }
+  }
+
+  // A stack coming back to patches it had before (a group taken over, a patch dropped) is assembled again: its
+  // branch was rewritten since that assembly. Each return to them is a generation of their hash ("-2", "-3"…).
+  private assembled(id: string, hash: string): string {
+    const runs: string[] = [];
+    for (const j of this.view.jobs) {
+      const m = j.purpose.key.match(new RegExp(`^assemble:${id}:([^:]+)$`));
+      if (m && m[1] !== runs.at(-1)) runs.push(m[1]);
+    }
+    const base = (h: string) => h.replace(/-\d+$/, "");
+    const last = runs.at(-1);
+    if (last !== undefined && base(last) === hash) return last;
+    const before = new Set(runs.filter((h) => base(h) === hash)).size;
+    return before === 0 ? hash : `${hash}-${before + 1}`;
   }
 
   private stacks(): void {
