@@ -463,7 +463,7 @@ function patchRow(r: RequestState, p: PatchView, ctx: RenderContext): Html {
     title: p.title,
     end: html`${viewLink(r, p)}${item ? costLabel(itemCost(r, item)) : null}`,
     // "in the stack" says nothing a patch row in its stack's section doesn't.
-    state: html`${item ? html`fixes <b>${groupLinks(r, item)}</b>${item.state === "in stack" ? null : html` · ${stateText(r, item, ctx)}`}` : p.review ? p.review.status : null}${landable ? html` · <span class="landable">landable</span>` : null}`,
+    state: html`${item ? html`fixes <b>${groupLinks(r, item)}</b>${item.state === "in stack" ? null : html` · ${item.state === "waiting for review" && p.review?.status === "accepted" ? "accepted on Phabricator" : stateText(r, item, ctx)}`}` : p.review ? p.review.status : null}${landable ? html` · <span class="landable">landable</span>` : null}`,
     trust: item ? trustLine(r, item, ctx) : null,
     ask: item && asks ? askBlock(r, item, ctx, [], controls !== null) : undefined,
     under: bugBoxShown ? bugDraftBox(r, p, back) : null,

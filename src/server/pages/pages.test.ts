@@ -733,6 +733,14 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.match(h, /href="https:\/\/phabricator\.services\.mozilla\.com\/D327101#inline-1873402"/);
     assert.ok(h.includes(cmd({ cmd: "comment-fix", request: "r-20261005-newtab", patch: "p-sponsored" })));
   });
+  it("10. landing: an accepted patch whose group still waits for review says it's accepted", () => {
+    const r = structuredClone(get("r-20261001-mouse-button"));
+    const p = Object.values(r.patches).find((x) => x.review?.status === "accepted" && x.item)!;
+    r.items[p.item!].state = "waiting for review";
+    const row = rowOf(renderRequest(r, ctx, true).value, `patch-${p.id}`);
+    assert.match(row, /accepted on Phabricator/);
+    assert.doesNotMatch(row, /waiting for review on Phabricator/);
+  });
   it("10. landing: landable patches and the moz-phab command", () => {
     const h = expanded("r-20261001-mouse-button");
     assert.match(h, /<span class="landable">landable<\/span>/);
