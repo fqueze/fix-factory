@@ -135,6 +135,8 @@ export type Event =
   | (EventBase & { type: "request-routed"; kind: Exclude<RequestKind, "unrouted">; folder?: string; rev?: string })
   | (EventBase & { type: "request-forwarded"; to: RequestId })
   | (EventBase & { type: "request-superseded"; by: RequestId })
+  | (EventBase & { type: "request-split"; into: RequestId[] }) // archived: its groups went to these requests
+  | (EventBase & { type: "split-from"; from: RequestId }) // made by splitting that request
   | (EventBase & { type: "config-set"; config: Record<string, unknown> })
   | (EventBase & { type: "step"; step: RequestStep })
   | (EventBase & { type: "item-created"; item: ItemId; folder: string; group: FailureGroup })
@@ -252,7 +254,8 @@ export type PlannedCommand =
   | { cmd: "redo-step"; item?: ItemId; step: RequestStep; reason: string }
   | { cmd: "edit-config"; config: Record<string, unknown>; reason: string }
   | { cmd: "shell"; cwd: string; command: string; reason: string }
-  | { cmd: "hand-off"; items: ItemId[]; reason: string }; // you take them over in a session of your own: the factory writes its prompt
+  | { cmd: "hand-off"; items: ItemId[]; reason: string }
+  | { cmd: "split-request"; parts: { title: string; items: ItemId[] }[]; reason: string }; // new requests taking these groups, with their history; this one archived // you take them over in a session of your own: the factory writes its prompt
 
 // ---------------------------------------------------------------------------
 // Agent reports: the structured_output of each prompt. The JSON schemas in
@@ -436,6 +439,8 @@ export interface RequestState {
   fromCommand?: string; // the tell-factory command that created it
   forwardedTo?: RequestId; // route-request said its text is about that request
   supersededBy?: RequestId; // route-request failed, and you rephrased it in the main box as that request
+  splitInto?: RequestId[]; // split into these, and archived
+  splitFrom?: RequestId; // made by splitting that one
   createdAt: Iso;
   updatedAt: Iso;
   finishedAt?: Iso; // when its step became done

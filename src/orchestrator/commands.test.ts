@@ -1,6 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import type { Command, PlannedCommand } from "../types.ts";
+import type { Command, Event, PlannedCommand } from "../types.ts";
+import { foldEvents } from "../state/fold.ts";
 import { commandEffects, newRequestId, type Effect } from "./commands.ts";
 import { config, ID, Scenario, sha } from "./testkit.ts";
 
@@ -274,6 +275,54 @@ describe("commands", () => {
     assert.equal(refs.groups[0].worktrees[0].keptCommits, "refs/fix-factory/a/");
     sc.complete(`hand-off:${c.id}`, { report: { prompt: "Take over test_a.js.\n", feedback: [] } });
     assert.deepEqual(sc.state().handOffs.map((h) => [h.items, h.text]), [[["i-a"], "Take over test_a.js."]]);
+  });
+
+  it("split-request makes a request per part with its groups' history and the pushes made, and archives this one", () => {
+    const sc = withPatch();
+    sc.add({ type: "item-created", request: ID, item: "i-b", folder: "b", group: { message: "bang", tests: ["b/test_b.js"], configs: ["linux"] } });
+    sc.startJob({ purpose: { key: "author:i-b:initial", what: "author", item: "i-b", reason: "initial" }, kind: "agent", name: "investigate-and-fix", item: "i-b", cwd: "/wt/b", agent: { sessionId: "s-2", resume: false, vars: { test: "b/test_b.js", worktree: "/wt/b", failureSummary: "bang" } } });
+    sc.complete("author:i-b:initial", { report: { state: "fix verified locally", summary: "s", cause: "c", verification: "v", commits: [sha("2")], landsAfter: [], feedback: [] } });
+    sc.add({ type: "patch", request: ID, patch: "p-b", item: "i-b", sha: sha("2"), worktree: "/wt/b", title: "Bug 5 - Fix b", bug: 5 });
+    for (const item of ["i-a", "i-b"]) sc.add({ type: "item-state", request: ID, item, state: "in stack" });
+    sc.add({ type: "try-planned", request: ID, push: "root-1", purpose: "the stack", command: ["./mach", "try"] });
+    sc.add({ type: "try-pushed", request: ID, push: "root-1", rev: "r1", url: "https://treeherder/r1" });
+    sc.add({ type: "try-finished", request: ID, push: "root-1", result: "green", summary: "green" });
+    sc.add({ type: "try-planned", request: ID, push: "root-2", purpose: "not made", command: ["./mach", "try"] });
+    sc.add({ type: "needs-user", request: ID, key: "file-bug:p-a", action: "file", detail: "d", patch: "p-a", item: "i-a" });
+    sc.add({ type: "needs-user", request: ID, key: "approve-push:root-2", action: "approve", detail: "d", push: "root-2" });
+    const split = (parts: { title: string; items: string[] }[]) =>
+      commandEffects(cmd({ cmd: "split-request", parts, reason: "two topics" }), { config, state: sc.state(), view: sc.view(), exists: () => false, plan: () => undefined, events: () => sc.events });
+    const parts = [{ title: "Fix the tests failing alone", items: ["i-a"] }, { title: "Fix intermittent failures", items: ["i-b"] }];
+
+    sc.add({ type: "dep", request: ID, dep: { patch: "p-b", needs: "p-a", kind: "hard", reason: "builds on it", source: "textual" } });
+    const refused = split(parts);
+    assert.match(refused.map((e) => (e.type === "event" && e.event.type === "command-executed" ? e.event.detail : "")).join(""), /Fix b needs Bug XXXXXXX - Fix \(builds on it\): put them in the same part/);
+    sc.add({ type: "dep-removed", request: ID, patch: "p-b", needs: "p-a" });
+
+    const byRequest = new Map<string, Event[]>();
+    for (const e of split(parts)) if (e.type === "event") byRequest.set(e.event.request, [...(byRequest.get(e.event.request) ?? []), { v: 1, t: "2026-10-27T10:00:00.000Z", ...e.event } as Event]);
+    const ids = [...byRequest.keys()].filter((id) => id !== ID);
+    assert.deepEqual(ids, ["r-20261015-fix-the-tests-failing", "r-20261015-fix-intermittent-failures"]);
+    const [a, b] = ids.map((id) => foldEvents(byRequest.get(id)!));
+    assert.deepEqual([Object.keys(a.items), Object.keys(a.patches), Object.keys(b.items), Object.keys(b.patches)], [["i-a"], ["p-a"], ["i-b"], ["p-b"]]);
+    assert.equal(a.splitFrom, ID);
+    assert.equal(a.step, "stack");
+    assert.equal(a.text, "Fix the tests failing alone");
+    // The push made is evidence for both; the planned one isn't copied, nor the stack's flags.
+    assert.deepEqual([Object.keys(a.pushes), Object.keys(b.pushes)], [["root-1"], ["root-1"]]);
+    assert.equal(a.pushes["root-1"].result, "green");
+    assert.deepEqual(a.needsUser.map((n) => n.key), ["file-bug:p-a"]);
+    assert.deepEqual(b.needsUser, []);
+    // Their sessions, which resumes use.
+    assert.deepEqual(Object.values(b.jobs).map((j) => j.sessionId), ["s-2"]);
+    // Its planner takes it from there: its own stack, from its groups' commits.
+    const part = new Scenario("try-push", { rev: "abc" });
+    const [created, ...rest] = byRequest.get(ids[1])!;
+    part.events = [created, ...part.events.slice(1, 3).map((e) => ({ ...e, request: ids[1] })), ...rest];
+    for (const [job, report] of sc.reports) part.reports.set(job, report);
+    assert.ok(part.settle().includes("wt:root"), "a worktree for its stack");
+    const original = foldEvents([...sc.events, ...byRequest.get(ID)!]);
+    assert.deepEqual([original.splitInto, original.step, original.needsUser], [ids, "done", []]);
   });
 
   it("start-agent starts a fresh session on the item, which later resumes use", () => {

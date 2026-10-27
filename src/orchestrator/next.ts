@@ -113,7 +113,7 @@ const FIXING: ItemState[] = ["fix verified locally", "in critical review", "revi
 // The cherry-pick a conflict left in progress, if there's one: a rewrite may have left none.
 const ABORT_CHERRY_PICK = 'test ! -e "$(git rev-parse --git-path CHERRY_PICK_HEAD)" || git cherry-pick --abort';
 const STACKED: ItemState[] = ["in stack", "in try", "waiting for review", "addressing review comments", "fixed", "landed"];
-const SETTLED: ItemState[] = ["reviewed", "in stack", "in try", "waiting for review", "addressing review comments", "fixed", "landed", "left as-is", "handed back", "taken over", "waiting for a try repro"];
+export const SETTLED: ItemState[] = ["reviewed", "in stack", "in try", "waiting for review", "addressing review comments", "fixed", "landed", "left as-is", "handed back", "taken over", "waiting for a try repro"];
 const WITH_PATCHES: ItemState[] = ["reviewed", "in stack", "in try", "waiting for review", "addressing review comments", "fixed", "landed"];
 // Author runs that can change a patch after it was submitted (besides address-review).
 const CHANGES_AFTER_SUBMIT = ["continue", "comment", "stack comments", "asked push", "try"];
@@ -2556,7 +2556,8 @@ class Planner {
   private cleanup(): void {
     const names = new Set(
       this.view.jobs
-        .filter((j) => j.purpose.what === "worktree" && succeeded(j) && !(j.purpose.item !== undefined && this.s.items[j.purpose.item]?.state === "taken over"))
+        // A split request's groups went to the new requests, with their worktrees.
+        .filter((j) => j.purpose.what === "worktree" && succeeded(j) && !(j.purpose.item !== undefined && (this.s.splitInto || this.s.items[j.purpose.item]?.state === "taken over")))
         .map((j) => this.out<{ name: string }>(j).name),
     );
     for (const name of names) {

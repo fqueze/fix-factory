@@ -4,9 +4,10 @@ import { isDeepStrictEqual } from "node:util";
 import type { EventInput } from "../state/events.ts";
 import { sameBugDraft } from "../state/meta-bug.ts";
 import { canDismiss, canRetry, isPushJob, reviewLimitFlag } from "../state/flags.ts";
-import type { Command, FactoryConfig, ItemId, JobId, PlannedCommand, RequestId, RequestState } from "../types.ts";
-import { ANNOTATIONS_ITEM, authorJobsOf, CANCELLED, itemEpochOf, TERMINAL, resumeAuthorPlan } from "./next.ts";
+import type { Command, Event, FactoryConfig, ItemId, JobId, PlannedCommand, RequestId, RequestState } from "../types.ts";
+import { ANNOTATIONS_ITEM, authorJobsOf, CANCELLED, itemEpochOf, SETTLED, TERMINAL, resumeAuthorPlan } from "./next.ts";
 import { handOffReferences } from "./hand-off.ts";
+import { partEvents, splitProblem } from "./split.ts";
 import { dataPath, requestDir, sessionIdFor, slug, type JobPlan } from "./plan.ts";
 import type { View } from "./view.ts";
 
@@ -18,7 +19,8 @@ export type Effect =
   | { type: "start"; plan: JobPlan }
   | { type: "cancel"; job: JobId; request: RequestId; detail: string } // then job-finished with error CANCELLED
   | { type: "start-now"; request: RequestId }
-  | { type: "allow-push"; sessionId: string }; // no-push.ts lets that session make one push
+  | { type: "allow-push"; sessionId: string } // no-push.ts lets that session make one push
+  | { type: "copy-report"; job: JobId; from: RequestId; to: RequestId }; // a split's: its agent's report, if it has one
 
 export interface CommandContext {
   config: FactoryConfig;
@@ -27,6 +29,7 @@ export interface CommandContext {
   exists: (request: RequestId) => boolean;
   plan: (job: JobId) => JobPlan | undefined; // jobs/<job>/plan.json, what the runner started
   unroutable?: RequestState[]; // for a global tell-factory: open requests whose route-request failed twice
+  events?: (request: RequestId) => Event[]; // a request's events, for split-request
 }
 
 // r-20261015-<slug>, from the first words of the text.
@@ -464,6 +467,42 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
       done(true, c.reason);
       break;
     }
+    case "split-request": {
+      const problem = splitProblem(s, c.parts);
+      if (problem) {
+        done(false, problem);
+        break;
+      }
+      const events = ctx.events!(s.id);
+      const taken = new Set<RequestId>();
+      const ids = c.parts.map((p) => {
+        const id = newRequestId({ t: c.t, text: p.title }, (x) => taken.has(x) || ctx.exists(x));
+        taken.add(id);
+        return id;
+      });
+      c.parts.forEach((p, n) => {
+        const to = ids[n];
+        const at = (e: RequestEvent): Effect => ({ type: "event", event: { ...e, request: to } as EventInput });
+        effects.push(
+          at({ type: "request-created", kind: s.kind, text: p.title, ...(s.folder !== undefined ? { folder: s.folder } : {}), ...(s.rev !== undefined ? { rev: s.rev } : {}), command: c.id }),
+          at({ type: "split-from", from: s.id }),
+          at({ type: "config-set", config: s.config }),
+          ...partEvents(events, s, p.items, to).flatMap((event): Effect[] => [
+            { type: "event", event },
+            ...(event.type === "job-started" && event.kind === "agent" ? [{ type: "copy-report", job: event.job, from: s.id, to } as const] : []),
+          ]),
+          at({ type: "note", text: `Split from ${s.id}: ${c.reason}` }),
+          // Its groups are where they were: settled ones go on to their own stack.
+          at({ type: "step", step: p.items.every((i) => SETTLED.includes(s.items[i].state)) ? "stack" : "investigate and fix" }),
+        );
+      });
+      ev({ type: "request-split", into: ids });
+      ev({ type: "note", text: `Split into ${ids.join(", ")}: ${c.reason}` });
+      for (const n of s.needsUser) ev({ type: "user-done", key: n.key, byFactory: true });
+      ev({ type: "step", step: "done" });
+      done(true, c.reason);
+      break;
+    }
     case "shell":
       effects.push({ type: "start", plan: { purpose: { key: `shell:${c.id}`, what: "shell" }, kind: "script", name: "shell", cwd: c.cwd, cmd: ["sh", "-c", c.command] } });
       done(true, c.reason);
@@ -472,7 +511,7 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
   return effects;
 }
 
-const PLANNED = new Set<string>(["retry-job", "cancel-job", "resume-agent", "start-agent", "set-state", "redo-step", "edit-config", "shell", "hand-off"] satisfies PlannedCommand["cmd"][]);
+const PLANNED = new Set<string>(["retry-job", "cancel-job", "resume-agent", "start-agent", "set-state", "redo-step", "edit-config", "shell", "hand-off", "split-request"] satisfies PlannedCommand["cmd"][]);
 
 export const STOPPED = "stopped by you";
 

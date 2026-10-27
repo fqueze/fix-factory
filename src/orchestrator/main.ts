@@ -7,8 +7,8 @@
 //
 // --dry-run (or "dryRun" in the config): starts no agents, and passes --dry-run to every CLI,
 // which then refuses try pushes and Phabricator or Bugzilla writes.
-import { existsSync, mkdirSync, readFileSync, watch, writeFileSync, type FSWatcher } from "node:fs";
-import { delimiter, join, resolve } from "node:path";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, watch, writeFileSync, type FSWatcher } from "node:fs";
+import { delimiter, dirname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { toolsBin } from "../cli/tools.ts";
 import { loadConfig } from "../config.ts";
@@ -22,7 +22,7 @@ import { commandEffects } from "./commands.ts";
 import { appendEventSafe } from "./event-data.ts";
 import { handleWatchLines } from "./handlers.ts";
 import { CANCELLED, next, requestSummary, type Action, type Ctx } from "./next.ts";
-import { DEFAULT_PRIORITY, shortHash, type JobPlan } from "./plan.ts";
+import { DEFAULT_PRIORITY, reportPath, shortHash, type JobPlan } from "./plan.ts";
 import { defaultCliCommand, finishJob, jsonLines, readOut, readReport, startPlan, type RunnerDeps } from "./runner.ts";
 import { buildView, type JobRecord, type View } from "./view.ts";
 
@@ -189,6 +189,7 @@ export class Orchestrator {
       state: loaded?.s,
       view: loaded?.view,
       exists: (id) => existsSync(join(this.config.stateDir, "requests", id)),
+      events: (id) => readEvents(this.config.stateDir, id),
       plan: (job) => {
         const path = join(jobDir(this.config.stateDir, job), "plan.json");
         return existsSync(path) ? (JSON.parse(readFileSync(path, "utf8")) as JobPlan) : undefined;
@@ -217,6 +218,15 @@ export class Orchestrator {
           mkdirSync(join(this.config.stateDir, "allow-push"), { recursive: true });
           writeFileSync(join(this.config.stateDir, "allow-push", e.sessionId), new Date(this.now()).toISOString() + "\n");
           break;
+        case "copy-report": {
+          // Only agents that succeeded have one.
+          const from = reportPath(this.config, e.from, e.job);
+          if (existsSync(from)) {
+            mkdirSync(dirname(reportPath(this.config, e.to, e.job)), { recursive: true });
+            copyFileSync(from, reportPath(this.config, e.to, e.job));
+          }
+          break;
+        }
       }
     }
   }

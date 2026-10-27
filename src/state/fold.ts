@@ -64,6 +64,12 @@ export function foldEvents(events: readonly Event[]): RequestState {
       case "request-superseded":
         s.supersededBy = e.by;
         break;
+      case "request-split":
+        s.splitInto = e.into;
+        break;
+      case "split-from":
+        s.splitFrom = e.from;
+        break;
       case "request-routed":
         s.kind = e.kind;
         s.folder = e.folder;

@@ -53,6 +53,7 @@ type Field =
   | "string[]"
   | "object"
   | "comments"
+  | "parts"
   | { oneOf: readonly string[]; optional?: boolean };
 
 // One entry per Command["cmd"]: the type checker fails here when a command is added
@@ -86,6 +87,7 @@ const SPECS: Record<Command["cmd"], Record<string, Field>> = {
   "edit-config": { config: "object", reason: "string" },
   shell: { cwd: "string", command: "string", reason: "string" },
   "hand-off": { items: "string[]", reason: "string" },
+  "split-request": { parts: "parts", reason: "string" },
   "accept-review": { item: "string" },
   "allow-push": { item: "string" },
   continue: { item: "string", text: "string" },
@@ -145,6 +147,10 @@ function checkField(name: string, spec: Field, value: unknown): string | null {
       return Array.isArray(value) && value.every((v) => typeof v === "string") ? null : `${name} must be a list of strings`;
     case "object":
       return isObject(value) ? null : `${name} must be an object`;
+    case "parts":
+      return Array.isArray(value) && value.length > 1 && value.every((p) => isObject(p) && typeof p.title === "string" && p.title.trim() !== "" && Array.isArray(p.items) && p.items.every((i) => typeof i === "string"))
+        ? null
+        : `${name} must be two or more {title, items}`;
     case "comments":
       return Array.isArray(value) && value.length > 0 && value.every((c) => isObject(c) && typeof c.patch === "string" && typeof c.text === "string" && c.text.trim() !== "")
         ? null
@@ -203,7 +209,7 @@ export function validateCommand(input: unknown, getRequest: (id: string) => Requ
   return { ok: true, command: out as unknown as CommandInput };
 }
 
-const PLANNED = new Set<string>(["retry-job", "cancel-job", "resume-agent", "start-agent", "set-state", "redo-step", "edit-config", "shell", "hand-off"] satisfies PlannedCommand["cmd"][]);
+const PLANNED = new Set<string>(["retry-job", "cancel-job", "resume-agent", "start-agent", "set-state", "redo-step", "edit-config", "shell", "hand-off", "split-request"] satisfies PlannedCommand["cmd"][]);
 
 function project(c: object, spec: Record<string, Field>): Record<string, unknown> {
   const o = c as Record<string, unknown>;
@@ -221,7 +227,8 @@ function checkIds(c: Record<string, unknown>, state: RequestState): string | nul
   if (typeof c.item === "string" && !Object.hasOwn(state.items, c.item)) {
     return `unknown item ${c.item}`;
   }
-  const unknownItem = Array.isArray(c.items) ? (c.items as string[]).find((i) => !Object.hasOwn(state.items, i)) : undefined;
+  const listed = [...(Array.isArray(c.items) ? (c.items as string[]) : []), ...(Array.isArray(c.parts) ? (c.parts as { items: string[] }[]).flatMap((p) => p.items) : [])];
+  const unknownItem = listed.find((i) => !Object.hasOwn(state.items, i));
   if (unknownItem !== undefined) {
     return `unknown item ${unknownItem}`;
   }

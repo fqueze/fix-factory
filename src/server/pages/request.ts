@@ -131,6 +131,7 @@ export function renderRequestBody(r: RequestState, ctx: RenderContext): Html {
   return html`<div class="rbody">
     ${others.length ? html`<div class="jobs">${others.map((j) => jobLine(r, j, ctx))}</div>` : null}
     ${configLine(r)}
+    ${splitLine(r)}
     ${pushes.length ? html`<h3>Try pushes${planned.length > 1 ? html` ${approvePushControls(r, planned, back)}` : null}</h3><div class="rows">${[...planned, ...rest].map((p) => pushRowOf(r, p, ctx))}${
       declined.length ? html`<details class="fold" data-fold="declined-pushes"><summary>${declined.length} declined or withdrawn</summary><div class="rows">${declined.map((p) => pushRowOf(r, p, ctx))}</div></details>` : null
     }</div><hr class="part">` : null}
@@ -179,6 +180,15 @@ function inWords(v: unknown): string {
 }
 
 // The folder is already in the request's title.
+// The requests a split made, and the one it came from.
+function splitLine(r: RequestState): Html | null {
+  const link = (id: string) => html`<a href="${requestUrl(id)}">${id}</a>`;
+  if (r.splitInto) {
+    return html`<div class="sub" style="margin-top:6px">Split into ${join(r.splitInto.map(link), ", ")}: its groups, patches and pushes went there.</div>`;
+  }
+  return r.splitFrom ? html`<div class="sub" style="margin-top:6px">Split from ${link(r.splitFrom)}, whose try pushes it keeps.</div>` : null;
+}
+
 function configLine(r: RequestState): Html | null {
   const entries = configEntries(r).filter(([k, v]) => !(k === "folders" && v === r.folder));
   if (!entries.length) {

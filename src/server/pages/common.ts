@@ -247,6 +247,7 @@ export const COMMAND_LABELS: Record<Command["cmd"], string> = {
   "edit-config": "config change",
   shell: "shell command",
   "hand-off": "hand-off to your session",
+  "split-request": "split of the request",
   "accept-review": "accept as reviewed",
   "allow-push": "one try push allowed",
   continue: "continue",

@@ -286,6 +286,8 @@ function plannedText(c: PlannedCommand, r: RequestState): string {
       return `run in ${c.cwd}: ${c.command}`;
     case "hand-off":
       return `hand ${c.items.map((i) => itemLabel(r, i)).join(", ")} over to a session of your own, writing its prompt`;
+    case "split-request":
+      return `split this request into ${c.parts.map((p) => `“${p.title}” (${p.items.length} ${p.items.length === 1 ? "group" : "groups"})`).join(", ")}, archiving it`;
   }
 }
 
@@ -329,7 +331,7 @@ export function recoveryPlan(r: RequestState, plan: RequestState["recoveryPlans"
           (c, i) =>
             // The shell escape hatch is opt-in; everything else is checked. An agent's instructions are folded.
             html`<li><label><input type="checkbox" name="command" value="${JSON.stringify({ ...c, request: r.id })}"${c.cmd === "shell" ? null : html` checked`}> ${shortLabel(c, r)}</label> <span class="reason">${c.reason}</span>${
-              instructions(c) ? html`<details class="fold" data-fold="plan-${plan.job}-${i}"><summary>its instructions</summary><div class="sub">${instructions(c)}</div></details>` : null
+              instructions(c, r) ? html`<details class="fold" data-fold="plan-${plan.job}-${i}"><summary>${c.cmd === "split-request" ? "its parts" : "its instructions"}</summary><div class="sub${c.cmd === "split-request" ? " pre" : ""}">${instructions(c, r)}</div></details>` : null
             }</li>`,
         )}</ul><button class="btn small primary">${plan.plan.length === 1 ? "Do it" : "Do these"}</button></form>`
       : null
@@ -350,7 +352,10 @@ function shortLabel(c: PlannedCommand, r: RequestState): Html {
   }
 }
 
-function instructions(c: PlannedCommand): string | undefined {
+function instructions(c: PlannedCommand, r: RequestState): string | undefined {
+  if (c.cmd === "split-request") {
+    return c.parts.map((p) => `${p.title}: ${p.items.map((i) => itemLabel(r, i)).join(", ")}`).join("\n");
+  }
   return c.cmd === "resume-agent" ? c.message : c.cmd === "start-agent" ? c.prompt : undefined;
 }
 

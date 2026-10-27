@@ -272,6 +272,50 @@
               "reason"
             ],
             "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "cmd": {
+                "type": "string",
+                "enum": [
+                  "split-request"
+                ]
+              },
+              "parts": {
+                "type": "array",
+                "description": "Two or more new requests, each taking these groups.",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "title": {
+                      "type": "string",
+                      "description": "What this part fixes, as a request's title."
+                    },
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "title",
+                    "items"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "reason": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "cmd",
+              "parts",
+              "reason"
+            ],
+            "additionalProperties": false
           }
         ]
       }
