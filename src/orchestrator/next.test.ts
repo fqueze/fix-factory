@@ -2182,6 +2182,10 @@ describe("8. submit", () => {
     sc.settle();
     assert.equal(sc.state().step, "review comments");
     assert.equal(sc.state().items["i-test-a"].state, "waiting for review");
+    // Verifying again after review (a redo-step): it stays there to plan its push.
+    sc.add({ type: "step", request: ID, step: "verify on try" });
+    assert.deepEqual(sc.settle().filter((k) => k.startsWith("plan:verify:")).length, 1);
+    assert.equal(sc.state().step, "verify on try");
   });
 
   it("orders an unsubmitted stack again when a patch's effort changes, and reorders it", () => {
