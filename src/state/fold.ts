@@ -72,7 +72,8 @@ export function foldEvents(events: readonly Event[]): RequestState {
         s.splitFrom = e.from;
         break;
       case "comment-sent":
-        if (s.patches[e.patch]) s.patches[e.patch].yourComments = [...(s.patches[e.patch].yourComments ?? []), { text: e.text, key: e.key, t: e.t }];
+        // One per answering run: a later event for it corrects the earlier one.
+        if (s.patches[e.patch]) s.patches[e.patch].yourComments = [...(s.patches[e.patch].yourComments ?? []).filter((c) => c.key !== e.key), { text: e.text, key: e.key, t: e.t }];
         break;
       case "tests-asked":
         s.askedTests = [...new Set([...(s.askedTests ?? []), ...e.tests])];
