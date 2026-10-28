@@ -2445,21 +2445,7 @@ class Planner {
         purpose: { stack: st.id, patches: Object.fromEntries(st.order.map((pid) => [this.s.patches[pid].sha.slice(0, 12), pid])) },
       }),
     );
-    if (!rw) return;
-    // Its amended commit no longer applies where it sits in the stack (the base or the patches below it moved): its
-    // author rebases it onto them.
-    const conflict = this.out<{ conflict?: { sha: string; files: string[] } }>(rw).conflict;
-    if (conflict) {
-      const below = st.order.slice(0, st.order.indexOf(p.id)).map((pid) => this.s.patches[pid].sha).at(-1) ?? st.base ?? this.config.baseRef;
-      this.resumeAuthor(
-        item.id,
-        `author:${item.id}${this.itemEpoch(item.id)}:restack:${author.job.job}`,
-        "restack",
-        `Putting your amended commit back in the stack (branch ${st.branch}) conflicted in ${conflict.files.join(", ")}. Rebase your commits onto ${below.slice(0, 12)} (the stack's patches below yours), resolving the conflict and changing nothing else, check the test still passes, then end with the JSON report again.`,
-      );
-      return;
-    }
-    if (p.worktree !== st.worktree) return;
+    if (!rw || p.worktree !== st.worktree) return;
     if (oldSha) {
       const inter = this.want(`interdiff:${p.id}:${author.job.job}:${oldSha.slice(0, 12)}`, () =>
         this.cli("interdiff", "stack.ts", ["interdiff", "--cwd", st.worktree, oldSha, p.sha], { cwd: st.worktree, priority: REVIEW_PRIORITY, purpose: { patch: p.id, stack: st.id } }),

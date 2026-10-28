@@ -2523,54 +2523,6 @@ describe("9. review comments", () => {
     assert.equal(sc.state().items["i-test-a"].state, "waiting for review");
   });
 
-  it("an addressed commit that conflicts back in the stack goes to its author to rebase onto the patches below it", () => {
-    const sc = inReview();
-    const comment = { id: 7, author: "smaug", file: "a/test_a.js", line: 3, length: 1, text: "Use waitForCondition", done: false };
-    const mine = { id: 8, author: "florian", text: "ok", done: false, replyTo: 7, length: 1 };
-    sc.complete("poll:0", { output: polled("needs-revision", [comment, mine], "blocking") });
-    const [classify] = sc.settle();
-    assert.match(classify, /^classify-comments:p-test-a:/);
-    assert.equal(sc.plan(classify).priority, 0);
-    sc.complete(classify, { report: { comments: [{ id: 7, kind: "change request", impliesChange: true }], feedback: [] } });
-    assert.equal(sc.state().patches["p-test-a"].review?.comments[0].kind, "change request");
-    const [address] = sc.settle();
-    const plan = sc.plan(address);
-    assert.equal(plan.name, "address-review");
-    assert.equal(plan.agent?.resume, true);
-    assert.equal(plan.agent?.sessionId, sc.plan("author:i-test-a:initial").agent?.sessionId);
-    assert.equal(plan.priority, 0);
-    assert.deepEqual(plan.purpose.comments, [7]);
-    assert.deepEqual(JSON.parse(plan.files![0].content).map((c: { id: number }) => c.id), [7]);
-    assert.equal(sc.state().items["i-test-a"].state, "addressing review comments");
-
-    const job = sc.complete(address, { report: { state: "addressed", summary: "s", commits: [sha("7")], replies: [{ commentId: 7, text: "waitForCondition hides the race." }], feedback: [] } });
-    assert.deepEqual(sc.state().patches["p-test-a"].replyDrafts, [{ commentId: 7, text: "waitForCondition hides the race." }]);
-    sc.settle();
-    assert.equal(sc.plan(`import:${job}`).priority, 0);
-    sc.complete(`import:${job}`, { output: imported(sha("7"), "Bug 999 - Fix a, r=smaug.", ["a/test_a.js"], 999).map((c) => ({ ...c, revision: 101 })) });
-    sc.settle();
-    sc.complete(`msg:p-test-a:${sha("7")}`, { output: "m" });
-    sc.complete(`lint-reply:${job}:7`, { output: lintOk });
-    sc.settle();
-    sc.complete(`lint:p-test-a:${sha("7")}`, { output: lintOk });
-    sc.settle();
-    assert.equal(sc.plan(`review:p-test-a:${job}`).priority, 0);
-    sc.complete(`review:p-test-a:${job}`, { report: ok });
-    assert.deepEqual(sc.settle(), [`rewrite-review:root:${job}`]);
-    // Its commit lost its Differential Revision line: the rewrite gives every submitted patch its own back.
-    const rw = sc.plan(`rewrite-review:root:${job}`);
-    assert.deepEqual(rw.cli?.args.slice(-4), ["--order", `${sha("e")},${sha("7")}`, "--edits", rw.files![0].path]);
-    assert.deepEqual(JSON.parse(rw.files![0].content), {
-      [sha("e")]: { revision: "https://phabricator.services.mozilla.com/D100" },
-      [sha("7")]: { revision: "https://phabricator.services.mozilla.com/D101" },
-    });
-    sc.complete(`rewrite-review:root:${job}`, { output: { mapping: {}, conflict: { sha: sha("7"), files: ["a/browser.toml"] } } });
-    const [restack] = sc.settle();
-    assert.equal(restack, `author:i-test-a:restack:${job}`);
-    assert.match(sc.plan(restack).agent?.message ?? "", new RegExp(`conflicted in a/browser.toml\\. Rebase your commits onto ${sha("e").slice(0, 12)}`));
-    assert.ok(!sc.state().needsUser.some((x) => x.key.startsWith("resubmit:")));
-  });
-
   it("a nits pass after the answer still leads to the resubmit, with the answer's replies", () => {
     const sc = inReview();
     sc.complete("poll:0", { output: polled("needs-revision", [{ id: 7, author: "smaug", text: "Use waitForCondition", done: false, length: 1 }], "blocking") });
