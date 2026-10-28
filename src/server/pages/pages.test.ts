@@ -655,7 +655,8 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.doesNotMatch(h, /summary-r-20261008-permissions-permissions|meta-bug comment/i);
     const focus = expanded("r-20261007-focus");
     assert.doesNotMatch(focus, /meta-bug comment/i);
-    assert.match(focus, /A meta bug is optional here: <a href="https:\/\/bugzilla\.mozilla\.org\/enter_bug\.cgi\?[^"]*&amp;dependson=2080500&amp;bug_type=task/);
+    // Its agent drafts one when you ask.
+    assert.match(focus, /A meta bug is optional here: <form class="inline cmd"[^>]*><input type="hidden" name="command" value="\{&quot;cmd&quot;:&quot;draft-meta-bug&quot;[^>]*>.*?<button class="btn small">Draft it<\/button><\/form>, or paste the number of one you filed/);
   });
 
   it("7. meta bug: its box says when it's optional, waits for the stack's other bugs, then links to file it", () => {
@@ -698,7 +699,7 @@ describe("one fixture per step of docs/MVP.md", () => {
     const r = structuredClone(get("r-20261008-permissions"));
     delete r.metaBug;
     r.patches["p-captive"].item = "i-annotations";
-    assert.match(renderRequest(r, ctx, true).value, /This stack needs a meta bug, for its annotation patches: <a href="https:\/\/bugzilla/);
+    assert.match(renderRequest(r, ctx, true).value, /This stack needs a meta bug, for its annotation patches: <form class="inline cmd"/);
     r.kind = "burndown";
     const h = renderRequest(r, ctx, true).value;
     assert.doesNotMatch(h, /class="metabug|<h4>Meta bug/);

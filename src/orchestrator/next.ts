@@ -2108,7 +2108,8 @@ class Planner {
   // The meta bug's text, written by an agent from the stack for its reviewers; written again when the stack or its
   // bugs change, until it's filed. One per request: a burndown has one stack.
   private metaDraft(): void {
-    if (this.s.kind !== "burndown" || at(this.s.step) < at("stack") || this.s.step === "done" || this.s.metaBug?.bug) return;
+    // A burndown's, and any other request's you asked for: its meta bug is optional.
+    if ((this.s.kind !== "burndown" && !this.s.metaDraftAsked) || at(this.s.step) < at("stack") || this.s.step === "done" || this.s.metaBug?.bug) return;
     const st = this.liveStacks()[0];
     const info = st && this.stackInfos.get(st.id);
     if (!info?.ready) return;

@@ -272,6 +272,10 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
       done(true);
       break;
     }
+    case "draft-meta-bug":
+      ev({ type: "meta-draft-asked" });
+      done(true);
+      break;
     case "poll-phab":
       ev({ type: "poll-requested" });
       done(true);

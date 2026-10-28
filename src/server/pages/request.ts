@@ -255,20 +255,16 @@ function stackBugs(r: RequestState): number[] {
 // Outside burndowns, there's no drafted meta bug: when nothing needs one, filing one to track the stack's bugs is up to
 // you, and doesn't hold back submitting.
 function optionalMetaBug(r: RequestState, s: StackView, ctx: RenderContext): Html | null {
-  // A burndown's meta bug is drafted by an agent: shown with the meta bug's box once written.
+  // A burndown's meta bug is drafted by an agent, as is another request's when you ask: shown with the meta bug's
+  // box once written.
   if (r.metaBug || r.kind === "burndown") return null;
-  const first = stackPatches(r, s).find((p) => p.bugDraft)?.bugDraft;
-  const draft: BugDraft = {
-    product: first?.product ?? "Testing",
-    component: first?.component ?? "General",
-    summary: `[meta] Intermittent failures in ${r.folder ?? s.folder}`,
-    description: s.summary ?? "",
-    bugType: "task",
-    keywords: ["meta"],
-    dependsOn: stackBugs(r),
-  };
   const lead = stackNeedsMetaBug(stackPatches(r, s)) ? "This stack needs a meta bug, for its annotation patches" : "A meta bug is optional here";
-  return html`<div class="metabug sub">${lead}: <a href="${enterBugUrl(draft, ctx)}" target="_blank" rel="noopener" title="Opens a prefilled enter_bug.cgi, depending on the stack's bugs">file one ↗</a> to track the stack's bugs, then paste its number ${bugBox(r.id, "meta", requestUrl(r.id))}</div>`;
+  const drafting = Object.values(r.jobs).some((j) => j.name === "write-meta-bug" && j.endedAt === undefined);
+  return html`<div class="metabug sub">${lead}: ${
+    drafting
+      ? "its draft is being written"
+      : html`<form class="inline cmd" method="post" action="/api/commands">${commandFields([{ cmd: "draft-meta-bug", request: r.id }], requestUrl(r.id))}<button class="btn small">Draft it</button></form>`
+  }, or paste the number of one you filed ${bugBox(r.id, "meta", requestUrl(r.id))}</div>`;
 }
 
 // One line per group or patch: its name and cost, then where it stands. Opening it shows the rest

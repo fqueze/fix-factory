@@ -138,6 +138,7 @@ export type Event =
   | (EventBase & { type: "request-split"; into: RequestId[]; moved?: Record<ItemId, RequestId> }) // archived: its groups went to these requests (moved: absent on the first split)
   | (EventBase & { type: "split-from"; from: RequestId }) // made by splitting that request
   | (EventBase & { type: "groups-moved"; to: RequestId; items: ItemId[] }) // they go on in that request
+  | (EventBase & { type: "meta-draft-asked" }) // you want a meta bug for a stack that doesn't need one
   | (EventBase & { type: "config-set"; config: Record<string, unknown> })
   | (EventBase & { type: "step"; step: RequestStep })
   | (EventBase & { type: "item-created"; item: ItemId; folder: string; group: FailureGroup })
@@ -232,6 +233,7 @@ export type Command =
   | (CommandBase & { cmd: "set-test-plan"; patch: PatchId; text: string }) // on its revision
   | (CommandBase & { cmd: "revise-test-plan"; patch: PatchId; text: string }) // what its agent should change
   | (CommandBase & { cmd: "set-reviewer"; patch: PatchId; reviewer: string }) // its r=, e.g. "#ai-frontend-reviewers-rotation"
+  | (CommandBase & { cmd: "draft-meta-bug" }) // its agent drafts the optional meta bug
   | (CommandBase & { cmd: "tell-factory"; text: string })
   | (CommandBase & { cmd: "reply-recovery"; job: JobId; text: string })
   | (CommandBase & { cmd: "start-now" })
@@ -446,6 +448,7 @@ export interface RequestState {
   supersededBy?: RequestId; // route-request failed, and you rephrased it in the main box as that request
   splitInto?: RequestId[]; // split into these, and archived
   movedTo?: Record<ItemId, RequestId>; // its groups the split moved, and where
+  metaDraftAsked?: boolean; // you asked for a meta bug draft
   splitFrom?: RequestId; // made by splitting that one
   createdAt: Iso;
   updatedAt: Iso;

@@ -77,6 +77,7 @@ const SPECS: Record<Command["cmd"], Record<string, Field>> = {
   "set-test-plan": { patch: "string", text: "string" },
   "revise-test-plan": { patch: "string", text: "string" },
   "set-reviewer": { patch: "string", reviewer: "string" },
+  "draft-meta-bug": {},
   "tell-factory": { text: "string" },
   "reply-recovery": { job: "string", text: "string" },
   "start-now": {},
