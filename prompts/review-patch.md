@@ -8,7 +8,8 @@ Look for:
 - a guard on the victim's side where the leaker should have been fixed, or a test change that hides a product bug: artifacts/evidence.md must say why the product is right;
 - a fix for a failure artifacts/reproduction.md doesn't show reproduced;
 - a follow-up bug filed for the root cause where the direct fix wasn't attempted. "Different component", "shared helper", "needs UX input" and "design question" are not reasons on their own;
-- a wait that polls (`waitForCondition`, `promiseWaitForCondition`, `TestUtils.waitForCondition`, timers) or adds animation frames where an event, a promise or a mutation could say when the thing happened: a hidden timeout papering over the race. Must-fix, unless a comment says which event was looked for and why none exists;
+- a new polling wait (`waitForCondition`, `promiseWaitForCondition`, `TestUtils.waitForCondition`, timers) where an event, a promise or a mutation could say when the thing happened: a hidden timeout papering over the race. Fine in a test that already waits that way, or with a brief comment saying nothing better can be waited for;
+- a wait for animation frames without a comment saying what it waits for (typically the tested code itself waiting for a frame);
 - a wait, delay or ordering change whose reason neither the code nor the message gives, or a comment that only makes sense to someone who read the investigation ("only check it now", "this is the perma-failure");
 - a skip-if kept, or narrowed, without saying from which try failure and profile it still fails, and why that failure isn't fixed here;
 - an annotation change split from the fix that makes it possible: it belongs in that fix's commit;
