@@ -1275,8 +1275,9 @@ class Planner {
     if (!this.view.byKey.has(`review:${patches[0].id}:${author.job}`) && prior.every((j) => j && this.rep<ReviewPatchReport>(j).verdict === "findings")) {
       const last = prior.at(-1)!.job;
       if (this.view.done.has(`failed:${last}`)) return;
+      // Into the stack all the same: the question waits for you on its row without holding the stack back.
       this.raise(`failed:${last}`, { action: "Its author left the patch unchanged after the critical review", detail: report.summary.slice(0, 500), job: last, item: item.id });
-      this.setItem(item.id, "blocked", "critical review");
+      reviewed();
       return;
     }
     const reviews = patches.map((p) =>
