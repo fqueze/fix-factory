@@ -2501,15 +2501,15 @@ describe("9. review comments", () => {
     sc.settle();
     assert.equal(sc.plan(`review:p-test-a:${job}`).priority, 0);
     sc.complete(`review:p-test-a:${job}`, { report: ok });
-    assert.deepEqual(sc.settle(), [`rewrite-review:root:${job}`]);
+    assert.deepEqual(sc.settle(), [`rewrite-review:root:${job}:v2`]);
     // Its commit lost its Differential Revision line: the rewrite gives every submitted patch its own back.
-    const rw = sc.plan(`rewrite-review:root:${job}`);
-    assert.deepEqual(rw.cli?.args.slice(-4), ["--order", `${sha("e")},${sha("7")}`, "--edits", rw.files![0].path]);
+    const rw = sc.plan(`rewrite-review:root:${job}:v2`);
+    assert.deepEqual(rw.cli?.args.slice(-5), ["--order", `${sha("e")},${sha("7")}`, "--leave-conflict", "--edits", rw.files![0].path]);
     assert.deepEqual(JSON.parse(rw.files![0].content), {
       [sha("e")]: { revision: "https://phabricator.services.mozilla.com/D100" },
       [sha("7")]: { revision: "https://phabricator.services.mozilla.com/D101" },
     });
-    sc.complete(`rewrite-review:root:${job}`, { output: { mapping: { [sha("e")]: sha("e"), [sha("7")]: sha("8") } } });
+    sc.complete(`rewrite-review:root:${job}:v2`, { output: { mapping: { [sha("e")]: sha("e"), [sha("7")]: sha("8") } } });
     // Against what Phabricator has (the commit D101 showed up on), not the author's previous commit.
     const key = `interdiff:p-test-a:${job}:${sha("f").slice(0, 12)}`;
     assert.deepEqual(sc.settle(), [key]);
@@ -2521,6 +2521,57 @@ describe("9. review comments", () => {
     assert.equal(n.action, "Post 1 reply, then resubmit D101");
     assert.equal(n.stack, "root");
     assert.equal(sc.state().items["i-test-a"].state, "waiting for review");
+  });
+
+it("an addressed commit that conflicts on today's central goes to resolve-conflict, then gets its Differential Revision line back", () => {
+    const sc = inReview();
+    const comment = { id: 7, author: "smaug", file: "a/test_a.js", line: 3, length: 1, text: "Use waitForCondition", done: false };
+    const mine = { id: 8, author: "florian", text: "ok", done: false, replyTo: 7, length: 1 };
+    sc.complete("poll:0", { output: polled("needs-revision", [comment, mine], "blocking") });
+    const [classify] = sc.settle();
+    assert.match(classify, /^classify-comments:p-test-a:/);
+    assert.equal(sc.plan(classify).priority, 0);
+    sc.complete(classify, { report: { comments: [{ id: 7, kind: "change request", impliesChange: true }], feedback: [] } });
+    assert.equal(sc.state().patches["p-test-a"].review?.comments[0].kind, "change request");
+    const [address] = sc.settle();
+    const plan = sc.plan(address);
+    assert.equal(plan.name, "address-review");
+    assert.equal(plan.agent?.resume, true);
+    assert.equal(plan.agent?.sessionId, sc.plan("author:i-test-a:initial").agent?.sessionId);
+    assert.equal(plan.priority, 0);
+    assert.deepEqual(plan.purpose.comments, [7]);
+    assert.deepEqual(JSON.parse(plan.files![0].content).map((c: { id: number }) => c.id), [7]);
+    assert.equal(sc.state().items["i-test-a"].state, "addressing review comments");
+
+    const job = sc.complete(address, { report: { state: "addressed", summary: "s", commits: [sha("7")], replies: [{ commentId: 7, text: "waitForCondition hides the race." }], feedback: [] } });
+    assert.deepEqual(sc.state().patches["p-test-a"].replyDrafts, [{ commentId: 7, text: "waitForCondition hides the race." }]);
+    sc.settle();
+    assert.equal(sc.plan(`import:${job}`).priority, 0);
+    sc.complete(`import:${job}`, { output: imported(sha("7"), "Bug 999 - Fix a, r=smaug.", ["a/test_a.js"], 999).map((c) => ({ ...c, revision: 101 })) });
+    sc.settle();
+    sc.complete(`msg:p-test-a:${sha("7")}`, { output: "m" });
+    sc.complete(`lint-reply:${job}:7`, { output: lintOk });
+    sc.settle();
+    sc.complete(`lint:p-test-a:${sha("7")}`, { output: lintOk });
+    sc.settle();
+    assert.equal(sc.plan(`review:p-test-a:${job}`).priority, 0);
+    sc.complete(`review:p-test-a:${job}`, { report: ok });
+    assert.deepEqual(sc.settle(), [`rewrite-review:root:${job}:v2`]);
+    // Its commit lost its Differential Revision line: the rewrite gives every submitted patch its own back.
+    const rw = sc.plan(`rewrite-review:root:${job}:v2`);
+    assert.deepEqual(rw.cli?.args.slice(-5), ["--order", `${sha("e")},${sha("7")}`, "--leave-conflict", "--edits", rw.files![0].path]);
+    assert.deepEqual(JSON.parse(rw.files![0].content), {
+      [sha("e")]: { revision: "https://phabricator.services.mozilla.com/D100" },
+      [sha("7")]: { revision: "https://phabricator.services.mozilla.com/D101" },
+    });
+    sc.complete(`rewrite-review:root:${job}:v2`, { output: { mapping: { [sha("e")]: sha("e") }, conflict: { sha: sha("7"), files: ["a/browser.toml"] } } });
+    const [resolve] = sc.settle();
+    assert.equal(resolve, `resolve:root:review-${job}:${sha("7")}`);
+    sc.complete(resolve, { report: { state: "resolved", commit: sha("c"), explanation: "kept both entries", feedback: [] } });
+    assert.equal(sc.state().patches["p-test-a"].sha, sha("c"));
+    const [again] = sc.settle();
+    assert.equal(again, `rewrite-review:root:${job}:v2:resolved`);
+    assert.deepEqual(Object.keys(JSON.parse(sc.plan(again).files![0].content)), [sha("e"), sha("c")]);
   });
 
   it("a nits pass after the answer still leads to the resubmit, with the answer's replies", () => {
@@ -2552,7 +2603,7 @@ describe("9. review comments", () => {
     sc.complete(`msg:p-test-a:${sha("9")}`, { output: "m" });
     sc.settle();
     sc.complete(`lint:p-test-a:${sha("9")}`, { output: lintOk });
-    assert.deepEqual(sc.settle(), [`rewrite-review:root:${pass}`]);
+    assert.deepEqual(sc.settle(), [`rewrite-review:root:${pass}:v2`]);
   });
 });
 
@@ -2603,10 +2654,10 @@ describe("9. changes after submission", () => {
   for (const reason of ["continue", "comment", "stack comments", "asked push", "try"]) {
     it(`an author run for ${reason} after the submission is put in the stack, and asks you to resubmit`, () => {
       const { sc, job } = changed(reason);
-      assert.deepEqual(sc.settle(), [`rewrite-review:root:${job}`]);
-      const rw = sc.plan(`rewrite-review:root:${job}`);
+      assert.deepEqual(sc.settle(), [`rewrite-review:root:${job}:v2`]);
+      const rw = sc.plan(`rewrite-review:root:${job}:v2`);
       assert.deepEqual(JSON.parse(rw.files![0].content)[sha("7")], { revision: "https://phabricator.services.mozilla.com/D101" });
-      sc.complete(`rewrite-review:root:${job}`, { output: { mapping: { [sha("e")]: sha("e"), [sha("7")]: sha("8") } } });
+      sc.complete(`rewrite-review:root:${job}:v2`, { output: { mapping: { [sha("e")]: sha("e"), [sha("7")]: sha("8") } } });
       const [inter] = sc.settle();
       assert.equal(inter, `interdiff:p-test-a:${job}:${sha("f").slice(0, 12)}`);
       assert.deepEqual(sc.plan(inter).cli?.args.slice(-2), [sha("f"), sha("8")]);
@@ -2626,7 +2677,7 @@ describe("9. changes after submission", () => {
   it("once you copied the resubmit, the next change's interdiff is against that commit", () => {
     const { sc, job } = changed("continue");
     sc.settle();
-    sc.complete(`rewrite-review:root:${job}`, { output: { mapping: { [sha("e")]: sha("e"), [sha("7")]: sha("8") } } });
+    sc.complete(`rewrite-review:root:${job}:v2`, { output: { mapping: { [sha("e")]: sha("e"), [sha("7")]: sha("8") } } });
     sc.settle();
     sc.complete(`interdiff:p-test-a:${job}:${sha("f").slice(0, 12)}`, { output: { diff: "-a\n+b\n", method: "same-parent" } });
     sc.settle();
@@ -2647,8 +2698,8 @@ describe("9. changes after submission", () => {
     sc.complete(`lint:p-test-a:${sha("9")}`, { output: lintOk });
     sc.settle();
     sc.complete(`review:p-test-a:${again}`, { report: ok });
-    assert.deepEqual(sc.settle(), [`rewrite-review:root:${again}`]);
-    sc.complete(`rewrite-review:root:${again}`, { output: { mapping: { [sha("e")]: sha("e"), [sha("9")]: sha("a") } } });
+    assert.deepEqual(sc.settle(), [`rewrite-review:root:${again}:v2`]);
+    sc.complete(`rewrite-review:root:${again}:v2`, { output: { mapping: { [sha("e")]: sha("e"), [sha("9")]: sha("a") } } });
     const inter = `interdiff:p-test-a:${again}:${sha("8").slice(0, 12)}`;
     assert.deepEqual(sc.settle(), [inter]);
     assert.deepEqual(sc.plan(inter).cli?.args.slice(-2), [sha("8"), sha("a")]);

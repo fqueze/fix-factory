@@ -2436,16 +2436,39 @@ class Planner {
     const index = author.commits.findIndex((_, i) => patchId(item.id, i) === p.id);
     // Against what Phabricator has, not the author's previous commit (which may never have been sent).
     const oldSha = p.sentSha ?? (previous ? commitsOf(previous.name, this.rep(previous))[index] : undefined);
-    const e = this.rewriteEdits(`review-${st.id}-${author.job.job}`, st.order.map((pid) => this.s.patches[pid]));
-    const rw = this.want(`rewrite-review:${st.id}:${author.job.job}`, () =>
-      this.cli("rewrite", "stack.ts", ["rewrite", "--cwd", st.worktree, "--base", st.base ?? this.config.baseRef, "--branch", st.branch, "--order", st.order.map((pid) => this.s.patches[pid].sha).join(","), ...e.args], {
+    // Rebuilt on today's central (patches that landed drop out), with each submitted patch's Differential Revision
+    // line. v2: a conflict is left for resolve-conflict, as in the stack's assembly.
+    const key = `rewrite-review:${st.id}:${author.job.job}:v2`;
+    const rewrite = (k: string) => {
+      const e = this.rewriteEdits(k.replace(/[:]/g, "-"), st.order.map((pid) => this.s.patches[pid]));
+      return this.want(k, () =>
+        this.cli("rewrite", "stack.ts", ["rewrite", "--cwd", st.worktree, "--base", st.base ?? this.config.baseRef, "--branch", st.branch, "--order", st.order.map((pid) => this.s.patches[pid].sha).join(","), "--leave-conflict", ...e.args], {
+          cwd: st.worktree,
+          files: e.files,
+          priority: REVIEW_PRIORITY,
+          purpose: { stack: st.id, patches: Object.fromEntries(st.order.map((pid) => [this.s.patches[pid].sha.slice(0, 12), pid])) },
+        }),
+      );
+    };
+    const rw = rewrite(key);
+    if (!rw) return;
+    const conflict = this.out<{ conflict?: { sha: string; files: string[] } }>(rw).conflict;
+    if (conflict) {
+      const res = this.wantAgent(`resolve:${st.id}:review-${author.job.job}:${conflict.sha}`, "resolve", "resolve-conflict", { sha: conflict.sha, base: st.branch, files: conflict.files.join(", ") }, {
         cwd: st.worktree,
-        files: e.files,
         priority: REVIEW_PRIORITY,
-        purpose: { stack: st.id, patches: Object.fromEntries(st.order.map((pid) => [this.s.patches[pid].sha.slice(0, 12), pid])) },
-      }),
-    );
-    if (!rw || p.worktree !== st.worktree) return;
+        purpose: { stack: st.id, sha: conflict.sha, patches: Object.fromEntries(st.order.filter((pid) => this.s.patches[pid].sha.startsWith(conflict.sha.slice(0, 12))).map((pid) => [conflict.sha.slice(0, 12), pid])) },
+      });
+      if (!res) return;
+      const r = this.rep<ResolveConflictReport>(res);
+      if (r.state !== "resolved" || !r.commit) {
+        this.raise(`failed:${res.job}`, { action: "Its amended commit doesn't apply on today's central", detail: r.explanation.slice(0, 500), job: res.job, item: item.id });
+        return;
+      }
+      // Once more, for the Differential Revision line the resolution's commit lacks.
+      if (!rewrite(`${key}:resolved`)) return;
+    }
+    if (p.worktree !== st.worktree) return;
     if (oldSha) {
       const inter = this.want(`interdiff:${p.id}:${author.job.job}:${oldSha.slice(0, 12)}`, () =>
         this.cli("interdiff", "stack.ts", ["interdiff", "--cwd", st.worktree, oldSha, p.sha], { cwd: st.worktree, priority: REVIEW_PRIORITY, purpose: { patch: p.id, stack: st.id } }),
