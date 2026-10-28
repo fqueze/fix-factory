@@ -30,7 +30,7 @@
   // Re-rendering waits while you type, and while anything you typed isn't sent yet, focused or not: it would be lost.
   function busy(el) {
     var a = document.activeElement;
-    if (a && el.contains(a) && (a.tagName === "INPUT" || a.tagName === "TEXTAREA" || a.tagName === "SELECT") && a.value !== "") return true;
+    if (a && el.contains(a) && ((a.tagName === "INPUT" && a.type === "text") || a.tagName === "TEXTAREA") && a.value !== "" && a.value !== a.defaultValue) return true;
     return Array.prototype.some.call(el.querySelectorAll("input[type=text], textarea"), function (i) {
       return i.value !== "" && i.value !== i.defaultValue;
     });
@@ -202,16 +202,18 @@
     });
   }
 
+  // Refreshes held while you typed, once you're done: you left the field, or sent it (which leaves focus there).
+  function flushPending() {
+    pending.forEach(function (id) {
+      var el = requestElement(id);
+      if (!el || !busy(el)) {
+        pending.delete(id);
+        refreshRequest(id);
+      }
+    });
+  }
   document.addEventListener("focusout", function () {
-    setTimeout(function () {
-      pending.forEach(function (id) {
-        var el = requestElement(id);
-        if (!el || !busy(el)) {
-          pending.delete(id);
-          refreshRequest(id);
-        }
-      });
-    }, 0);
+    setTimeout(flushPending, 0);
   });
 
   // A collapsed request comes without its body, to keep the overview small.
@@ -320,6 +322,7 @@
         var flag = dismissed && form.closest("[data-key]");
         if (flag) flag.remove();
         else if (button) say(button, "Sent", 3000);
+        flushPending();
       })
       .catch(function (e) {
         if (button) button.disabled = false;
@@ -442,9 +445,25 @@
 
   reopenFolds(document);
 
+  // A connection that went dead without an error (a machine that slept) gets no more events: one silent for
+  // longer than a few heartbeats (30 s) is replaced, and its open handler catches up on what was missed.
   var connectedOnce = false;
+  var source = null;
+  var lastSeen = Date.now();
+  function seen() {
+    lastSeen = Date.now();
+  }
+  setInterval(function () {
+    if (Date.now() - lastSeen < 75000) return;
+    seen();
+    source.close();
+    connect();
+  }, 10000);
   function connect() {
-    var source = new EventSource("/events");
+    source = new EventSource("/events");
+    ["open", "hello", "changed", "ping"].forEach(function (type) {
+      source.addEventListener(type, seen);
+    });
     source.addEventListener("hello", function (event) {
       if (JSON.parse(event.data) !== bootId && !reloading) reloadWhenIdle();
     });

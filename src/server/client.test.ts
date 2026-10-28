@@ -13,6 +13,7 @@ type Field = { value: string; defaultValue: string };
 function loadPage(visibilityState: "visible" | "hidden", fields: Field[] = []) {
   const listeners = new Map<string, (() => void)[]>();
   const sse = new Map<string, (event: { data: string }) => void>();
+  let connections = 0;
   const sent: { url: string; body: unknown; keepalive: unknown }[] = [];
   const selectors: string[] = [];
   let reloads = 0;
@@ -31,6 +32,10 @@ function loadPage(visibilityState: "visible" | "hidden", fields: Field[] = []) {
   const page = {
     document,
     EventSource: class {
+      constructor() {
+        connections++;
+      }
+      close() {}
       addEventListener(type: string, f: (event: { data: string }) => void) {
         sse.set(type, f);
       }
@@ -60,6 +65,8 @@ function loadPage(visibilityState: "visible" | "hidden", fields: Field[] = []) {
     document,
     reloads: () => reloads,
     hello: (id: string) => sse.get("hello")!({ data: JSON.stringify(id) }),
+    ping: () => sse.get("ping")!({ data: "" }),
+    connections: () => connections,
     setVisibility(v: "visible" | "hidden") {
       document.visibilityState = v;
       for (const f of listeners.get("visibilitychange") ?? []) f();
@@ -110,6 +117,22 @@ describe("presence", () => {
     const page = loadPage("hidden");
     mock.timers.tick(60 * MIN);
     assert.deepEqual(page.sent, []);
+  });
+});
+
+describe("live events", () => {
+  beforeEach(() => mock.timers.enable({ apis: ["setInterval", "setTimeout", "Date"] }));
+  afterEach(() => mock.timers.reset());
+
+  it("reconnects when the server's heartbeats stop arriving (a machine waking from sleep), not while they do", () => {
+    const page = loadPage("visible");
+    for (let i = 0; i < 10; i++) {
+      mock.timers.tick(30000);
+      page.ping();
+    }
+    assert.equal(page.connections(), 1);
+    mock.timers.tick(80000);
+    assert.equal(page.connections(), 2);
   });
 });
 

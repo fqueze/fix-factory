@@ -100,8 +100,9 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
     }
   };
   const unsubscribe = opts.state.subscribe((id) => broadcast(`event: changed\ndata: ${JSON.stringify(id)}\n\n`));
-  // Keeps idle connections from being dropped by proxies, and finds dead clients.
-  const heartbeat = setInterval(() => broadcast(": heartbeat\n\n"), HEARTBEAT_MS);
+  // Keeps idle connections from being dropped by proxies, finds dead clients, and lets pages notice a dead
+  // connection (a laptop waking up): an event they see, not a comment.
+  const heartbeat = setInterval(() => broadcast("event: ping\ndata: \n\n"), HEARTBEAT_MS);
   heartbeat.unref();
 
   const server = createServer((req, res) => {
