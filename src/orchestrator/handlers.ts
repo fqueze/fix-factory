@@ -304,7 +304,7 @@ export function handleFinished(input: HandlerInput): HandlerResult {
     case "meta-draft": {
       // The meta bug's text, rewritten as the stack changes, until it's filed.
       const d = input.report as WriteMetaBugReport;
-      const fields = { ...(d.product ? { product: d.product } : {}), ...(d.component ? { component: d.component } : {}), ...(d.blocks ? { blocks: d.blocks } : {}) };
+      const fields = { ...(d.product ? { product: d.product } : {}), ...(d.component ? { component: d.component } : {}), ...(d.blocks ? { blocks: [...new Set([...((purpose.draft as BugDraft).blocks ?? []), ...d.blocks])] } : {}) };
       if (!s.metaBug?.bug) ev("meta-bug", { bug: null, draft: { ...(purpose.draft as BugDraft), ...fields, description: d.description, ...(d.summary ? { summary: d.summary } : {}) } });
       break;
     }

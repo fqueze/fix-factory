@@ -166,14 +166,14 @@ describe("commands", () => {
     const sc = withPatch();
     sc.startJob({ purpose: { key: "meta-draft:root:h", what: "meta-draft", stack: "root" }, kind: "agent", name: "write-meta-bug", cwd: "/wt/root", agent: { sessionId: "s-meta", resume: false, vars: { subject: "s", worktree: "/wt/root", stackFile: "f", overall: "o", summary: "" } } });
     sc.complete("meta-draft:root:h", { report: { description: "d", summary: "[meta] x", feedback: [] } });
-    sc.add({ type: "meta-bug", request: ID, bug: null, draft: { product: "Core", component: "DOM", summary: "[meta] x", description: "d" } });
+    sc.add({ type: "meta-bug", request: ID, bug: null, draft: { product: "Core", component: "DOM", summary: "[meta] x", description: "d", blocks: [2063593] } });
     const c = cmd({ cmd: "comment-bug-draft", patch: "meta", text: "reference the bugs that added the standalone jobs" });
     run(sc, c);
     const plan = sc.plan(`meta-draft:root:revise:${c.id}`);
     assert.deepEqual([plan.name, plan.agent?.sessionId, plan.agent?.resume, plan.cwd], ["write-meta-bug", "s-meta", true, "/wt/root"]);
     assert.match(plan.agent?.message ?? "", /reference the bugs that added the standalone jobs[\s\S]*Never ask them for something you can find/);
     // Bug fields it was asked to change go into the draft.
-    sc.complete(`meta-draft:root:revise:${c.id}`, { report: { description: "d2", answer: "moved it", product: "Testing", component: "General", blocks: [2063593, 1975728], feedback: [] } });
+    sc.complete(`meta-draft:root:revise:${c.id}`, { report: { description: "d2", answer: "moved it", product: "Testing", component: "General", blocks: [1975728], feedback: [] } });
     const draft = sc.state().metaBug?.draft;
     assert.deepEqual([draft?.product, draft?.component, draft?.blocks, draft?.description, draft?.summary], ["Testing", "General", [2063593, 1975728], "d2", "[meta] x"]);
   });

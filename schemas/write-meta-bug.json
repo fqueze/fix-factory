@@ -26,7 +26,7 @@
       "items": {
         "type": "integer"
       },
-      "description": "Only when the user asks: every bug it blocks, the current ones included."
+      "description": "Only when the user asks: the bugs it should also block."
     },
     "feedback": {
       "type": "array",

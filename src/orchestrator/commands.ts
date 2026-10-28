@@ -199,7 +199,7 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
             agent: {
               sessionId: meta.sessionId!,
               resume: true,
-              message: `The user comments on the meta bug draft:\n${c.text}\n\nDo what they ask. Look up what you need yourself: \`git log\` and \`git blame\` here, searchfox-cli, Bugzilla's REST API with curl (https://bugzilla.mozilla.org/rest/bug?...). Never ask them for something you can find. Bug fields they ask for go in the report's \`product\`, \`component\` and \`blocks\` (every bug it blocks). Then end with the JSON report again, saying in \`answer\` what you changed, and for what you didn't, why and what you checked.`,
+              message: `The user comments on the meta bug draft:\n${c.text}\n\nDo what they ask. Look up what you need yourself: \`git log\` and \`git blame\` here, searchfox-cli, Bugzilla's REST API with curl (https://bugzilla.mozilla.org/rest/bug?...). Never ask them for something you can find. Bug fields they ask for go in the report's \`product\`, \`component\` and \`blocks\` (the bugs to add). Then end with the JSON report again, saying in \`answer\` what you changed, and for what you didn't, why and what you checked.`,
             },
           },
         });
