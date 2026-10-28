@@ -93,6 +93,7 @@ export type Action = { type: "event"; event: EventInput } | { type: "start"; pla
 export const HOUR = 3600_000;
 export const EARLY_WORK_LIST_MS = 2 * HOUR;
 export const SUBMIT_IMPORT_MS = 2 * 60_000;
+export const SUBMIT_IMPORT_SOON_MS = 20_000; // the first minutes after you copy it, while moz-phab runs
 export const SUBMIT_WATCH_MS = 60 * 60_000; // after you copy the moz-phab command
 export { ANNOTATIONS_ITEM };
 export const LINT_ROUNDS = 2;
@@ -2193,7 +2194,8 @@ class Planner {
       if (!st.submitCopied || this.ctx.now - Date.parse(st.submitCopied) > SUBMIT_WATCH_MS) continue;
       const imports = this.view.jobs.filter((j) => j.purpose.what === "import-submit" && j.purpose.stack === st.id);
       const last = imports.at(-1);
-      if (!last || (last.end && this.ctx.now - last.startedAt >= SUBMIT_IMPORT_MS)) {
+      const every = this.ctx.now - Date.parse(st.submitCopied) < 10 * 60_000 ? SUBMIT_IMPORT_SOON_MS : SUBMIT_IMPORT_MS;
+      if (!last || (last.end && this.ctx.now - last.startedAt >= every)) {
         this.want(`import-submit:${st.id}:${imports.length}`, () =>
           this.cli("import-submit", "stack.ts", ["import", "--cwd", st.worktree, `${st.base ?? this.config.baseRef}..${st.branch}`], { cwd: st.worktree, purpose: { stack: st.id } }),
         );
