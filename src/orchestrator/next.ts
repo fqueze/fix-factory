@@ -1280,15 +1280,21 @@ class Planner {
       reviewed();
       return;
     }
-    const reviews = patches.map((p) =>
-      this.wantAgent(`review:${p.id}:${author.job}`, "review", "review-patch", { sha: p.sha, worktree: cwd, report: reportPath(this.config, this.s.id, author.job) }, {
+    // An answer to review comments is reviewed against them: a change claimed but not made is caught here.
+    const answered = author.name === "address-review" ? (author.purpose.comments ?? []) : [];
+    const reviews = patches.map((p) => {
+      const comments = (this.s.patches[p.id]?.review?.comments ?? []).filter((c) => answered.includes(c.id));
+      const file = dataPath(this.config, this.s.id, `review-comments-${p.id}-${author.job}.json`);
+      const vars = { sha: p.sha, worktree: cwd, report: reportPath(this.config, this.s.id, author.job), comments: comments.length ? ` It answers the review comments in ${file}: check each one is really dealt with as its reviewer asked, in the code or in a reply in the report; a change the report claims but the diff doesn't make is a must-fix.` : "" };
+      return this.wantAgent(`review:${p.id}:${author.job}`, "review", "review-patch", vars, {
         cwd,
         priority,
         item: item.id,
+        ...(comments.length ? { files: [{ path: file, content: JSON.stringify(comments, null, 2) + "\n" }] } : {}),
         purpose: { item: item.id, patch: p.id, sha: p.sha },
         startEvents: [this.ev("item-state", { item: item.id, state: "in critical review" })],
-      }),
-    );
+      });
+    });
     if (reviews.some((r) => !r)) return;
     const findings = reviews.flatMap((r) => {
       const rep = this.rep<ReviewPatchReport>(r!);

@@ -108,10 +108,10 @@ Other agents work in sibling worktrees of the same repository:
 
 ## review-patch
 
-opus · 2. First signal, 4. Investigate and fix, 9. Review comments · inputs: `sha`, `worktree`, `report`
+opus · 2. First signal, 4. Investigate and fix, 9. Review comments · inputs: `sha`, `worktree`, `report`, `comments`
 
 ```
-Review commit {sha} in {worktree}, diff and message together, as a demanding Firefox reviewer would. The author's report ({report}) is testimony, not evidence: spot-check its claims about the code and the test results yourself, and don't quote it. Check the message against the commit-message skill.
+Review commit {sha} in {worktree}, diff and message together, as a demanding Firefox reviewer would. The author's report ({report}) is testimony, not evidence: spot-check its claims about the code and the test results yourself, and don't quote it.{comments} Check the message against the commit-message skill.
 
 Look for:
 - dead code, leftover instrumentation or debug logging;

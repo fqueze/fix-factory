@@ -759,7 +759,7 @@ describe("4. investigate and fix", () => {
     assert.deepEqual(sc.settle(), [`review:p-test-a:${job}`]);
     assert.deepEqual(sc.open(), []);
     const review = sc.plan(`review:p-test-a:${job}`);
-    assert.deepEqual(review.agent?.vars, { sha: sha("1"), worktree: `/wt/${ID}-i-test-a`, report: `/state/requests/${ID}/reports/${job}.json` });
+    assert.deepEqual(review.agent?.vars, { sha: sha("1"), worktree: `/wt/${ID}-i-test-a`, report: `/state/requests/${ID}/reports/${job}.json`, comments: "" });
     assert.notEqual(review.agent?.sessionId, author.agent?.sessionId);
     assert.equal(sc.state().items["i-test-a"].state, "in critical review");
     sc.complete(`review:p-test-a:${job}`, { report: ok });
@@ -2500,6 +2500,10 @@ describe("9. review comments", () => {
     sc.complete(`lint:p-test-a:${sha("7")}`, { output: lintOk });
     sc.settle();
     assert.equal(sc.plan(`review:p-test-a:${job}`).priority, 0);
+    // Reviewed against the comments it answers.
+    const reviewPlan = sc.plan(`review:p-test-a:${job}`);
+    assert.match(reviewPlan.agent?.vars?.comments ?? "", /It answers the review comments in .*: check each one is really dealt with/);
+    assert.deepEqual(JSON.parse(reviewPlan.files![0].content).map((c: { id: number }) => c.id), [7]);
     sc.complete(`review:p-test-a:${job}`, { report: ok });
     assert.deepEqual(sc.settle(), [`rewrite-review:root:${job}:v2`]);
     // Its commit lost its Differential Revision line: the rewrite gives every submitted patch its own back.

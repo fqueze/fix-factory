@@ -1,4 +1,4 @@
-Review commit {sha} in {worktree}, diff and message together, as a demanding Firefox reviewer would. The author's report ({report}) is testimony, not evidence: spot-check its claims about the code and the test results yourself, and don't quote it. Check the message against the commit-message skill.
+Review commit {sha} in {worktree}, diff and message together, as a demanding Firefox reviewer would. The author's report ({report}) is testimony, not evidence: spot-check its claims about the code and the test results yourself, and don't quote it.{comments} Check the message against the commit-message skill.
 
 Look for:
 - dead code, leftover instrumentation or debug logging;
