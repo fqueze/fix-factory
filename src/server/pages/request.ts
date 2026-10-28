@@ -458,7 +458,9 @@ function patchRow(r: RequestState, p: PatchView, ctx: RenderContext): Html {
   // A "file the bug" ⚑'s buttons are the bug box's.
   const controls = bugBoxShown && r.needsUser.some((n) => n.patch === p.id && actionKind(n, r) === "file-bug") ? null : sentence?.controls;
   // A group's question is asked once, on the row of its first patch.
-  const asks = item !== undefined && Object.values(r.patches).find((x) => x.item === item.id && !isDraft(r, x) && !isDropped(r, x)) === p;
+  // A blocked group's patch still in its stack counts: that row is the only one it has.
+  const stacked = new Set(Object.values(r.stacks).flatMap((st) => st.order));
+  const asks = item !== undefined && Object.values(r.patches).find((x) => x.item === item.id && (!isDraft(r, x) || stacked.has(x.id)) && !isDropped(r, x)) === p;
   return row({
     anchor: html`id="patch-${p.id}" data-patch="${p.id}"`,
     fold: `patch-${p.id}`,

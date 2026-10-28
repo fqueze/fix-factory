@@ -1183,6 +1183,18 @@ describe("linkify", () => {
   });
 });
 
+describe("a blocked group's patch in the stack", () => {
+  it("asks its question, with its buttons, on the patch's row", () => {
+    const r = structuredClone(get("r-20261005-newtab"));
+    const item = r.patches["p-panel"].item!;
+    r.items[item].state = "blocked";
+    r.jobs["j-rev"] = { job: "j-rev", item, kind: "agent", name: "review-patch", cmd: [], cwd: "/wt", pid: 1, pidStartTime: 1, startedAt: "2026-10-28T10:00:00.000Z", endedAt: "2026-10-28T10:01:00.000Z", exitCode: 0 };
+    r.needsUser.push({ key: "failed:j-rev", action: "No ok after 3 critical review rounds", detail: "a must-fix", job: "j-rev", item, since: "2026-10-28T10:01:00.000Z" });
+    const row = rowOf(renderRequest(r, ctx, true).value, "patch-p-panel");
+    assert.ok(row.includes(cmd({ cmd: "accept-review", item, request: r.id })));
+  });
+});
+
 describe("hand-off", () => {
   it("the groups you took over, with their patches, and the prompt for your session to copy", () => {
     const r = structuredClone(get("r-20261005-newtab"));
