@@ -135,7 +135,7 @@ export type Event =
   | (EventBase & { type: "request-routed"; kind: Exclude<RequestKind, "unrouted">; folder?: string; rev?: string })
   | (EventBase & { type: "request-forwarded"; to: RequestId })
   | (EventBase & { type: "request-superseded"; by: RequestId })
-  | (EventBase & { type: "request-split"; into: RequestId[] }) // archived: its groups went to these requests
+  | (EventBase & { type: "request-split"; into: RequestId[]; moved?: Record<ItemId, RequestId> }) // archived: its groups went to these requests (moved: absent on the first split)
   | (EventBase & { type: "split-from"; from: RequestId }) // made by splitting that request
   | (EventBase & { type: "config-set"; config: Record<string, unknown> })
   | (EventBase & { type: "step"; step: RequestStep })
@@ -440,6 +440,7 @@ export interface RequestState {
   forwardedTo?: RequestId; // route-request said its text is about that request
   supersededBy?: RequestId; // route-request failed, and you rephrased it in the main box as that request
   splitInto?: RequestId[]; // split into these, and archived
+  movedTo?: Record<ItemId, RequestId>; // its groups the split moved, and where
   splitFrom?: RequestId; // made by splitting that one
   createdAt: Iso;
   updatedAt: Iso;

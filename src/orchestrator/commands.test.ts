@@ -323,6 +323,7 @@ describe("commands", () => {
     assert.ok(part.settle().includes("wt:root"), "a worktree for its stack");
     const original = foldEvents([...sc.events, ...byRequest.get(ID)!]);
     assert.deepEqual([original.splitInto, original.step, original.needsUser], [ids, "done", []]);
+    assert.deepEqual(original.movedTo, { "i-a": ids[0], "i-b": ids[1] });
   });
 
   it("start-agent starts a fresh session on the item, which later resumes use", () => {

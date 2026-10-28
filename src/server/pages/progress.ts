@@ -83,6 +83,11 @@ export function runningJobOf(r: RequestState, i: ItemView): JobView | undefined 
 }
 
 export function itemSentence(r: RequestState, i: ItemView, ctx: RenderContext): ItemSentence {
+  // Split off: it goes on in the request it went to.
+  const moved = r.movedTo?.[i.id];
+  if (moved) {
+    return { text: html`moved to <a href="${requestUrl(moved)}">${moved}</a>`, cls: "closed", controls: null };
+  }
   const job = runningJobOf(r, i);
   if (job) {
     return { text: html`<span class="working">${runningSentence(job)} · ${elapsed(job.startedAt, ctx)}</span>`, cls: "run", controls: null, detail: i.detail };

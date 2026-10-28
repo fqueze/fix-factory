@@ -66,6 +66,7 @@ export function foldEvents(events: readonly Event[]): RequestState {
         break;
       case "request-split":
         s.splitInto = e.into;
+        if (e.moved) s.movedTo = e.moved;
         break;
       case "split-from":
         s.splitFrom = e.from;

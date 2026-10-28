@@ -496,7 +496,7 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
           at({ type: "step", step: p.groups.every((g) => SETTLED.includes(s.items[g.item].state)) ? "stack" : "investigate and fix" }),
         );
       });
-      ev({ type: "request-split", into: ids });
+      ev({ type: "request-split", into: ids, moved: Object.fromEntries(c.parts.flatMap((p, n) => p.groups.map((g) => [g.item, ids[n]]))) });
       ev({ type: "note", text: `Split into ${ids.join(", ")}: ${c.reason}` });
       for (const n of s.needsUser) ev({ type: "user-done", key: n.key, byFactory: true });
       ev({ type: "step", step: "done" });
