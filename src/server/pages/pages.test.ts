@@ -1195,6 +1195,16 @@ describe("a blocked group's patch in the stack", () => {
   });
 });
 
+describe("your comments", () => {
+  it("each on its patch, with the answer of the run it started", () => {
+    const r = structuredClone(get("r-20261005-newtab"));
+    r.patches["p-panel"].yourComments = [{ text: "why no skip-if?", key: "author:x:comment:c-1", t: "2026-10-28T10:00:00.000Z" }];
+    r.jobs["j-c"] = { job: "j-c", kind: "agent", name: "investigate-and-fix", cmd: [], cwd: "/wt", pid: 1, pidStartTime: 1, startedAt: "2026-10-28T10:00:01.000Z", endedAt: "2026-10-28T10:05:00.000Z", exitCode: 0, outcome: "fix verified locally: No skip-if: browser.toml has none for it.", purpose: { key: "author:x:comment:c-1", what: "author" } };
+    const row = rowOf(renderRequest(r, ctx, true).value, "patch-p-panel");
+    assert.match(row, /<h4 class="part">Your comments<\/h4><div class="yourcomment"><div class="said"><div class="md"><p>why no skip-if\?<\/p><\/div><\/div><div class="answer"><div class="md"><p>fix verified locally: No skip-if: browser.toml has none for it\.<\/p>/);
+  });
+});
+
 describe("hand-off", () => {
   it("the groups you took over, with their patches, and the prompt for your session to copy", () => {
     const r = structuredClone(get("r-20261005-newtab"));

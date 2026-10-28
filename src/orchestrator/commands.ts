@@ -207,13 +207,26 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
         const item = s.patches[x.patch]?.item;
         if (item) byItem.set(item, [...(byItem.get(item) ?? []), `- On ${s.patches[x.patch].title}: ${x.text}`]);
       }
-      const errors = [...byItem].map(([item, lines]) => resume(item, "stack comments", `Review comments on your patch, from stack-viewer:\n${lines.join("\n")}\n\nAddress them by amending your commit, then end with the JSON report again. If you think it is wrong, don't do it: leave your commits as they are and say why in \`disagreement\`.`)).filter((e) => e);
+      const sent = new Set<ItemId>();
+      const errors = [...byItem]
+        .map(([item, lines]) => {
+          const error = resume(item, "stack comments", `Review comments on your patch, from stack-viewer:\n${lines.join("\n")}\n\nAddress them by amending your commit, then end with the JSON report again. ${ANSWER_EACH} If you think one is wrong, don't do it and say why in \`disagreement\`.`);
+          if (!error) sent.add(item);
+          return error;
+        })
+        .filter((e) => e);
+      // Each comment and the run that answers it, shown on its patch.
+      for (const x of c.comments) {
+        const item = s.patches[x.patch]?.item;
+        if (item && sent.has(item)) ev({ type: "comment-sent", patch: x.patch, text: x.text, key: `author:${item}${itemEpochOf(view, item)}:stack-comments:${c.id}` });
+      }
       done(errors.length === 0, errors.join("; "));
       break;
     }
     case "comment-fix": {
       const item = s.patches[c.patch]?.item;
-      const error = item ? resume(item, "comment", `A comment on your fix:\n${c.text}\n\nAddress it by amending your commit, then end with the JSON report again. If you think it is wrong, don't do it: leave your commits as they are and say why in \`disagreement\`.`) : "this patch has no group, so no author to tell";
+      const error = item ? resume(item, "comment", `A comment on your fix:\n${c.text}\n\nAddress it by amending your commit, then end with the JSON report again. ${ANSWER_EACH} If you think it is wrong, don't do it: leave your commits as they are and say why in \`disagreement\`.`) : "this patch has no group, so no author to tell";
+      if (!error) ev({ type: "comment-sent", patch: c.patch, text: c.text, key: `author:${item}${itemEpochOf(view, item!)}:comment:${c.id}` });
       done(!error, error);
       break;
     }
@@ -560,6 +573,9 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
 const PLANNED = new Set<string>(["retry-job", "cancel-job", "resume-agent", "start-agent", "set-state", "redo-step", "edit-config", "shell", "hand-off", "split-request", "move-groups", "fix-tests"] satisfies PlannedCommand["cmd"][]);
 
 export const STOPPED = "stopped by you";
+
+// Your comments are shown on the patch with the summary of the run that answered them.
+const ANSWER_EACH = "Start the report's summary by answering each point of it in a line: what you changed, or, for a question or a change you didn't make, the answer and what backs it (the file, command or data you checked; for a shared helper, every test using it).";
 
 function startVars(tests: string[], worktree: string): Record<string, string> {
   return { test: tests.length > 1 ? `${tests[0]} (and ${tests.length - 1} other tests)` : tests[0], worktree };

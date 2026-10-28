@@ -140,6 +140,7 @@ export type Event =
   | (EventBase & { type: "groups-moved"; to: RequestId; items: ItemId[] }) // they go on in that request
   | (EventBase & { type: "meta-draft-asked" }) // you want a meta bug for a stack that doesn't need one
   | (EventBase & { type: "tests-asked"; tests: string[] }) // failures already on central you want fixed too
+  | (EventBase & { type: "comment-sent"; patch: PatchId; text: string; key: string }) // your comment on a patch, and the key of the author run answering it
   | (EventBase & { type: "config-set"; config: Record<string, unknown> })
   | (EventBase & { type: "step"; step: RequestStep })
   | (EventBase & { type: "item-created"; item: ItemId; folder: string; group: FailureGroup })
@@ -366,6 +367,7 @@ export interface PatchView {
   testPlan?: string; // for its revision's Test Plan field: how the fix was shown to work, a few lines
   testPlanSent?: { revision: number; text: string; t: Iso }; // what you set on its revision
   reviewerFromYou?: string; // the r= you gave it
+  yourComments?: { text: string; key: string; t: Iso }[]; // what you told its author (Comment on the fix, stack-viewer), oldest first
 }
 
 export interface StackView {

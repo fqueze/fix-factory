@@ -475,10 +475,24 @@ function patchRow(r: RequestState, p: PatchView, ctx: RenderContext): Html {
     trust: item ? trustLine(r, item, ctx) : null,
     ask: item && asks ? askBlock(r, item, ctx, [], controls !== null) : undefined,
     under: bugBoxShown ? bugDraftBox(r, p, back) : null,
-    body: html`${testPlanSection(r, p, back)}${item ? failure(r, item) : null}<h4 class="part">The fix</h4>${item ? investigationHtml(item) : null}${p.effort === undefined ? null : html`<div class="sub">review effort ${p.effort}/5</div>`}${reviewers(p)}${p.deps.map((d) => depLine(r, d))}${controls && !sentence?.ask ? html`<div class="jobctl">${controls}</div>` : null}${reviewBox(r, p, back, p.interdiffFile === undefined ? undefined : ctx.interdiff?.(p))}${
+    body: html`${testPlanSection(r, p, back)}${yourComments(r, p)}${item ? failure(r, item) : null}<h4 class="part">The fix</h4>${item ? investigationHtml(item) : null}${p.effort === undefined ? null : html`<div class="sub">review effort ${p.effort}/5</div>`}${reviewers(p)}${p.deps.map((d) => depLine(r, d))}${controls && !sentence?.ask ? html`<div class="jobctl">${controls}</div>` : null}${reviewBox(r, p, back, p.interdiffFile === undefined ? undefined : ctx.interdiff?.(p))}${
       item ? html`<h4 class="part">What the factory did</h4>${talkBox(r, item, ctx)}${itemJobs(r, item, ctx)}` : null
     }`,
   });
+}
+
+// What you told its author, each with the answer of the run it started (its summary starts with one line per point).
+function yourComments(r: RequestState, p: PatchView): Html | null {
+  if (!p.yourComments?.length) {
+    return null;
+  }
+  const answer = (key: string): Html => {
+    const job = Object.values(r.jobs).findLast((j) => j.purpose?.key === key);
+    if (!job) return html`<span class="sub">not answered yet</span>`;
+    if (job.endedAt === undefined) return html`<span class="working">being answered</span>`;
+    return job.outcome ? html`${md(job.outcome)}` : html`<span class="sub">${job.error ?? "no answer"}</span>`;
+  };
+  return html`<h4 class="part">Your comments</h4>${p.yourComments.map((c) => html`<div class="yourcomment"><div class="said">${md(c.text)}</div><div class="answer">${answer(c.key)}</div></div>`)}`;
 }
 
 // Its test plan for reviewers, as Phabricator will show it: copied, set on its revision with a click (the factory's

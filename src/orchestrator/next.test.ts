@@ -2502,7 +2502,7 @@ describe("9. review comments", () => {
     assert.equal(sc.plan(`review:p-test-a:${job}`).priority, 0);
     // Reviewed against the comments it answers.
     const reviewPlan = sc.plan(`review:p-test-a:${job}`);
-    assert.match(reviewPlan.agent?.vars?.comments ?? "", /It answers the review comments in .*: check each one is really dealt with/);
+    assert.match(String(reviewPlan.agent?.vars?.comments ?? ""), /It answers the review comments in .*: check each one is really dealt with/);
     assert.deepEqual(JSON.parse(reviewPlan.files![0].content).map((c: { id: number }) => c.id), [7]);
     sc.complete(`review:p-test-a:${job}`, { report: ok });
     assert.deepEqual(sc.settle(), [`rewrite-review:root:${job}:v2`]);

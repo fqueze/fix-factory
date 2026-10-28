@@ -71,6 +71,9 @@ export function foldEvents(events: readonly Event[]): RequestState {
       case "split-from":
         s.splitFrom = e.from;
         break;
+      case "comment-sent":
+        if (s.patches[e.patch]) s.patches[e.patch].yourComments = [...(s.patches[e.patch].yourComments ?? []), { text: e.text, key: e.key, t: e.t }];
+        break;
       case "tests-asked":
         s.askedTests = [...new Set([...(s.askedTests ?? []), ...e.tests])];
         break;

@@ -330,3 +330,5 @@ form.inline-tell input { flex: 1; font: inherit; font-size: 12px; padding: 2px 6
 .parts { margin: 4px 0 4px 22px; }
 .part ul { margin: 2px 0 8px; padding-left: 18px; }
 .part li { margin: 1px 0; }
+.yourcomment { border-left: 3px solid var(--border); padding-left: 8px; margin: 4px 0 10px; }
+.yourcomment .answer { margin-top: 4px; }

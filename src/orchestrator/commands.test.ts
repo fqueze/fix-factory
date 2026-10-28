@@ -171,8 +171,12 @@ describe("commands", () => {
     assert.equal(plan.agent?.resume, true);
     assert.match(plan.agent?.message ?? "", /drop the timeout/);
     assert.equal(sc.state().items["i-a"].state, "investigating");
+    // It answers each point with what backs it; the page shows the comment with that answer.
+    assert.match(plan.agent?.message ?? "", /answering each point of it in a line/);
+    assert.deepEqual(sc.state().patches["p-a"].yourComments?.map((x) => [x.text, x.key]), [["drop the timeout", `author:i-a:comment:${c.id}`]]);
     run(sc, cmd({ cmd: "stack-comments", stack: "a", comments: [{ patch: "p-a", text: "nit" }] }));
     assert.deepEqual(executed(sc).at(-1), { ok: false, detail: "the author of test_a.js is running: send it again when it's done" });
+    assert.equal(sc.state().patches["p-a"].yourComments?.length, 1, "not sent, not shown");
   });
 
   it("a global tell-factory creates a request to route, named from its text; one for an unknown request does nothing", () => {
