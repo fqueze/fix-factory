@@ -313,7 +313,8 @@ class Planner {
       const inv = item.investigation ?? null;
       // The version changes with the prompt: an earlier version's session isn't resumed.
       const version = `test-plan:${p.id}:${TEST_PLAN_VERSION}:`;
-      const key = `${version}${shortHash([JSON.stringify([inv, results])]).slice(0, 8)}`;
+      // passes-v1: plans written before told to confirm a push's runs with fx-tests --test are rewritten in their session.
+      const key = `${version}${shortHash([JSON.stringify([inv, results]), "passes-v1"]).slice(0, 8)}`;
       const investigationFile = dataPath(this.config, this.s.id, `test-plan-${p.id}-investigation.json`);
       const pushesFile = dataPath(this.config, this.s.id, `test-plan-${p.id}-pushes.json`);
       const notes = Object.values(inv?.files ?? {});
@@ -332,7 +333,7 @@ class Planner {
           item: item.id,
           cwd: last.cwd,
           files,
-          agent: { sessionId: last.sessionId!, resume: true, message: `Its investigation or its request's try results changed: ${investigationFile} and ${pushesFile} are up to date. Write the test plan again, keeping what you were asked before, then end with the JSON report.` },
+          agent: { sessionId: last.sessionId!, resume: true, message: `Its investigation, its request's try results or your instructions changed: ${investigationFile} and ${pushesFile} are up to date. Say a push shows the test passing only once \`fx-tests try <rev> --all-jobs --test <full path>\` shows its runs passing, with how many; leave out a push you can't confirm, and say nothing about what a tool could or couldn't show. Write the test plan again, keeping what you were asked before, then end with the JSON report.` },
         }));
         continue;
       }
