@@ -2219,7 +2219,7 @@ class Planner {
     const rv = this.want(`reviewers:${st.id}${e}`, () => this.cli("reviewers", "phab.ts", ["reviewers", ...files, "--repo", st.worktree], { cwd: st.worktree, purpose: { stack: st.id } }));
     if (!rv) return undefined;
     const reviewer = this.out<{ suggestions: ReviewerSuggestion[] }>(rv).suggestions[0]?.name;
-    const missing = patches.filter((p) => !/\br=\S/.test(p.title) || names(p).some((n) => unknown.includes(n)));
+    const missing = patches.filter((p) => !/\br=\S/.test(p.title) || names(p).some((n) => unknown.includes(n)) || (p.reviewerFromYou !== undefined && !names(p).includes(p.reviewerFromYou)));
     if (missing.length > 0 && reviewer) {
       // Each patch gets the suggestion for its own files (the find-reviewer skill): a stack's patches can be in
       // unrelated modules.
@@ -2230,7 +2230,7 @@ class Planner {
       const candidates = new Map(
         missing.map((p, i) => {
           const names = this.out<{ suggestions: ReviewerSuggestion[] }>(own[i]!).suggestions.map((x) => x.name);
-          const all = [...(names.length ? names : [reviewer]), ...names.filter((n) => n.startsWith("#") && !n.endsWith("-rotation")).map((n) => `${n}-rotation`)];
+          const all = (names.length ? names : [reviewer]).flatMap((n) => (n.startsWith("#") && !n.endsWith("-rotation") ? [n, `${n}-rotation`] : [n]));
           return [p.id, p.reviewerFromYou ? [p.reviewerFromYou] : all];
         }),
       );

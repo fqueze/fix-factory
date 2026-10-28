@@ -1877,7 +1877,8 @@ describe("review fixes", () => {
     sc.add({ type: "patch", request: ID, patch: id, ...p, title: "Bug 999 - Fix a" });
     reviewersChecked(sc);
     sc.complete("reviewers:root", { output: { files: [], suggestions: [{ name: "#ai-frontend-reviewers", source: "mots" }] } });
-    sc.complete(sc.settle()[0], { output: { files: [], suggestions: [{ name: "#ai-frontend-reviewers", source: "mots" }] } });
+    // Its rotation before mach's next suggestion.
+    sc.complete(sc.settle()[0], { output: { files: [], suggestions: [{ name: "#ai-frontend-reviewers", source: "mots" }, { name: "#firefox-desktop-core-reviewers", source: "mots" }] } });
     sc.complete(sc.settle()[0], { output: { unknown: ["#ai-frontend-reviewers"] } });
     const [rewrite] = sc.settle();
     assert.match(JSON.parse(sc.plan(rewrite).files![0].content)[sha("f")].message, /^Bug 999 - Fix a, r=#ai-frontend-reviewers-rotation\./);
