@@ -1858,8 +1858,29 @@ describe("review fixes", () => {
     sc.complete("reviewers:root", { output: { files: [], suggestions: [{ name: "#gone-reviewers", source: "recent" }] } });
     const [own] = sc.settle();
     sc.complete(own, { output: { files: [], suggestions: [{ name: "#gone-reviewers", source: "recent" }] } });
+    // Its rotation is tried too.
+    const [candidates] = sc.settle();
+    assert.deepEqual(sc.plan(candidates).cli?.args, ["check-reviewers", "#gone-reviewers", "#gone-reviewers-rotation"]);
+    sc.complete(candidates, { output: { unknown: ["#gone-reviewers", "#gone-reviewers-rotation"] } });
     assert.ok(!sc.settle().some((k) => k.startsWith("rewrite-reviewers:")), "no rewrite that can't help");
-    assert.ok(sc.open().includes("reviewers:root"));
+    assert.ok(sc.open().includes("reviewers:root:p-test-a"));
+    // The one you give is used.
+    sc.add({ type: "reviewer-set", request: ID, patch: "p-test-a", reviewer: "smaug" });
+    sc.add({ type: "user-done", request: ID, key: "reviewers:root:p-test-a" });
+    const [rewrite] = sc.settle();
+    assert.match(JSON.parse(sc.plan(rewrite).files![0].content)[sha("f")].message, /^Bug 999 - Fix a, r=smaug\./);
+  });
+
+  it("uses a group's rotation when Phabricator doesn't know the group mach suggests", () => {
+    const sc = submitting();
+    const { deps: _d, review: _r, replyDrafts: _rd, id, ...p } = sc.state().patches["p-test-a"];
+    sc.add({ type: "patch", request: ID, patch: id, ...p, title: "Bug 999 - Fix a" });
+    reviewersChecked(sc);
+    sc.complete("reviewers:root", { output: { files: [], suggestions: [{ name: "#ai-frontend-reviewers", source: "mots" }] } });
+    sc.complete(sc.settle()[0], { output: { files: [], suggestions: [{ name: "#ai-frontend-reviewers", source: "mots" }] } });
+    sc.complete(sc.settle()[0], { output: { unknown: ["#ai-frontend-reviewers"] } });
+    const [rewrite] = sc.settle();
+    assert.match(JSON.parse(sc.plan(rewrite).files![0].content)[sha("f")].message, /^Bug 999 - Fix a, r=#ai-frontend-reviewers-rotation\./);
   });
 });
 
@@ -2255,6 +2276,7 @@ describe("8. submit", () => {
     const [own] = sc.settle();
     assert.deepEqual(sc.plan(own).cli?.args, ["reviewers", "a/test_a.js", "--repo", `/wt/${ID}-root`], "the suggestion for its own files");
     sc.complete(own, { output: { files: [], suggestions: [{ name: "#xpcshell-reviewers", source: "mots" }] } });
+    sc.complete(sc.settle()[0], { output: { unknown: [] } });
     const [rewrite] = sc.settle();
     assert.equal(JSON.parse(sc.plan(rewrite).files![0].content)[sha("f")].message, "Bug 999 - Fix a, r=#xpcshell-reviewers.\n\nBody.\n");
     sc.complete(rewrite, { output: { mapping: { [sha("f")]: sha("9") } } });
@@ -2270,6 +2292,7 @@ describe("8. submit", () => {
     sc.complete("reviewers:root", { output: { files: [], suggestions: [{ name: "#dom-core", source: "mots" }] } });
     const own = sc.settle().find((k) => k.startsWith("reviewers:"))!;
     sc.complete(own, { output: { files: [], suggestions: [] } });
+    sc.complete(sc.settle()[0], { output: { unknown: [] } });
     const [rewrite] = sc.settle();
     assert.match(rewrite, /^rewrite-reviewers:root:/);
     assert.deepEqual(JSON.parse(sc.plan(rewrite).files![0].content), {
@@ -2284,6 +2307,7 @@ describe("8. submit", () => {
     sc.add({ type: "patch", request: ID, patch: id, ...p, title: "Bug 999 - Fix a" });
     sc.complete("reviewers:root", { output: { files: [], suggestions: [{ name: "#dom-core", source: "mots" }] } });
     sc.complete(sc.settle()[0], { output: { files: [], suggestions: [] } });
+    sc.complete(sc.settle()[0], { output: { unknown: [] } });
     const [rewrite] = sc.settle();
     assert.match(rewrite, /^rewrite-reviewers:root:/, "without a suggestion for its own files, the stack's");
     const edits = JSON.parse(sc.plan(rewrite).files![0].content);

@@ -77,6 +77,9 @@ export function flagControls(r: RequestState, n: NeedsUser, ctx: RenderContext):
           : html`<form class="inline cmd" method="post" action="/api/commands">${commandFields([{ cmd: "take-it", request: r.id, item }], back)}<button class="btn small primary">Fix it anyway</button></form><form class="inline cmd" method="post" action="/api/commands">${commandFields([{ cmd: "hand-back", request: r.id, item }], back)}<button class="btn small">Leave it to them</button></form>`;
       break;
     }
+    case "reviewers":
+      controls = n.patch === undefined ? null : html`<form class="inline cmd" method="post" action="/api/commands">${commandFields([{ cmd: "set-reviewer", request: r.id, patch: n.patch }], back)}<input type="text" name="reviewer" required placeholder="A reviewer or #group Phabricator knows"><button class="btn small">Use it</button></form>`;
+      break;
     case "file-bug": {
       const patch = n.patch === undefined ? undefined : r.patches[n.patch];
       controls = patch?.bugDraft

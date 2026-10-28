@@ -2225,13 +2225,29 @@ class Planner {
       // unrelated modules.
       const own = missing.map((p) => this.want(`reviewers:${p.id}:${p.sha}`, () => this.cli("reviewers", "phab.ts", ["reviewers", ...this.patchFiles(p), "--repo", st.worktree], { cwd: st.worktree, purpose: { stack: st.id, patch: p.id } })));
       if (own.some((j) => !j)) return undefined;
-      const suggested = new Map(missing.map((p, i) => [p.id, this.out<{ suggestions: ReviewerSuggestion[] }>(own[i]!).suggestions[0]?.name ?? reviewer]));
-      // mach's suggestion is the name Phabricator doesn't know (a former reviewer, an alias): only you can pick.
-      const stuck = missing.filter((p) => names(p).includes(suggested.get(p.id)!));
-      if (stuck.length) {
-        this.raise(`reviewers:${st.id}`, { action: "Pick a reviewer Phabricator knows", detail: stuck.map((p) => `${p.title}: ${suggested.get(p.id)} is unknown`).join("; ").slice(0, 500), stack: st.id });
-        return undefined;
+      // The first of mach's suggestions Phabricator knows, a group's rotation included (mach may still name a group
+      // renamed to "#x-rotation"); the reviewer you gave first.
+      const candidates = new Map(
+        missing.map((p, i) => {
+          const names = this.out<{ suggestions: ReviewerSuggestion[] }>(own[i]!).suggestions.map((x) => x.name);
+          const all = [...(names.length ? names : [reviewer]), ...names.filter((n) => n.startsWith("#") && !n.endsWith("-rotation")).map((n) => `${n}-rotation`)];
+          return [p.id, p.reviewerFromYou ? [p.reviewerFromYou] : all];
+        }),
+      );
+      const asked = [...new Set([...candidates.values()].flat())].sort();
+      const checked = this.want(`check-reviewers:${st.id}:${shortHash(asked)}`, () => this.cli("check-reviewers", "phab.ts", ["check-reviewers", ...asked], { cwd: st.worktree, purpose: { stack: st.id } }));
+      if (!checked) return undefined;
+      const unknownToo = new Set(this.out<{ unknown: string[] }>(checked).unknown);
+      const suggested = new Map(missing.map((p) => [p.id, candidates.get(p.id)!.find((n) => !unknownToo.has(n))]));
+      // None known (former reviewers, aliases): only you can pick.
+      const stuck = missing.filter((p) => suggested.get(p.id) === undefined);
+      for (const p of missing) {
+        const key = `reviewers:${st.id}:${p.id}`;
+        if (stuck.includes(p)) this.raise(key, { action: "Give a reviewer Phabricator knows", detail: `${p.title.replace(/,\s*r=.*$/, "")}: Phabricator knows none of ${candidates.get(p.id)!.join(", ")}`.slice(0, 500), stack: st.id, patch: p.id, ...(p.item ? { item: p.item } : {}) });
+        else this.clear(key);
       }
+      this.clear(`reviewers:${st.id}`);
+      if (stuck.length) return undefined;
       const messages = missing.map((p) => ({ p, msg: this.sourceMessage(p) }));
       if (messages.some((m) => m.msg === undefined)) return undefined;
       const titles = Object.fromEntries(missing.map((p) => [p.id, `${p.title.replace(/,\s*r=.*$/, "").replace(/\.\s*$/, "")}, r=${suggested.get(p.id)}.`]));

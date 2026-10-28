@@ -180,6 +180,7 @@ export type Event =
   // What a planned push is for, against the stack's previous push: its regressions, and the patch that claims each fix.
   | (EventBase & { type: "try-context"; push: PushId; since?: PushId; regressions?: Regression[]; scope?: PushScope })
   | (EventBase & { type: "test-plan-sent"; patch: PatchId; revision: number; text: string })
+  | (EventBase & { type: "reviewer-set"; patch: PatchId; reviewer: string }) // the r= you gave, when Phabricator knew none of mach's suggestions
   | (EventBase & { type: "hand-off"; job: JobId; items: ItemId[]; text: string }) // the prompt for your session taking them over
   | (EventBase & { type: "dep"; dep: Dep })
   | (EventBase & { type: "dep-removed"; patch: PatchId; needs: PatchId | string })
@@ -229,6 +230,7 @@ export type Command =
   | (CommandBase & { cmd: "comment-fix"; patch: PatchId; text: string })
   | (CommandBase & { cmd: "set-test-plan"; patch: PatchId; text: string }) // on its revision
   | (CommandBase & { cmd: "revise-test-plan"; patch: PatchId; text: string }) // what its agent should change
+  | (CommandBase & { cmd: "set-reviewer"; patch: PatchId; reviewer: string }) // its r=, e.g. "#ai-frontend-reviewers-rotation"
   | (CommandBase & { cmd: "tell-factory"; text: string })
   | (CommandBase & { cmd: "reply-recovery"; job: JobId; text: string })
   | (CommandBase & { cmd: "start-now" })
@@ -357,6 +359,7 @@ export interface PatchView {
   replyDrafts: { commentId: number; text: string }[];
   testPlan?: string; // for its revision's Test Plan field: how the fix was shown to work, a few lines
   testPlanSent?: { revision: number; text: string; t: Iso }; // what you set on its revision
+  reviewerFromYou?: string; // the r= you gave it
 }
 
 export interface StackView {

@@ -264,6 +264,13 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
       done(true);
       break;
     }
+    case "set-reviewer": {
+      const st = Object.values(s.stacks).find((x) => x.order.includes(c.patch));
+      ev({ type: "reviewer-set", patch: c.patch, reviewer: c.reviewer.trim() });
+      if (st) for (const n of s.needsUser.filter((x) => x.key === `reviewers:${st.id}:${c.patch}`)) ev({ type: "user-done", key: n.key });
+      done(true);
+      break;
+    }
     case "poll-phab":
       ev({ type: "poll-requested" });
       done(true);
