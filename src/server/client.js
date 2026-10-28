@@ -297,7 +297,9 @@
     var form = event.target;
     if (!form.classList.contains("cmd")) return;
     event.preventDefault();
+    // A copy button's form says nothing more: the button says "Copied".
     var button = event.submitter || form.querySelector("button");
+    if (button && button.dataset.copy) button = null;
     if (button) button.disabled = true;
     fetch(form.action, {
       method: "POST",
@@ -317,15 +319,29 @@
         var dismissed = /"cmd":"dismiss"/.test((form.querySelector("input[name=command]") || {}).value || "");
         var flag = dismissed && form.closest("[data-key]");
         if (flag) flag.remove();
-        else flash(form, "Sent", "flash");
+        else if (button) say(button, "Sent", 3000);
       })
       .catch(function (e) {
-        flash(form, e.message, "error");
-      })
-      .finally(function () {
         if (button) button.disabled = false;
+        flash(form, e.message, "error");
       });
   });
+
+  // The button says what happened ("Sent", "Copied"), disabled and keeping its width, until the page re-renders
+  // it or a few seconds pass.
+  function say(button, text, ms) {
+    if (button.dataset.label === undefined) button.dataset.label = button.textContent;
+    button.style.minWidth = button.offsetWidth + "px";
+    button.textContent = text;
+    button.disabled = true;
+    clearTimeout(button.sayTimer);
+    button.sayTimer = setTimeout(function () {
+      button.textContent = button.dataset.label;
+      delete button.dataset.label;
+      button.style.minWidth = "";
+      button.disabled = false;
+    }, ms);
+  }
 
   function flash(form, text, cls) {
     var span = document.createElement("span");
@@ -348,11 +364,7 @@
     var form = button.closest("form.cmd");
     if (form) form.requestSubmit();
     var done = function () {
-      var label = button.textContent;
-      button.textContent = "Copied";
-      setTimeout(function () {
-        button.textContent = label;
-      }, 1200);
+      say(button, "Copied", 1500);
     };
     if (navigator.clipboard && window.isSecureContext) {
       navigator.clipboard.writeText(area.value).then(done);
