@@ -23,7 +23,7 @@ import { appendEventSafe } from "./event-data.ts";
 import { handleWatchLines } from "./handlers.ts";
 import { CANCELLED, next, requestSummary, type Action, type Ctx } from "./next.ts";
 import { DEFAULT_PRIORITY, reportPath, shortHash, type JobPlan } from "./plan.ts";
-import { defaultCliCommand, finishJob, jsonLines, readOut, readReport, startPlan, type RunnerDeps } from "./runner.ts";
+import { commitExists, defaultCliCommand, finishJob, jsonLines, readOut, readReport, startPlan, type RunnerDeps } from "./runner.ts";
 import { buildView, type JobRecord, type View } from "./view.ts";
 
 export const TICK_MS = 30_000;
@@ -36,6 +36,7 @@ export interface OrchestratorOptions {
   codeVersion: string;
   factoryRoot?: string;
   cliCommand?: (tool: string) => string[];
+  commitExists?: (cwd: string, sha: string) => boolean;
   now?: () => number;
   dryRun?: boolean;
 }
@@ -70,6 +71,7 @@ export class Orchestrator {
       factoryRoot,
       codeVersion: opts.codeVersion,
       cliCommand: opts.cliCommand ?? defaultCliCommand(factoryRoot),
+      commitExists: opts.commitExists ?? commitExists,
     };
   }
 

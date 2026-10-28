@@ -137,6 +137,8 @@ export class Scenario {
   }
 
   // Finishes the running job of a key: successful ones go through the handlers.
+  commitExists?: (cwd: string, sha: string) => boolean;
+
   complete(key: string, result: { output?: unknown; report?: unknown; exitCode?: number; error?: string } = {}): JobId {
     const job = this.running(key);
     const rec = this.view().jobs.find((j) => j.job === job)!;
@@ -144,7 +146,7 @@ export class Scenario {
     if (result.report !== undefined) this.reports.set(job, result.report);
     const exitCode = result.exitCode ?? 0;
     if (exitCode === 0 && result.error === undefined) {
-      const h = handleFinished({ state: this.state(), view: this.view(), config, job: rec, output: this.outputs.get(job) ?? "", report: result.report, reportOf: (j) => this.reports.get(j), outputOf: (j) => this.outputs.get(j) ?? "" });
+      const h = handleFinished({ state: this.state(), view: this.view(), config, job: rec, output: this.outputs.get(job) ?? "", report: result.report, reportOf: (j) => this.reports.get(j), outputOf: (j) => this.outputs.get(j) ?? "", ...(this.commitExists ? { commitExists: this.commitExists } : {}) });
       if (result.report !== undefined) this.add({ type: "agent-report", request: ID, job, ...(rec.item ? { item: rec.item } : {}), prompt: rec.name, report: result.report });
       for (const e of h.events) this.add(e);
       this.commands.push(...(h.commands ?? []));

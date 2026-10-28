@@ -51,6 +51,7 @@ export interface HandlerInput {
   report?: unknown; // validated, for agents
   reportOf: (job: JobId) => unknown; // reports of earlier agent jobs
   outputOf: (job: JobId) => string; // out.log of earlier jobs
+  commitExists?: (cwd: string, sha: string) => boolean; // an author's reported commits are checked against its worktree
 }
 
 // A report that matches its schema but not what the agent was asked: the runner records it as an
@@ -361,6 +362,9 @@ function authorReport(input: HandlerInput, ev: <T extends EventInput["type"]>(ty
   switch (job.name) {
     case "investigate-and-fix": {
       const r = input.report as InvestigateReport;
+      // An agent may write a sha from memory, its start right and the rest made up.
+      const missing = input.commitExists ? r.commits.filter((c) => !input.commitExists!(job.cwd, c)) : [];
+      if (missing.length) throw new InvalidReport(`${missing.join(", ")} ${missing.length === 1 ? "isn't a commit" : "aren't commits"} in ${job.cwd}: report each commit's sha exactly as \`git log --format=%H\` prints it.`);
       if (r.state === "blocked") {
         blocked(r.summary);
         return;

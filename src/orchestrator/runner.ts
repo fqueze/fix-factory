@@ -1,6 +1,7 @@
 // Starts planned jobs and records finished ones. The side-effecting half of the orchestrator:
 // writes the plan's files, renders prompts, starts the detached job, and turns its output into
 // events (src/orchestrator/handlers.ts says what they mean).
+import { spawnSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { appendFeedback, buildAgentCommand, parseStreamJson, promptVersion, renderPrompt, validateReport, type JsonSchema } from "../agents/run.ts";
@@ -19,6 +20,7 @@ export interface RunnerDeps {
   factoryRoot: string; // prompts/, schemas/, src/cli/
   codeVersion: string;
   cliCommand: (tool: string) => string[]; // the command prefix of a CLI; tests replace it with fixtures
+  commitExists: (cwd: string, sha: string) => boolean; // tests' fake agents report commits no repository has
 }
 
 export function defaultCliCommand(factoryRoot: string): (tool: string) => string[] {
@@ -118,6 +120,10 @@ function errTail(config: FactoryConfig, job: JobId): string {
   }
 }
 
+export function commitExists(cwd: string, sha: string): boolean {
+  return spawnSync("git", ["-C", cwd, "cat-file", "-e", `${sha}^{commit}`]).status === 0;
+}
+
 export function readReport(config: Pick<FactoryConfig, "stateDir">, request: string, job: JobId): unknown {
   return JSON.parse(readFileSync(reportPath(config, request, job), "utf8"));
 }
@@ -134,7 +140,7 @@ export function finishJob(deps: RunnerDeps, s: RequestState, view: View, rec: Jo
   // first: events recorded only when the handler accepts the result (an agent's report).
   const handle = (report?: unknown, first: EventInput[] = []) => {
     try {
-      const r = handleFinished({ state: s, view, config, job: rec, output: out, report, reportOf: (job) => readReport(config, s.id, job), outputOf: (job) => readOut(config, job) });
+      const r = handleFinished({ state: s, view, config, job: rec, output: out, report, reportOf: (job) => readReport(config, s.id, job), outputOf: (job) => readOut(config, job), commitExists: deps.commitExists });
       writeFiles(r.files ?? []);
       append([...first, ...r.events]);
       // Their ids derive from the job, so a replay after a crash executes them once.

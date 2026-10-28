@@ -1401,6 +1401,19 @@ describe("4b. try repro", () => {
   });
 });
 
+describe("4. author reports", () => {
+  it("a reported commit its worktree doesn't have (a sha half made up) is an invalid report", () => {
+    const sc = workList([group("ka", "a/test_a.js", "boom")]);
+    investigating(sc, "i-test-a");
+    const real = sha("1");
+    sc.commitExists = (_cwd, c) => c === real;
+    const bad = sha("1").slice(0, 12) + "0".repeat(28);
+    const report = { state: "fix verified locally", summary: "s", cause: "c", verification: "v", commits: [bad], landsAfter: [], feedback: [] };
+    const key = sc.view().jobs.find((j) => !j.end && j.purpose.what === "author")!.purpose.key;
+    assert.throws(() => sc.complete(key, { report }), (e: Error) => e instanceof InvalidReport && e.message.startsWith(`${bad} isn't a commit in `));
+  });
+});
+
 describe("5. stack", () => {
   it("assembles a settled folder, finds deps and efforts, orders, reviews the stack and summarizes it", () => {
     const sc = twoReviewed();

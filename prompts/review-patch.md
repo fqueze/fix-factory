@@ -16,4 +16,4 @@ Look for:
 - a fix not verified by the checks it claims;
 - several citations for one claim that all trace back to the same source.
 
-Report each finding as must-fix or nit, with file and line, or return `ok`. Must-fix means the patch can't land as it is; everything else is a nit, and nits don't send the patch back. `Bug XXXXXXX` is expected at this stage (bugs are filed later): never report it.
+Don't ask for try runs: the whole stack goes to try after this review, on the configs its planner picks; a fix only a try run can show (a platform the author doesn't have) is a nit saying which configs that push must cover. Report each finding as must-fix or nit, with file and line, or return `ok`. Must-fix means the patch can't land as it is; everything else is a nit, and nits don't send the patch back. `Bug XXXXXXX` is expected at this stage (bugs are filed later): never report it.

@@ -39,6 +39,8 @@ export function setup(maxAgents = 3) {
     configPath: join(root, "factory.config.json"),
     codeVersion: "test",
     cliCommand: (tool) => [process.execPath, join(fixtures, "fake-cli.js"), join(root, "cli.json"), tool],
+    // The fake agents' commits are in no repository.
+    commitExists: () => true,
   });
   return { root, config, orchestrator };
 }
