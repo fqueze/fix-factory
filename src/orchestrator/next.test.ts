@@ -887,8 +887,9 @@ describe("4. investigate and fix", () => {
         assert.match(sc.plan(author).agent?.message ?? "", /\[must-fix\] a.js:2 guard on the victim's side/);
         assert.equal(sc.state().items["i-test-a"].state, "review findings");
       } else {
-        assert.deepEqual(started, []);
-        assert.equal(sc.state().items["i-test-a"].state, "blocked");
+        // It goes on into the stack; its findings wait for you on its row.
+        assert.ok(!started.some((k) => k.startsWith("author:")));
+        assert.equal(sc.state().items["i-test-a"].state, "reviewed");
         assert.equal(sc.state().needsUser[0].action, "No ok after 3 critical review rounds");
       }
     }
@@ -940,7 +941,7 @@ describe("4. investigate and fix", () => {
       const { job } = round(n);
       author = `author:i-test-a:review:${job}`;
     }
-    assert.equal(sc.state().items["i-test-a"].state, "blocked");
+    assert.equal(sc.state().items["i-test-a"].state, "reviewed");
     // What continue does (commands.ts): the author resumed with reason "continue".
     const plan = resumeAuthorPlan(ID, sc.view(), "i-test-a", "continue", { message: "keep the wait" }, "investigating");
     assert.ok(plan && plan !== "busy");

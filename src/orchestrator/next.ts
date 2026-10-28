@@ -1312,8 +1312,10 @@ class Planner {
       if (this.view.done.has(`failed:${last}`)) {
         return;
       }
+      // The patch goes on into the stack: its findings wait for you on its row, as a reviewer's comments would,
+      // without holding the stack (and its try push, which may be what they ask for) back.
       this.raise(`failed:${last}`, { action: `No ok after ${REVIEW_ROUNDS} critical review rounds`, detail: mustFix.map((f) => f.text).join("; ").slice(0, 500), job: last, item: item.id });
-      this.setItem(item.id, "blocked", "critical review");
+      reviewed();
       return;
     }
     this.resumeAuthor(item.id, key, "review", `A critical reviewer found these problems in your patch:\n${list}\n\nAddress them by amending your commit, then end with the JSON report again. Must-fix findings have to be fixed; where you disagree with one, say why in the report's summary. For nits, address them or say in one line why not.`, "review findings");
