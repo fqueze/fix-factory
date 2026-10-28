@@ -291,6 +291,8 @@ function plannedText(c: PlannedCommand, r: RequestState): string {
       return `hand ${c.items.map((i) => itemLabel(r, i)).join(", ")} over to a session of your own, writing its prompt`;
     case "split-request":
       return `split this request into ${c.parts.length} requests, archiving it`;
+    case "fix-tests":
+      return `fix these failures too, though already on central: ${c.tests.map((t) => t.split("/").pop()).join(", ")}`;
     case "move-groups":
       return `move ${c.groups.map((g) => itemLabel(r, g.item)).join(", ")} to ${c.to}`;
   }

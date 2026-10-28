@@ -375,6 +375,33 @@
               "reason"
             ],
             "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "cmd": {
+                "type": "string",
+                "enum": [
+                  "fix-tests"
+                ]
+              },
+              "tests": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Full test paths, as in the triage."
+              },
+              "reason": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "cmd",
+              "tests",
+              "reason"
+            ],
+            "additionalProperties": false
           }
         ]
       }

@@ -287,6 +287,7 @@ class Planner {
     this.stacks();
     this.bugEdits();
     this.verify();
+    this.askedTests();
     this.skipRemoval();
     this.metaDraft();
     this.metaBug();
@@ -908,6 +909,24 @@ class Planner {
   }
 
   // New and unexplained failures become work items; the rest is noted by the triage handler.
+  // Failures already on central are only noted, unless you asked for them to be fixed too: a group each, from the
+  // triage of any of its pushes, and the request goes back to fixing (the stack, its push and its submission
+  // follow as before).
+  private askedTests(): void {
+    if (!this.s.askedTests?.length || this.s.step === "done") return;
+    const tests = this.knownTests();
+    let created = false;
+    for (const j of this.view.jobs.filter((x) => x.name === "triage-try" && succeeded(x))) {
+      for (const c of this.rep<TriageTryReport>(j).cells) {
+        if (!c.test || tests.has(c.test) || !this.s.askedTests.some((t) => c.test!.endsWith(t) || t.endsWith(c.test!))) continue;
+        tests.add(c.test);
+        created = true;
+        this.createItem({ message: c.evidence.slice(0, 300), tests: [c.test], configs: c.config ? [c.config] : [], ...(c.taskId ? { taskIds: [c.taskId] } : {}) });
+      }
+    }
+    if (created && at(this.s.step) > at("investigate and fix")) this.setStep("investigate and fix");
+  }
+
   private itemsFromTriage(report: TriageTryReport): void {
     const tests = this.knownTests();
     for (const c of report.cells) {
@@ -1967,15 +1986,17 @@ class Planner {
         }
       }
     }
-    if (this.s.step !== "verify on try") return;
-    // Every verification push's failures are routed, also those of a stack being redone: its
-    // other authors still need to hear about theirs.
+    // Every verification push's failures are routed, also those of a stack being redone (its other authors still
+    // need to hear about theirs), and those of a push that finished after the request moved on (you submitted
+    // while it ran).
+    if (at(this.s.step) < at("verify on try") || this.s.step === "done") return;
     for (const push of Object.values(this.s.pushes)) {
       const stack = this.view.byKey.get(`dry-run:${push.id}`)?.[0].purpose.stack;
       // Pushes made before this request (a split copies them) are evidence, routed already where they were made.
       if ((this.view.pushedAt.get(push.id) ?? Infinity) < Date.parse(this.s.createdAt)) continue;
       if (stack && this.s.stacks[stack] && push.rev) this.routeTryFailures(push.id, this.s.stacks[stack].order.map((pid) => this.s.patches[pid]));
     }
+    if (this.s.step !== "verify on try") return;
     // An un-skip push may still add groups to the stack: verifying it waits for its results.
     if (this.signalPushes().some((id) => id !== "initial" && this.s.pushes[id].result === undefined)) return;
     let green = this.stackInfos.size > 0;

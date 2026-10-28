@@ -71,6 +71,9 @@ export function foldEvents(events: readonly Event[]): RequestState {
       case "split-from":
         s.splitFrom = e.from;
         break;
+      case "tests-asked":
+        s.askedTests = [...new Set([...(s.askedTests ?? []), ...e.tests])];
+        break;
       case "meta-draft-asked":
         s.metaDraftAsked = true;
         break;

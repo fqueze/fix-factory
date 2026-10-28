@@ -272,6 +272,10 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
       done(true);
       break;
     }
+    case "fix-tests":
+      ev({ type: "tests-asked", tests: c.tests });
+      done(true, c.reason);
+      break;
     case "draft-meta-bug":
       ev({ type: "meta-draft-asked" });
       done(true);
@@ -553,7 +557,7 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
   return effects;
 }
 
-const PLANNED = new Set<string>(["retry-job", "cancel-job", "resume-agent", "start-agent", "set-state", "redo-step", "edit-config", "shell", "hand-off", "split-request", "move-groups"] satisfies PlannedCommand["cmd"][]);
+const PLANNED = new Set<string>(["retry-job", "cancel-job", "resume-agent", "start-agent", "set-state", "redo-step", "edit-config", "shell", "hand-off", "split-request", "move-groups", "fix-tests"] satisfies PlannedCommand["cmd"][]);
 
 export const STOPPED = "stopped by you";
 

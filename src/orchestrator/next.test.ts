@@ -1742,6 +1742,33 @@ describe("6. verify on try", () => {
     assert.equal(sc.state().step, "meta bug");
   });
 
+  it("a failure already on central becomes a group when you ask to fix it too, and the request goes back to fixing", () => {
+    const sc = stacked();
+    const planKey = sc.view().jobs.find((j) => j.purpose.what === "plan-pushes")!.purpose.key;
+    sc.complete(planKey, { report: { pushes: [{ purpose: "verify", tryArgs: ["fuzzy", "-q", "x"], rebuild: 5 }], feedback: [] } });
+    const [dry] = sc.settle();
+    const push = sc.purpose(dry).push!;
+    sc.complete(dry, { output: { command: ["./mach", "try", "fuzzy", "-q", "x"], taskCount: 5, tasks: [], tryTaskConfig: {}, commits: [], warnings: [] } });
+    sc.add({ type: "user-done", request: ID, key: `approve-push:${push}` });
+    sc.settle();
+    sc.complete(`push:${push}`, { output: { rev: "fed", landoJobId: 1, treeherderUrl: "t" } });
+    sc.settle();
+    // You moved on (submitted) while it ran: its failures are still triaged.
+    sc.add({ type: "step", request: ID, step: "review comments" });
+    sc.add({ type: "try-finished", request: ID, push, result: "failures", summary: "s" });
+    sc.settle();
+    sc.complete(`try-table:${push}:final`, { output: table([{ test: "z/test_z.js", config: "linux", result: "fail", failures: ["zap"], taskIds: ["T2"] }]) });
+    sc.settle();
+    sc.complete(`triage:${push}:final:v2`, { report: { cells: [{ test: "z/test_z.js", config: "linux", verdict: "pre-existing", evidence: "fails on central too" }], feedback: [] } });
+    sc.settle();
+    assert.ok(!Object.values(sc.state().items).some((i) => i.group.tests.includes("z/test_z.js")), "only noted");
+    sc.add({ type: "tests-asked", request: ID, tests: ["z/test_z.js"] });
+    sc.settle();
+    const item = Object.values(sc.state().items).find((i) => i.group.tests.includes("z/test_z.js"));
+    assert.equal(item?.group.message, "fails on central too");
+    assert.equal(sc.state().step, "investigate and fix");
+  });
+
   it("moves to the meta bug once every push is green", () => {
     const sc = stacked();
     const planKey = sc.view().jobs.find((j) => j.purpose.what === "plan-pushes")!.purpose.key;

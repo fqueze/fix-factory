@@ -92,6 +92,7 @@ const SPECS: Record<Command["cmd"], Record<string, Field>> = {
   "hand-off": { items: "string[]", reason: "string" },
   "split-request": { parts: "parts", reason: "string" },
   "move-groups": { to: "string", groups: "groups", reason: "string" },
+  "fix-tests": { tests: "string[]", reason: "string" },
   "accept-review": { item: "string" },
   "allow-push": { item: "string" },
   continue: { item: "string", text: "string" },
@@ -215,7 +216,7 @@ export function validateCommand(input: unknown, getRequest: (id: string) => Requ
   return { ok: true, command: out as unknown as CommandInput };
 }
 
-const PLANNED = new Set<string>(["retry-job", "cancel-job", "resume-agent", "start-agent", "set-state", "redo-step", "edit-config", "shell", "hand-off", "split-request", "move-groups"] satisfies PlannedCommand["cmd"][]);
+const PLANNED = new Set<string>(["retry-job", "cancel-job", "resume-agent", "start-agent", "set-state", "redo-step", "edit-config", "shell", "hand-off", "split-request", "move-groups", "fix-tests"] satisfies PlannedCommand["cmd"][]);
 
 function project(c: object, spec: Record<string, Field>): Record<string, unknown> {
   const o = c as Record<string, unknown>;
