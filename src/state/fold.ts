@@ -325,8 +325,13 @@ export function foldEvents(events: readonly Event[]): RequestState {
         }
         break;
       case "recovery-plan":
-        // Splits planned on 2026-10-28 listed each part's groups without saying why.
-        const plan = e.plan.map((c) => (c.cmd === "split-request" ? { ...c, parts: c.parts.map((p) => ("items" in p ? { title: p.title, groups: (p.items as string[]).map((item) => ({ item, why: "" })) } : p)) } : c));
+        // Splits planned on 2026-10-28 listed each part's groups, and said why in their reason, a line per group.
+        const legacy = (c: { parts: object[]; reason: string }) => {
+          const why = new Map(c.reason.split("\n").map((l) => /^(i-[^:\s]+): (.*)$/.exec(l)).filter((m) => m !== null).map((m) => [m[1], m[2]]));
+          const parts = (c.parts as { title: string; items: string[] }[]).map((p) => ({ title: p.title, groups: p.items.map((item) => ({ item, why: why.get(item) ?? "" })) }));
+          return { cmd: "split-request" as const, parts, reason: "" };
+        };
+        const plan = e.plan.map((c) => (c.cmd === "split-request" && c.parts.some((p) => "items" in p) ? legacy(c) : c));
         s.recoveryPlans.push({ job: e.job, text: e.text, ...(e.answer ? { answer: e.answer } : {}), plan, cannotDo: e.cannotDo, questions: e.questions, t: e.t });
         break;
       case "note":

@@ -352,12 +352,19 @@ function shortLabel(c: PlannedCommand, r: RequestState): Html {
   }
 }
 
+// A group by its test, or its first test and how many others: a folder doesn't tell groups apart.
+function groupName(r: RequestState, item: string): string {
+  const tests = r.items[item]?.group.tests ?? [];
+  const first = tests[0]?.split("/").pop() ?? item;
+  return tests.length > 1 ? `${first} and ${plural(tests.length - 1, "other test")}` : first;
+}
+
 // A split's parts, each with its groups and why they go there.
 function splitParts(c: PlannedCommand, r: RequestState): Html | null {
   if (c.cmd !== "split-request") {
     return null;
   }
-  return html`<div class="parts">${c.parts.map((p) => html`<div class="part"><b>${p.title}</b> <span class="sub">${plural(p.groups.length, "group")}</span><ul>${p.groups.map((g) => html`<li>${itemLabel(r, g.item)} <span class="reason">${g.why}</span></li>`)}</ul></div>`)}</div>`;
+  return html`<div class="parts">${c.parts.map((p) => html`<div class="part"><b>${p.title}</b> <span class="sub">${plural(p.groups.length, "group")}</span><ul>${p.groups.map((g) => html`<li>${groupName(r, g.item)} <span class="reason">${g.why}</span></li>`)}</ul></div>`)}</div>`;
 }
 
 function instructions(c: PlannedCommand, r: RequestState): string | undefined {

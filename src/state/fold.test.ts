@@ -179,6 +179,13 @@ test("patches: sentSha is the commit their revision showed up on, kept by later 
   assert.equal(fold(...events, ev({ type: "submit-copied", stack: "s1" }), patch("p1", "e", 5)).patches.p1.sentSha, "c");
 });
 
+test("a split planned before groups said why gets each group's line of its reason", () => {
+  const s = fold(
+    ev({ type: "recovery-plan", job: "j-r", text: "split it", plan: [{ cmd: "split-request", parts: [{ title: "A", items: ["i-a"] }, { title: "B", items: ["i-b"] }], reason: "i-a: removes a skip-if.\ni-b: no skip-if." } as never], cannotDo: [], questions: [] }),
+  );
+  assert.deepEqual(s.recoveryPlans[0].plan[0], { cmd: "split-request", parts: [{ title: "A", groups: [{ item: "i-a", why: "removes a skip-if." }] }, { title: "B", groups: [{ item: "i-b", why: "no skip-if." }] }], reason: "" });
+});
+
 test("test plans: code in link text, which Phabricator doesn't render, becomes plain link text", () => {
   const s = fold(
     ev({ type: "patch", patch: "p1", sha: "a", worktree: "/wt", title: "t", bug: 1 }),
