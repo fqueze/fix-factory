@@ -2172,11 +2172,21 @@ class Planner {
         summary: inv?.summary ?? (item?.lastReport?.report as { summary?: string } | undefined)?.summary,
       };
     });
-    this.wantAgent(`meta-draft:${st.id}:${h}`, "meta-draft", "write-meta-bug", { ...this.metaSubject(st), stackFile: file }, {
-      cwd: st.worktree,
-      files: [{ path: file, content: JSON.stringify(patches, null, 2) + "\n" }],
-      purpose: { stack: st.id, draft },
-    });
+    const files = [{ path: file, content: JSON.stringify(patches, null, 2) + "\n" }];
+    // The session that wrote it, which keeps what you asked of it.
+    const last = this.view.jobs.findLast((j) => j.purpose.what === "meta-draft" && j.purpose.stack === st.id && j.sessionId && succeeded(j));
+    if (last) {
+      this.want(`meta-draft:${st.id}:${h}`, () => ({
+        purpose: { key: "", what: "meta-draft", stack: st.id, draft },
+        kind: "agent",
+        name: "write-meta-bug",
+        cwd: last.cwd,
+        files,
+        agent: { sessionId: last.sessionId!, resume: true, message: `The stack changed: ${file} has its patches now. Write the description again, keeping what the user asked of you before, then end with the JSON report again.` },
+      }));
+      return;
+    }
+    this.wantAgent(`meta-draft:${st.id}:${h}`, "meta-draft", "write-meta-bug", { ...this.metaSubject(st), stackFile: file }, { cwd: st.worktree, files, purpose: { stack: st.id, draft } });
   }
 
   // A burndown's meta bug is about its folder, with its dashboard; any other request's about what it asked, and its

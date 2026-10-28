@@ -585,6 +585,7 @@ export interface PriorArtVerdictReport {
 export interface WriteMetaBugReport {
   description: string;
   summary?: string; // when the request isn't a burndown
+  answer?: string; // after your comment: what it changed, or why not
   feedback: Feedback[];
 }
 

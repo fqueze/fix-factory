@@ -576,7 +576,7 @@ describe("one fixture per step of docs/MVP.md", () => {
 
     const r = structuredClone(source.getRequest("r-20261010-xpcshell-cwd")!);
     r.jobs["j-revise"] = { job: "j-revise", kind: "agent", name: "revise-bug-draft", purpose: { key: "revise-draft:p-copydir:c-1", what: "revise-draft", patch: "p-copydir", reason: "use `backticks`" }, startedAt: "2026-10-15T08:00:00.000Z", endedAt: "2026-10-15T08:00:06.000Z", exitCode: 0, outcome: "Which functions?" } as RequestState["jobs"][string];
-    assert.match(rowOf(renderRequest(r, ctx, true).value, "patch-p-copydir"), /<div class="revisions"><div class="sub">Revised after your comment “use `backticks`” · [^<]*<div class="answer">It answered: Which functions\?<\/div>/);
+    assert.match(rowOf(renderRequest(r, ctx, true).value, "patch-p-copydir"), /<div class="revisions"><div class="sub">Revised after your comment “use `backticks`” · [^<]*<div class="answer"><b>It answered:<\/b> <div class="md"><p>Which functions\?<\/p><\/div><\/div>/);
   });
   it("5. stack: patches in stack order, deps, effort and value", () => {
     const h = expanded("r-20261010-xpcshell-cwd");

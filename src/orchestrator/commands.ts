@@ -186,6 +186,26 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
         done(false, "no draft to revise");
         break;
       }
+      // The meta bug's agent, which knows the stack and works in its worktree, rather than one that sees the text.
+      const meta = c.patch === "meta" ? view.jobs.findLast((j) => j.purpose.what === "meta-draft" && j.sessionId && j.end) : undefined;
+      if (meta) {
+        effects.push({
+          type: "start",
+          plan: {
+            purpose: { key: `meta-draft:${meta.purpose.stack}:revise:${c.id}`, what: "meta-draft", stack: meta.purpose.stack, draft: { ...draft, description: "" }, reason: c.text },
+            kind: "agent",
+            name: "write-meta-bug",
+            cwd: meta.cwd,
+            agent: {
+              sessionId: meta.sessionId!,
+              resume: true,
+              message: `The user comments on the meta bug draft:\n${c.text}\n\nDo what they ask. Look up what you need yourself: \`git log\` and \`git blame\` here, searchfox-cli, Bugzilla's REST API with curl (https://bugzilla.mozilla.org/rest/bug?...). Never ask them for something you can find. Then end with the JSON report again, saying in \`answer\` what you changed, and for what you didn't, why and what you checked.`,
+            },
+          },
+        });
+        done(true);
+        break;
+      }
       effects.push({
         type: "start",
         plan: {

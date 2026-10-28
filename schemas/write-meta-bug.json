@@ -9,6 +9,10 @@
       "type": "string",
       "description": "Only when asked: the meta bug's summary, \"[meta] \u2026\"."
     },
+    "answer": {
+      "type": "string",
+      "description": "Only when revising it after the user's comment: what you changed, and for what you didn't, why and what you checked."
+    },
     "feedback": {
       "type": "array",
       "description": "Problems with the tools or inputs you used, one entry per problem.",

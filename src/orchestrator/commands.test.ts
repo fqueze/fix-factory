@@ -162,6 +162,18 @@ describe("commands", () => {
     assert.equal(sc.state().patches["p-a"].bugDraft?.component, "DOM: Events");
   });
 
+  it("a comment on the meta bug draft goes to the session that wrote it, which looks up what it needs", () => {
+    const sc = withPatch();
+    sc.startJob({ purpose: { key: "meta-draft:root:h", what: "meta-draft", stack: "root" }, kind: "agent", name: "write-meta-bug", cwd: "/wt/root", agent: { sessionId: "s-meta", resume: false, vars: { subject: "s", worktree: "/wt/root", stackFile: "f", overall: "o", summary: "" } } });
+    sc.complete("meta-draft:root:h", { report: { description: "d", summary: "[meta] x", feedback: [] } });
+    sc.add({ type: "meta-bug", request: ID, bug: null, draft: { product: "Core", component: "DOM", summary: "[meta] x", description: "d" } });
+    const c = cmd({ cmd: "comment-bug-draft", patch: "meta", text: "reference the bugs that added the standalone jobs" });
+    run(sc, c);
+    const plan = sc.plan(`meta-draft:root:revise:${c.id}`);
+    assert.deepEqual([plan.name, plan.agent?.sessionId, plan.agent?.resume, plan.cwd], ["write-meta-bug", "s-meta", true, "/wt/root"]);
+    assert.match(plan.agent?.message ?? "", /reference the bugs that added the standalone jobs[\s\S]*Never ask them for something you can find/);
+  });
+
   it("comment-fix and stack-comments resume the patch's author, unless it's running", () => {
     const sc = withPatch();
     const c = cmd({ cmd: "comment-fix", patch: "p-a", text: "drop the timeout" });

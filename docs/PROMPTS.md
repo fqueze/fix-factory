@@ -137,7 +137,7 @@ Don't ask for try runs: the whole stack goes to try after this review, on the co
 sonnet · 4. Investigate and fix, 7. Meta bug · inputs: `draft`, `comments`
 
 ```
-Revise this bug draft according to the user's comments. Always make it follow the bug-filing skill's conventions: code identifiers (functions, classes, prefs, files) in backticks, for a test failure a link to https://tests.firefox.dev/test.html?test=<path>, and a bug type. If the comments are unclear, apply only these conventions and ask in `answer` what you need from the user. Change nothing else, and say in `answer` what you changed. Draft:
+Revise this bug draft as the user's comments ask. Look up what you need yourself (searchfox-cli for full file paths, Bugzilla's REST API with curl for bugs); never ask the user for something you can find. Always make it follow the bug-filing skill's conventions: code identifiers (functions, classes, prefs, files) in backticks, for a test failure a link to https://tests.firefox.dev/test.html?test=<full path>, and a bug type. Change nothing they didn't ask for, and say in `answer` what you changed, and for what you didn't, why and what you checked. Draft:
 {draft}. Comments: {comments}.
 ```
 

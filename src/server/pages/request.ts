@@ -635,12 +635,12 @@ function bugDraftBox(r: RequestState, p: PatchView, back: string): Html {
 // What your comments on a bug draft did: the draft above is the latest revision. Jobs from before 2026-10-19 don't
 // have the comment.
 function revisions(r: RequestState, patch: string): Html | null {
-  const jobs = Object.values(r.jobs).filter((j) => j.purpose?.what === "revise-draft" && j.purpose.patch === patch);
+  const jobs = Object.values(r.jobs).filter((j) => (j.purpose?.what === "revise-draft" && j.purpose.patch === patch) || (patch === "meta" && j.purpose?.what === "meta-draft" && j.purpose.key.includes(":revise:")));
   return jobs.length
     ? html`<div class="revisions">${jobs.map(
         (j) =>
           html`<div class="sub">${j.endedAt === undefined ? "Revising it after" : j.exitCode === 0 ? "Revised after" : "Couldn't revise it after"} your comment${j.purpose!.reason === undefined ? null : html` “${j.purpose!.reason}”`} · ${formatDate(j.startedAt)}${
-            j.outcome ? html`<div class="answer">It answered: ${j.outcome}</div>` : null
+            (j.said ?? j.outcome) ? html`<div class="answer"><b>It answered:</b> ${md(j.said ?? j.outcome!)}</div>` : null
           }</div>`,
       )}</div>`
     : null;
