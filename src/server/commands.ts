@@ -148,9 +148,9 @@ function checkField(name: string, spec: Field, value: unknown): string | null {
     case "object":
       return isObject(value) ? null : `${name} must be an object`;
     case "parts":
-      return Array.isArray(value) && value.length > 1 && value.every((p) => isObject(p) && typeof p.title === "string" && p.title.trim() !== "" && Array.isArray(p.items) && p.items.every((i) => typeof i === "string"))
+      return Array.isArray(value) && value.length > 1 && value.every((p) => isObject(p) && typeof p.title === "string" && p.title.trim() !== "" && Array.isArray(p.groups) && p.groups.every((g) => isObject(g) && typeof g.item === "string" && typeof g.why === "string"))
         ? null
-        : `${name} must be two or more {title, items}`;
+        : `${name} must be two or more {title, groups: [{item, why}]}`;
     case "comments":
       return Array.isArray(value) && value.length > 0 && value.every((c) => isObject(c) && typeof c.patch === "string" && typeof c.text === "string" && c.text.trim() !== "")
         ? null
@@ -227,7 +227,7 @@ function checkIds(c: Record<string, unknown>, state: RequestState): string | nul
   if (typeof c.item === "string" && !Object.hasOwn(state.items, c.item)) {
     return `unknown item ${c.item}`;
   }
-  const listed = [...(Array.isArray(c.items) ? (c.items as string[]) : []), ...(Array.isArray(c.parts) ? (c.parts as { items: string[] }[]).flatMap((p) => p.items) : [])];
+  const listed = [...(Array.isArray(c.items) ? (c.items as string[]) : []), ...(Array.isArray(c.parts) ? (c.parts as { groups: { item: string }[] }[]).flatMap((p) => p.groups.map((g) => g.item)) : [])];
   const unknownItem = listed.find((i) => !Object.hasOwn(state.items, i));
   if (unknownItem !== undefined) {
     return `unknown item ${unknownItem}`;

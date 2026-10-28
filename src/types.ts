@@ -255,7 +255,7 @@ export type PlannedCommand =
   | { cmd: "edit-config"; config: Record<string, unknown>; reason: string }
   | { cmd: "shell"; cwd: string; command: string; reason: string }
   | { cmd: "hand-off"; items: ItemId[]; reason: string }
-  | { cmd: "split-request"; parts: { title: string; items: ItemId[] }[]; reason: string }; // new requests taking these groups, with their history; this one archived // you take them over in a session of your own: the factory writes its prompt
+  | { cmd: "split-request"; parts: { title: string; groups: { item: ItemId; why: string }[] }[]; reason: string }; // new requests taking these groups, with their history; this one archived // you take them over in a session of your own: the factory writes its prompt
 
 // ---------------------------------------------------------------------------
 // Agent reports: the structured_output of each prompt. The JSON schemas in

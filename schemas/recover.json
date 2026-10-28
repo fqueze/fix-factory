@@ -292,22 +292,37 @@
                       "type": "string",
                       "description": "What this part fixes, as a request's title."
                     },
-                    "items": {
+                    "groups": {
                       "type": "array",
                       "items": {
-                        "type": "string"
+                        "type": "object",
+                        "properties": {
+                          "item": {
+                            "type": "string"
+                          },
+                          "why": {
+                            "type": "string",
+                            "description": "A few words on why it goes in this part, in terms the user can check without knowing the code: the skip-if it removes, the patch it must stay with."
+                          }
+                        },
+                        "required": [
+                          "item",
+                          "why"
+                        ],
+                        "additionalProperties": false
                       }
                     }
                   },
                   "required": [
                     "title",
-                    "items"
+                    "groups"
                   ],
                   "additionalProperties": false
                 }
               },
               "reason": {
-                "type": "string"
+                "type": "string",
+                "description": "One or two sentences: how the parts were decided."
               }
             },
             "required": [

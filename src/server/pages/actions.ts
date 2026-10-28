@@ -287,7 +287,7 @@ function plannedText(c: PlannedCommand, r: RequestState): string {
     case "hand-off":
       return `hand ${c.items.map((i) => itemLabel(r, i)).join(", ")} over to a session of your own, writing its prompt`;
     case "split-request":
-      return `split this request into ${c.parts.map((p) => `“${p.title}” (${p.items.length} ${p.items.length === 1 ? "group" : "groups"})`).join(", ")}, archiving it`;
+      return `split this request into ${c.parts.length} requests, archiving it`;
   }
 }
 
@@ -330,8 +330,8 @@ export function recoveryPlan(r: RequestState, plan: RequestState["recoveryPlans"
       ? html`<form class="inline cmd" method="post" action="/api/commands"><input type="hidden" name="back" value="${back}"><ul class="plan">${plan.plan.map(
           (c, i) =>
             // The shell escape hatch is opt-in; everything else is checked. An agent's instructions are folded.
-            html`<li><label><input type="checkbox" name="command" value="${JSON.stringify({ ...c, request: r.id })}"${c.cmd === "shell" ? null : html` checked`}> ${shortLabel(c, r)}</label> <span class="reason">${c.reason}</span>${
-              instructions(c, r) ? html`<details class="fold" data-fold="plan-${plan.job}-${i}"><summary>${c.cmd === "split-request" ? "its parts" : "its instructions"}</summary><div class="sub${c.cmd === "split-request" ? " pre" : ""}">${instructions(c, r)}</div></details>` : null
+            html`<li><label><input type="checkbox" name="command" value="${JSON.stringify({ ...c, request: r.id })}"${c.cmd === "shell" ? null : html` checked`}> ${shortLabel(c, r)}</label> <span class="reason">${c.reason}</span>${splitParts(c, r)}${
+              instructions(c, r) ? html`<details class="fold" data-fold="plan-${plan.job}-${i}"><summary>its instructions</summary><div class="sub">${instructions(c, r)}</div></details>` : null
             }</li>`,
         )}</ul><button class="btn small primary">${plan.plan.length === 1 ? "Do it" : "Do these"}</button></form>`
       : null
@@ -352,10 +352,15 @@ function shortLabel(c: PlannedCommand, r: RequestState): Html {
   }
 }
 
-function instructions(c: PlannedCommand, r: RequestState): string | undefined {
-  if (c.cmd === "split-request") {
-    return c.parts.map((p) => `${p.title}: ${p.items.map((i) => itemLabel(r, i)).join(", ")}`).join("\n");
+// A split's parts, each with its groups and why they go there.
+function splitParts(c: PlannedCommand, r: RequestState): Html | null {
+  if (c.cmd !== "split-request") {
+    return null;
   }
+  return html`<div class="parts">${c.parts.map((p) => html`<div class="part"><b>${p.title}</b> <span class="sub">${plural(p.groups.length, "group")}</span><ul>${p.groups.map((g) => html`<li>${itemLabel(r, g.item)} <span class="reason">${g.why}</span></li>`)}</ul></div>`)}</div>`;
+}
+
+function instructions(c: PlannedCommand, r: RequestState): string | undefined {
   return c.cmd === "resume-agent" ? c.message : c.cmd === "start-agent" ? c.prompt : undefined;
 }
 

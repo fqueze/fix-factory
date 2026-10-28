@@ -325,7 +325,9 @@ export function foldEvents(events: readonly Event[]): RequestState {
         }
         break;
       case "recovery-plan":
-        s.recoveryPlans.push({ job: e.job, text: e.text, ...(e.answer ? { answer: e.answer } : {}), plan: e.plan, cannotDo: e.cannotDo, questions: e.questions, t: e.t });
+        // Splits planned on 2026-10-28 listed each part's groups without saying why.
+        const plan = e.plan.map((c) => (c.cmd === "split-request" ? { ...c, parts: c.parts.map((p) => ("items" in p ? { title: p.title, groups: (p.items as string[]).map((item) => ({ item, why: "" })) } : p)) } : c));
+        s.recoveryPlans.push({ job: e.job, text: e.text, ...(e.answer ? { answer: e.answer } : {}), plan, cannotDo: e.cannotDo, questions: e.questions, t: e.t });
         break;
       case "note":
         // Review nits and answers to you used to be notes; they are in their job's report.

@@ -290,9 +290,9 @@ describe("commands", () => {
     sc.add({ type: "try-planned", request: ID, push: "root-2", purpose: "not made", command: ["./mach", "try"] });
     sc.add({ type: "needs-user", request: ID, key: "file-bug:p-a", action: "file", detail: "d", patch: "p-a", item: "i-a" });
     sc.add({ type: "needs-user", request: ID, key: "approve-push:root-2", action: "approve", detail: "d", push: "root-2" });
-    const split = (parts: { title: string; items: string[] }[]) =>
+    const split = (parts: { title: string; groups: { item: string; why: string }[] }[]) =>
       commandEffects(cmd({ cmd: "split-request", parts, reason: "two topics" }), { config, state: sc.state(), view: sc.view(), exists: () => false, plan: () => undefined, events: () => sc.events });
-    const parts = [{ title: "Fix the tests failing alone", items: ["i-a"] }, { title: "Fix intermittent failures", items: ["i-b"] }];
+    const parts = [{ title: "Fix the tests failing alone", groups: [{ item: "i-a", why: "removes a standalone skip-if" }] }, { title: "Fix intermittent failures", groups: [{ item: "i-b", why: "no skip-if" }] }];
 
     sc.add({ type: "dep", request: ID, dep: { patch: "p-b", needs: "p-a", kind: "hard", reason: "builds on it", source: "textual" } });
     const refused = split(parts);

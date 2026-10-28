@@ -7,25 +7,27 @@ import type { Event, ItemId, JobId, PatchId, RequestId, RequestState } from "../
 
 export interface SplitPart {
   title: string;
-  items: ItemId[];
+  groups: { item: ItemId; why: string }[];
 }
+
+const itemsOf = (p: SplitPart): ItemId[] => p.groups.map((g) => g.item);
 
 // Why a split can't be done as asked, or undefined.
 export function splitProblem(s: RequestState, parts: SplitPart[]): string | undefined {
   if (parts.length < 2) return "a split needs two parts or more";
-  const all = parts.flatMap((p) => p.items);
+  const all = parts.flatMap(itemsOf);
   const unknown = all.find((i) => !s.items[i]);
   if (unknown) return `unknown group ${unknown}`;
   const twice = all.find((i, n) => all.indexOf(i) !== n);
   if (twice) return `${twice} is in two parts`;
-  const empty = parts.find((p) => p.items.length === 0);
+  const empty = parts.find((p) => p.groups.length === 0);
   if (empty) return `“${empty.title}” has no groups`;
   const running = Object.values(s.jobs).find((j) => j.endedAt === undefined);
   if (running) return `${running.name} is running: split once it's done`;
   const submitted = Object.values(s.patches).find((p) => p.revision !== undefined && all.includes(p.item ?? ""));
   if (submitted) return `${submitted.title} is on Phabricator already: splitting a submitted stack isn't supported`;
   // Each part's patches are assembled on their own: one needing another part's can't be.
-  const partOf = new Map(parts.flatMap((p, n) => p.items.map((i) => [i, n] as const)));
+  const partOf = new Map(parts.flatMap((p, n) => itemsOf(p).map((i) => [i, n] as const)));
   for (const p of Object.values(s.patches)) {
     for (const d of p.deps.filter((d) => d.kind === "hard")) {
       const needed = s.patches[d.needs];

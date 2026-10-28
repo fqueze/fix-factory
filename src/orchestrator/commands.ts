@@ -487,13 +487,13 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
           at({ type: "request-created", kind: s.kind, text: p.title, ...(s.folder !== undefined ? { folder: s.folder } : {}), ...(s.rev !== undefined ? { rev: s.rev } : {}), command: c.id }),
           at({ type: "split-from", from: s.id }),
           at({ type: "config-set", config: s.config }),
-          ...partEvents(events, s, p.items, to).flatMap((event): Effect[] => [
+          ...partEvents(events, s, p.groups.map((g) => g.item), to).flatMap((event): Effect[] => [
             { type: "event", event },
             ...(event.type === "job-started" && event.kind === "agent" ? [{ type: "copy-report", job: event.job, from: s.id, to } as const] : []),
           ]),
           at({ type: "note", text: `Split from ${s.id}: ${c.reason}` }),
           // Its groups are where they were: settled ones go on to their own stack.
-          at({ type: "step", step: p.items.every((i) => SETTLED.includes(s.items[i].state)) ? "stack" : "investigate and fix" }),
+          at({ type: "step", step: p.groups.every((g) => SETTLED.includes(s.items[g.item].state)) ? "stack" : "investigate and fix" }),
         );
       });
       ev({ type: "request-split", into: ids });

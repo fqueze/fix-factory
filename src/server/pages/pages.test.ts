@@ -229,6 +229,13 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.match(h, /<li>❓ Should the next attempt use a debug build\?<\/li>/);
     assert.match(h, /placeholder="Answer it, or say what to change…"/);
   });
+  it("4. investigate and fix: a split's parts, each with its groups and why they go there", () => {
+    const r = structuredClone(get("r-20261013-tab-failures"));
+    const [a, b] = Object.keys(r.items);
+    r.recoveryPlans.at(-1)!.plan = [{ cmd: "split-request", parts: [{ title: "Fix the tests failing alone", groups: [{ item: a, why: "removes a standalone skip-if" }] }, { title: "Fix intermittents", groups: [{ item: b, why: "no skip-if" }] }], reason: "by whether a skip-if hid the failure" }];
+    const h = renderRequest(r, ctx, true).value;
+    assert.match(h, /> split this request into 2 requests, archiving it<\/label> <span class="reason">by whether a skip-if hid the failure<\/span><div class="parts"><div class="part"><b>Fix the tests failing alone<\/b> <span class="sub">1 group<\/span><ul><li>[^<]+ <span class="reason">removes a standalone skip-if<\/span><\/li><\/ul><\/div>/);
+  });
   it("4. investigate and fix: what you asked, then one short line per planned command with its reason, an agent's instructions folded, notes after the list", () => {
     const h = expanded("r-20261013-tab-failures");
     assert.match(h, /<div class="action reply" data-key="recovery:j-recover"><span class="flag">You asked<\/span> <form class="inline cmd"[^>]*>.*?Dismiss<\/button><\/form><span class="said clamp1" data-expand title="the browser_tabSpinner agent has been at it for 6 hours">“the browser_tabSpinner agent has been at it for 6 hours”<\/span><form/, "a plan recorded without an answer still renders, without an empty answer");
