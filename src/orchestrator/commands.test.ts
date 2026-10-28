@@ -324,6 +324,10 @@ describe("commands", () => {
     const original = foldEvents([...sc.events, ...byRequest.get(ID)!]);
     assert.deepEqual([original.splitInto, original.step, original.needsUser], [ids, "done", []]);
     assert.deepEqual(original.movedTo, { "i-a": ids[0], "i-b": ids[1] });
+    // What's sent to it afterwards is refused: its groups go on elsewhere.
+    for (const e of byRequest.get(ID)!) sc.add(e);
+    run(sc, cmd({ cmd: "continue", item: "i-a", text: "remove the skip-if" }));
+    assert.match(executed(sc).at(-1)?.detail ?? "", /this request was split into r-20261015-fix-the-tests-failing, r-20261015-fix-intermittent-failures: send it there/);
   });
 
   it("start-agent starts a fresh session on the item, which later resumes use", () => {

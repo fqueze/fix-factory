@@ -105,6 +105,12 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
       return effects;
   }
   if (!s || !view) return effects;
+  // Its groups went on in the requests it was split into: what's sent here (an approved plan's other commands
+  // included, run after the split) would act on copies nobody follows.
+  if (s.splitInto && c.cmd !== "dismiss") {
+    done(false, `this request was split into ${s.splitInto.join(", ")}: send it there`);
+    return effects;
+  }
 
   // A command from a recovery plan answers that plan's ⚑.
   if (PLANNED.has(c.cmd)) {

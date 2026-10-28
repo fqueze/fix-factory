@@ -1971,6 +1971,8 @@ class Planner {
     // other authors still need to hear about theirs.
     for (const push of Object.values(this.s.pushes)) {
       const stack = this.view.byKey.get(`dry-run:${push.id}`)?.[0].purpose.stack;
+      // Pushes made before this request (a split copies them) are evidence, routed already where they were made.
+      if ((this.view.pushedAt.get(push.id) ?? Infinity) < Date.parse(this.s.createdAt)) continue;
       if (stack && this.s.stacks[stack] && push.rev) this.routeTryFailures(push.id, this.s.stacks[stack].order.map((pid) => this.s.patches[pid]));
     }
     // An un-skip push may still add groups to the stack: verifying it waits for its results.
