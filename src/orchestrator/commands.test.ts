@@ -172,6 +172,10 @@ describe("commands", () => {
     const plan = sc.plan(`meta-draft:root:revise:${c.id}`);
     assert.deepEqual([plan.name, plan.agent?.sessionId, plan.agent?.resume, plan.cwd], ["write-meta-bug", "s-meta", true, "/wt/root"]);
     assert.match(plan.agent?.message ?? "", /reference the bugs that added the standalone jobs[\s\S]*Never ask them for something you can find/);
+    // Bug fields it was asked to change go into the draft.
+    sc.complete(`meta-draft:root:revise:${c.id}`, { report: { description: "d2", answer: "moved it", product: "Testing", component: "General", blocks: [2063593, 1975728], feedback: [] } });
+    const draft = sc.state().metaBug?.draft;
+    assert.deepEqual([draft?.product, draft?.component, draft?.blocks, draft?.description, draft?.summary], ["Testing", "General", [2063593, 1975728], "d2", "[meta] x"]);
   });
 
   it("comment-fix and stack-comments resume the patch's author, unless it's running", () => {

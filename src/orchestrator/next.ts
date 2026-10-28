@@ -2149,14 +2149,17 @@ class Planner {
     const h = shortHash(["v4", info.code, ...ps.map((p) => `${p.id}:${p.bug}`)]).slice(0, 10);
     const file = dataPath(this.config, this.s.id, `meta-${st.id}-${h}.json`);
     const first = ps.find((p) => p.bugDraft)?.bugDraft;
+    // Fields you had its agent change stay.
+    const current = this.s.metaBug?.draft;
+    const blocks = current?.blocks ?? this.config.metaBugBlocks;
     const draft: BugDraft = {
-      product: first?.product ?? "Testing",
-      component: first?.component ?? "General",
-      summary: this.s.kind === "burndown" ? `[meta] Fix the flakiness in ${this.s.folder ?? st.folder}` : "",
+      product: current?.product ?? first?.product ?? "Testing",
+      component: current?.component ?? first?.component ?? "General",
+      summary: current?.summary ?? (this.s.kind === "burndown" ? `[meta] Fix the flakiness in ${this.s.folder ?? st.folder}` : ""),
       description: "",
       bugType: "task",
       keywords: ["meta"],
-      ...(this.config.metaBugBlocks?.length ? { blocks: this.config.metaBugBlocks } : {}),
+      ...(blocks?.length ? { blocks } : {}),
     };
     const patches = ps.map((p) => {
       const item = p.item === undefined ? undefined : this.s.items[p.item];

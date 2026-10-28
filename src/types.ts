@@ -586,6 +586,9 @@ export interface WriteMetaBugReport {
   description: string;
   summary?: string; // when the request isn't a burndown
   answer?: string; // after your comment: what it changed, or why not
+  product?: string; // fields you asked to change
+  component?: string;
+  blocks?: number[];
   feedback: Feedback[];
 }
 
