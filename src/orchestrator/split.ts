@@ -38,11 +38,38 @@ export function splitProblem(s: RequestState, parts: SplitPart[]): string | unde
   return undefined;
 }
 
+// Why groups can't move to that request, or undefined.
+export function moveProblem(s: RequestState, target: RequestState | undefined, items: ItemId[]): string | undefined {
+  if (!target) return "no such request";
+  if (target.step === "done") return `${target.id} is done`;
+  const related = (a: RequestState, b: RequestState) => a.splitFrom !== undefined && a.splitFrom === b.splitFrom;
+  if (!related(s, target)) return `${target.id} isn't from the same split: only groups of one split move between its requests`;
+  const unknown = items.find((i) => !s.items[i]);
+  if (unknown) return `unknown group ${unknown}`;
+  const running = Object.values(s.jobs).find((j) => j.endedAt === undefined && j.item !== undefined && items.includes(j.item));
+  if (running) return `${running.name} of ${running.item} is running: move it once it's done`;
+  const taken = items.find((i) => target.items[i] && !TERMINAL_STATES.includes(target.items[i].state));
+  if (taken) return `${target.id} has a group ${taken} already`;
+  const moving = new Set(items);
+  for (const p of Object.values(s.patches)) {
+    if (p.revision !== undefined && p.item !== undefined && moving.has(p.item)) return `${p.title} is on Phabricator already`;
+    for (const d of p.deps.filter((d) => d.kind === "hard")) {
+      const needed = s.patches[d.needs];
+      if (!needed || p.item === undefined || needed.item === undefined) continue;
+      if (moving.has(p.item) !== moving.has(needed.item)) return `${p.title} needs ${needed.title} (${d.reason}): move them together, or drop that dependency`;
+    }
+  }
+  return undefined;
+}
+
+const TERMINAL_STATES = ["left as-is", "handed back", "taken over", "landed", "fixed"];
+
 // The original's events a new request taking these groups starts from, addressed to it.
-export function partEvents(events: Event[], s: RequestState, items: ItemId[], to: RequestId): EventInput[] {
+// pushes: false when moving groups to a request that has the pushes made already, from the same split.
+export function partEvents(events: Event[], s: RequestState, items: ItemId[], to: RequestId, opts: { pushes: boolean } = { pushes: true }): EventInput[] {
   const own = new Set(items);
   const patchesOwn = new Set<PatchId>(Object.values(s.patches).filter((p) => p.item !== undefined && own.has(p.item)).map((p) => p.id));
-  const made = new Set(Object.values(s.pushes).filter((p) => p.rev).map((p) => p.id));
+  const made = new Set(opts.pushes ? Object.values(s.pushes).filter((p) => p.rev).map((p) => p.id) : []);
   const finished = new Set(events.filter((e) => e.type === "job-finished").map((e) => e.job));
   // Its groups' finished jobs, and those of the pushes made (dry-run, push, watch, triage).
   const jobs = new Set<JobId>();

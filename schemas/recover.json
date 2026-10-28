@@ -331,6 +331,50 @@
               "reason"
             ],
             "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "cmd": {
+                "type": "string",
+                "enum": [
+                  "move-groups"
+                ]
+              },
+              "to": {
+                "type": "string",
+                "description": "Another request split from the same one."
+              },
+              "groups": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "item": {
+                      "type": "string"
+                    },
+                    "why": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "item",
+                    "why"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "reason": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "cmd",
+              "to",
+              "groups",
+              "reason"
+            ],
+            "additionalProperties": false
           }
         ]
       }

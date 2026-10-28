@@ -71,6 +71,9 @@ export function foldEvents(events: readonly Event[]): RequestState {
       case "split-from":
         s.splitFrom = e.from;
         break;
+      case "groups-moved":
+        s.movedTo = { ...s.movedTo, ...Object.fromEntries(e.items.map((i) => [i, e.to])) };
+        break;
       case "request-routed":
         s.kind = e.kind;
         s.folder = e.folder;

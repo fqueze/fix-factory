@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import type { Command, Event, PlannedCommand } from "../types.ts";
 import { foldEvents } from "../state/fold.ts";
+import { buildView } from "./view.ts";
 import { commandEffects, newRequestId, type Effect } from "./commands.ts";
 import { config, ID, Scenario, sha } from "./testkit.ts";
 
@@ -324,6 +325,17 @@ describe("commands", () => {
     const original = foldEvents([...sc.events, ...byRequest.get(ID)!]);
     assert.deepEqual([original.splitInto, original.step, original.needsUser], [ids, "done", []]);
     assert.deepEqual(original.movedTo, { "i-a": ids[0], "i-b": ids[1] });
+    // A group in the wrong part moves to another of the same split, with its history; its pushes are there already.
+    const source = byRequest.get(ids[0])!;
+    const move = commandEffects(cmd({ cmd: "move-groups", request: ids[0], to: ids[1], groups: [{ item: "i-a", why: "no skip-if" }], reason: "wrong part" }), {
+      config, state: foldEvents(source), view: buildView(source), exists: () => true, plan: () => undefined,
+      events: (id) => byRequest.get(id)!, other: (id) => foldEvents(byRequest.get(id)!),
+    });
+    for (const e of move) if (e.type === "event") byRequest.get(e.event.request)!.push({ v: 1, t: "2026-10-27T11:00:00.000Z", ...e.event } as Event);
+    const [from, to] = [foldEvents(byRequest.get(ids[0])!), foldEvents(byRequest.get(ids[1])!)];
+    assert.deepEqual([from.items["i-a"].state, from.movedTo], ["taken over", { "i-a": ids[1] }]);
+    assert.deepEqual([Object.keys(to.items).sort(), Object.keys(to.patches).sort(), Object.keys(to.pushes)], [["i-a", "i-b"], ["p-a", "p-b"], ["root-1"]]);
+    assert.ok(move.some((e) => e.type === "copy-report" && e.to === ids[1]), "its author's report goes along");
     // What's sent to it afterwards is refused: its groups go on elsewhere.
     for (const e of byRequest.get(ID)!) sc.add(e);
     run(sc, cmd({ cmd: "continue", item: "i-a", text: "remove the skip-if" }));

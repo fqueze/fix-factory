@@ -190,6 +190,7 @@ export class Orchestrator {
       view: loaded?.view,
       exists: (id) => existsSync(join(this.config.stateDir, "requests", id)),
       events: (id) => readEvents(this.config.stateDir, id),
+      other: (id) => (existsSync(join(this.config.stateDir, "requests", id)) ? this.load(id).s : undefined),
       plan: (job) => {
         const path = join(jobDir(this.config.stateDir, job), "plan.json");
         return existsSync(path) ? (JSON.parse(readFileSync(path, "utf8")) as JobPlan) : undefined;

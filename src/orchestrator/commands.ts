@@ -7,7 +7,7 @@ import { canDismiss, canRetry, isPushJob, reviewLimitFlag } from "../state/flags
 import type { Command, Event, FactoryConfig, ItemId, JobId, PlannedCommand, RequestId, RequestState } from "../types.ts";
 import { ANNOTATIONS_ITEM, authorJobsOf, CANCELLED, itemEpochOf, SETTLED, TERMINAL, resumeAuthorPlan } from "./next.ts";
 import { handOffReferences } from "./hand-off.ts";
-import { partEvents, splitProblem } from "./split.ts";
+import { moveProblem, partEvents, splitProblem } from "./split.ts";
 import { dataPath, requestDir, sessionIdFor, slug, type JobPlan } from "./plan.ts";
 import type { View } from "./view.ts";
 
@@ -25,6 +25,7 @@ export type Effect =
 export interface CommandContext {
   config: FactoryConfig;
   state?: RequestState; // the command's request
+  other?: (request: RequestId) => RequestState | undefined; // another request's state, for move-groups
   view?: View;
   exists: (request: RequestId) => boolean;
   plan: (job: JobId) => JobPlan | undefined; // jobs/<job>/plan.json, what the runner started
@@ -516,6 +517,30 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
       done(true, c.reason);
       break;
     }
+    case "move-groups": {
+      const items = c.groups.map((g) => g.item);
+      const problem = moveProblem(s, ctx.other!(c.to), items);
+      if (problem) {
+        done(false, problem);
+        break;
+      }
+      const at = (e: RequestEvent): Effect => ({ type: "event", event: { ...e, request: c.to } as EventInput });
+      effects.push(
+        ...partEvents(ctx.events!(s.id), s, items, c.to, { pushes: false }).flatMap((event): Effect[] => [
+          { type: "event", event },
+          ...(event.type === "job-started" && event.kind === "agent" ? [{ type: "copy-report", job: event.job, from: s.id, to: c.to } as const] : []),
+        ]),
+        at({ type: "note", text: `Moved from ${s.id}: ${c.groups.map((g) => `${g.item} (${g.why})`).join("; ")}` }),
+      );
+      // Taken over: out of this stack, and its worktree, now the other request's, kept.
+      for (const item of items) {
+        ev({ type: "item-state", item, state: "taken over", detail: `moved to ${c.to}` });
+        for (const n of s.needsUser.filter((x) => x.item === item || (x.job !== undefined && s.jobs[x.job]?.item === item))) ev({ type: "user-done", key: n.key, byFactory: true });
+      }
+      ev({ type: "groups-moved", to: c.to, items });
+      done(true, c.reason);
+      break;
+    }
     case "shell":
       effects.push({ type: "start", plan: { purpose: { key: `shell:${c.id}`, what: "shell" }, kind: "script", name: "shell", cwd: c.cwd, cmd: ["sh", "-c", c.command] } });
       done(true, c.reason);
@@ -524,7 +549,7 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
   return effects;
 }
 
-const PLANNED = new Set<string>(["retry-job", "cancel-job", "resume-agent", "start-agent", "set-state", "redo-step", "edit-config", "shell", "hand-off", "split-request"] satisfies PlannedCommand["cmd"][]);
+const PLANNED = new Set<string>(["retry-job", "cancel-job", "resume-agent", "start-agent", "set-state", "redo-step", "edit-config", "shell", "hand-off", "split-request", "move-groups"] satisfies PlannedCommand["cmd"][]);
 
 export const STOPPED = "stopped by you";
 

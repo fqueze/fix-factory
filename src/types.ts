@@ -137,6 +137,7 @@ export type Event =
   | (EventBase & { type: "request-superseded"; by: RequestId })
   | (EventBase & { type: "request-split"; into: RequestId[]; moved?: Record<ItemId, RequestId> }) // archived: its groups went to these requests (moved: absent on the first split)
   | (EventBase & { type: "split-from"; from: RequestId }) // made by splitting that request
+  | (EventBase & { type: "groups-moved"; to: RequestId; items: ItemId[] }) // they go on in that request
   | (EventBase & { type: "config-set"; config: Record<string, unknown> })
   | (EventBase & { type: "step"; step: RequestStep })
   | (EventBase & { type: "item-created"; item: ItemId; folder: string; group: FailureGroup })
@@ -257,7 +258,8 @@ export type PlannedCommand =
   | { cmd: "edit-config"; config: Record<string, unknown>; reason: string }
   | { cmd: "shell"; cwd: string; command: string; reason: string }
   | { cmd: "hand-off"; items: ItemId[]; reason: string }
-  | { cmd: "split-request"; parts: { title: string; groups: { item: ItemId; why: string }[] }[]; reason: string }; // new requests taking these groups, with their history; this one archived // you take them over in a session of your own: the factory writes its prompt
+  | { cmd: "split-request"; parts: { title: string; groups: { item: ItemId; why: string }[] }[]; reason: string }
+  | { cmd: "move-groups"; to: RequestId; groups: { item: ItemId; why: string }[]; reason: string }; // to another request of the same split, with their history // new requests taking these groups, with their history; this one archived // you take them over in a session of your own: the factory writes its prompt
 
 // ---------------------------------------------------------------------------
 // Agent reports: the structured_output of each prompt. The JSON schemas in
