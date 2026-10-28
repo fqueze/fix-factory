@@ -67,7 +67,7 @@ export async function changedFiles(cwd: string, sha: string): Promise<string[]> 
   return out.split("\0").filter(Boolean);
 }
 
-export type MergeResult = { ok: true; tree: string } | { ok: false; files: string[] };
+export type MergeResult = { ok: true; tree: string } | { ok: false; files: string[]; tree: string }; // tree: with conflict markers in files
 
 // Applies the change base→theirs on top of `onto`, like a cherry-pick, without a worktree.
 export async function mergeTree(cwd: string, base: string, onto: string, theirs: string): Promise<MergeResult> {
@@ -83,7 +83,7 @@ export async function mergeTree(cwd: string, base: string, onto: string, theirs:
       if (p === "") break;
       if (!files.includes(p)) files.push(p);
     }
-    return { ok: false, files };
+    return { ok: false, files, tree: parts[0].trim() };
   }
   throw new Error(`git merge-tree exited with ${r.code}: ${r.stderr.trim()}`);
 }
