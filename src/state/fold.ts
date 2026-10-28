@@ -155,6 +155,9 @@ export function foldEvents(events: readonly Event[]): RequestState {
         const job = s.jobs[e.job];
         const outcome = outcomeOf(e.report);
         if (job && outcome) job.outcome = outcome;
+        const r = e.report as { summary?: unknown; disagreement?: unknown } | null;
+        const said = typeof r?.disagreement === "string" ? `Disagrees with you: ${r.disagreement}` : typeof r?.summary === "string" ? r.summary : undefined;
+        if (job && said) job.said = said;
         // A push's failures as triage saw them; a later run of the same cell replaces the earlier verdict.
         if (e.prompt === "triage-try" && job?.purpose?.push !== undefined && s.pushes[job.purpose.push]) {
           const p = s.pushes[job.purpose.push];

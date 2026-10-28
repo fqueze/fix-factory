@@ -490,9 +490,10 @@ function yourComments(r: RequestState, p: PatchView): Html | null {
     const job = Object.values(r.jobs).findLast((j) => j.purpose?.key === key);
     if (!job) return html`<span class="sub">not answered yet</span>`;
     if (job.endedAt === undefined) return html`<span class="working">being answered</span>`;
-    return job.outcome ? html`${md(job.outcome)}` : html`<span class="sub">${job.error ?? "no answer"}</span>`;
+    const text = job.said ?? job.outcome;
+    return text ? html`${md(text)}` : html`<span class="sub">${job.error ?? "no answer"}</span>`;
   };
-  return html`<h4 class="part">Your comments</h4>${p.yourComments.map((c) => html`<div class="yourcomment"><div class="said">${md(c.text)}</div><div class="answer">${answer(c.key)}</div></div>`)}`;
+  return html`<h4 class="part">Your comments</h4>${p.yourComments.map((c) => html`<div class="yourcomment"><div class="comment-text">${md(c.text)}</div><div class="answer"><b>Its answer</b>${answer(c.key)}</div></div>`)}`;
 }
 
 // Its test plan for reviewers, as Phabricator will show it: copied, set on its revision with a click (the factory's

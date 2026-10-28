@@ -330,6 +330,7 @@ export interface JobView {
   error?: string;
   purpose?: JobPurpose; // absent for jobs whose job-started has none
   outcome?: string; // an agent's report on one line: its status or verdict, and its summary
+  said?: string; // an author's summary in full, or its disagreement: its answer to your comments
   machProfiles?: number; // resource-usage profiles of the mach builds and test runs it made, kept in its directory
 }
 

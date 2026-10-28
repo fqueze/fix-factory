@@ -332,3 +332,5 @@ form.inline-tell input { flex: 1; font: inherit; font-size: 12px; padding: 2px 6
 .part li { margin: 1px 0; }
 .yourcomment { border-left: 3px solid var(--border); padding-left: 8px; margin: 4px 0 10px; }
 .yourcomment .answer { margin-top: 4px; }
+.yourcomment .comment-text pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+.yourcomment .answer { border-top: 1px dashed var(--border); padding-top: 4px; }
