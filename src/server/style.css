@@ -195,7 +195,7 @@ details.reopen[open] > summary { display: none; }
 .rows > details.fold > summary { padding: 6px 12px; }
 details.fold > div.rows { padding: 0; }
 details.row { border-bottom: 1px solid var(--border); }
-details.row.you { background: var(--action-bg); box-shadow: inset 3px 0 0 var(--warning); }
+details.row.you { background: var(--action-bg); }
 details.row .state b.you { font-weight: 600; }
 details.row > summary { list-style: none; cursor: pointer; display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; gap: 0 8px; padding: 5px 12px; align-items: baseline; }
 details.row > summary::-webkit-details-marker { display: none; }
@@ -372,17 +372,19 @@ details.menu { position: relative; display: inline-block; font-weight: normal; }
 details.menu > summary { list-style: none; }
 details.menu > summary::-webkit-details-marker { display: none; }
 details.menu > .menu-items { position: absolute; right: 0; top: 100%; z-index: 10; margin-top: 4px; display: flex; flex-direction: column; gap: 4px; align-items: flex-start; padding: 6px; background: var(--surface-1); border: 1px solid var(--border); border-radius: 6px; white-space: nowrap; box-shadow: 0 2px 6px rgb(0 0 0 / .15); }
-/* Each row's state on its left edge, in the progress bar's colors; a row needing you keeps its orange. */
-details.row.b-landed { box-shadow: inset 3px 0 0 var(--good); }
-details.row.b-landable { box-shadow: inset 3px 0 0 var(--good); animation: landable-edge 2s ease-in-out infinite; }
-@keyframes landable-edge { 0%, 100% { box-shadow: inset 3px 0 0 var(--accent); } 50% { box-shadow: inset 3px 0 0 var(--good); } }
-details.row.b-ready { box-shadow: inset 3px 0 0 var(--accent); }
-details.row.b-waiting-for-try { box-shadow: inset 3px 0 0 color-mix(in srgb, var(--accent) 40%, var(--track)); }
-details.row.b-working { box-shadow: inset 3px 0 0 var(--text-muted); }
-details.row.b-pending { box-shadow: inset 3px 0 0 var(--border); }
-details.row.b-needs-you, details.row.you { box-shadow: inset 3px 0 0 var(--serious); animation: none; }
+/* Each row's state on its left edge, in the progress bar's colors (a border: the summary's hover background would cover
+   an inset shadow); a row needing you keeps its orange. */
+details.row { border-left: 3px solid transparent; }
+details.row.b-landed { border-left-color: var(--good); }
+details.row.b-landable { border-left-color: var(--good); animation: landable-edge 2s ease-in-out infinite; }
+@keyframes landable-edge { 0%, 100% { border-left-color: var(--accent); } 50% { border-left-color: var(--good); } }
+details.row.b-ready { border-left-color: var(--accent); }
+details.row.b-waiting-for-try { border-left-color: color-mix(in srgb, var(--accent) 40%, var(--track)); }
+details.row.b-working { border-left-color: var(--text-muted); }
+details.row.b-pending { border-left-color: var(--border); }
+details.row.b-needs-you, details.row.you { border-left-color: var(--serious); animation: none; }
 @media (prefers-reduced-motion: reduce) { details.row.b-landable { animation: none; } }
 /* Landed rows: their first line only, the rest on hover. */
 .landed-rows details.row:not([open]) { border-bottom-color: transparent; }
-.landed-rows details.row:not([open]):hover { border-bottom-color: var(--border); box-shadow: inset 3px 0 0 var(--good), 0 -1px 0 var(--border); }
+.landed-rows details.row:not([open]):hover { border-bottom-color: var(--border); box-shadow: 0 -1px 0 var(--border); }
 .landed-rows details.row:not([open]):not(:hover) > summary > :is(.state, .trust, .warn) { display: none; }
