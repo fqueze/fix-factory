@@ -3,6 +3,7 @@ import type { BugDraft, Command, ItemState, ItemView, NeedsUser, PatchView, Push
 import { REQUEST_STEPS } from "../commands.ts";
 import { html, join, type Html } from "../html.ts";
 import { needsMetaBug as stackNeedsMetaBug } from "../../state/meta-bug.ts";
+import { landingState } from "../../state/landing.ts";
 
 // What the pages need besides the state.
 export interface RenderContext {
@@ -151,9 +152,10 @@ export function isAccepted(p: PatchView): boolean {
   return active.length > 0 && active.every((x) => x.status === "accepted");
 }
 
-// Accepted, and every hard dep is landed or landable itself.
+// Accepted with its comments addressed, and every hard dep is landed or landable itself.
 export function isLandable(r: RequestState, p: PatchView, seen = new Set<string>()): boolean {
-  if (!isAccepted(p) || isLanded(r, p) || seen.has(p.id)) {
+  const own = landingState(r, p);
+  if (!own.accepted || !own.commentsAddressed || isLanded(r, p) || seen.has(p.id)) {
     return false;
   }
   seen.add(p.id);

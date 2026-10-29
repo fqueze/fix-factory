@@ -19,6 +19,7 @@ import type { OrderOutput } from "../cli/stack/order.ts";
 import { expectedTests, type DryRunResult } from "../cli/try.ts";
 import { keptDir } from "../lib/kept.ts";
 import { REQUEST_STEPS } from "../server/commands.ts";
+import { landingState } from "../state/landing.ts";
 import { COMMITS_CHANGED } from "../state/flags.ts";
 import { ANNOTATIONS_ITEM, lacksBug, needsMetaBug, sameBugDraft } from "../state/meta-bug.ts";
 import type { EventInput } from "../state/events.ts";
@@ -163,16 +164,6 @@ export function similarMessages(a: string, b: string): boolean {
 
 // A patch event's fields from its view, to change one of them.
 type Ask = { n: number; text: string }; // your nth verify-stack, and why
-
-// What a patch's place in the stack's order depends on once it's on Phabricator: landable patches go to the bottom.
-function landingState(p: PatchView): { accepted: boolean; commentsAddressed: boolean; landed: boolean } {
-  const active = p.review?.reviewers.filter((r) => r.status !== "resigned") ?? [];
-  return {
-    accepted: active.length > 0 && active.every((r) => r.status === "accepted"),
-    commentsAddressed: !(p.review?.comments.some((c) => !c.done) ?? false),
-    landed: p.review?.status === "published",
-  };
-}
 
 function patchFields(p: PatchView): Omit<PatchView, "id" | "deps" | "review" | "replyDrafts"> & { patch: PatchId } {
   const { id, deps: _d, review: _r, replyDrafts: _rd, ...rest } = p;
@@ -1549,7 +1540,7 @@ class Planner {
       patches: inStack.map((p) => {
         const pv = this.s.patches[p.id];
         // A landed patch stays in the stack until the base has it: landable, as far as its order goes.
-        const { landed: _l, ...landing } = landingState(pv);
+        const { landed: _l, ...landing } = landingState(this.s, pv);
         return { id: p.id, effort: pv.effort, value: value(p.id), testOnly: pv.testOnly, ...landing };
       }),
       deps: inStack.flatMap((p) => this.s.patches[p.id].deps).map((d) => ({ ...d, needs: this.depTarget(d.needs, inStack.map((x) => x.id)) })),
@@ -2551,8 +2542,8 @@ class Planner {
   private landing(): void {
     if (this.s.step !== "review comments" && this.s.step !== "landing") return;
     const patches = Object.values(this.s.patches).filter((p) => p.revision !== undefined);
-    const landed = (p: PatchView) => landingState(p).landed;
-    const accepted = (p: PatchView) => landingState(p).accepted;
+    const landed = (p: PatchView) => landingState(this.s, p).landed;
+    const accepted = (p: PatchView) => landingState(this.s, p).accepted;
     for (const item of Object.values(this.s.items)) {
       const own = patches.filter((p) => p.item === item.id);
       if (own.length > 0 && own.every(landed) && item.state !== "landed") this.setItem(item.id, "landed");
@@ -2566,7 +2557,7 @@ class Planner {
     for (const st of this.liveStacks()) {
       const ps = st.order.map((pid) => this.s.patches[pid]);
       // What makes patches landable, not their order or shas: the reorder below changes those.
-      const h = shortHash(ps.map((p) => `${p.id}:${JSON.stringify(landingState(p))}`).sort()) + this.stepEpoch("landing");
+      const h = shortHash(ps.map((p) => `${p.id}:${JSON.stringify(landingState(this.s, p))}`).sort()) + this.stepEpoch("landing");
       const file = dataPath(this.config, this.s.id, `landable-${st.id}-${h}.json`);
       const ord = this.want(`order-landable:${st.id}:${h}`, () =>
         this.cli("order", "stack.ts", ["order", file], {
@@ -2576,7 +2567,7 @@ class Planner {
               path: file,
               content:
                 JSON.stringify({
-                  patches: ps.map((p) => ({ id: p.id, effort: p.effort, value: this.s.items[p.item ?? ""]?.group.ratePerWeek, testOnly: p.testOnly, ...landingState(p) })),
+                  patches: ps.map((p) => ({ id: p.id, effort: p.effort, value: this.s.items[p.item ?? ""]?.group.ratePerWeek, testOnly: p.testOnly, ...landingState(this.s, p) })),
                   deps: ps.flatMap((p) => p.deps),
                   previous: st.order,
                 }) + "\n",
