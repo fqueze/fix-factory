@@ -386,13 +386,15 @@ details.row.b-pending { border-left-color: var(--border); }
 details.row.b-needs-you, details.row.you { border-left-color: var(--serious); animation: none; }
 @media (prefers-reduced-motion: reduce) { details.row.b-landable { animation: none; } }
 /* Landed: one green edge from its header down its rows; its rows show their first line only, the rest when hovered,
-   eased in and out (moving from one row to the next, one closes as the other opens). */
+   eased in and out. */
 .landed-section { margin: 0 -12px; padding: 1px 12px 0 9px; border-left: 3px solid var(--good); }
 .landed-section > h3 { margin-top: 13px; }
 .landed-section .rows { margin-left: -9px; }
 .landed-section details.row { border-left: 0; animation: none; }
 .landed-rows details.row:not([open]) { border-bottom-color: transparent; }
 .landed-rows details.row:not([open]):hover { border-bottom-color: var(--border); box-shadow: 0 -1px 0 var(--border); }
-.landed-rows details.row:not([open]) > summary > :is(.state, .trust, .warn) { max-height: 0; transition: max-height .15s ease; }
+.landed-rows details.row:not([open]) > summary > :is(.state, .trust, .warn) { max-height: 0; }
+/* Eased only as the pointer enters or leaves the list (client.js): from one row to the next, it's instant. */
+.landed-rows.easing details.row:not([open]) > summary > :is(.state, .trust, .warn) { transition: max-height .15s ease; }
 .landed-rows details.row:not([open]):hover > summary > :is(.state, .trust, .warn) { max-height: 20px; }
 a.cost { color: inherit; }

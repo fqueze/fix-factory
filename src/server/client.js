@@ -356,6 +356,19 @@
     }, cls === "error" ? 6000 : 1500);
   }
 
+  // The landed list eases a row's lines open or closed only as the pointer enters or leaves it.
+  function easeLanded(event) {
+    var list = event.target.closest && event.target.closest(".landed-rows");
+    if (!list || list.contains(event.relatedTarget)) return;
+    list.classList.add("easing");
+    clearTimeout(list.easingTimer);
+    list.easingTimer = setTimeout(function () {
+      list.classList.remove("easing");
+    }, 200);
+  }
+  document.addEventListener("mouseover", easeLanded);
+  document.addEventListener("mouseout", easeLanded);
+
   // An open ⋯ menu closes on a click anywhere else. In a request's summary line, opening it mustn't fold the request.
   document.addEventListener("click", function (event) {
     var own = event.target.closest && event.target.closest("details.menu > summary");
