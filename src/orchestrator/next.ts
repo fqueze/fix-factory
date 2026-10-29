@@ -2620,6 +2620,8 @@ class Planner {
       if (!inter) return;
     }
     const replies = answer.name === "address-review" ? (this.rep<AddressReviewReport>(answer).replies ?? []).length : 0;
+    // The latest answer's flag stands for the patch: earlier ones are moot.
+    for (const n of this.s.needsUser) if (n.patch === p.id && n.key.startsWith("resubmit:") && n.key !== `resubmit:${st.id}:${author.job.job}`) this.clear(n.key);
     this.raise(`resubmit:${st.id}:${author.job.job}`, {
       action: `${replies ? `Post ${replies} ${replies === 1 ? "reply" : "replies"}, then resubmit` : "Resubmit"} D${p.revision}`,
       detail: `${answer.name === "address-review" ? "comments addressed" : "changed by its author since you submitted it"} and re-reviewed (Opus) · interdiff below`,
