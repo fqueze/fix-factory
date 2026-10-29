@@ -385,18 +385,14 @@ details.row.b-working { border-left-color: var(--text-muted); }
 details.row.b-pending { border-left-color: var(--border); }
 details.row.b-needs-you, details.row.you { border-left-color: var(--serious); animation: none; }
 @media (prefers-reduced-motion: reduce) { details.row.b-landable { animation: none; } }
-/* Landed: one green edge from its header down its rows; its rows show their first line only, the rest over the rows
-   below on hover, which don't move and stay reachable. */
+/* Landed: one green edge from its header down its rows; its rows show their first line only, the rest when hovered,
+   eased in and out (moving from one row to the next, one closes as the other opens). */
 .landed-section { margin: 0 -12px; padding: 1px 12px 0 9px; border-left: 3px solid var(--good); }
 .landed-section > h3 { margin-top: 13px; }
 .landed-section .rows { margin-left: -9px; }
 .landed-section details.row { border-left: 0; animation: none; }
-.landed-rows details.row:not([open]) { border-bottom-color: transparent; position: relative; height: 30px; box-sizing: border-box; }
-.landed-rows details.row:not([open]) > summary { line-height: 20px; }
-.landed-rows details.row:not([open]):hover { z-index: 5; }
-.landed-rows details.row:not([open]):hover > summary { position: absolute; top: 0; left: 0; right: 0; background: var(--surface-1); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); margin-top: -1px; box-shadow: 0 2px 6px rgb(0 0 0 / .12); }
-.landed-rows details.row:not([open]):not(:hover) > summary > :is(.state, .trust, .warn) { display: none; }
-/* The lines shown over the next rows let the pointer through to them: only the first line keeps the row hovered. */
-.landed-rows details.row:not([open]):hover > summary { pointer-events: none; }
-.landed-rows details.row:not([open]):hover > summary > :is(.st, .name, .end) { pointer-events: auto; }
+.landed-rows details.row:not([open]) { border-bottom-color: transparent; }
+.landed-rows details.row:not([open]):hover { border-bottom-color: var(--border); box-shadow: 0 -1px 0 var(--border); }
+.landed-rows details.row:not([open]) > summary > :is(.state, .trust, .warn) { max-height: 0; transition: max-height .15s ease; }
+.landed-rows details.row:not([open]):hover > summary > :is(.state, .trust, .warn) { max-height: 20px; }
 a.cost { color: inherit; }
