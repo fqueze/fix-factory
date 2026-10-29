@@ -2160,8 +2160,9 @@ class Planner {
     const ask = { n, text: this.s.verifyAsked![n - 1] };
     for (const info of this.stackInfos.values()) {
       const all = `${info.id}-ask${n}-`;
-      // Made, or declined by you: that ask is answered, and a later change to the stack waits for your next one.
-      if (Object.values(this.s.pushes).some((p) => p.id.startsWith(all) && (p.rev || (p.declined !== undefined && !p.withdrawn)))) continue;
+      // Made, or declined by you: that ask is answered, and a later change to the stack waits for your next one. One you
+      // asked to revise isn't declined: its planner revises it.
+      if (Object.values(this.s.pushes).some((p) => p.id.startsWith(all) && (p.rev || (p.declined !== undefined && !p.withdrawn && !p.replan)))) continue;
       const plan = this.verifyPushes(info, ask);
       for (const push of Object.values(this.s.pushes)) {
         if (push.id.startsWith(all) && plan && !plan.ids.includes(push.id) && this.s.needsUser.some((x) => x.key === `approve-push:${push.id}`)) {

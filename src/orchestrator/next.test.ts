@@ -2563,14 +2563,24 @@ describe("9. a try push of a submitted stack", () => {
     sc.settle();
     assert.ok(sc.open().includes(`approve-push:${push}`), "not withdrawn for being past verification");
     assert.equal(sc.state().step, "review comments");
-    sc.add({ type: "user-done", request: ID, key: `approve-push:${push}` });
-    assert.ok(sc.settle().includes(`push:${push}`));
+    // Asked to revise, its planner revises it: that's not declining the ask.
+    sc.add({ type: "try-declined", request: ID, push, text: "add mac", replan: true });
+    const rev = sc.settle().find((k) => k.startsWith(`${planKey}:revise:`));
+    assert.ok(rev, "revised");
+    sc.complete(rev!, { report: { pushes: [{ purpose: "verify with mac", tryArgs: ["fuzzy", "-q", "mac"], rebuild: 5 }], answer: "added mac", feedback: [] } });
+    const dry2 = sc.settle().find((k) => k.startsWith("dry-run:"))!;
+    const v1 = sc.purpose(dry2).push!;
+    sc.complete(dry2, { output: { command: ["./mach", "try", "fuzzy"], taskCount: 5, tasks: [], tryTaskConfig: {}, commits: [], warnings: [] } });
+    sc.settle();
+    assert.ok(sc.open().includes(`approve-push:${v1}`));
+    sc.add({ type: "user-done", request: ID, key: `approve-push:${v1}` });
+    assert.ok(sc.settle().includes(`push:${v1}`));
     assert.deepEqual(Object.values(sc.state().items).map((i) => i.state), ["waiting for review", "waiting for review"], "its groups stay where their review is");
-    sc.add({ type: "try-pushed", request: ID, push, rev: "fed", url: "u" });
-    sc.add({ type: "try-finished", request: ID, push, result: "green", summary: "green" });
+    sc.add({ type: "try-pushed", request: ID, push: v1, rev: "fed", url: "u" });
+    sc.add({ type: "try-finished", request: ID, push: v1, result: "green", summary: "green" });
     sc.settle();
     assert.equal(sc.state().step, "review comments");
-    assert.equal(sc.view().jobs.filter((j) => j.purpose.what === "plan-pushes" && j.purpose.key.includes(":ask")).length, 1, "that ask is answered");
+    assert.equal(sc.view().jobs.filter((j) => j.purpose.what === "plan-pushes" && j.purpose.key.includes(":ask")).length, 2, "that ask is answered: its plan and its revision");
   });
 
   it("a fix made after submission goes on top of the stack once reviewed, for you to submit, without the step going back", () => {
