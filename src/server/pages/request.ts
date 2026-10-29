@@ -118,6 +118,9 @@ export function renderRequestBody(r: RequestState, ctx: RenderContext): Html {
   const planned = pushes.filter((p) => isWaiting(r, p));
   const declined = pushes.filter((p) => !p.rev && p.declined !== undefined);
   const rest = pushes.filter((p) => !planned.includes(p) && !declined.includes(p));
+  // In sight: the pushes waiting for you or running; the finished ones are a click away.
+  const active = [...planned, ...rest.filter((p) => !p.result)];
+  const finished = rest.filter((p) => p.result);
   const shownPlans = new Set(r.needsUser.map((n) => recoveryPlanFor(r, n)));
   const plans = r.recoveryPlans.filter((p) => !shownPlans.has(p));
   // A try push's jobs (push, watch) are on its row.
@@ -132,9 +135,13 @@ export function renderRequestBody(r: RequestState, ctx: RenderContext): Html {
     ${others.length ? html`<div class="jobs">${others.map((j) => jobLine(r, j, ctx))}</div>` : null}
     ${configLine(r)}
     ${splitLine(r)}
-    ${pushes.length ? html`<h3>Try pushes${planned.length > 1 ? html` ${approvePushControls(r, planned, back)}` : null}</h3><div class="rows">${[...planned, ...rest].map((p) => pushRowOf(r, p, ctx))}${
-      declined.length ? html`<details class="fold" data-fold="declined-pushes"><summary>${declined.length} declined or withdrawn</summary><div class="rows">${declined.map((p) => pushRowOf(r, p, ctx))}</div></details>` : null
-    }</div><hr class="part">` : null}
+    ${pushes.length ? html`${active.length ? html`<h3>Try pushes${planned.length > 1 ? html` ${approvePushControls(r, planned, back)}` : null}</h3><div class="rows">${active.map((p) => pushRowOf(r, p, ctx))}</div>` : null}${
+      finished.length || declined.length
+        ? html`<details class="fold pushes" data-fold="finished-pushes"><summary>${plural(finished.length, active.length ? "finished try push" : "try push")}${declined.length ? `, ${declined.length} declined or withdrawn` : ""}</summary><div class="rows">${finished.map((p) => pushRowOf(r, p, ctx))}${
+            declined.length ? html`<details class="fold" data-fold="declined-pushes"><summary>${declined.length} declined or withdrawn</summary><div class="rows">${declined.map((p) => pushRowOf(r, p, ctx))}</div></details>` : null
+          }</div></details>`
+        : null
+    }<hr class="part">` : null}
     ${r.metaBug && !(hasBug(r.metaBug) && (stacks.length || landed.length)) ? metaBugLine(r, back, ctx) : null}
     ${stacks.map((s) => stackSection(r, s, ctx))}
     ${loose.length ? html`<h3>Patches</h3><div class="rows">${loose.map((p) => patchRow(r, p, ctx))}</div>` : null}

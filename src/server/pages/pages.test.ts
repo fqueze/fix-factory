@@ -607,6 +607,15 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.ok(h.indexOf('id="push-A"') < h.indexOf(">storage/test/unit</span>"), "at the top of the body");
   });
 
+  it("6. verify on try: finished pushes are folded under one line, the Try pushes header only for the running and planned", () => {
+    const r = structuredClone(get("r-20261010-xpcshell-cwd"));
+    for (const p of Object.values(r.pushes)) if (!p.result) delete r.pushes[p.id];
+    const n = Object.keys(r.pushes).length;
+    const h = renderRequest(r, ctx, true).value;
+    assert.doesNotMatch(h, /<h3>Try pushes/);
+    assert.match(h, new RegExp(`<details class="fold pushes" data-fold="finished-pushes"><summary>${n} try push`));
+  });
+
   it("6. verify on try: a running push shows its progress", () => {
     const h = expanded("r-20261005-newtab");
     assert.match(h, /<span class="state">412\/440, 0 failures<\/span>/);
