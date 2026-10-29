@@ -206,6 +206,16 @@ export function authorJobsOf(view: View, item: ItemId): JobRecord[] {
 
 // Authors are resumed in their own session (the latest fresh one: start-agent begins a new one),
 // one run at a time.
+// The worktree's name when it was removed (its group closed, to free the disk) and not restored since: its branch was
+// kept, so creating it again brings the author's commits back.
+export function removedWorktree(view: View, cwd: string): string | undefined {
+  const name = basename(cwd);
+  const removed = view.jobs.findLast((j) => j.purpose.key === `remove:${name}` && succeeded(j));
+  if (!removed) return undefined;
+  const restored = view.jobs.findLast((j) => j.purpose.key.startsWith(`wt-restore:${name}:`) && succeeded(j));
+  return restored && restored.startedAt > removed.startedAt ? undefined : name;
+}
+
 export function resumeAuthorPlan(
   request: string,
   view: View,
@@ -292,6 +302,8 @@ class Planner {
     this.bugEdits();
     this.verify();
     this.askedTests();
+    // Your messages to authors whose worktree is being restored.
+    for (const q of this.s.queuedAuthors ?? []) this.resumeAuthor(q.item, q.key, q.reason, q.message);
     this.skipRemoval();
     this.metaDraft();
     this.metaBug();
@@ -994,6 +1006,14 @@ class Planner {
 
   resumeAuthor(item: ItemId, key: string, reason: string, message: string, state: ItemState = "investigating"): JobRecord | undefined {
     if (this.view.byKey.has(key)) return this.want(key);
+    // A removed worktree comes back first.
+    const session = this.authorJobs(item).filter((j) => j.purpose.reason === "initial" || j.purpose.reason === "start").at(-1);
+    const removed = session && removedWorktree(this.view, session.cwd);
+    if (removed) {
+      const removal = this.view.jobs.findLast((j) => j.purpose.key === `remove:${removed}`)!;
+      this.want(`wt-restore:${removed}:${removal.job}`, () => this.worktree(removed, { item }));
+      return undefined;
+    }
     // Its own commit has no Differential Revision line (the stack's has): without the revision it can't read the reviews.
     const revs = Object.values(this.s.patches).filter((p) => p.item === item && p.revision !== undefined);
     if (revs.length) {

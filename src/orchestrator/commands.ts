@@ -6,7 +6,7 @@ import { sameBugDraft } from "../state/meta-bug.ts";
 import { canDismiss, canRetry, isPushJob, reviewLimitFlag } from "../state/flags.ts";
 import type { Command, Event, FactoryConfig, ItemId, JobId, PlannedCommand, RequestId, RequestState } from "../types.ts";
 import { REQUEST_STEPS } from "../server/commands.ts";
-import { ANNOTATIONS_ITEM, authorJobsOf, CANCELLED, itemEpochOf, SETTLED, TERMINAL, resumeAuthorPlan } from "./next.ts";
+import { ANNOTATIONS_ITEM, authorJobsOf, CANCELLED, itemEpochOf, SETTLED, TERMINAL, resumeAuthorPlan, removedWorktree } from "./next.ts";
 import { handOffReferences } from "./hand-off.ts";
 import { moveProblem, partEvents, splitProblem } from "./split.ts";
 import { dataPath, requestDir, sessionIdFor, slug, type JobPlan } from "./plan.ts";
@@ -62,6 +62,11 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
     if (plan === undefined) return `${itemName(item)} has no author session to resume`;
     if (plan === "busy") return `the author of ${itemName(item)} is running: send it again when it's done`;
     plan.purpose.key = `author:${item}${itemEpochOf(view!, item)}:${reason.replace(/\s+/g, "-")}:${c.id}`;
+    // Its worktree was removed: the planner restores it, then resumes the author with this.
+    if (removedWorktree(view!, plan.cwd)) {
+      ev({ type: "author-queued", item, key: plan.purpose.key, reason, message });
+      return undefined;
+    }
     effects.push({ type: "start", plan });
     return undefined;
   };

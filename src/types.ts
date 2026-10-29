@@ -140,6 +140,7 @@ export type Event =
   | (EventBase & { type: "groups-moved"; to: RequestId; items: ItemId[] }) // they go on in that request
   | (EventBase & { type: "meta-draft-asked" }) // you want a meta bug for a stack that doesn't need one
   | (EventBase & { type: "tests-asked"; tests: string[] }) // failures already on central you want fixed too
+  | (EventBase & { type: "author-queued"; item: ItemId; key: string; reason: string; message: string }) // your message to an author whose worktree is restored first
   | (EventBase & { type: "verify-asked"; text: string }) // you want the stack pushed to try as it stands, whatever the step
   | (EventBase & { type: "comment-sent"; patch: PatchId; text: string; key: string }) // your comment on a patch, and the key of the author run answering it
   | (EventBase & { type: "config-set"; config: Record<string, unknown> })
@@ -466,6 +467,7 @@ export interface RequestState {
   movedTo?: Record<ItemId, RequestId>; // its groups the split moved, and where
   metaDraftAsked?: boolean; // you asked for a meta bug draft
   askedTests?: string[]; // failures already on central you asked to fix too, by test path
+  queuedAuthors?: { item: ItemId; key: string; reason: string; message: string }[]; // your messages waiting for their author's worktree
   verifyAsked?: string[]; // each time you asked for a try push of the stack as it stands, why
   splitFrom?: RequestId; // made by splitting that one
   createdAt: Iso;

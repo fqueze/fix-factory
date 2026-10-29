@@ -2489,6 +2489,21 @@ describe("9. a try push of a submitted stack", () => {
     assert.equal(sc.state().items["i-test-a"].state, "waiting for review");
   });
 
+  it("a message to an author whose worktree was removed waits for it to be restored", () => {
+    const sc = inReview();
+    const name = `${ID}-i-test-a`;
+    sc.startJob({ purpose: { key: `remove:${name}`, what: "remove" }, kind: "script", name: "worktree.ts remove", cwd: config.firefoxRepo, cli: { tool: "worktree.ts", args: ["remove", name] } });
+    sc.complete(`remove:${name}`, { output: { name, removed: true } });
+    command(sc, { cmd: "continue", item: "i-test-a", text: "Post the reply." });
+    const queued = sc.state().queuedAuthors![0].key;
+    assert.ok(!sc.view().byKey.has(queued), "not resumed in a missing worktree");
+    const restore = sc.settle().find((k) => k.startsWith(`wt-restore:${name}:`))!;
+    assert.deepEqual(sc.plan(restore).cli?.args.slice(0, 2), ["create", name]);
+    sc.complete(restore, { output: { name, path: `/wt/${name}` } });
+    assert.ok(sc.settle().includes(queued));
+    assert.match(sc.plan(queued).agent?.message ?? "", /Post the reply\./);
+  });
+
   it("redo-step back before review is refused once the stack is on Phabricator", () => {
     const sc = inReview();
     command(sc, { cmd: "redo-step", step: "verify on try", reason: "another push" });
