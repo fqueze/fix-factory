@@ -2659,6 +2659,17 @@ describe("9. review comments", () => {
     assert.equal(n.action, "Post 1 reply, then resubmit D101");
     assert.equal(n.stack, "root");
     assert.equal(sc.state().items["i-test-a"].state, "waiting for review");
+    // It stays until Phabricator has a newer diff, however many polls go by.
+    const pollWith = (created: string) => {
+      sc.now += 11 * 60_000;
+      const key = sc.settle().find((k) => k.startsWith("poll:"))!;
+      sc.complete(key, { output: polled("needs-review", [], "pending").map((x) => ({ ...x, diff: { id: 1, commit: sha("f"), created } })) });
+      sc.settle();
+    };
+    pollWith("2026-10-01T00:00:00.000Z");
+    assert.ok(sc.open().includes(n.key), "an older diff: not resubmitted yet");
+    pollWith(new Date(sc.now).toISOString());
+    assert.ok(!sc.open().includes(n.key), "resubmitted");
   });
 
 it("an addressed commit that conflicts on today's central goes to resolve-conflict, then gets its Differential Revision line back", () => {
@@ -2812,7 +2823,7 @@ describe("9. changes after submission", () => {
     });
   }
 
-  it("once you copied the resubmit, the next change's interdiff is against that commit", () => {
+  it("once Phabricator has the resubmitted commit, the next change's interdiff is against it", () => {
     const { sc, job } = changed("continue");
     sc.settle();
     sc.complete(`rewrite-review:root:${job}:v2`, { output: { mapping: { [sha("e")]: sha("e"), [sha("7")]: sha("8") } } });
@@ -2821,6 +2832,9 @@ describe("9. changes after submission", () => {
     sc.settle();
     sc.add({ type: "submit-copied", request: ID, stack: "root" });
     assert.equal(sc.state().patches["p-test-a"].sentSha, sha("8"));
+    // Its next poll shows the diff moz-phab made from it.
+    const review = sc.state().patches["p-test-a"].review!;
+    sc.add({ type: "review-status", request: ID, patch: "p-test-a", ...review, diff: { id: 2, commit: sha("8"), created: new Date(sc.now).toISOString() } });
     sc.settle();
     // Its author changes it again.
     const plan = resumeAuthorPlan(ID, sc.view(), "i-test-a", "continue", { message: "m" }, "investigating");

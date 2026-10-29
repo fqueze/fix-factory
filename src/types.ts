@@ -201,7 +201,7 @@ export type Event =
   | (EventBase & { type: "try-progress"; push: PushId; done: number; total: number; failures: number; tests?: { done: number; total: number } })
   | (EventBase & { type: "try-job-failed"; push: PushId; taskId: string; retryId?: number; jobName: string; platform: string; tier?: number; result: string })
   | (EventBase & { type: "try-finished"; push: PushId; result: "green" | "failures"; summary: string })
-  | (EventBase & { type: "review-status"; patch: PatchId; revision: number; status: string; reviewers: ReviewerStatus[]; comments: InlineComment[] })
+  | (EventBase & { type: "review-status"; patch: PatchId; revision: number; status: string; reviewers: ReviewerStatus[]; comments: InlineComment[]; diff?: PhabDiff })
   | (EventBase & { type: "reply-draft"; patch: PatchId; commentId: number; text: string })
   | (EventBase & { type: "needs-user"; key: string; action: string; detail: string; item?: ItemId; patch?: PatchId; push?: PushId; stack?: string; job?: JobId })
   | (EventBase & { type: "user-done"; key: string; byFactory?: true; reorg?: true }) // clears a needs-user with the same key; byFactory: the factory found it moot, not your answer; reorg: you copied the moz-phab reorg command
@@ -367,12 +367,19 @@ export interface PatchView {
   pastShas?: string[]; // its commit's earlier shas, oldest first
   interdiffFile?: string;
   deps: Dep[]; // deps where this patch is the dependent one
-  review?: { revision: number; status: string; reviewers: ReviewerStatus[]; comments: InlineComment[] };
+  review?: { revision: number; status: string; reviewers: ReviewerStatus[]; comments: InlineComment[]; diff?: PhabDiff };
   replyDrafts: { commentId: number; text: string }[];
   testPlan?: string; // for its revision's Test Plan field: how the fix was shown to work, a few lines
   testPlanSent?: { revision: number; text: string; t: Iso }; // what you set on its revision
   reviewerFromYou?: string; // the r= you gave it
   yourComments?: { text: string; key: string; t: Iso }[]; // what you told its author (Comment on the fix, stack-viewer), oldest first
+}
+
+// The revision's latest diff: what Phabricator has, and the local commit moz-phab sent it from.
+export interface PhabDiff {
+  id: number;
+  commit?: string;
+  created: Iso;
 }
 
 export interface StackView {
@@ -470,7 +477,7 @@ export interface RequestState {
   patches: Record<PatchId, PatchView>;
   stacks: Record<string, StackView>;
   pushes: Record<PushId, PushView>; // in creation order
-  patchSent: Record<PatchId, { sha: string; t: Iso }[]>; // each commit taken as sent to Phabricator (its revision showing up, a moz-phab command copied), and when
+  patchSent: Record<PatchId, { sha: string; t: Iso }[]>; // each commit Phabricator had (its revision showing up, then its diffs), and since when
   patchShas: Record<PatchId, string[]>; // every commit each patch has been, oldest first: what tells whether a push had it
   pushChanges: Record<string, { since: PushId; changes: PushChange[]; removed: { sha: string; title: string }[] }>; // per stack, the latest
   jobs: Record<JobId, JobView>;

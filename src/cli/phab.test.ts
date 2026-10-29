@@ -25,6 +25,7 @@ test("poll: reviewers, inline comments, suggested edits, replies", async () => {
     { name: "jcristau", status: "accepted" },
   ]);
   assert.equal(d333041.comments.length, 2);
+  assert.deepEqual(d333041.diff, { id: 1404076, commit: "4bfc772b4e156746e430284c9f263f522b175c26", created: new Date(1791879808 * 1000).toISOString() });
   assert.deepEqual(d333041.comments[0], {
     id: 1767043,
     author: "jcristau",

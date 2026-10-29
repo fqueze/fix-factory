@@ -2466,8 +2466,10 @@ class Planner {
     if (this.s.step !== "review comments" && this.s.step !== "landing") return;
     const lastPoll = this.view.jobs.filter((j) => j.purpose.what === "poll" && succeeded(j)).at(-1);
     for (const n of this.s.needsUser.filter((x) => x.key.startsWith("resubmit:"))) {
-      // You resubmit while you're here; the next poll after the request means it's done.
-      if (lastPoll && lastPoll.startedAt > (this.view.raised.get(n.key) ?? Infinity)) this.clear(n.key);
+      // Done once Phabricator has a diff newer than the request (polls from before diffs were read: the next poll).
+      const diff = n.patch === undefined ? undefined : this.s.patches[n.patch]?.review?.diff;
+      const raised = this.view.raised.get(n.key) ?? Infinity;
+      if (diff ? Date.parse(diff.created) > raised : lastPoll && lastPoll.startedAt > raised) this.clear(n.key);
     }
     for (const p of revisions) {
       if (!p.review || !p.item) continue;

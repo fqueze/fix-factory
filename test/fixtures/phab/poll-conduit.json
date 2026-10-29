@@ -1609,5 +1609,83 @@
     "order": null
    }
   }
+ },
+ {
+  "method": "differential.diff.search",
+  "params": {
+   "constraints": {
+    "revisionPHIDs": [
+     "PHID-DREV-42hmfhtmjpmmdmxn73ou",
+     "PHID-DREV-5jo35geyazizlxzexbwi"
+    ]
+   },
+   "attachments": {
+    "commits": true
+   },
+   "order": "newest"
+  },
+  "result": {
+   "data": [
+    {
+     "id": 1404076,
+     "type": "DIFF",
+     "phid": "PHID-DIFF-e3im5r25skysglsdiyac",
+     "fields": {
+      "revisionPHID": "PHID-DREV-42hmfhtmjpmmdmxn73ou",
+      "dateCreated": 1791879808
+     },
+     "attachments": {
+      "commits": {
+       "commits": [
+        {
+         "identifier": "4bfc772b4e156746e430284c9f263f522b175c26",
+         "tree": "6d5eeacd4843914d9190f0cfed03893f504180bd",
+         "parents": [],
+         "author": {
+          "name": "Florian Quèze",
+          "email": "florian@queze.net",
+          "raw": "\"Florian Quèze\" <florian@queze.net>",
+          "epoch": null
+         },
+         "message": "Bug 2080975 - Keep failures of tests that will be retried as FAIL in resource usage profile markers. r=jcristau\n\nThe harnesses make expected match status when a test will be retried, so the\nfailure arrived looking like a todo() and became KNOWN-FAIL.\n\nDifferential Revision: https://phabricator.services.mozilla.com/D333041\n"
+        }
+       ]
+      }
+     }
+    },
+    {
+     "id": 1391310,
+     "type": "DIFF",
+     "phid": "PHID-DIFF-oydb7ycgtrdswqmlyvw2",
+     "fields": {
+      "revisionPHID": "PHID-DREV-5jo35geyazizlxzexbwi",
+      "dateCreated": 1790650159
+     },
+     "attachments": {
+      "commits": {
+       "commits": [
+        {
+         "identifier": "4edac2bfd4c6f28943eb80c2e9efd5afbb2d468e",
+         "tree": "5e200b3502f3f549590071b5c048c1e917164830",
+         "parents": [
+          "b333202cd8d8"
+         ],
+         "author": {
+          "name": "Florian Quèze",
+          "email": "florian@queze.net",
+          "raw": "\"Florian Quèze\" <florian@queze.net>",
+          "epoch": 1790649606
+         },
+         "message": "Bug 1869154 - Don't start CSS animation and transition markers before the animation started playing. r?#layout-reviewers\n\nSummary:\n\nSubtracting the elapsed time from the event time gives a marker start before\nthe animation started playing when it was seeked (e.g. with finish()), which\nunderflows to a null TimeStamp if that is before the machine booted.\n\n\n\nTest Plan:\n\nReviewers: #layout-reviewers\n\nSubscribers:\n\nBug #: 1869154"
+        }
+       ]
+      }
+     }
+    }
+   ],
+   "cursor": {
+    "after": null
+   }
+  }
  }
 ]

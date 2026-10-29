@@ -111,6 +111,7 @@ export interface PollResult {
   status: string;
   reviewers: ReviewerStatus[];
   comments: PolledComment[];
+  diff?: { id: number; commit?: string; created: string }; // its latest diff, and the local commit moz-phab sent it from
 }
 
 async function names(conduit: Conduit, phids: string[]): Promise<Map<string, string>> {
@@ -172,6 +173,10 @@ export async function poll(revisions: number[], conduit: Conduit = makeConduit()
     for (const t of txns) if (t.type === "inline") for (const c of t.comments) phids.add(c.authorPHID);
   }
   const nameOf = await names(conduit, [...phids].sort());
+  // Newest first: the first diff seen for a revision is its latest.
+  const diffs = await searchAll(conduit, "differential.diff.search", { constraints: { revisionPHIDs: revs.map((r) => r.phid) }, attachments: { commits: true }, order: "newest" });
+  const latest = new Map<string, any>();
+  for (const d of diffs) if (!latest.has(d.fields.revisionPHID)) latest.set(d.fields.revisionPHID, d);
 
   return revisions.map((id) => {
     const r = byId.get(id);
@@ -209,6 +214,15 @@ export async function poll(revisions: number[], conduit: Conduit = makeConduit()
         status: reviewerStatus(rv.status, r.fields.status.value),
       })),
       comments,
+      ...(latest.has(r.phid)
+        ? {
+            diff: {
+              id: latest.get(r.phid).id,
+              ...(latest.get(r.phid).attachments.commits.commits[0]?.identifier ? { commit: latest.get(r.phid).attachments.commits.commits[0].identifier } : {}),
+              created: new Date(latest.get(r.phid).fields.dateCreated * 1000).toISOString(),
+            },
+          }
+        : {}),
     };
   });
 }

@@ -279,11 +279,7 @@ export function foldEvents(events: readonly Event[]): RequestState {
         if (s.stacks[e.stack]) {
           s.stacks[e.stack].submitCopied = e.t;
           s.stacks[e.stack].submittedOrder = [...s.stacks[e.stack].order];
-          for (const id of s.stacks[e.stack].order) {
-            if (s.patches[id]?.revision === undefined) continue;
-            s.patches[id].sentSha = s.patches[id].sha;
-            s.patchSent[id] = [...(s.patchSent[id] ?? []), { sha: s.patches[id].sha, t: e.t }];
-          }
+          for (const id of s.stacks[e.stack].order) if (s.patches[id]?.revision !== undefined) s.patches[id].sentSha = s.patches[id].sha;
         }
         break;
       case "try-planned": {
@@ -319,7 +315,8 @@ export function foldEvents(events: readonly Event[]): RequestState {
         break;
       }
       case "review-status":
-        reviews.set(e.patch, { revision: e.revision, status: e.status, reviewers: e.reviewers, comments: e.comments });
+        reviews.set(e.patch, { revision: e.revision, status: e.status, reviewers: e.reviewers, comments: e.comments, ...(e.diff ? { diff: e.diff } : {}) });
+        if (e.diff?.commit && s.patchSent[e.patch]?.at(-1)?.sha !== e.diff.commit) s.patchSent[e.patch] = [...(s.patchSent[e.patch] ?? []), { sha: e.diff.commit, t: e.diff.created }];
         break;
       case "reply-draft": {
         const m = replies.get(e.patch) ?? new Map<number, string>();

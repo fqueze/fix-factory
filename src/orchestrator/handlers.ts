@@ -283,6 +283,7 @@ export function handleFinished(input: HandlerInput): HandlerResult {
           status: r.status,
           reviewers: r.reviewers,
           comments: r.comments.map((c) => toInline(c, kinds.get(c.id) ?? p.review?.comments.find((x) => x.id === c.id)?.kind)),
+          ...(r.diff ? { diff: r.diff } : {}),
         });
       }
       break;
