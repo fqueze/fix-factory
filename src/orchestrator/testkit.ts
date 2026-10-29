@@ -90,7 +90,7 @@ export class Scenario {
       if (a.type !== "start") continue;
       this.startJob(a.plan);
       // Answered right away (startJob): not something a test waits on.
-      if (a.plan.purpose.what === "bug-check") continue;
+      if (a.plan.purpose.what === "bug-check" || a.plan.purpose.what === "test-runs") continue;
       if (this.showTestPlans || !a.plan.purpose.key.startsWith("test-plan:")) keys.push(a.plan.purpose.key);
     }
     return keys;
@@ -129,6 +129,10 @@ export class Scenario {
     for (const e of plan.startEvents ?? []) this.add(e);
     this.plans.set(job, plan);
     // A bug an author names is open, unless a test says otherwise.
+    // Each test ran once, and passed, on one job of a push, unless a test says otherwise.
+    if (plan.purpose.what === "test-runs") {
+      this.complete(plan.purpose.key, { output: plan.cli!.args.slice(2).map((test) => ({ test, configs: this.testRuns.get(test) ?? [{ jobName: "test-linux2404-64/opt-mochitest-plain-1", jobs: 1, passed: 1, passedOnRetry: 0, failed: 0 }] })) });
+    }
     if (plan.purpose.what === "bug-check") {
       const id = Number(plan.cli!.args[1]);
       this.complete(plan.purpose.key, { output: { id, summary: `bug ${id}`, status: this.resolvedBugs.has(id) || this.incompleteBugs.has(id) ? "RESOLVED" : "NEW", resolution: this.resolvedBugs.has(id) ? "FIXED" : this.incompleteBugs.has(id) ? "INCOMPLETE" : "", firstComment: "" } });
@@ -136,6 +140,7 @@ export class Scenario {
     return job;
   }
   readonly plans = new Map<JobId, JobPlan>();
+  readonly testRuns = new Map<string, { jobName: string; jobs: number; passed: number; passedOnRetry: number; failed: number }[]>();
   readonly resolvedBugs = new Set<number>(); // FIXED
   readonly incompleteBugs = new Set<number>();
 

@@ -2713,6 +2713,7 @@ describe("9. review comments", () => {
     sc.settle();
     const pushesOf = (pid: string) => JSON.parse(sc.plan(sc.view().jobs.findLast((j) => j.purpose.key.startsWith(`test-plan:${pid}:`))!.purpose.key).files![1].content);
     assert.deepEqual(pushesOf("p-test-a").map((x: { rev: string; thisVersion: boolean }) => [x.rev, x.thisVersion]), [["fed", false]]);
+    assert.deepEqual(pushesOf("p-test-a")[0].runs, [{ test: "a/test_a.js", configs: [{ jobName: "test-linux2404-64/opt-mochitest-plain-1", jobs: 1, passed: 1, passedOnRetry: 0, failed: 0 }] }], "where its test ran, read by the factory");
     assert.deepEqual(pushesOf("p-test-b"), [], "that push didn't have test_b's patch");
   });
 

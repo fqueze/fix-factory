@@ -16,7 +16,7 @@ import type { ReviewerSuggestion } from "../cli/phab.ts";
 import type { ImportedCommit } from "../cli/stack/import.ts";
 import type { MessageEdit } from "../cli/stack/message.ts";
 import type { OrderOutput } from "../cli/stack/order.ts";
-import { expectedTests, type DryRunResult } from "../cli/try.ts";
+import { expectedTests, type DryRunResult, type TestRuns } from "../cli/try.ts";
 import type { BugInfo, BugLandings } from "../cli/bugzilla.ts";
 import { keptDir } from "../lib/kept.ts";
 import { REQUEST_STEPS } from "../server/commands.ts";
@@ -341,19 +341,33 @@ class Planner {
       const inv = item.investigation ?? null;
       // Only the pushes that had this patch: a plan may cite no other.
       const shas = this.s.patchShas[p.id] ?? [p.sha];
-      const results = pushes
-        .filter(({ commits }) => commits.some((c) => shas.some((x) => same(c, x))))
-        .map(({ push, commits }) => ({ purpose: push.purpose, rev: push.rev, url: push.url, result: push.result, summary: push.summary, thisVersion: commits.some((c) => same(c, p.sha)) }));
+      const had = pushes.filter(({ commits }) => commits.some((c) => shas.some((x) => same(c, x))));
       // Groups this patch fixes too, their own fix dropped as covered by it.
       const alsoFixes = Object.values(this.s.items)
         .filter((i) => i.coveredBy === p.id)
         .map((i) => ({ tests: i.group.tests, failure: i.group.message, covered: i.detail, cause: i.investigation?.cause, reproduction: i.investigation?.reproduction, verification: i.investigation?.verification }));
+      // Where its tests ran in each of those pushes, per job, read by the factory with fx-tests: all a plan may say about
+      // try comes from them (a platform the test is skipped on, or that wasn't selected, isn't listed).
+      const tests = [...new Set([...item.group.tests, ...alsoFixes.flatMap((a) => a.tests)])].filter((t) => t.includes("/")).sort();
+      const runsOf = had.map(({ push }) =>
+        tests.length ? this.want(`test-runs:${push.id}:${shortHash(tests).slice(0, 8)}`, () => this.cli("test-runs", "try.ts", ["test-runs", push.rev!, ...tests], { purpose: { push: push.id } })) : undefined,
+      );
+      if (tests.length && runsOf.some((r) => !r)) continue;
+      const results = had.map(({ push, commits }, i) => ({
+        purpose: push.purpose,
+        rev: push.rev,
+        url: push.url,
+        result: push.result,
+        summary: push.summary,
+        thisVersion: commits.some((c) => same(c, p.sha)),
+        ...(runsOf[i] ? { runs: this.out<TestRuns[]>(runsOf[i]!) } : {}),
+      }));
       // The version changes with the prompt: an earlier version's session isn't resumed.
       const version = `test-plan:${p.id}:${TEST_PLAN_VERSION}:`;
       // passes-v1: plans written before told to confirm a push's runs with fx-tests --test are rewritten in their session;
       // pushes-v2: and those given every push of the request, whether it had the patch or not; positive-v1: and those
-      // saying what wasn't run, or leaving out the tests it fixes too; skips-v1: and those counting platforms that skip it.
-      const key = `${version}${shortHash([JSON.stringify([inv, results]), "passes-v1", "pushes-v2", "positive-v1", "skips-v1", ...(alsoFixes.length ? [JSON.stringify(alsoFixes)] : [])]).slice(0, 8)}`;
+      // saying what wasn't run, or leaving out the tests it fixes too; runs-v1: and those not given the tests' runs.
+      const key = `${version}${shortHash([JSON.stringify([inv, results]), "passes-v1", "pushes-v2", "positive-v1", "runs-v1", ...(alsoFixes.length ? [JSON.stringify(alsoFixes)] : [])]).slice(0, 8)}`;
       const investigationFile = dataPath(this.config, this.s.id, `test-plan-${p.id}-investigation.json`);
       const pushesFile = dataPath(this.config, this.s.id, `test-plan-${p.id}-pushes.json`);
       const notes = Object.values(inv?.files ?? {});
@@ -372,7 +386,7 @@ class Planner {
           item: item.id,
           cwd: last.cwd,
           files,
-          agent: { sessionId: last.sessionId!, resume: true, message: `Its investigation, its request's try results or your instructions changed: ${investigationFile} and ${pushesFile} are up to date. ${pushesFile} lists only the pushes that had this commit (\`thisVersion: false\`: an earlier version of it): cite no other push, and drop anything you wrote about one that isn't there. Its \`alsoFixes\`, when there, are tests it fixes too: link each on the first line with its own, with its reproduction and verification. Write nothing about what wasn't done (no platform, build type or push that wasn't run, nothing "untested" or "not confirmed"): what was run speaks for itself; only a push that still had failures in these tests is said plainly. A platform whose manifest skips the test (its skip-if, which this commit may not remove) didn't run it: name only the platforms fx-tests shows runs on. Say a push shows the test passing only once \`fx-tests try <rev> --all-jobs --test <full path>\` shows its runs passing, with how many; leave out a push you can't confirm, and say nothing about what a tool could or couldn't show. Write the test plan again, keeping what you were asked before, then end with the JSON report.` },
+          agent: { sessionId: last.sessionId!, resume: true, message: `Its investigation, its request's try results or your instructions changed: ${investigationFile} and ${pushesFile} are up to date. ${pushesFile} lists only the pushes that had this commit (\`thisVersion: false\`: an earlier version of it): cite no other push, and drop anything you wrote about one that isn't there. Its \`alsoFixes\`, when there, are tests it fixes too: link each on the first line with its own, with its reproduction and verification. Write nothing about what wasn't done (no platform, build type or push that wasn't run, nothing "untested" or "not confirmed"): what was run speaks for itself; only a push that still had failures in these tests is said plainly. Each push's \`runs\` are where its tests ran, per job, read with fx-tests: what you say about try (which platforms, build types, variants, how many runs, passed or failed) comes from them and nothing else, a job not listed there didn't run the test. A push with no runs of the test is left out, and nothing is said about what a tool could or couldn't show. Write the test plan again, keeping what you were asked before, then end with the JSON report.` },
         }));
         continue;
       }

@@ -28,6 +28,11 @@
 //   resolves it later. If Lando needs an Auth0 login, a line
 //   "lando-login-required: <url>" goes to stderr and mach waits for the login.
 //
+// node src/cli/try.ts test-runs <rev> <test>...
+//   → [{test, configs: [{jobName, jobs, passed, passedOnRetry, failed}]}]: each test's runs in the push, per job,
+//   from `fx-tests try <rev> --all-jobs --test <test> --json` (fx-tests on PATH). A config the test didn't run in
+//   (skipped there, or not selected) isn't listed.
+//
 // node src/cli/try.ts watch <rev> | --lando <jobId> [--interval <s>] [--timeout <min>]
 //   Polls Lando (with --lando) until the job has landed, then Treeherder until the
 //   push exists and every job has run. Prints JSON lines (WatchLine):
@@ -50,7 +55,7 @@ import { setTimeout as sleepMs } from "node:timers/promises";
 import { loadConfig } from "../config.ts";
 import { log, runCli, UsageError } from "../lib/cli.ts";
 import { COMMITS_CHANGED } from "../state/flags.ts";
-import { exec, type ExecResult } from "../lib/exec.ts";
+import { exec, execJson, type ExecResult } from "../lib/exec.ts";
 import { dryRunJobs, taskgraphJobs, type TryJob } from "./task-set.ts";
 
 export const TREEHERDER = "https://treeherder.mozilla.org";
@@ -834,9 +839,27 @@ function positiveNumber(value: unknown, name: string, fallback: number): number 
   return n;
 }
 
+export interface TestRuns {
+  test: string;
+  configs: { jobName: string; jobs: number; passed: number; passedOnRetry: number; failed: number }[];
+}
+
+export async function testRuns(rev: string, tests: string[]): Promise<TestRuns[]> {
+  const out: TestRuns[] = [];
+  for (const test of tests) {
+    const r = await execJson<{ configs: TestRuns["configs"] }>(["fx-tests", "try", rev, "--all-jobs", "--test", test, "--json", "--quiet"]);
+    out.push({ test, configs: r.configs });
+  }
+  return out;
+}
+
 async function main(): Promise<void> {
   await runCli(
     {
+      "test-runs": async (args) => {
+        if (args.length < 2) throw new UsageError("usage: test-runs <rev> <test>...");
+        return testRuns(args[0], args.slice(1));
+      },
       "dry-run": async (args, values) => {
         const pending = typeof values.pending === "string" ? (JSON.parse(readFileSync(values.pending, "utf8")) as PendingPush[]) : undefined;
         return dryRun(requireCwd(values), args, { pending });
