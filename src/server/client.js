@@ -356,6 +356,13 @@
     }, cls === "error" ? 6000 : 1500);
   }
 
+  // An open ⋯ menu closes on a click anywhere else.
+  document.addEventListener("click", function (event) {
+    document.querySelectorAll("details.menu[open]").forEach(function (menu) {
+      if (!menu.contains(event.target)) menu.open = false;
+    });
+  });
+
   document.addEventListener("click", function (event) {
     var button = event.target.closest && event.target.closest("[data-copy]");
     if (!button) return;

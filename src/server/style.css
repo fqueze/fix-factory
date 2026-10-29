@@ -368,3 +368,7 @@ ul.changes li.more ul.changes { padding-left: 0; margin: 0; }
 .thread .draftreply b { display: inline; }
 .draftreply .parthead { margin: 0 0 3px; }
 .draftreply textarea { width: 100%; box-sizing: border-box; font: inherit; }
+details.menu { position: relative; display: inline-block; font-weight: normal; }
+details.menu > summary { list-style: none; }
+details.menu > summary::-webkit-details-marker { display: none; }
+details.menu > .menu-items { position: absolute; right: 0; top: 100%; z-index: 10; margin-top: 4px; display: flex; flex-direction: column; gap: 4px; align-items: flex-start; padding: 6px; background: var(--surface-1); border: 1px solid var(--border); border-radius: 6px; white-space: nowrap; box-shadow: 0 2px 6px rgb(0 0 0 / .15); }

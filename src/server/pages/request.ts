@@ -258,8 +258,11 @@ submitted ? verifyStackButton(r.id, requestUrl(r.id)) : null
 function phabCheck(r: RequestState, ctx: RenderContext): Html {
   const polls = Object.values(r.jobs).filter((j) => j.name === "phab.ts poll");
   if (polls.some((j) => j.endedAt === undefined)) return html`<span class="sub working">checking Phabricator…</span>`;
+  // Rarely needed: in a ⋯ menu.
   const last = polls.filter((j) => j.exitCode === 0).map((j) => j.endedAt!).sort().at(-1);
-  return html`${last ? html`<span class="sub">Phabricator checked ${elapsed(last, ctx)} ago</span>` : null}${pollPhabButton(r.id, requestUrl(r.id))}`;
+  return html`<details class="menu"><summary class="btn small" title="More">⋯</summary><div class="menu-items">${pollPhabButton(r.id, requestUrl(r.id))}${
+    last ? html`<span class="sub">last checked ${elapsed(last, ctx)} ago</span>` : null
+  }</div></details>`;
 }
 
 // The bugs of the stacks' patches, which a meta bug tracks.

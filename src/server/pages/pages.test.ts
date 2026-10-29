@@ -680,9 +680,9 @@ describe("one fixture per step of docs/MVP.md", () => {
     r.patches["p-focus"].revision = 5;
     assert.ok(renderRequest(r, ctx, true).value.includes(button), "whatever the step, once a patch is on Phabricator");
     r.step = "review comments";
-    assert.match(renderRequest(r, ctx, true).value, /<h3 class="stackhead">[^]*?Check Phabricator now<\/button><\/form><\/h3>/);
+    assert.match(renderRequest(r, ctx, true).value, /<h3 class="stackhead">[^]*?<details class="menu"><summary class="btn small" title="More">⋯<\/summary><div class="menu-items"><form[^]*?Check Phabricator now<\/button><\/form>[^]*<\/details><\/h3>/);
     r.jobs["j-poll"] = { job: "j-poll", kind: "script", name: "phab.ts poll", cmd: [], cwd: "", pid: 1, pidStartTime: 1, startedAt: "2026-10-16T07:00:00.000Z", endedAt: "2026-10-16T07:30:00.000Z", exitCode: 0 };
-    assert.match(renderRequest(r, ctx, true).value, /Phabricator checked <span data-since="2026-10-16T07:30:00.000Z">/);
+    assert.match(renderRequest(r, ctx, true).value, /last checked <span data-since="2026-10-16T07:30:00.000Z">/);
     delete r.jobs["j-poll"].endedAt;
     assert.match(renderRequest(r, ctx, true).value, /checking Phabricator…/);
     delete r.jobs["j-poll"];
