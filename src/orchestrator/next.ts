@@ -2770,10 +2770,11 @@ class Planner {
       // One reorg to ask for at a time: an earlier one's order is moot.
       for (const n of this.s.needsUser) if (n.key.startsWith(`land:${st.id}:`) && n.key !== `land:${st.id}:${h}`) this.clear(n.key);
       if (!o.landable.length) continue;
-      if (o.order.join() !== st.order.join() || this.view.byKey.has(`rewrite-land:${st.id}:${h}`)) {
+      // v2: earlier versions gave landed patches an edit, which the rewrite refused.
+      if (o.order.join() !== st.order.join() || this.view.byKey.has(`rewrite-land:${st.id}:${h}:v2`)) {
         // Landed patches leave the order, and their edits with them.
         const e = this.rewriteEdits(`land-${st.id}-${h}`, o.order.map((pid) => this.s.patches[pid]));
-        const rw = this.want(`rewrite-land:${st.id}:${h}`, () =>
+        const rw = this.want(`rewrite-land:${st.id}:${h}:v2`, () =>
           this.cli("rewrite", "stack.ts", ["rewrite", "--cwd", st.worktree, "--base", st.base ?? this.config.baseRef, "--branch", st.branch, "--order", o.order.map((pid) => this.s.patches[pid].sha).join(","), ...e.args], {
             cwd: st.worktree,
             files: e.files,
@@ -2798,7 +2799,7 @@ class Planner {
       }
       // Only when the stack's order differs from Phabricator's: landable patches already at the bottom need nothing there.
       const phab = st.submittedOrder?.filter((pid) => st.order.includes(pid));
-      if (!this.view.byKey.has(`rewrite-land:${st.id}:${h}`) || (phab && phab.join() === st.order.join())) {
+      if (!this.view.byKey.has(`rewrite-land:${st.id}:${h}:v2`) || (phab && phab.join() === st.order.join())) {
         this.clear(`land:${st.id}:${h}`);
         continue;
       }

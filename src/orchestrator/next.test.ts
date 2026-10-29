@@ -3129,7 +3129,7 @@ describe("10. landing: the reorg flag", () => {
     const again = sc.view().jobs.find((j) => j.purpose.key.startsWith("order-landable:") && j.purpose.key !== key)!.purpose.key;
     sc.complete(again, { output: { order: ["p-test-b", "p-test-a"], flippedSoftDeps: [], landable: ["p-test-b", "p-test-a"] } });
     const [back] = sc.settle();
-    assert.equal(back, `rewrite-land:root:${again.split(":").at(-1)}`);
+    assert.equal(back, `rewrite-land:root:${again.split(":").at(-1)}:v2`);
     const args = sc.plan(back).cli!.args;
     assert.equal(args[args.indexOf("--order") + 1], [sha("6"), sha("5")].join(","));
     sc.complete(back, { output: { mapping: { [sha("6")]: sha("7"), [sha("5")]: sha("8") } } });
