@@ -1264,19 +1264,20 @@ class Planner {
       );
       return;
     }
-    // A bug an author names must be open: a resolved one (often the bug that added the skip-if being removed) isn't this
-    // failure's, and a fix can't land under it. The one you gave stands; a submitted patch keeps its revision's.
+    // A bug an author names can't be FIXED (often the bug that added the skip-if being removed: not this failure's) nor a
+    // DUPLICATE (the bug it duplicates is the one); an inactive one closed otherwise (INCOMPLETE…) can be reopened. The one
+    // you gave stands; a submitted patch keeps its revision's.
     const named = patches.map((p) => this.s.patches[p.id]).filter((pv) => pv !== undefined && pv.bug !== null && !pv.bugFromYou && pv.revision === undefined);
     const checks = named.map((pv) => this.want(`bug-check:${pv.bug}`, () => this.cli("bug-check", "bugzilla.ts", ["bug", String(pv.bug)], { item: item.id, priority, purpose: { item: item.id } })));
     if (checks.some((c) => !c)) return;
-    const resolved = named.map((pv, i) => ({ pv, bug: this.out<BugInfo>(checks[i]!) })).filter((x) => ["RESOLVED", "VERIFIED", "CLOSED"].includes(x.bug.status));
+    const resolved = named.map((pv, i) => ({ pv, bug: this.out<BugInfo>(checks[i]!) })).filter((x) => ["FIXED", "DUPLICATE"].includes(x.bug.resolution));
     if (resolved.length) {
       const list = resolved.map((x) => `bug ${x.bug.id} (“${x.bug.summary}”, ${x.bug.status} ${x.bug.resolution})`).join(", ");
       // Told once; named again, you decide.
       if (author.purpose.reason === "bug") {
-        for (const x of resolved) this.raise(`bug-resolved:${x.pv.id}`, { action: `Its commit is under a resolved bug`, detail: `${x.pv.title}: ${list}. Tell its author which open bug to use, or to draft a new one.`.slice(0, 500), patch: x.pv.id, item: item.id });
+        for (const x of resolved) this.raise(`bug-resolved:${x.pv.id}`, { action: `Its commit is under a bug already fixed`, detail: `${x.pv.title}: ${list}. Tell its author which open bug to use, or to draft a new one.`.slice(0, 500), patch: x.pv.id, item: item.id });
       } else {
-        this.resumeAuthor(item.id, `author:${item.id}${e}:bug-resolved:${author.job}`, "bug", `Your commit names ${list}, which is resolved: it isn't this failure's bug, and a fix can't land under it. Put the number of an open bug that covers this failure in the commit message, or add a draft to \`bugDrafts\` in your report and keep \`Bug XXXXXXX\`. Change nothing else, then end with the JSON report again.`);
+        this.resumeAuthor(item.id, `author:${item.id}${e}:bug-resolved:${author.job}`, "bug", `Your commit names ${list}, which is already fixed (or a duplicate): it isn't this failure's bug, and a fix can't land under it. Put the number of a bug that covers this failure in the commit message (an open one, or one closed as INCOMPLETE or WORKSFORME, which can be reopened; for a duplicate, the bug it duplicates), or add a draft to \`bugDrafts\` in your report and keep \`Bug XXXXXXX\`. Change nothing else, then end with the JSON report again.`);
       }
       return;
     }

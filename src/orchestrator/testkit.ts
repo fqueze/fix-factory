@@ -131,12 +131,13 @@ export class Scenario {
     // A bug an author names is open, unless a test says otherwise.
     if (plan.purpose.what === "bug-check") {
       const id = Number(plan.cli!.args[1]);
-      this.complete(plan.purpose.key, { output: { id, summary: `bug ${id}`, status: this.resolvedBugs.has(id) ? "RESOLVED" : "NEW", resolution: this.resolvedBugs.has(id) ? "FIXED" : "", firstComment: "" } });
+      this.complete(plan.purpose.key, { output: { id, summary: `bug ${id}`, status: this.resolvedBugs.has(id) || this.incompleteBugs.has(id) ? "RESOLVED" : "NEW", resolution: this.resolvedBugs.has(id) ? "FIXED" : this.incompleteBugs.has(id) ? "INCOMPLETE" : "", firstComment: "" } });
     }
     return job;
   }
   readonly plans = new Map<JobId, JobPlan>();
-  readonly resolvedBugs = new Set<number>();
+  readonly resolvedBugs = new Set<number>(); // FIXED
+  readonly incompleteBugs = new Set<number>();
 
   running(key: string): JobId {
     const rec = this.view().byKey.get(key)?.at(-1);
