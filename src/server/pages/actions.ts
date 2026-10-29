@@ -167,8 +167,9 @@ export function renderRefused(r: RequestState, x: RefusedCommand): Html {
   return html`<div class="action" data-key="${x.key}"><span class="flag">Your ${x.cmd ? COMMAND_LABELS[x.cmd] : "command"} was refused</span>${dismissButton(r.id, x.key, requestUrl(r.id))}${why(x.detail)}</div>`;
 }
 
+// 🗑: the factory drops the group (its row stays, closed; Reopen brings it back).
 export function handBackButton(request: string, item: string, back: string): Html {
-  return commandButton(request, { cmd: "hand-back", item }, "Close", back, false, "The factory stops working on this group");
+  return html`<form class="inline cmd" method="post" action="/api/commands">${commandFields([{ cmd: "hand-back", request, item }], back)}<button class="btn small icon" title="Drop: the factory stops working on this group" aria-label="Drop">🗑</button></form>`;
 }
 
 // An author with a session is resumed where it stopped; anything else runs again.

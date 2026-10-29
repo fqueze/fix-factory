@@ -109,7 +109,7 @@ export function itemSentence(r: RequestState, i: ItemView, ctx: RenderContext): 
       controls,
       detail: i.detail,
       ask: html`<p>The factory should be working on it, but nothing runs and nothing will on its own: a factory bug, or a job that was lost. ${
-        hasAuthorSession(r, i.id) ? "Retry its last job, tell its author what to do, or hand it back to you." : "Retry its last job, or hand it back to you."
+        hasAuthorSession(r, i.id) ? "Retry its last job, tell its author what to do, or drop it (🗑)." : "Retry its last job, or drop it (🗑)."
       }</p>`,
     };
   }
@@ -142,13 +142,13 @@ export function flagAsk(r: RequestState, i: ItemView, n: NeedsUser): Html {
       return html`<p>You stopped ${job ? jobNoun(job.name) : "its job"}. Resume it, tell its author what to do instead, or dismiss this.</p>`;
     case "failed":
       if (job?.kind !== "agent") {
-        return html`${detail}<p>Retry it, tell its author what to do, or hand the group back to you.</p>`;
+        return html`${detail}<p>Retry it, tell its author what to do, or drop the group (🗑).</p>`;
       }
       return isAuthorJob(job)
-        ? html`<p>Its author stopped without a fix:</p>${detail}<p>Resume it where it stopped, tell it what to do, or hand the group back to you.</p>`
-        : html`<p>${jobNoun(job.name).replace(/^./, (c) => c.toUpperCase())} failed:</p>${detail}<p>Retry it, or hand the group back to you.</p>`;
+        ? html`<p>Its author stopped without a fix:</p>${detail}<p>Resume it where it stopped, tell it what to do, or drop the group (🗑).</p>`
+        : html`<p>${jobNoun(job.name).replace(/^./, (c) => c.toUpperCase())} failed:</p>${detail}<p>Retry it, or drop the group (🗑).</p>`;
     case "disagrees":
-      return html`<p>Its author didn't do what you asked:</p>${detail}<p>Tell it again, go ahead with its patch as it is, or hand the group back to you.</p>`;
+      return html`<p>Its author didn't do what you asked:</p>${detail}<p>Tell it again, go ahead with its patch as it is, or drop the group (🗑).</p>`;
     case "take-it":
       return html`${detail}<p>Fix it anyway, or leave it to them: the factory then stops working on this test.</p>`;
     default:

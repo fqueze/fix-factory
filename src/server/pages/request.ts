@@ -3,7 +3,7 @@ import { md } from "./md.ts";
 import { REQUEST_STEPS } from "../commands.ts";
 import type { BugDraft, ItemView, JobView, PatchView, PushView, Regression, RequestState, StackView } from "../../types.ts";
 import { html, join, type Html } from "../html.ts";
-import { actionsSummary, flagPlaceOf, renderAction, recoveryAnswers, pollPhabButton, verifyStackButton, redoAnnotationsButton, approvePushControls, bugBox, continueBox, copyButton, flagControls, flagItemOf, flagText, plannedLabel, recoveryPlanFor, hasAuthorSession, stackViewerLink, submitControls, summaryId } from "./actions.ts";
+import { actionsSummary, flagPlaceOf, renderAction, recoveryAnswers, pollPhabButton, verifyStackButton, redoAnnotationsButton, approvePushControls, bugBox, continueBox, copyButton, handBackButton, flagControls, flagItemOf, flagText, plannedLabel, recoveryPlanFor, hasAuthorSession, stackViewerLink, submitControls, summaryId } from "./actions.ts";
 import { groupJobs, jobLine } from "./activity.ts";
 import { flagAsk, itemBucket, itemSentence, progressLine, requestProgress, type Bucket } from "./progress.ts";
 import {
@@ -447,14 +447,14 @@ function talkBox(r: RequestState, i: ItemView, ctx: RenderContext, p?: PatchView
   }</div>`;
 }
 
-// Whether the factory may still be told to stop working on a group: the row's 🗑.
+// Whether the factory may still be told to drop a group: the row's 🗑.
 function closable(r: RequestState, i: ItemView, ctx: RenderContext): boolean {
   const s = itemSentence(r, i, ctx);
   return !s.ask && s.cls !== "run" && !["fixed", "landed", "left as-is", "handed back", "taken over"].includes(i.state);
 }
 
 function closeButton(r: RequestState, i: ItemView): Html {
-  return html`<form class="inline cmd" method="post" action="/api/commands">${commandFields([{ cmd: "hand-back", request: r.id, item: i.id }], requestUrl(r.id))}<button class="btn small icon" title="Close: the factory stops working on this group" aria-label="Close">🗑</button></form>`;
+  return handBackButton(r.id, i.id, requestUrl(r.id));
 }
 
 // Agents can't push to try; you can let its author make one push (it may be running).

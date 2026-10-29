@@ -344,7 +344,7 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.doesNotMatch(fetch, />(Accept the patch as it is|Dismiss)</);
     assert.match(fetch, /<span class="state">needs you: fetch test artifacts failed twice<\/span>/);
     assert.match(fetch, /title="Runs fetch test artifacts again">Retry</);
-    assert.ok(has(fetch, { cmd: "hand-back", item: "i-fetch", request: D }));
+    assert.ok(has(fetch, { cmd: "hand-back", request: D, item: "i-fetch" }));
     const slow = rowOf(h, "item-i-slow");
     assert.match(slow, /<span class="state">needs you: the investigation stopped by you<\/span>/);
     assert.match(slow, /<div class="ask-you"><p>You stopped the investigation\. Resume it, tell its author what to do instead, or dismiss this\.<\/p>/);
@@ -408,11 +408,11 @@ describe("one fixture per step of docs/MVP.md", () => {
     );
     const row = rowOf(renderRequest(r, ctx, true).value, "item-i-idle");
     const ask = row.slice(row.indexOf('<div class="ask-you">'));
-    assert.match(ask, /^<div class="ask-you"><p>Critical review failed:<\/p><div class="md"><p>API error<\/p><\/div><p>Retry it, or hand the group back to you\.<\/p>/);
+    assert.match(ask, /^<div class="ask-you"><p>Critical review failed:<\/p><div class="md"><p>API error<\/p><\/div><p>Retry it, or drop the group \(🗑\)\.<\/p>/);
     assert.match(ask, /title="Runs critical review again">Retry</);
     assert.doesNotMatch(ask, /Its author|Resume/);
     assert.ok(!ask.includes(cmd({ cmd: "continue", request: D, item: "i-idle" })), "its author has nothing to do with it");
-    assert.ok(ask.includes(cmd({ cmd: "hand-back", item: "i-idle", request: D })));
+    assert.ok(ask.includes(cmd({ cmd: "hand-back", request: D, item: "i-idle" })));
     assert.match(ask, /<div class="ask-more" data-key="note:odd"><p><b>Also: Something odd<\/b><\/p><div class="md"><p>look at it<\/p><\/div><div class="jobctl"><form[^]*?>Dismiss<\/button>/, "the second ⚑ with its own buttons: a note isn't a take-it");
   });
 
@@ -438,7 +438,7 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.doesNotMatch(rowOf(h, "patch-p-close2"), /ask-you/);
   });
 
-  it("asks you when its author disagrees with your message, with Tell it again, Go ahead and Close", () => {
+  it("asks you when its author disagrees with your message, with Tell it again, Go ahead and Drop", () => {
     const D = "r-20261015-downloads-stuck";
     const r = structuredClone(get(D));
     r.needsUser.push({ key: "disagrees:j-author-nits", action: "Its author disagrees with you", detail: "there is no product leak", job: "j-author-nits", item: "i-nits", since: r.createdAt });
@@ -447,7 +447,7 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.match(row, /<span class="state">needs you: Its author disagrees with you<\/span>/);
     assert.match(row, /<p>Its author didn't do what you asked:<\/p><div class="md"><p>there is no product leak<\/p><\/div>/);
     assert.ok(row.includes(cmd({ cmd: "dismiss", key: "disagrees:j-author-nits", request: D })));
-    assert.ok(row.includes(cmd({ cmd: "hand-back", item: "i-nits", request: D })));
+    assert.ok(row.includes(cmd({ cmd: "hand-back", request: D, item: "i-nits" })));
     assert.match(row, />Go ahead with its patch</);
   });
 
