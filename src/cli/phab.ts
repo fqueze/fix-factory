@@ -170,7 +170,7 @@ export async function poll(revisions: number[], conduit: Conduit = makeConduit()
     for (const rv of r.attachments.reviewers.reviewers) phids.add(rv.reviewerPHID);
   }
   for (const txns of txnsByRev.values()) {
-    for (const t of txns) if (t.type === "inline") for (const c of t.comments) phids.add(c.authorPHID);
+    for (const t of txns) if (t.type === "inline" || t.type === "comment") for (const c of t.comments) phids.add(c.authorPHID);
   }
   const nameOf = await names(conduit, [...phids].sort());
   // Newest first: the first diff seen for a revision is its latest.
@@ -201,6 +201,15 @@ export async function poll(revisions: number[], conduit: Conduit = makeConduit()
         if (f.hasSuggestion) comment.suggestion = f.suggestionText;
         if (f.replyToCommentPHID) comment.replyTo = idOfPhid.get(f.replyToCommentPHID);
         comments.push(comment);
+      }
+    }
+    // General comments on the revision, not on a line: nothing marks them done, so one older than the latest diff
+    // counts as answered by it.
+    const diffAt = latest.get(r.phid)?.fields.dateCreated ?? 0;
+    for (const t of (txnsByRev.get(id) ?? []).filter((t) => t.type === "comment")) {
+      for (const c of t.comments) {
+        if (c.removed) continue;
+        comments.push({ id: c.id, author: nameOf.get(c.authorPHID) ?? c.authorPHID, length: 0, text: stripBadge(c.content.raw), done: c.dateCreated < diffAt });
       }
     }
     comments.sort((a, b) => (a.file ?? "").localeCompare(b.file ?? "") || (a.line ?? 0) - (b.line ?? 0) || a.id - b.id);

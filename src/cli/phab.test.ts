@@ -24,9 +24,11 @@ test("poll: reviewers, inline comments, suggested edits, replies", async () => {
     { name: "ahal", status: "pending" },
     { name: "jcristau", status: "accepted" },
   ]);
-  assert.equal(d333041.comments.length, 2);
+  assert.equal(d333041.comments.filter((c) => c.file).length, 2);
+  // General comments too, on no line.
+  assert.ok(d333041.comments.some((c) => !c.file && c.line === undefined && c.text.length > 0));
   assert.deepEqual(d333041.diff, { id: 1404076, commit: "4bfc772b4e156746e430284c9f263f522b175c26", created: new Date(1791879808 * 1000).toISOString() });
-  assert.deepEqual(d333041.comments[0], {
+  assert.deepEqual(d333041.comments.find((c) => c.id === 1767043), {
     id: 1767043,
     author: "jcristau",
     file: "testing/mochitest/runtests.py",

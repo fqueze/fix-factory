@@ -1391,6 +1391,8 @@
   "params": {
    "constraints": {
     "phids": [
+     "PHID-USER-4jlttcsengdawi5jugb4",
+     "PHID-USER-c6de5rnxld25mqp4pngs",
      "PHID-USER-laiy2eaopxzo3vm6tath",
      "PHID-USER-quoh3mwvqjdpzkhrtcuf",
      "PHID-USER-uh7m7daa2eoi4muct5kh",
@@ -1406,116 +1408,60 @@
      "type": "USER",
      "phid": "PHID-USER-uh7m7daa2eoi4muct5kh",
      "fields": {
-      "username": "dshin",
-      "realName": "David Shin",
-      "roles": [
-       "verified",
-       "approved",
-       "activated"
-      ],
-      "dateCreated": 1647888479,
-      "dateModified": 1647888479,
-      "policy": {
-       "view": "public",
-       "edit": "no-one"
-      }
-     },
-     "attachments": {}
+      "username": "dshin"
+     }
     },
     {
      "id": 473,
      "type": "USER",
      "phid": "PHID-USER-xzwtemgjb3abai5r6iul",
      "fields": {
-      "username": "jcristau",
-      "realName": "Julien Cristau",
-      "roles": [
-       "verified",
-       "approved",
-       "activated"
-      ],
-      "dateCreated": 1535465168,
-      "dateModified": 1535465210,
-      "policy": {
-       "view": "public",
-       "edit": "no-one"
-      }
-     },
-     "attachments": {}
+      "username": "jcristau"
+     }
     },
     {
      "id": 265,
      "type": "USER",
      "phid": "PHID-USER-laiy2eaopxzo3vm6tath",
      "fields": {
-      "username": "boris",
-      "realName": "Boris Chiou",
-      "roles": [
-       "verified",
-       "approved",
-       "activated"
-      ],
-      "dateCreated": 1531176648,
-      "dateModified": 1533629009,
-      "policy": {
-       "view": "public",
-       "edit": "no-one"
-      }
-     },
-     "attachments": {}
+      "username": "boris"
+     }
+    },
+    {
+     "id": 133,
+     "type": "USER",
+     "phid": "PHID-USER-4jlttcsengdawi5jugb4",
+     "fields": {
+      "username": "florian"
+     }
+    },
+    {
+     "id": 101,
+     "type": "USER",
+     "phid": "PHID-USER-c6de5rnxld25mqp4pngs",
+     "fields": {
+      "username": "hiro"
+     }
     },
     {
      "id": 69,
      "type": "USER",
      "phid": "PHID-USER-quoh3mwvqjdpzkhrtcuf",
      "fields": {
-      "username": "ahal",
-      "realName": "Andrew Halberstadt",
-      "roles": [
-       "verified",
-       "approved",
-       "activated"
-      ],
-      "dateCreated": 1510667571,
-      "dateModified": 1768937805,
-      "policy": {
-       "view": "public",
-       "edit": "no-one"
-      }
-     },
-     "attachments": {}
+      "username": "ahal"
+     }
     },
     {
      "id": 62,
      "type": "USER",
      "phid": "PHID-USER-zp4gy3jjzfehipsktf6x",
      "fields": {
-      "username": "emilio",
-      "realName": "Emilio Cobos Álvarez",
-      "roles": [
-       "verified",
-       "approved",
-       "activated"
-      ],
-      "dateCreated": 1508430658,
-      "dateModified": 1758044058,
-      "policy": {
-       "view": "public",
-       "edit": "no-one"
-      }
-     },
-     "attachments": {}
+      "username": "emilio"
+     }
     }
    ],
-   "maps": {},
-   "query": {
-    "queryKey": null
-   },
    "cursor": {
-    "limit": 100,
-    "after": null,
-    "before": null,
-    "order": null
+    "after": null
    }
   }
  },
