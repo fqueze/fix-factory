@@ -241,7 +241,7 @@ function stackSection(r: RequestState, s: StackView, ctx: RenderContext): Html {
       dropped.length ? html`<details class="fold" data-fold="dropped-${s.id}"><summary>${dropped.length} dropped</summary><div class="rows">${dropped.map((p) => patchRow(r, p, ctx))}</div></details>` : null
     }</div>
     <div class="stack-submit">${
-      patches.some((p) => p.revision !== undefined) && REQUEST_STEPS.indexOf(r.step) >= REQUEST_STEPS.indexOf("review comments")
+      patches.some((p) => p.revision !== undefined) && r.step !== "done"
         ? pollPhabButton(r.id, requestUrl(r.id))
         : null
     }${submitControls(r, s, requestUrl(r.id))}</div>`;

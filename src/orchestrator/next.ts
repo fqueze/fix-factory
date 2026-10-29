@@ -2411,13 +2411,14 @@ class Planner {
   }
 
   private reviewComments(): void {
-    if (this.s.step !== "review comments" && this.s.step !== "landing") return;
+    // Revisions are checked whatever the step: a stack back on try for review fixes is still on Phabricator.
     const revisions = Object.values(this.s.patches).filter((p) => p.revision !== undefined);
-    if (revisions.length > 0 && this.pollDue()) {
+    if (this.s.step !== "done" && revisions.length > 0 && this.pollDue()) {
       const n = this.view.jobs.filter((j) => j.purpose.what === "poll").length;
       const ds = revisions.map((p) => p.revision!).sort((a, b) => a - b);
       this.want(`poll:${n}`, () => this.cli("poll", "phab.ts", ["poll", ...ds.map((d) => `D${d}`)], { priority: REVIEW_PRIORITY }));
     }
+    if (this.s.step !== "review comments" && this.s.step !== "landing") return;
     const lastPoll = this.view.jobs.filter((j) => j.purpose.what === "poll" && succeeded(j)).at(-1);
     for (const n of this.s.needsUser.filter((x) => x.key.startsWith("resubmit:"))) {
       // You resubmit while you're here; the next poll after the request means it's done.

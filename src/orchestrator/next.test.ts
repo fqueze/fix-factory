@@ -2401,6 +2401,14 @@ const polled = (status: string, comments: unknown[] = [], reviewer = "accepted")
 ];
 
 describe("9. review comments", () => {
+  it("keeps checking Phabricator while the stack is back on try", () => {
+    const sc = inReview();
+    sc.complete("poll:0", { output: polled("needs-review") });
+    sc.add({ type: "step", request: ID, step: "verify on try" });
+    sc.now += 4 * 3_600_000;
+    assert.ok(sc.settle().includes("poll:1"));
+  });
+
   it("writes each accepted patch's test plan, which you set on its revision with a click", () => {
     const sc = inReview();
     const key = sc.view().jobs.find((j) => !j.end && j.purpose.key.startsWith("test-plan:p-test-a:"))!.purpose.key;

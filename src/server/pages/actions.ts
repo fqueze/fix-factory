@@ -174,7 +174,7 @@ function commandButton(request: string, c: object, label: string, back: string, 
 }
 
 export function pollPhabButton(request: string, back: string): Html {
-  return commandButton(request, { cmd: "poll-phab" }, "Check Phabricator now", back, false, "Reviews, comments and statuses are otherwise checked every few hours");
+  return commandButton(request, { cmd: "poll-phab" }, "Check Phabricator now", back, false, "Otherwise checked every 10 minutes while you're on the page, every few hours while you're away");
 }
 
 export function redoAnnotationsButton(request: string, back: string): Html {
