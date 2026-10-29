@@ -59,7 +59,7 @@ export function renderMain(requests: RequestState[], ctx: RenderContext): Html {
   const queued = byCreation.filter((r) => sectionOf(r) === "queued").reverse();
   // Finished requests open like the active ones; text that was forwarded or rephrased is one line.
   const finished = byCreation.filter((r) => sectionOf(r) === "finished").sort((a, b) => (b.finishedAt ?? b.updatedAt).localeCompare(a.finishedAt ?? a.updatedAt));
-  return html`<form class="ask cmd" method="post" action="/api/commands">${commandFields([{ cmd: "tell-factory" }], "/")}<input type="text" name="text" required placeholder="Tell the factory… (e.g. “burn down dom/base/test”, or “Lando was down this morning, re-push what failed”)"><button class="btn">Send</button></form>
+  return html`<form class="ask cmd joined" method="post" action="/api/commands">${commandFields([{ cmd: "tell-factory" }], "/")}<input type="text" name="text" required placeholder="Tell the factory… (e.g. “burn down dom/base/test”, or “Lando was down this morning, re-push what failed”)"><button class="btn">Send</button></form>
 
   <h2>Active <span class="count">${active.length}</span></h2>
   <div id="section-active">${active.map((r) => renderRequest(r, ctx))}</div>
