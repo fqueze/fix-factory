@@ -154,7 +154,7 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.match(top, /data-revise[^>]*>Revise…<\/button>/);
     const body = row.slice(row.indexOf("</summary>"));
     assert.ok(body.includes(cmd({ cmd: "revise-push", request: "r-20261014-extensions-xpcshell", push: "unskip" })), "the revise box in its body");
-    assert.match(body, /<form class="cmd revise"[^]*<textarea name="text" required[^>]*><\/textarea><button class="btn small">Revise<\/button><\/form>/);
+    assert.match(body, /<form class="cmd revise joined"[^]*<textarea name="text" required[^>]*><\/textarea><button class="btn small" title="Enter sends; Shift\+Enter for a new line">Send<\/button><\/form>/);
     assert.match(row, /data-tasks="\/api\/requests\/r-20261014-extensions-xpcshell\/pushes\/unskip\/tasks"/);
     assert.match(top, /<span>186 tasks<\/span>/);
     assert.match(row, /<div class="ptasks">Loading…<\/div>/);

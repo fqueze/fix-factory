@@ -356,6 +356,14 @@
     }, cls === "error" ? 6000 : 1500);
   }
 
+  // In a box whose button touches it, Enter sends, as in a one-line box; Shift+Enter makes a new line.
+  document.addEventListener("keydown", function (event) {
+    var area = event.target.closest && event.target.closest("form.joined textarea");
+    if (!area || event.key !== "Enter" || event.shiftKey || event.isComposing) return;
+    event.preventDefault();
+    if (area.value.trim()) area.form.requestSubmit();
+  });
+
   // The landed list eases a row's lines open or closed only as the pointer enters or leaves it.
   function easeLanded(event) {
     var list = event.target.closest && event.target.closest(".landed-rows");

@@ -604,7 +604,7 @@ function testPlanSection(r: RequestState, p: PatchView, back: string): Html | nu
   const revise =
     p.testPlan === undefined
       ? null
-      : html`<form class="cmd revise joined" method="post" action="/api/commands">${commandFields([{ cmd: "revise-test-plan", request: r.id, patch: p.id }], back)}<textarea name="text" required rows="2" placeholder="What should change? The agent that wrote it gets this"></textarea><button class="btn small">Send</button></form>`;
+      : html`<form class="cmd revise joined" method="post" action="/api/commands">${commandFields([{ cmd: "revise-test-plan", request: r.id, patch: p.id }], back)}<textarea name="text" required rows="2" placeholder="What should change? The agent that wrote it gets this"></textarea><button class="btn small" title="Enter sends; Shift+Enter for a new line">Send</button></form>`;
   return html`<div class="parthead"><h4 class="part">Test plan</h4>${status}<textarea hidden id="${id}">${text}</textarea><button type="button" class="btn small" data-copy="${id}">Copy</button>${set}</div><div class="testplan">${md(text, itemOf(r, p)?.group.tests)}${revise}</div>`;
 }
 
@@ -1066,5 +1066,5 @@ function revisable(r: RequestState, p: PushView): boolean {
 // The agent that planned it gets what you write, in its session, and plans what replaces it.
 function reviseBox(r: RequestState, p: PushView): Html {
   const declined = p.declined !== undefined && p.declined !== DISCARDED ? p.declined : "";
-  return html`<form class="cmd revise" method="post" action="/api/commands">${commandFields([{ cmd: "revise-push", request: r.id, push: p.id }], requestUrl(r.id))}<textarea name="text" required rows="2" placeholder="What should it run instead? The agent that planned it gets this; the plan's other pushes stay as they are">${declined}</textarea><button class="btn small">Revise</button></form>`;
+  return html`<form class="cmd revise joined" method="post" action="/api/commands">${commandFields([{ cmd: "revise-push", request: r.id, push: p.id }], requestUrl(r.id))}<textarea name="text" required rows="2" placeholder="What should it run instead? The agent that planned it gets this; the plan's other pushes stay as they are">${declined}</textarea><button class="btn small" title="Enter sends; Shift+Enter for a new line">Send</button></form>`;
 }
