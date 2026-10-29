@@ -335,7 +335,8 @@ class Planner {
     const same = (a: string, b: string) => a.startsWith(b.slice(0, 12)) || b.startsWith(a.slice(0, 12));
     for (const p of Object.values(this.s.patches)) {
       const item = p.item === undefined ? undefined : this.s.items[p.item];
-      if (!item || !TEST_PLAN_STATES.has(item.state) || (!verified && p.revision === undefined)) continue;
+      // A plan already written (shown on its row) is kept up to date whatever the step.
+      if (!item || !TEST_PLAN_STATES.has(item.state) || (!verified && p.revision === undefined && p.testPlan === undefined)) continue;
       const author = item.jobs.map((j) => this.s.jobs[j]).findLast((j) => j?.name === "investigate-and-fix");
       const inv = item.investigation ?? null;
       // Only the pushes that had this patch: a plan may cite no other.
@@ -351,8 +352,8 @@ class Planner {
       const version = `test-plan:${p.id}:${TEST_PLAN_VERSION}:`;
       // passes-v1: plans written before told to confirm a push's runs with fx-tests --test are rewritten in their session;
       // pushes-v2: and those given every push of the request, whether it had the patch or not; positive-v1: and those
-      // saying what wasn't run, or leaving out the tests it fixes too.
-      const key = `${version}${shortHash([JSON.stringify([inv, results]), "passes-v1", "pushes-v2", "positive-v1", ...(alsoFixes.length ? [JSON.stringify(alsoFixes)] : [])]).slice(0, 8)}`;
+      // saying what wasn't run, or leaving out the tests it fixes too; skips-v1: and those counting platforms that skip it.
+      const key = `${version}${shortHash([JSON.stringify([inv, results]), "passes-v1", "pushes-v2", "positive-v1", "skips-v1", ...(alsoFixes.length ? [JSON.stringify(alsoFixes)] : [])]).slice(0, 8)}`;
       const investigationFile = dataPath(this.config, this.s.id, `test-plan-${p.id}-investigation.json`);
       const pushesFile = dataPath(this.config, this.s.id, `test-plan-${p.id}-pushes.json`);
       const notes = Object.values(inv?.files ?? {});
@@ -371,7 +372,7 @@ class Planner {
           item: item.id,
           cwd: last.cwd,
           files,
-          agent: { sessionId: last.sessionId!, resume: true, message: `Its investigation, its request's try results or your instructions changed: ${investigationFile} and ${pushesFile} are up to date. ${pushesFile} lists only the pushes that had this commit (\`thisVersion: false\`: an earlier version of it): cite no other push, and drop anything you wrote about one that isn't there. Its \`alsoFixes\`, when there, are tests it fixes too: link each on the first line with its own, with its reproduction and verification. Write nothing about what wasn't done (no platform, build type or push that wasn't run, nothing "untested" or "not confirmed"): what was run speaks for itself; only a push that still had failures in these tests is said plainly. Say a push shows the test passing only once \`fx-tests try <rev> --all-jobs --test <full path>\` shows its runs passing, with how many; leave out a push you can't confirm, and say nothing about what a tool could or couldn't show. Write the test plan again, keeping what you were asked before, then end with the JSON report.` },
+          agent: { sessionId: last.sessionId!, resume: true, message: `Its investigation, its request's try results or your instructions changed: ${investigationFile} and ${pushesFile} are up to date. ${pushesFile} lists only the pushes that had this commit (\`thisVersion: false\`: an earlier version of it): cite no other push, and drop anything you wrote about one that isn't there. Its \`alsoFixes\`, when there, are tests it fixes too: link each on the first line with its own, with its reproduction and verification. Write nothing about what wasn't done (no platform, build type or push that wasn't run, nothing "untested" or "not confirmed"): what was run speaks for itself; only a push that still had failures in these tests is said plainly. A platform whose manifest skips the test (its skip-if, which this commit may not remove) didn't run it: name only the platforms fx-tests shows runs on. Say a push shows the test passing only once \`fx-tests try <rev> --all-jobs --test <full path>\` shows its runs passing, with how many; leave out a push you can't confirm, and say nothing about what a tool could or couldn't show. Write the test plan again, keeping what you were asked before, then end with the JSON report.` },
         }));
         continue;
       }

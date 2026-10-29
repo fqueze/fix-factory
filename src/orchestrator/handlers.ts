@@ -59,7 +59,7 @@ export interface HandlerInput {
 // invalid report, so the agent gets one retry with the error.
 export class InvalidReport extends Error {}
 
-const DOUBT = /\b(untested|not (?:been )?(?:run|tested|confirmed|verified|covered)|(?:was|were|is|has|have)n't (?:been )?(?:run|tested|confirmed|verified|covered)|no try push|isn't confirmed)\b[^.\n]*/i;
+const DOUBT = /\b(untested|not (?:been )?(?:run|tried|tested|confirmed|verified|covered|included)|(?:was|were|is|has|have)n't (?:been )?(?:run|tried|tested|confirmed|verified|covered|included)|(?:was|were|is)(?: not|n't) (?:in|part of) (?:that|the|this) push|no try push|isn't confirmed)\b[^.\n]*/i;
 
 export interface HandlerResult {
   events: EventInput[];

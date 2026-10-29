@@ -2686,6 +2686,14 @@ describe("9. review comments", () => {
     assert.ok(sc.settle().includes("poll:1"));
   });
 
+  it("keeps a plan already written up to date before the stack is verified (a split copies plans)", () => {
+    const sc = stacked();
+    assert.ok(!sc.view().jobs.some((j) => j.purpose.key.startsWith("test-plan:p-test-a:")), "none written before verification");
+    sc.add({ type: "test-plan", request: ID, patch: "p-test-a", text: "- an old plan" });
+    sc.showTestPlans = true;
+    assert.ok(sc.settle().some((k) => k.startsWith("test-plan:p-test-a:")));
+  });
+
   it("gives a test plan only the pushes that had its patch, saying whether they had this version of it", () => {
     const sc = stacked();
     const planKey = sc.view().jobs.find((j) => j.purpose.what === "plan-pushes")!.purpose.key;
@@ -2716,6 +2724,8 @@ describe("9. review comments", () => {
     assert.equal(plan.agent?.vars?.firefoxRepo, config.firefoxRepo);
     assert.deepEqual(plan.files?.map((f) => f.path.split("/").pop()), ["test-plan-p-test-a-investigation.json", "test-plan-p-test-a-pushes.json"]);
     assert.throws(() => sc.complete(key, { report: { testPlan: "- Reproduced locally.\n- No try push has run this version; Windows is untested.\n", feedback: [] } }), /“No try push has run this version; Windows is untested”: a test plan says what was run/);
+    assert.throws(() => sc.complete(key, { report: { testPlan: "- Reproduced locally. Debug builds were not tried.\n", feedback: [] } }), /“not tried\.?”|a test plan says what was run/);
+    assert.throws(() => sc.complete(key, { report: { testPlan: "- Green on try; macOS was not in that push.\n", feedback: [] } }), /a test plan says what was run/);
     sc.complete(key, { report: { testPlan: "- Reproduced by widening the race: 6/6 failures, 0/20 with the fix.\n- Green on try.\n", feedback: [] } });
     assert.equal(sc.state().patches["p-test-a"].testPlan, "- Reproduced by widening the race: 6/6 failures, 0/20 with the fix.\n- Green on try.");
     assert.ok(!sc.settle().some((k) => k.startsWith("test-plan:p-test-a:")), "written once for the same investigation and try results");
