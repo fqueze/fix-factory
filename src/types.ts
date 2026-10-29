@@ -295,6 +295,7 @@ export interface InvestigateReport {
   bugDraft?: BugDraft; // reports from before 2026-10-23: one draft, for its first commit without a bug
   tryRequest?: string; // a try push it needs: what to run and why; the factory plans it and asks you
   coveredBy?: string; // left as-is because a commit of the stack already fixes it: that commit
+  replies?: { commentId: number; text: string }[]; // draft replies to reviewers that this run changed
   landsAfter: { what: string; reason: string }[];
   feedback: Feedback[];
 }

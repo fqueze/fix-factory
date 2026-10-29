@@ -2658,6 +2658,17 @@ describe("9. a try push of a submitted stack", () => {
     assert.equal(sc.state().needsUser.find((n) => n.patch === "p-test-a" && n.key.startsWith("resubmit:"))?.action, "Resubmit D101");
   });
 
+  it("a comment on a fix shows its author its draft replies, which its answer may rewrite", () => {
+    const sc = inReview();
+    sc.complete("poll:0", { output: polled("needs-revision", [{ id: 7, author: "emilio", text: "Why not CheckForAnchorChange?", done: false, length: 0 }], "blocking") });
+    sc.add({ type: "reply-draft", request: ID, patch: "p-test-a", commentId: 7, text: "Menus don't follow their anchor." });
+    command(sc, { cmd: "comment-fix", patch: "p-test-a", text: "emilio means using CheckForAnchorChange for menus too" });
+    const key = sc.view().jobs.findLast((j) => j.purpose.key.includes(":comment:"))!.purpose.key;
+    assert.match(sc.plan(key).agent?.message ?? "", /Your draft replies to the reviewers, not posted yet:\n- comment 7 \(emilio: “Why not CheckForAnchorChange\?”\): Menus don't follow their anchor\./);
+    sc.complete(key, { report: { ...fixed([sha("f")]), replies: [{ commentId: 7, text: "Done: menus now go through CheckForAnchorChange." }] } });
+    assert.deepEqual(sc.state().patches["p-test-a"].replyDrafts, [{ commentId: 7, text: "Done: menus now go through CheckForAnchorChange." }]);
+  });
+
   it("redo-step back before review is refused once the stack is on Phabricator", () => {
     const sc = inReview();
     command(sc, { cmd: "redo-step", step: "verify on try", reason: "another push" });

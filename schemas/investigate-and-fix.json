@@ -254,6 +254,26 @@
         ],
         "additionalProperties": false
       }
+    },
+    "replies": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "commentId": {
+            "type": "integer"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "commentId",
+          "text"
+        ],
+        "additionalProperties": false
+      },
+      "description": "Your draft replies to reviewers' comments on Phabricator that what you did changes: the new text, by comment id."
     }
   },
   "required": [

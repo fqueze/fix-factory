@@ -1308,8 +1308,8 @@ class Planner {
       if (lint) lints.push({ job: lint, what: drafts.length > 1 ? `the bug draft “${d.draft.summary}”` : "the bug draft" });
       else pending = true;
     });
-    if (author.name === "address-review") {
-      for (const reply of report.replies) {
+    {
+      for (const reply of report.replies ?? []) {
         const file = dataPath(this.config, this.s.id, `replies/${author.job}-${reply.commentId}.txt`);
         const lint = this.want(`lint-reply:${author.job}:${reply.commentId}`, () =>
           this.cli("lint", "lint-text.ts", ["--kind", "reply", file], { item: item.id, priority, files: [{ path: file, content: reply.text }], purpose: { item: item.id } }),
@@ -2644,7 +2644,7 @@ class Planner {
       );
       if (!inter) return;
     }
-    const replies = answer.name === "address-review" ? (this.rep<AddressReviewReport>(answer).replies ?? []).length : 0;
+    const replies = (this.rep<AddressReviewReport>(answer).replies ?? []).length;
     // The latest answer's flag stands for the patch: earlier ones are moot.
     for (const n of this.s.needsUser) if (n.patch === p.id && n.key.startsWith("resubmit:") && n.key !== `resubmit:${st.id}:${author.job.job}`) this.clear(n.key);
     this.raise(`resubmit:${st.id}:${author.job.job}`, {

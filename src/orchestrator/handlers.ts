@@ -409,6 +409,11 @@ function authorReport(input: HandlerInput, ev: <T extends EventInput["type"]>(ty
       const submitted = Object.values(input.state.patches).some((p) => p.item === item && p.revision !== undefined);
       const state = r.state === "left as-is" && submitted && r.commits.length > 0 ? "waiting for review" : r.state;
       ev("item-state", { item, state, detail: r.summary.slice(0, 300), ...(coveredBy ? { coveredBy } : {}) });
+      // Draft replies it changed: on the patch whose revision has that comment.
+      for (const reply of r.replies ?? []) {
+        const p = Object.values(input.state.patches).find((x) => x.item === item && x.review?.comments.some((c) => c.id === reply.commentId));
+        if (p) ev("reply-draft", { patch: p.id, commentId: reply.commentId, text: reply.text.slice(0, 2500) });
+      }
       // A refusal of what you told it waits for you.
       if (r.disagreement && YOUR_MESSAGES.includes(job.purpose?.reason ?? "")) {
         ev("needs-user", { key: `disagrees:${job.job}`, action: "Its author disagrees with you", detail: r.disagreement.slice(0, 1000), job: job.job, item });

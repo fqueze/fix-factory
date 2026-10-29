@@ -236,7 +236,7 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
       const sent = new Set<ItemId>();
       const errors = [...byItem]
         .map(([item, lines]) => {
-          const error = resume(item, "stack comments", `Review comments on your patch, from stack-viewer:\n${lines.join("\n")}\n\nAddress them by amending your commit, then end with the JSON report again. ${ANSWER_EACH} If you think one is wrong, don't do it and say why in \`disagreement\`.`);
+          const error = resume(item, "stack comments", `Review comments on your patch, from stack-viewer:\n${lines.join("\n")}\n\nAddress them by amending your commit, then end with the JSON report again. ${ANSWER_EACH} If you think one is wrong, don't do it and say why in \`disagreement\`.${draftsNote(s, item)}`);
           if (!error) sent.add(item);
           return error;
         })
@@ -251,7 +251,7 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
     }
     case "comment-fix": {
       const item = s.patches[c.patch]?.item;
-      const error = item ? resume(item, "comment", `A comment on your fix:\n${c.text}\n\nAddress it by amending your commit, then end with the JSON report again. ${ANSWER_EACH} If you think it is wrong, don't do it: leave your commits as they are and say why in \`disagreement\`.`) : "this patch has no group, so no author to tell";
+      const error = item ? resume(item, "comment", `A comment on your fix:\n${c.text}\n\nAddress it by amending your commit, then end with the JSON report again. ${ANSWER_EACH} If you think it is wrong, don't do it: leave your commits as they are and say why in \`disagreement\`.${draftsNote(s, item)}`) : "this patch has no group, so no author to tell";
       if (!error) ev({ type: "comment-sent", patch: c.patch, text: c.text, key: `author:${item}${itemEpochOf(view, item!)}:comment:${c.id}` });
       done(!error, error);
       break;
@@ -448,7 +448,7 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
       break;
     }
     case "continue": {
-      const error = resume(c.item, "continue", `A message from the user:\n${c.text}\n\nDo what it says, amending your commit if your fix changes, then end with the JSON report again. If you think it is wrong, don't do it: leave your commits as they are and say why in \`disagreement\`.`);
+      const error = resume(c.item, "continue", `A message from the user:\n${c.text}\n\nDo what it says, amending your commit if your fix changes, then end with the JSON report again. If you think it is wrong, don't do it: leave your commits as they are and say why in \`disagreement\`.${draftsNote(s, c.item)}`);
       if (!error) {
         clearItemFlags(c.item);
         reopen(c.item);
@@ -610,6 +610,16 @@ const PLANNED = new Set<string>(["retry-job", "cancel-job", "resume-agent", "sta
 export const STOPPED = "stopped by you";
 
 // Your comments are shown on the patch with the summary of the run that answered them.
+// Its draft replies to reviewers, which what it changes may make wrong.
+function draftsNote(s: RequestState, item: ItemId): string {
+  const drafts = Object.values(s.patches)
+    .filter((p) => p.item === item)
+    .flatMap((p) => p.replyDrafts.map((d) => ({ d, c: p.review?.comments.find((x) => x.id === d.commentId) })))
+    .filter((x) => x.c && !x.c.done);
+  if (!drafts.length) return "";
+  return `\n\nYour draft replies to the reviewers, not posted yet:\n${drafts.map(({ d, c }) => `- comment ${d.commentId} (${c!.author}: “${c!.text.slice(0, 300)}”): ${d.text}`).join("\n")}\nIf what you change makes one wrong, give its new text in \`replies\` (by comment id).`;
+}
+
 const ANSWER_EACH = "Start the report's summary by answering each point of it in a line: what you changed, or, for a question or a change you didn't make, the answer and what backs it (the file, command or data you checked; for a shared helper, every test using it).";
 
 function startVars(tests: string[], worktree: string): Record<string, string> {
