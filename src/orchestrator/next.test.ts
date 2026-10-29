@@ -226,7 +226,7 @@ describe("2. first signal", () => {
 
     sc.complete("plan:unskip", { report: { pushes: [{ purpose: "reproduce", tryArgs: ["fuzzy", "-q", "xpcshell"], rebuild: 10 }], feedback: [] } });
     assert.deepEqual(sc.settle(), ["dry-run:unskip"]);
-    assert.deepEqual(sc.plan("dry-run:unskip").cli?.args, ["dry-run", "--cwd", `/wt/${ID}-signal`, "--pending", `/state/requests/${ID}/data/pending-unskip.json`, "--", "fuzzy", "-q", "xpcshell"]);
+    assert.deepEqual(sc.plan("dry-run:unskip").cli?.args, ["dry-run", "--cwd", `/wt/${ID}-signal`, "--pending", `/state/requests/${ID}/data/pending-unskip.json`, "--", "fuzzy", "-q", "xpcshell", "--rebuild", "10"], "its rebuild count, which its arguments didn't say");
     sc.complete("dry-run:unskip", { output: { command: ["./mach", "try", "fuzzy", "-q", "xpcshell"], taskCount: 40, tasks: [], tryTaskConfig: {}, commits: ["c2", "c1"], warnings: ["artifact push"] } });
     sc.settle();
     assert.deepEqual(sc.open(), ["approve-push:unskip"]);
@@ -236,7 +236,7 @@ describe("2. first signal", () => {
     // Approved: pushed, watched, and the step moves on once the push exists.
     sc.add({ type: "user-done", request: ID, key: "approve-push:unskip" });
     assert.deepEqual(sc.settle(), ["push:unskip"]);
-    assert.deepEqual(sc.plan("push:unskip").cli?.args, ["push", "--cwd", `/wt/${ID}-signal`, "--expect-commits", "c2,c1", "--", "fuzzy", "-q", "xpcshell"]);
+    assert.deepEqual(sc.plan("push:unskip").cli?.args, ["push", "--cwd", `/wt/${ID}-signal`, "--expect-commits", "c2,c1", "--", "fuzzy", "-q", "xpcshell", "--rebuild", "10"]);
     sc.complete("push:unskip", { output: { landoJobId: 7, landoUrl: "l", treeherderUrl: "t" } });
     assert.deepEqual(sc.settle(), ["watch:unskip"]);
     assert.deepEqual(sc.plan("watch:unskip").cli?.args, ["watch", "--lando", "7"]);
@@ -1988,7 +1988,7 @@ describe("6. verify on try, again", () => {
     assert.equal(sc.state().step, "meta bug");
   });
 
-  it("sends a push you revise back to the agent that planned it, in its session; what it returns replaces that push alone; and its replacement too", () => {
+  it("sends a push you revise back to the agent that planned it, in its session; what it returns replaces that push and the plan's others still waiting; and its replacement too", () => {
     const sc = stacked();
     const planKey = sc.view().jobs.find((j) => j.purpose.what === "plan-pushes")!.purpose.key;
     const two = [1, 2].map((n) => ({ purpose: `p${n}`, tryArgs: ["fuzzy", "-q", `x${n}`], rebuild: 5 }));
@@ -2008,6 +2008,7 @@ describe("6. verify on try, again", () => {
     assert.equal(p1.agent?.resume, true);
     assert.ok(p1.agent?.message?.includes(`push ${drop} (\`./mach try fuzzy\`): “on mac instead”`), String(p1.agent?.message));
     assert.deepEqual(sc.open(), [`approve-push:${keep}`], "the plan's other push still waits for you");
+    assert.ok(p1.agent?.message?.includes(`still waiting for the user's approval: ${keep} (`), "its planner may replace it too");
 
     sc.complete(rev1, { report: { pushes: [{ purpose: "mac", tryArgs: ["fuzzy", "-q", "mac"], rebuild: 5 }], feedback: [] } });
     const [dry1] = sc.settle();
@@ -2015,7 +2016,8 @@ describe("6. verify on try, again", () => {
     assert.equal(v1, `${keep}-v1`);
     sc.complete(dry1, { output: dryOut });
     sc.settle();
-    assert.deepEqual(sc.open().sort(), [`approve-push:${keep}`, `approve-push:${v1}`].sort());
+    assert.deepEqual(sc.open(), [`approve-push:${v1}`], "the other push replaced by the revision");
+    assert.equal(sc.state().pushes[keep].withdrawn, true);
     assert.deepEqual(sc.state().pushes[v1].revises, [drop], "its row says what you asked");
     assert.match(String(p1.agent?.message), /Say in `answer` what you changed and why/);
 

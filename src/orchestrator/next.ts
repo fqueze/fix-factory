@@ -738,16 +738,22 @@ class Planner {
     const ids: PushId[] = [];
     const dry: DryRunResult[] = [];
     // A push you revise goes back to the agent that planned it, in its session, with what you wrote; what it returns
-    // replaces that push alone. Revisions of the same round go together, each round once.
+    // replaces that push and the plan's others still waiting for you (it returns those it keeps). Revisions of the same
+    // round go together, each round once.
     const handled = new Set<PushId>();
     let revised: PushId[] | undefined;
+    let replaced: PushId[] = [];
+    const waiting = (id: PushId) => this.s.needsUser.some((n) => n.key === `approve-push:${id}`);
     let plan = this.wantAgent(key, "plan-pushes", "plan-try-pushes", vars, opts);
     for (let round = 0; ; round++) {
       if (!plan) return undefined;
+      for (const id of replaced) if (waiting(id)) this.event(this.ev("try-declined", { push: id, text: "replaced by its planner's revision", by: "factory" }));
       const planned = this.rep<PlanTryPushesReport>(plan).pushes;
       const r = round;
       const these = planned.map((_, i) => (r === 0 ? idOf(i, planned.length) : `${idOf(0, 1)}-v${r}${planned.length === 1 ? "" : `-${i + 1}`}`));
-      const d = planned.map((push, i) => this.dryRun(these[i], push.tryArgs, push.purpose, cwd, stack, opts?.item));
+      // Its rebuild count, when its arguments don't say it.
+      const args = (push: PlanTryPushesReport["pushes"][number]) => (push.rebuild > 1 && !push.tryArgs.includes("--rebuild") ? [...push.tryArgs, "--rebuild", String(push.rebuild)] : push.tryArgs);
+      const d = planned.map((push, i) => this.dryRun(these[i], args(push), push.purpose, cwd, stack, opts?.item));
       if (d.some((x) => !x)) return undefined;
       // What you judge it by: the previous push's regressions, and what claims to fix each.
       const regressions = this.rep<PlanTryPushesReport>(plan).regressions;
@@ -768,9 +774,11 @@ class Planner {
       const revise = asked ?? pending;
       for (const p of revise) handled.add(p);
       revised = revise;
+      replaced = ids.filter((id) => !revise.includes(id) && waiting(id));
       const prev = plan;
       const asks = revise.map((p) => `push ${p} (\`${this.s.pushes[p].command.join(" ")}\`): “${this.s.pushes[p].declined}”`).join("\n");
-      const message = `The user reviewed what you planned and wants it revised:\n${asks}\n\nDo exactly what they ask.${vars.since} Return only what replaces ${revise.length === 1 ? "that push" : "those pushes"} (the plan's other pushes stand), or an empty list if they want none. Say in \`answer\` what you changed and why; if you can't do what they ask (a push only carries the commits of the branch it's made from), say so and why. End with the JSON report again.`;
+      const others = replaced.length ? ` The plan's other ${replaced.length === 1 ? "push" : "pushes"} still waiting for the user's approval: ${replaced.map((p) => `${p} (\`${this.s.pushes[p].command.join(" ")}\`)`).join(", ")}. What you return replaces ${replaced.length === 1 ? "it" : "them"} too: return again any that should stay as ${replaced.length === 1 ? "it is" : "they are"}.` : "";
+      const message = `The user reviewed what you planned and wants it revised:\n${asks}\n\nDo exactly what they ask; a comment saying what's missing or wrong asks for it to be fixed.${vars.since}${others} Return the pushes that replace ${revise.length === 1 ? "that push" : "those pushes"}, or an empty list if they want none. Say in \`answer\` what you changed and why; if you can't do what they ask (a push only carries the commits of the branch it's made from), say so and why. End with the JSON report again.`;
       const k = `${key}:revise:${shortHash(revise).slice(0, 8)}`;
       plan = this.want(k, () => ({
         purpose: { key: k, what: "plan-pushes", pushes: revise },
