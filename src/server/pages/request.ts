@@ -160,7 +160,7 @@ export function renderRequestBody(r: RequestState, ctx: RenderContext): Html {
       repro.length ? html`<h3>DEBUG commits for the stack's next try push</h3>${groupRows(r, repro, ctx, false)}` : null
     }
     ${toStack.some((i) => itemBucket(r, i, ctx) !== "closed") ? html`${stacks.length || loose.length ? html`<h3>Not in a stack yet</h3>` : null}${groupRows(r, toStack, ctx, false)}` : null}
-    ${landed.length ? html`<h3 class="landed-head">Landed${r.metaBug && hasBug(r.metaBug) && !stacks.length ? html` · <a class="bug" href="${bugUrl(r.metaBug.bug)}" target="_blank" rel="noopener">Bug ${r.metaBug.bug}</a> ${metaSummary}` : null}</h3><div class="landed-rows">${groupRows(r, landed, ctx)}</div>` : null}
+    ${landed.length ? html`<div class="landed-section"><h3 class="landed-head">Landed${r.metaBug && hasBug(r.metaBug) && !stacks.length ? html` · <a class="bug" href="${bugUrl(r.metaBug.bug)}" target="_blank" rel="noopener">Bug ${r.metaBug.bug}</a> ${metaSummary}` : null}</h3><div class="landed-rows">${groupRows(r, landed, ctx)}</div></div>` : null}
     ${handOffs(r, ctx)}
     ${closedFold(r, items.filter((i) => itemBucket(r, i, ctx) === "closed" && i.state !== "taken over"), ctx)}
     ${stacks.length || loose.length || items.length || landed.length ? html`<hr class="part">` : null}
