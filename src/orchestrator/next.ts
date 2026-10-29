@@ -2477,9 +2477,11 @@ class Planner {
       const st = Object.values(this.s.stacks).find((x) => x.order.includes(p.id));
       const base = p.review?.diff?.commit;
       if (!st || !base || base === p.sha) continue;
-      this.want(`interdiff:${p.id}:phab-${base.slice(0, 12)}:${p.sha.slice(0, 12)}`, () =>
+      const inter = this.want(`interdiff:${p.id}:phab-${base.slice(0, 12)}:${p.sha.slice(0, 12)}`, () =>
         this.cli("interdiff", "stack.ts", ["interdiff", "--cwd", st.worktree, base, p.sha], { cwd: st.worktree, priority: REVIEW_PRIORITY, purpose: { patch: p.id, stack: st.id } }),
       );
+      // Phabricator has that code already: nothing to resubmit.
+      if (inter && !this.out<{ diff: string }>(inter).diff.trim()) this.clear(n.key);
     }
     for (const p of revisions) {
       if (!p.review || !p.item) continue;

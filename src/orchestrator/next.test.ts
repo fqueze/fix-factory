@@ -2678,7 +2678,11 @@ describe("9. review comments", () => {
     };
     pollWith("2026-10-01T00:00:00.000Z");
     assert.ok(sc.open().includes(n.key), "an older diff: not resubmitted yet");
-    assert.ok(sc.view().byKey.has(`interdiff:p-test-a:phab-${sha("f").slice(0, 12)}:${sha("8").slice(0, 12)}`), "what a resubmit sends, against what Phabricator has");
+    const phabInter = `interdiff:p-test-a:phab-${sha("f").slice(0, 12)}:${sha("8").slice(0, 12)}`;
+    assert.ok(sc.view().byKey.has(phabInter), "what a resubmit sends, against what Phabricator has");
+    sc.complete(phabInter, { output: { diff: "-a\n+b\n", method: "same-parent" } });
+    sc.settle();
+    assert.ok(sc.open().includes(n.key), "a change to send");
     pollWith(new Date(sc.now).toISOString());
     assert.ok(!sc.open().includes(n.key), "resubmitted");
   });
