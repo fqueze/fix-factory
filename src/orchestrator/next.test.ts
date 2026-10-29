@@ -2413,20 +2413,28 @@ function command(sc: Scenario, c: Record<string, unknown>): void {
 }
 
 describe("10. backouts", () => {
-  // Both patches landed, then a sheriff backed both out for test_b's failure.
+  // Both patches landed, then a sheriff backed both out for test_b's failure: their revisions reopen.
   function backedOut(): Scenario {
     const sc = inReview();
     sc.complete("poll:0", { output: polled("published") });
     sc.settle();
     assert.equal(sc.state().step, "done");
-    const key = sc.view().jobs.find((j) => !j.end && j.purpose.key.startsWith("landings:"))!.purpose.key;
-    assert.deepEqual(sc.plan(key).cli?.args, ["landings", "22", "999"]);
+    assert.ok(!sc.view().jobs.some((j) => j.purpose.key.startsWith("backout-reason:")), "Bugzilla isn't asked while nothing reopens");
+    sc.now += 4 * 3_600_000;
+    sc.settle();
+    const poll = sc.view().jobs.find((j) => !j.end && j.purpose.key.startsWith("poll:"))!.purpose.key;
+    sc.complete(poll, { output: polled("accepted") });
+    sc.settle();
+    assert.equal(sc.state().step, "landing");
+    const key = sc.view().jobs.find((j) => !j.end && j.purpose.key.startsWith("backout-reason:p-test-b:"))!.purpose.key;
+    assert.deepEqual(sc.plan(key).cli?.args, ["landings", "22"]);
     const pushes = [
       { t: "2026-10-15T10:00:00Z", kind: "landed", by: "me", title: "t" },
       { t: "2026-10-15T11:00:00Z", kind: "backed out", by: "sheriff", title: 'Revert "Bug 22, Bug 999 - …"' },
     ];
-    const backout = { t: "2026-10-15T11:05:00Z", by: "sheriff", text: "Backed out for causing mochitest failures @test_b.js.\n* [Failure Log](https://treeherder.mozilla.org/logviewer?job_id=1)" };
-    sc.complete(key, { output: [{ bug: 22, pushes, backout }, { bug: 999, pushes, backout }] });
+    const backout = { t: new Date(sc.now).toISOString(), by: "sheriff", text: "Backed out for causing mochitest failures @test_b.js.\n* [Failure Log](https://treeherder.mozilla.org/logviewer?job_id=1)" };
+    sc.complete(key, { output: [{ bug: 22, pushes, backout }] });
+    sc.complete(sc.view().jobs.find((j) => !j.end && j.purpose.key.startsWith("backout-reason:p-test-a:"))!.purpose.key, { output: [{ bug: 999, pushes, backout }] });
     sc.settle();
     return sc;
   }
@@ -2434,7 +2442,8 @@ describe("10. backouts", () => {
   it("takes the request back to landing: the patch the failure names goes to its author, the other may land again", () => {
     const sc = backedOut();
     assert.equal(sc.state().step, "landing");
-    assert.deepEqual(sc.state().backouts["p-test-b"], { at: "2026-10-15T11:00:00Z", reason: "Backed out for causing mochitest failures @test_b.js.\n* [Failure Log](https://treeherder.mozilla.org/logviewer?job_id=1)", culprit: true });
+    assert.equal(sc.state().backouts["p-test-b"].reason, "Backed out for causing mochitest failures @test_b.js.\n* [Failure Log](https://treeherder.mozilla.org/logviewer?job_id=1)");
+    assert.equal(sc.state().backouts["p-test-b"].culprit, true);
     assert.equal(sc.state().backouts["p-test-a"].culprit, false);
     assert.equal(sc.state().items["i-test-a"].state, "waiting for review", "not landed anymore");
     const told = sc.view().jobs.find((j) => j.purpose.key.startsWith("author:i-test-b:backout:p-test-b:"))!;

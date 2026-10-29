@@ -34,7 +34,7 @@ export function foldEvents(events: readonly Event[]): RequestState {
     stacks: {},
     pushes: {},
     patchSent: {},
-    bugLandings: {},
+    reopened: {},
     backouts: {},
     patchShas: {},
     pushChanges: {},
@@ -81,9 +81,6 @@ export function foldEvents(events: readonly Event[]): RequestState {
         break;
       case "author-queued":
         s.queuedAuthors = [...(s.queuedAuthors ?? []), { item: e.item, key: e.key, reason: e.reason, message: e.message }];
-        break;
-      case "landing-status":
-        s.bugLandings[e.bug] = { status: e.status, at: e.at, ...(e.reason ? { reason: e.reason } : {}) };
         break;
       case "backout":
         s.backouts[e.patch] = { at: e.at, reason: e.reason, culprit: e.culprit };
@@ -329,6 +326,7 @@ export function foldEvents(events: readonly Event[]): RequestState {
         break;
       }
       case "review-status":
+        if (reviews.get(e.patch)?.status === "published" && e.status !== "published") s.reopened[e.patch] = e.t;
         reviews.set(e.patch, { revision: e.revision, status: e.status, reviewers: e.reviewers, comments: e.comments, ...(e.diff ? { diff: e.diff } : {}), ...(e.author ? { author: e.author } : {}) });
         if (e.diff?.commit && s.patchSent[e.patch]?.at(-1)?.sha !== e.diff.commit) s.patchSent[e.patch] = [...(s.patchSent[e.patch] ?? []), { sha: e.diff.commit, t: e.diff.created }];
         break;

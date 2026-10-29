@@ -142,7 +142,6 @@ export type Event =
   | (EventBase & { type: "tests-asked"; tests: string[] }) // failures already on central you want fixed too
   | (EventBase & { type: "author-queued"; item: ItemId; key: string; reason: string; message: string }) // your message to an author whose worktree is restored first
   | (EventBase & { type: "verify-asked"; text: string })
-  | (EventBase & { type: "landing-status"; bug: number; status: "landed" | "backed out"; at: Iso; reason?: string }) // what autoland last did with the bug's patches, from Bugzilla
   | (EventBase & { type: "backout"; patch: PatchId; at: Iso; reason: string; culprit: boolean }) // its landing was backed out; culprit: the failure is its own (or nobody's could be told apart)
   | (EventBase & { type: "backout-verified"; patch: PatchId }) // a try push showed its fix green: it may land again // you want the stack pushed to try as it stands, whatever the step
   | (EventBase & { type: "comment-sent"; patch: PatchId; text: string; key: string }) // your comment on a patch, and the key of the author run answering it
@@ -472,7 +471,7 @@ export interface RequestState {
   askedTests?: string[]; // failures already on central you asked to fix too, by test path
   queuedAuthors?: { item: ItemId; key: string; reason: string; message: string }[]; // your messages waiting for their author's worktree
   verifyAsked?: string[];
-  bugLandings: Record<number, { status: "landed" | "backed out"; at: Iso; reason?: string }>; // per bug, what autoland last did
+  reopened: Record<PatchId, Iso>; // when its revision went from closed (landed) back to open: a backout
   backouts: Record<PatchId, { at: Iso; reason: string; culprit: boolean; verified?: boolean }>; // patches whose landing was backed out // each time you asked for a try push of the stack as it stands, why
   splitFrom?: RequestId; // made by splitting that one
   createdAt: Iso;

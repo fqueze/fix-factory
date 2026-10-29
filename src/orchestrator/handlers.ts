@@ -3,7 +3,6 @@
 // are next()'s business (retry, then failed:<job>).
 import { relative } from "node:path";
 import type { ClusterGroup } from "../cli/failures.ts";
-import type { BugLandings } from "../cli/bugzilla.ts";
 import type { PollResult } from "../cli/phab.ts";
 import type { ImportedCommit } from "../cli/stack/import.ts";
 import type { SinceResult } from "../cli/stack/since.ts";
@@ -290,16 +289,6 @@ export function handleFinished(input: HandlerInput): HandlerResult {
       }
       break;
     }
-    case "landings":
-      // A change in what autoland last did with a bug's patches: landed, or backed out (with the sheriff's why).
-      for (const b of json<BugLandings[]>()) {
-        const last = b.pushes.at(-1);
-        if (!last) continue;
-        const known = s.bugLandings[b.bug];
-        if (known?.status === last.kind && known.at === last.t) continue;
-        ev("landing-status", { bug: b.bug, status: last.kind, at: last.t, ...(last.kind === "backed out" ? { reason: (b.backout && b.backout.t >= last.t ? b.backout.text : last.title).slice(0, 3000) } : {}) });
-      }
-      break;
     case "classify-comments": {
       const p = s.patches[purpose.patch!];
       if (!p?.review) break;

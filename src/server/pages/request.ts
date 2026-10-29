@@ -815,7 +815,7 @@ function sinceSection(r: RequestState, p: PushView, ctx: RenderContext): Html | 
 // Its landing backed out: whether it caused it, and what it waits for.
 function backoutText(r: RequestState, p: PatchView): Html | null {
   const b = r.backouts[p.id];
-  if (!b || (r.bugLandings[p.bug ?? 0]?.status === "landed" && r.bugLandings[p.bug ?? 0].at > b.at)) return null;
+  if (!b || p.review?.status === "published") return null;
   const why = b.reason.split("\n")[0];
   const state = !b.culprit ? "backed out with another patch: it can land again" : b.verified ? "backed out, its fix green on try: it can land again" : "backed out: its fix needs a green try run first";
   return html` · <span class="bad" title="${why}">${state}</span>`;
