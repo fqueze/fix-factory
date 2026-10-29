@@ -800,16 +800,21 @@ function sinceSection(r: RequestState, p: PushView, ctx: RenderContext): Html | 
     ? html`<h4 class="part">Changed since push ${pushName(r, since)}${prev?.rev ? html` (<a href="${pushUrl(prev)}" target="_blank" rel="noopener">${(prev.summary ?? prev.result ?? "").split(":")[0]}</a>)` : null}</h4>${
         changed.length === 0 && changes.removed.length === 0
           ? html`<div class="sub">Nothing: the same patches.</div>`
-          : html`<ul class="changes">${changed.map((c) => {
+          : html`<ul class="changes">${firstTwo(`since-changed-${p.id}`, changed.map((c) => {
               const text = c.interdiffFile ? ctx.readData?.(c.interdiffFile) : undefined;
               const said = authorSaid(r, c.patch);
               return html`<li><b>${c.status === "new" ? "new" : "changed"}</b>: <a href="#patch-${c.patch}">${title(c.patch)}</a>${said ? html`<div class="sub clamp1" title="${said}">${said}</div>` : null}${
                 text === undefined ? null : html`<details class="fold" data-fold="since-${p.id}-${c.patch}"><summary>Interdiff</summary>${diff(text)}</details>`
               }</li>`;
-            })}${changes.removed.map((x) => html`<li><b>gone</b>: ${x.title}</li>`)}</ul>`
+            }))}${firstTwo(`since-gone-${p.id}`, changes.removed.map((x) => html`<li><b>gone</b>: ${x.title}</li>`))}</ul>`
       }`
     : null;
   return html`${regressions}${list}`;
+}
+
+// A list's first two items, the rest folded under "+n more".
+function firstTwo(fold: string, items: Html[]): Html {
+  return html`${items.slice(0, 2)}${items.length > 2 ? html`<li class="more"><details class="fold" data-fold="${fold}"><summary>+${items.length - 2} more</summary><ul class="changes">${items.slice(2)}</ul></details></li>` : null}`;
 }
 
 // What the latest run of a patch's author said it did.
