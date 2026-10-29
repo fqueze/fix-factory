@@ -2771,7 +2771,8 @@ class Planner {
       for (const n of this.s.needsUser) if (n.key.startsWith(`land:${st.id}:`) && n.key !== `land:${st.id}:${h}`) this.clear(n.key);
       if (!o.landable.length) continue;
       if (o.order.join() !== st.order.join() || this.view.byKey.has(`rewrite-land:${st.id}:${h}`)) {
-        const e = this.rewriteEdits(`land-${st.id}-${h}`, ps);
+        // Landed patches leave the order, and their edits with them.
+        const e = this.rewriteEdits(`land-${st.id}-${h}`, o.order.map((pid) => this.s.patches[pid]));
         const rw = this.want(`rewrite-land:${st.id}:${h}`, () =>
           this.cli("rewrite", "stack.ts", ["rewrite", "--cwd", st.worktree, "--base", st.base ?? this.config.baseRef, "--branch", st.branch, "--order", o.order.map((pid) => this.s.patches[pid].sha).join(","), ...e.args], {
             cwd: st.worktree,

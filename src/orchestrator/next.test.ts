@@ -2412,6 +2412,20 @@ function command(sc: Scenario, c: Record<string, unknown>): void {
   }
 }
 
+describe("10. landing with a patch landed", () => {
+  it("leaves the landed patch out of the rewrite, its Differential Revision edit too", () => {
+    const sc = inReview();
+    const [d100, d101] = polled("accepted");
+    sc.complete("poll:0", { output: [{ ...d100, status: "published" }, d101] });
+    sc.settle();
+    const key = sc.view().jobs.find((j) => !j.end && j.purpose.key.startsWith("order-landable:"))!.purpose.key;
+    sc.complete(key, { output: { order: ["p-test-a"], flippedSoftDeps: [], landable: ["p-test-a"] } });
+    const rw = sc.settle().find((k) => k.startsWith("rewrite-land:"))!;
+    const plan = sc.plan(rw);
+    assert.deepEqual(Object.keys(JSON.parse(plan.files![0].content)), [sc.state().patches["p-test-a"].sha]);
+  });
+});
+
 describe("10. backouts", () => {
   // Both patches landed, then a sheriff backed both out for test_b's failure: their revisions reopen.
   function backedOut(): Scenario {
