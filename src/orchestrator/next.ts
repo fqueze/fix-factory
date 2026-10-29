@@ -2767,8 +2767,9 @@ class Planner {
       );
       if (!ord) continue;
       const o = this.out<OrderOutput>(ord);
-      // One reorg to ask for at a time: an earlier one's order is moot.
-      for (const n of this.s.needsUser) if (n.key.startsWith(`land:${st.id}:`) && n.key !== `land:${st.id}:${h}`) this.clear(n.key);
+      // One reorg to ask for at a time, for the stack's order: an earlier one's is moot.
+      const landKey = `land:${st.id}:${shortHash(st.order).slice(0, 10)}`;
+      for (const n of this.s.needsUser) if (n.key.startsWith(`land:${st.id}:`) && n.key !== landKey) this.clear(n.key);
       if (!o.landable.length) continue;
       // v2: earlier versions gave landed patches an edit, which the rewrite refused.
       if (o.order.join() !== st.order.join() || this.view.byKey.has(`rewrite-land:${st.id}:${h}:v2`)) {
@@ -2797,16 +2798,17 @@ class Planner {
         if (adapts.some((a) => !a)) continue;
         if (adapts.length > 0 && !this.want(`refresh:${st.id}:${h}`, () => this.cli("refresh", "stack.ts", ["import", "--cwd", st.worktree, `${st.base ?? this.config.baseRef}..${st.branch}`], { cwd: st.worktree, purpose: { stack: st.id } }))) continue;
       }
-      // Only when the stack's order differs from Phabricator's: landable patches already at the bottom need nothing there.
+      // Whenever the stack's order differs from Phabricator's, whichever reorder made it: landable patches already at the
+      // bottom there need nothing.
       const phab = st.submittedOrder?.filter((pid) => st.order.includes(pid));
-      if (!this.view.byKey.has(`rewrite-land:${st.id}:${h}:v2`) || (phab && phab.join() === st.order.join())) {
-        this.clear(`land:${st.id}:${h}`);
+      if (!phab || phab.join() === st.order.join()) {
+        this.clear(landKey);
         continue;
       }
       const n = o.landable.length;
       const k = o.flippedSoftDeps.length;
       const adapted = k ? ` (${k} soft ${k === 1 ? "dependency" : "dependencies"} adapted)` : "";
-      this.raise(`land:${st.id}:${h}`, { action: `Stack reordered: ${n} landable ${n === 1 ? "patch" : "patches"} moved to the bottom`, detail: `Run moz-phab reorg so Phabricator has the new order${adapted}.`, stack: st.id });
+      this.raise(landKey, { action: `Stack reordered: ${n} landable ${n === 1 ? "patch" : "patches"} moved to the bottom`, detail: `Run moz-phab reorg so Phabricator has the new order${adapted}.`, stack: st.id });
     }
   }
 

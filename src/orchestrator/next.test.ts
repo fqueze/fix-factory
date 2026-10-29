@@ -3037,7 +3037,7 @@ describe("10. landing", () => {
     sc.complete(refresh, { output: [{ ...imported(sha("5"), "Bug 999 - Fix a, r=smaug.", [], 999)[0], revision: 101 }, { ...imported(sha("4"), "Bug 22 - Fix test_b, r=smaug.", [], 22)[0], revision: 100 }] });
     sc.settle();
     const flag = sc.state().needsUser.find((n) => n.key.startsWith("land:root:"))!;
-    assert.equal(flag.key, `land:root:${key.split(":").at(-1)}`);
+    assert.match(flag.key, /^land:root:[0-9a-f]{10}$/, "keyed by the stack's order");
     assert.equal(flag.action, "Stack reordered: 1 landable patch moved to the bottom");
     assert.equal(flag.detail, "Run moz-phab reorg so Phabricator has the new order (1 soft dependency adapted).");
     assert.equal(flag.stack, "root");
