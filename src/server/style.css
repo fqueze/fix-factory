@@ -221,7 +221,12 @@ div.job { padding-left: 14px; }
 .jobctl input[type=text] { font: inherit; font-size: 12px; padding: 1px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-1); color: var(--text-primary); min-width: 0; flex: 1 1 260px; }
 .jobs .btn, .jobctl .btn { font-size: 11px; padding: 0 6px; }
 .said { display: inline-block; max-width: 40em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
-.landable { color: var(--good); }
+/* Landable catches the eye: it goes from blue (ready) to green (landed). */
+@keyframes landable-bg { 0%, 100% { background: var(--accent); } 50% { background: var(--good); } }
+@keyframes landable-fg { 0%, 100% { color: var(--accent); } 50% { color: var(--good); } }
+.landable, .rprog > .landable, .progress > .landable { color: var(--good); font-weight: 600; animation: landable-fg 2s ease-in-out infinite; }
+.pbar .landable { background: var(--good); animation: landable-bg 2s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .landable, .pbar .landable { animation: none; } }
 details.fold.configs > summary { padding: 0; }
 /* What a group needing you asks: in sight under its line, with its buttons. */
 div.asks { border-bottom: 1px solid var(--border); }

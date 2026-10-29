@@ -85,7 +85,7 @@ describe("overview", () => {
 
   it("has the header strip and the global Tell the factory box", () => {
     assert.match(page, /agents <b>10\/10<\/b>/);
-    assert.match(page, /<span class="progress"><span class="pbar">(<span class="[a-z-]+" style="flex-grow:\d+"><\/span>){5}<\/span><span class="needs-you">19 need you<\/span> · <span class="working">8 working<\/span> · <span class="ready">12 ready<\/span> · <span class="pending">3 pending<\/span> · <span class="landed">2 landed<\/span> · <span class="closed">6 closed<\/span><\/span>/);
+    assert.match(page, /<span class="progress"><span class="pbar">(<span class="[a-z-]+" style="flex-grow:\d+"><\/span>){6}<\/span><span class="needs-you">19 need you<\/span> · <span class="working">8 working<\/span> · <span class="landable">2 landable<\/span> · <span class="ready">10 ready<\/span> · <span class="pending">3 pending<\/span> · <span class="landed">2 landed<\/span> · <span class="closed">6 closed<\/span><\/span>/);
     assert.ok(page.includes(cmd({ cmd: "tell-factory" })));
     assert.doesNotMatch(page, /New request|new-request/);
     assert.match(page, /<link rel="icon" href="data:image\/svg\+xml,[^"]*🏭/);
