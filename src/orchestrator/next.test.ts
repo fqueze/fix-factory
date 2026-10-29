@@ -2479,6 +2479,16 @@ describe("9. a try push of a submitted stack", () => {
     assert.equal(sc.state().step, "review comments");
   });
 
+  it("an author told of a push's failure that isn't its own keeps its submitted patch waiting for review", () => {
+    const sc = inReview();
+    const plan = resumeAuthorPlan(ID, sc.view(), "i-test-a", "try", { message: "Try push fed found these failures" }, "investigating");
+    assert.ok(plan && plan !== "busy");
+    plan.purpose.key = "author:i-test-a:try:x";
+    sc.startJob(plan);
+    sc.complete(plan.purpose.key, { report: { ...fixed([sha("f")]), state: "left as-is", summary: "that failure isn't from this patch" } });
+    assert.equal(sc.state().items["i-test-a"].state, "waiting for review");
+  });
+
   it("redo-step back before review is refused once the stack is on Phabricator", () => {
     const sc = inReview();
     command(sc, { cmd: "redo-step", step: "verify on try", reason: "another push" });

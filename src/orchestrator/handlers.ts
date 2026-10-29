@@ -403,7 +403,11 @@ function authorReport(input: HandlerInput, ev: <T extends EventInput["type"]>(ty
         coveredBy = Object.values(input.state.patches).find((p) => p.item !== item && (p.sha.startsWith(sha) || sha.startsWith(p.sha.slice(0, 12))))?.id;
         if (!coveredBy) throw new InvalidReport(`coveredBy: ${sha} isn't a patch of the stack; name the stack's commit that fixes it (\`git log\` on its branch).`);
       }
-      ev("item-state", { item, state: r.state, detail: r.summary.slice(0, 300), ...(coveredBy ? { coveredBy } : {}) });
+      // Its patch on Phabricator and its commits kept: nothing to change (a try failure that isn't its own), so it waits for
+      // review; "left as-is" closes a group whose fix is dropped.
+      const submitted = Object.values(input.state.patches).some((p) => p.item === item && p.revision !== undefined);
+      const state = r.state === "left as-is" && submitted && r.commits.length > 0 ? "waiting for review" : r.state;
+      ev("item-state", { item, state, detail: r.summary.slice(0, 300), ...(coveredBy ? { coveredBy } : {}) });
       // A refusal of what you told it waits for you.
       if (r.disagreement && YOUR_MESSAGES.includes(job.purpose?.reason ?? "")) {
         ev("needs-user", { key: `disagrees:${job.job}`, action: "Its author disagrees with you", detail: r.disagreement.slice(0, 1000), job: job.job, item });
