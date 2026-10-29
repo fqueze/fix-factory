@@ -2818,6 +2818,21 @@ describe("9. review comments", () => {
     assert.deepEqual(sc.settle(), []);
   });
 
+  it("a push its author asks for once its patch is on Phabricator waits for its change to be reviewed, then goes with the whole stack", () => {
+    const sc = inReview();
+    sc.complete("poll:0", { output: polled("needs-review", [], "pending") });
+    sc.settle();
+    const plan = resumeAuthorPlan(ID, sc.view(), "i-test-a", "continue", { message: "push it" }, "investigating");
+    assert.ok(plan && plan !== "busy");
+    plan.purpose.key = "author:i-test-a:continue:c-9";
+    sc.startJob(plan);
+    sc.complete("author:i-test-a:continue:c-9", { report: fixed([sha("9")], { tryRequest: "test_a.js on linux debug" }) });
+    const started = sc.settle();
+    assert.ok(!started.some((k) => k.startsWith("plan:asked:")), String(started));
+    assert.ok(started.some((k) => k.startsWith("import:")), String(started));
+    assert.deepEqual(sc.state().verifyAsked ?? [], [], "not before its change is reviewed and in the stack");
+  });
+
   it("classifies new comments, the author addresses them first, then the stack is rewritten and you resubmit", () => {
     const sc = inReview();
     const comment = { id: 7, author: "smaug", file: "a/test_a.js", line: 3, length: 1, text: "Use waitForCondition", done: false };

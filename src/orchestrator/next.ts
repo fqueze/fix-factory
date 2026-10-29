@@ -1209,11 +1209,25 @@ class Planner {
     const asked = this.rep<{ tryRequest?: string }>(author).tryRequest;
     if (!asked) return false;
     const e = this.itemEpoch(item.id);
-    if (item.id !== ANNOTATIONS_ITEM && author.name !== "address-review" && !this.authorJobs(item.id).some((j) => j.purpose.reason === "continue")) {
-      const own = `${item.id.replace(/^i-/, "").slice(0, 24)}-ask-`;
+    const own = `${item.id.replace(/^i-/, "").slice(0, 24)}-ask-`;
+    const declineOwn = (text: string) => {
       for (const p of Object.values(this.s.pushes)) {
-        if (p.id.startsWith(own) && !p.rev && p.declined === undefined) this.event(this.ev("try-declined", { push: p.id, text: "not needed anymore: the stack goes to try as a whole", by: "factory" }));
+        if (p.id.startsWith(own) && !p.rev && p.declined === undefined) this.event(this.ev("try-declined", { push: p.id, text, by: "factory" }));
       }
+    };
+    // Once on Phabricator, its change is reviewed (its interdiff yours to see) before any push, and what its author
+    // asked for goes to try with the whole stack: the other new patches too.
+    const submitted = Object.values(this.s.patches).filter((p) => p.item === item.id && p.revision !== undefined);
+    if (submitted.length) {
+      declineOwn("not from its worktree: its patch is on Phabricator, so the stack goes to try as a whole, once this change is reviewed");
+      if (this.s.items[item.id].state === "waiting for review") {
+        const text = `Its author asked for this after changing ${submitted.map((p) => `D${p.revision}`).join(", ")} (${shortHash([author.job]).slice(0, 4)}): ${asked}`;
+        if (!(this.s.verifyAsked ?? []).includes(text)) this.event(this.ev("verify-asked", { text }));
+      }
+      return false;
+    }
+    if (item.id !== ANNOTATIONS_ITEM && author.name !== "address-review" && !this.authorJobs(item.id).some((j) => j.purpose.reason === "continue")) {
+      declineOwn("not needed anymore: the stack goes to try as a whole");
       // Told once already: what it reported stands.
       if (this.rep<{ commits: string[] }>(author).commits.length || author.purpose.reason === "no push of its own") return false;
       this.resumeAuthor(
