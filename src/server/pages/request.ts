@@ -118,7 +118,6 @@ export function renderRequestBody(r: RequestState, ctx: RenderContext): Html {
   const loose = Object.values(r.patches).filter((p) => !stacked.has(p.id) && itemOf(r, p) === undefined);
   const unstacked = Object.values(r.items).filter((i) => !stackedItems.has(i.id));
   // Groups whose patches landed have left their stack.
-  const metaSummary = r.metaBug?.draft?.summary ?? "";
   // The abandoned groups come last, after what landed.
   const own = (i: ItemView) => Object.values(r.patches).filter((p) => p.item === i.id && !isDropped(r, p));
   const landed = unstacked.filter((i) => i.state === "landed" || (own(i).length > 0 && own(i).every((p) => isLanded(r, p))));
