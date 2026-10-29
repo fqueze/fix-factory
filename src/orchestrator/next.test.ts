@@ -1173,6 +1173,28 @@ describe("4. investigate and fix", () => {
   });
 });
 
+describe("a bug an author names", () => {
+  it("must be open: a resolved one goes back to the author, then to you", () => {
+    const sc = workList([group("ka", "a/test_a.js", "boom")]);
+    sc.resolvedBugs.add(2026600);
+    investigating(sc, "i-test-a");
+    sc.complete("author:i-test-a:initial", { report: fixed([sha("1")]) });
+    sc.settle();
+    const author = sc.view().byKey.get("author:i-test-a:initial")![0].job;
+    sc.complete(`import:${author}`, { output: imported(sha("1"), "Bug 2026600 - Fix a/test_a.js, r=smaug.", ["a/test_a.js"], 2026600) });
+    sc.settle();
+    const told = sc.view().jobs.find((j) => j.purpose.key === `author:i-test-a:bug-resolved:${author}`)!;
+    assert.match(sc.plan(told.purpose.key).agent?.message ?? "", /names bug 2026600 \(“bug 2026600”, RESOLVED FIXED\), which is resolved/);
+    assert.ok(!sc.view().jobs.some((j) => j.purpose.key.startsWith("lint:")), "nothing checked further meanwhile");
+    // Named again: you decide.
+    const again = sc.complete(told.purpose.key, { report: fixed([sha("2")]) });
+    sc.settle();
+    sc.complete(`import:${again}`, { output: imported(sha("2"), "Bug 2026600 - Fix a/test_a.js, r=smaug.", ["a/test_a.js"], 2026600) });
+    sc.settle();
+    assert.ok(sc.open().includes("bug-resolved:p-test-a"));
+  });
+});
+
 describe("failures", () => {
   it("retries a script once, then blocks it and shows you the error", () => {
     const sc = workList([group("ka", "a/test_a.js", "boom")]);

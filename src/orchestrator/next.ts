@@ -17,7 +17,7 @@ import type { ImportedCommit } from "../cli/stack/import.ts";
 import type { MessageEdit } from "../cli/stack/message.ts";
 import type { OrderOutput } from "../cli/stack/order.ts";
 import { expectedTests, type DryRunResult } from "../cli/try.ts";
-import type { BugLandings } from "../cli/bugzilla.ts";
+import type { BugInfo, BugLandings } from "../cli/bugzilla.ts";
 import { keptDir } from "../lib/kept.ts";
 import { REQUEST_STEPS } from "../server/commands.ts";
 import { isReviewComment, landingState } from "../state/landing.ts";
@@ -1262,6 +1262,22 @@ class Planner {
         "bug",
         `${bugless.length === 1 ? `Your commit ${bugless[0].sha.slice(0, 12)} has` : `Your commits ${bugless.map((p) => p.sha.slice(0, 12)).join(", ")} have`} no bug: only annotation patches go under the meta bug. If an open bug covers this failure, put its number in the commit message; otherwise add a draft for each one to \`bugDrafts\` in your report, for the user to file (keep \`Bug XXXXXXX\`): separate fixes get separate bugs. Change nothing else, then end with the JSON report again.`,
       );
+      return;
+    }
+    // A bug an author names must be open: a resolved one (often the bug that added the skip-if being removed) isn't this
+    // failure's, and a fix can't land under it. The one you gave stands; a submitted patch keeps its revision's.
+    const named = patches.map((p) => this.s.patches[p.id]).filter((pv) => pv !== undefined && pv.bug !== null && !pv.bugFromYou && pv.revision === undefined);
+    const checks = named.map((pv) => this.want(`bug-check:${pv.bug}`, () => this.cli("bug-check", "bugzilla.ts", ["bug", String(pv.bug)], { item: item.id, priority, purpose: { item: item.id } })));
+    if (checks.some((c) => !c)) return;
+    const resolved = named.map((pv, i) => ({ pv, bug: this.out<BugInfo>(checks[i]!) })).filter((x) => ["RESOLVED", "VERIFIED", "CLOSED"].includes(x.bug.status));
+    if (resolved.length) {
+      const list = resolved.map((x) => `bug ${x.bug.id} (“${x.bug.summary}”, ${x.bug.status} ${x.bug.resolution})`).join(", ");
+      // Told once; named again, you decide.
+      if (author.purpose.reason === "bug") {
+        for (const x of resolved) this.raise(`bug-resolved:${x.pv.id}`, { action: `Its commit is under a resolved bug`, detail: `${x.pv.title}: ${list}. Tell its author which open bug to use, or to draft a new one.`.slice(0, 500), patch: x.pv.id, item: item.id });
+      } else {
+        this.resumeAuthor(item.id, `author:${item.id}${e}:bug-resolved:${author.job}`, "bug", `Your commit names ${list}, which is resolved: it isn't this failure's bug, and a fix can't land under it. Put the number of an open bug that covers this failure in the commit message, or add a draft to \`bugDrafts\` in your report and keep \`Bug XXXXXXX\`. Change nothing else, then end with the JSON report again.`);
+      }
       return;
     }
     const lints: { job: JobRecord; what: string }[] = [];

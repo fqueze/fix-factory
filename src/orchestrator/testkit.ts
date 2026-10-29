@@ -89,6 +89,8 @@ export class Scenario {
     for (const a of actions) {
       if (a.type !== "start") continue;
       this.startJob(a.plan);
+      // Answered right away (startJob): not something a test waits on.
+      if (a.plan.purpose.what === "bug-check") continue;
       if (this.showTestPlans || !a.plan.purpose.key.startsWith("test-plan:")) keys.push(a.plan.purpose.key);
     }
     return keys;
@@ -126,9 +128,15 @@ export class Scenario {
     } as EventInput);
     for (const e of plan.startEvents ?? []) this.add(e);
     this.plans.set(job, plan);
+    // A bug an author names is open, unless a test says otherwise.
+    if (plan.purpose.what === "bug-check") {
+      const id = Number(plan.cli!.args[1]);
+      this.complete(plan.purpose.key, { output: { id, summary: `bug ${id}`, status: this.resolvedBugs.has(id) ? "RESOLVED" : "NEW", resolution: this.resolvedBugs.has(id) ? "FIXED" : "", firstComment: "" } });
+    }
     return job;
   }
   readonly plans = new Map<JobId, JobPlan>();
+  readonly resolvedBugs = new Set<number>();
 
   running(key: string): JobId {
     const rec = this.view().byKey.get(key)?.at(-1);
