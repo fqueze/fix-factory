@@ -183,10 +183,12 @@ details.reopen[open] > summary { display: none; }
 /* Progress per request and for the factory: a bar, then the counts. */
 .pbar { display: inline-flex; width: 120px; height: 8px; border-radius: 4px; overflow: hidden; background: var(--track); vertical-align: middle; margin-right: 8px; }
 .pbar > span { min-width: 3px; }
-.pbar .needs-you { background: var(--serious); } .pbar .working { background: var(--accent); } .pbar .ready { background: var(--good); } .pbar .landed { background: var(--good); } .pbar .waiting-for-try { background: color-mix(in srgb, var(--accent) 40%, var(--track)); }
-.pbar .pending { background: var(--text-muted); opacity: .5; } .pbar .closed { background: var(--border); }
+.pbar .landed { background: var(--good); } .pbar .ready { background: var(--accent); } .pbar .waiting-for-try { background: color-mix(in srgb, var(--accent) 40%, var(--track)); }
+.pbar .needs-you { background: var(--serious); } .pbar .working { background: var(--text-muted); } .pbar .pending { background: var(--border); }
 .rprog > .needs-you, .progress > .needs-you { color: var(--serious); font-weight: 600; }
-.rprog > .working, .progress > .working { color: var(--accent); }
+.rprog > .landed, .progress > .landed { color: var(--good); }
+.rprog > .ready, .progress > .ready { color: var(--accent); }
+.rprog > .closed, .progress > .closed { color: var(--text-muted); }
 /* One row per group or patch: its name and cost on the first line, where it stands under it, the rest when opened. */
 .rows { margin: 8px -12px 0; }
 .rows .rows { margin: 0; }
