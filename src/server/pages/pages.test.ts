@@ -673,14 +673,19 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.equal(h.split('data-key="resubmit:focus:j1"').length, 2, "and not also at the top");
   });
 
-  it("9. review comments: Check Phabricator now, under a stack with revisions, until done", () => {
+  it("9. review comments: Check Phabricator now, in a stack's header once it has revisions, until done", () => {
     const r = structuredClone(get("r-20261007-focus"));
     const button = cmd({ cmd: "poll-phab", request: "r-20261007-focus" });
     assert.ok(!renderRequest(r, ctx, true).value.includes(button), "not before it's submitted");
     r.patches["p-focus"].revision = 5;
     assert.ok(renderRequest(r, ctx, true).value.includes(button), "whatever the step, once a patch is on Phabricator");
     r.step = "review comments";
-    assert.match(renderRequest(r, ctx, true).value, /<div class="stack-submit"><form class="inline cmd"[^]*?Check Phabricator now<\/button>/);
+    assert.match(renderRequest(r, ctx, true).value, /<h3 class="stackhead">[^]*?Check Phabricator now<\/button><\/form><\/h3>/);
+    r.jobs["j-poll"] = { job: "j-poll", kind: "script", name: "phab.ts poll", cmd: [], cwd: "", pid: 1, pidStartTime: 1, startedAt: "2026-10-16T07:00:00.000Z", endedAt: "2026-10-16T07:30:00.000Z", exitCode: 0 };
+    assert.match(renderRequest(r, ctx, true).value, /Phabricator checked <span data-since="2026-10-16T07:30:00.000Z">/);
+    delete r.jobs["j-poll"].endedAt;
+    assert.match(renderRequest(r, ctx, true).value, /checking Phabricator…/);
+    delete r.jobs["j-poll"];
     r.step = "landing";
     assert.ok(renderRequest(r, ctx, true).value.includes(button));
     delete r.patches["p-focus"].revision;

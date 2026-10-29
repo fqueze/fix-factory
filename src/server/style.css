@@ -292,7 +292,9 @@ table.jobs .btype { color: var(--text-muted); }
 .jgroup { color: var(--text-secondary); }
 table.jobs .tier { color: var(--text-muted); font-size: 11px; margin: 0 2px 0 6px; }
 /* A stack: its title with the stack-viewer link at the end of the line; the moz-phab command in its bottom right corner. */
-h3.stackhead { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+h3.stackhead { display: flex; align-items: center; gap: 8px; }
+h3.stackhead > span:first-child { flex: 1; }
+h3.stackhead .sub { font-weight: normal; font-size: 12px; }
 h3.stackhead .btn { font-weight: normal; }
 .stack-submit { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; align-items: center; padding: 8px 0 4px; }
 .stack-submit .checks { margin: 0; }

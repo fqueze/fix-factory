@@ -242,17 +242,24 @@ function stackSection(r: RequestState, s: StackView, ctx: RenderContext): Html {
   // Once the meta bug is filed, it names the stack.
   const meta = r.metaBug && hasBug(r.metaBug) ? r.metaBug : undefined;
   const title = meta ? html`<a class="bug" href="${bugUrl(meta.bug!)}" target="_blank" rel="noopener">Bug ${meta.bug}</a> ${r.metaBug?.draft?.summary ?? s.folder}` : html`${s.folder}`;
-  return html`<h3 class="stackhead"><span title="Branch ${s.branch}; patches in review order: easy and valuable first, each after its hard deps">${title}</span>${stackViewerLink(r, s)}</h3>
+  const submitted = patches.some((p) => p.revision !== undefined) && r.step !== "done";
+  return html`<h3 class="stackhead"><span title="Branch ${s.branch}; patches in review order: easy and valuable first, each after its hard deps">${title}</span>${stackViewerLink(r, s)}${submitted ? phabCheck(r, ctx) : null}</h3>
     ${r.needsUser.filter((n) => flagItemOf(r, n) === undefined && n.patch === undefined && n.stack === s.id && flagPlaceOf(r, n) !== undefined).map((n) => renderAction(r, n, ctx))}
     ${optionalMetaBug(r, s, ctx)}
     <div class="rows">${patches.filter((p) => !isDropped(r, p)).map((p) => patchRow(r, p, ctx))}${
       dropped.length ? html`<details class="fold" data-fold="dropped-${s.id}"><summary>${dropped.length} dropped</summary><div class="rows">${dropped.map((p) => patchRow(r, p, ctx))}</div></details>` : null
     }</div>
     <div class="stack-submit">${
-      patches.some((p) => p.revision !== undefined) && r.step !== "done"
-        ? html`${pollPhabButton(r.id, requestUrl(r.id))}${verifyStackButton(r.id, requestUrl(r.id))}`
-        : null
+submitted ? verifyStackButton(r.id, requestUrl(r.id)) : null
     }${submitControls(r, s, requestUrl(r.id))}</div>`;
+}
+
+// When Phabricator was last read, and the button to read it now; "checking" while it's read.
+function phabCheck(r: RequestState, ctx: RenderContext): Html {
+  const polls = Object.values(r.jobs).filter((j) => j.name === "phab.ts poll");
+  if (polls.some((j) => j.endedAt === undefined)) return html`<span class="sub working">checking Phabricator…</span>`;
+  const last = polls.filter((j) => j.exitCode === 0).map((j) => j.endedAt!).sort().at(-1);
+  return html`${last ? html`<span class="sub">Phabricator checked ${elapsed(last, ctx)} ago</span>` : null}${pollPhabButton(r.id, requestUrl(r.id))}`;
 }
 
 // The bugs of the stacks' patches, which a meta bug tracks.
