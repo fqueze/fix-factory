@@ -252,6 +252,7 @@ export const COMMAND_LABELS: Record<Command["cmd"], string> = {
   "split-request": "split of the request",
   "move-groups": "move of groups to another request",
   "fix-tests": "tests to fix too",
+  "verify-stack": "try push of the stack",
   "accept-review": "accept as reviewed",
   "allow-push": "one try push allowed",
   continue: "continue",

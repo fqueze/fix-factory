@@ -2400,6 +2400,50 @@ const polled = (status: string, comments: unknown[] = [], reviewer = "accepted")
   { revision: 101, phid: "y", title: "t", status, reviewers: [{ name: "smaug", status: reviewer }], comments },
 ];
 
+function command(sc: Scenario, c: Record<string, unknown>): void {
+  const cmd = { v: 1, id: `c-${sc.events.length}`, t: new Date(sc.now).toISOString(), request: ID, ...c } as Command;
+  for (const e of commandEffects(cmd, { config, state: sc.state(), view: sc.view(), exists: () => false, plan: (j) => sc.plans.get(j) })) {
+    if (e.type === "event") sc.add(e.event);
+    if (e.type === "start") sc.startJob(e.plan);
+  }
+}
+
+describe("9. a try push of a submitted stack", () => {
+  it("is planned when you ask, once, without the step going back", () => {
+    const sc = inReview();
+    sc.complete("poll:0", { output: polled("needs-review", [], "pending") });
+    sc.settle();
+    command(sc, { cmd: "verify-stack", reason: "after the review fixes" });
+    // What changed since the stack's last push comes first.
+    const sinceKey = sc.settle().find((k) => k.startsWith("since:root:"))!;
+    sc.complete(sinceKey, { output: { changes: [], removed: [] } });
+    const planKey = sc.settle().find((k) => k.startsWith("plan:verify:root:"))!;
+    assert.match(planKey, /:ask1$/);
+    assert.match(String(sc.plan(planKey).agent?.vars?.goal), /The user asked for this push: “after the review fixes”/);
+    sc.complete(planKey, { report: { pushes: [{ purpose: "verify", tryArgs: ["fuzzy", "-q", "x"], rebuild: 5 }], feedback: [] } });
+    const dry = sc.settle().find((k) => k.startsWith("dry-run:"))!;
+    const push = sc.purpose(dry).push!;
+    assert.match(push, /^root-ask1-/);
+    sc.complete(dry, { output: { command: ["./mach", "try", "fuzzy"], taskCount: 5, tasks: [], tryTaskConfig: {}, commits: [], warnings: [] } });
+    sc.settle();
+    assert.ok(sc.open().includes(`approve-push:${push}`), "not withdrawn for being past verification");
+    assert.equal(sc.state().step, "review comments");
+    sc.add({ type: "user-done", request: ID, key: `approve-push:${push}` });
+    sc.add({ type: "try-pushed", request: ID, push, rev: "fed", url: "u" });
+    sc.add({ type: "try-finished", request: ID, push, result: "green", summary: "green" });
+    sc.settle();
+    assert.equal(sc.state().step, "review comments");
+    assert.equal(sc.view().jobs.filter((j) => j.purpose.what === "plan-pushes" && j.purpose.key.includes(":ask")).length, 1, "that ask is answered");
+  });
+
+  it("redo-step back before review is refused once the stack is on Phabricator", () => {
+    const sc = inReview();
+    command(sc, { cmd: "redo-step", step: "verify on try", reason: "another push" });
+    assert.equal(sc.state().step, "review comments");
+    assert.match(JSON.stringify(sc.events.at(-1)), /doesn't go back to verify on try/);
+  });
+});
+
 describe("9. review comments", () => {
   it("keeps checking Phabricator while the stack is back on try", () => {
     const sc = inReview();

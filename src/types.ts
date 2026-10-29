@@ -140,6 +140,7 @@ export type Event =
   | (EventBase & { type: "groups-moved"; to: RequestId; items: ItemId[] }) // they go on in that request
   | (EventBase & { type: "meta-draft-asked" }) // you want a meta bug for a stack that doesn't need one
   | (EventBase & { type: "tests-asked"; tests: string[] }) // failures already on central you want fixed too
+  | (EventBase & { type: "verify-asked"; text: string }) // you want the stack pushed to try as it stands, whatever the step
   | (EventBase & { type: "comment-sent"; patch: PatchId; text: string; key: string }) // your comment on a patch, and the key of the author run answering it
   | (EventBase & { type: "config-set"; config: Record<string, unknown> })
   | (EventBase & { type: "step"; step: RequestStep })
@@ -264,7 +265,8 @@ export type PlannedCommand =
   | { cmd: "hand-off"; items: ItemId[]; reason: string }
   | { cmd: "split-request"; parts: { title: string; groups: { item: ItemId; why: string }[] }[]; reason: string }
   | { cmd: "move-groups"; to: RequestId; groups: { item: ItemId; why: string }[]; reason: string } // to another request of the same split, with their history
-  | { cmd: "fix-tests"; tests: string[]; reason: string }; // a group for each, from the try pushes' failures, even ones already on central // new requests taking these groups, with their history; this one archived // you take them over in a session of your own: the factory writes its prompt
+  | { cmd: "fix-tests"; tests: string[]; reason: string }
+  | { cmd: "verify-stack"; reason: string }; // a try push of the stack as it stands, without going back a step // a group for each, from the try pushes' failures, even ones already on central // new requests taking these groups, with their history; this one archived // you take them over in a session of your own: the factory writes its prompt
 
 // ---------------------------------------------------------------------------
 // Agent reports: the structured_output of each prompt. The JSON schemas in
@@ -455,6 +457,7 @@ export interface RequestState {
   movedTo?: Record<ItemId, RequestId>; // its groups the split moved, and where
   metaDraftAsked?: boolean; // you asked for a meta bug draft
   askedTests?: string[]; // failures already on central you asked to fix too, by test path
+  verifyAsked?: string[]; // each time you asked for a try push of the stack as it stands, why
   splitFrom?: RequestId; // made by splitting that one
   createdAt: Iso;
   updatedAt: Iso;

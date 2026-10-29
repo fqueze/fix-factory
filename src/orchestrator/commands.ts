@@ -5,6 +5,7 @@ import type { EventInput } from "../state/events.ts";
 import { sameBugDraft } from "../state/meta-bug.ts";
 import { canDismiss, canRetry, isPushJob, reviewLimitFlag } from "../state/flags.ts";
 import type { Command, Event, FactoryConfig, ItemId, JobId, PlannedCommand, RequestId, RequestState } from "../types.ts";
+import { REQUEST_STEPS } from "../server/commands.ts";
 import { ANNOTATIONS_ITEM, authorJobsOf, CANCELLED, itemEpochOf, SETTLED, TERMINAL, resumeAuthorPlan } from "./next.ts";
 import { handOffReferences } from "./hand-off.ts";
 import { moveProblem, partEvents, splitProblem } from "./split.ts";
@@ -305,6 +306,10 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
       done(true);
       break;
     }
+    case "verify-stack":
+      ev({ type: "verify-asked", text: c.reason });
+      done(true, c.reason);
+      break;
     case "fix-tests":
       ev({ type: "tests-asked", tests: c.tests });
       done(true, c.reason);
@@ -492,6 +497,11 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
       done(true);
       break;
     case "redo-step":
+      // A stack on Phabricator doesn't go back: a try push of it is verify-stack, more fixes fix-tests.
+      if (!c.item && REQUEST_STEPS.indexOf(c.step) < REQUEST_STEPS.indexOf("review comments") && Object.values(s.patches).some((p) => p.revision !== undefined)) {
+        done(false, `the stack is on Phabricator: it doesn't go back to ${c.step}. For a try push of it, ask for one (verify-stack); for more fixes, fix-tests`);
+        break;
+      }
       if (c.item) ev({ type: "item-state", item: c.item, state: "not started", detail: c.reason.slice(0, 300) });
       else ev({ type: "step", step: c.step });
       done(true, c.reason);
@@ -590,7 +600,7 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
   return effects;
 }
 
-const PLANNED = new Set<string>(["retry-job", "cancel-job", "resume-agent", "start-agent", "set-state", "redo-step", "edit-config", "shell", "hand-off", "split-request", "move-groups", "fix-tests"] satisfies PlannedCommand["cmd"][]);
+const PLANNED = new Set<string>(["retry-job", "cancel-job", "resume-agent", "start-agent", "set-state", "redo-step", "edit-config", "shell", "hand-off", "split-request", "move-groups", "fix-tests", "verify-stack"] satisfies PlannedCommand["cmd"][]);
 
 export const STOPPED = "stopped by you";
 

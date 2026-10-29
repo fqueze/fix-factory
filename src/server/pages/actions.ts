@@ -177,6 +177,10 @@ export function pollPhabButton(request: string, back: string): Html {
   return commandButton(request, { cmd: "poll-phab" }, "Check Phabricator now", back, false, "Otherwise checked every 10 minutes while you're on the page, every few hours while you're away");
 }
 
+export function verifyStackButton(request: string, back: string): Html {
+  return commandButton(request, { cmd: "verify-stack", reason: "asked from the page" }, "Push to try", back, false, "Plans a try push of the stack as it stands, for your approval");
+}
+
 export function redoAnnotationsButton(request: string, back: string): Html {
   return commandButton(request, { cmd: "redo-annotations" }, "Redo with today's skip-ifs", back, false, "Lists and classifies the folder's skip-ifs again, writes the patches and plans the un-skip push");
 }
@@ -293,6 +297,8 @@ function plannedText(c: PlannedCommand, r: RequestState): string {
       return `split this request into ${c.parts.length} requests, archiving it`;
     case "fix-tests":
       return `fix these failures too, though already on central: ${c.tests.map((t) => t.split("/").pop()).join(", ")}`;
+    case "verify-stack":
+      return "push the stack to try as it stands, for your approval, without going back a step";
     case "move-groups":
       return `move ${c.groups.map((g) => itemLabel(r, g.item)).join(", ")} to ${c.to}`;
   }

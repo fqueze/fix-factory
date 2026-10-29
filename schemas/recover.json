@@ -402,6 +402,26 @@
               "reason"
             ],
             "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "cmd": {
+                "type": "string",
+                "enum": [
+                  "verify-stack"
+                ]
+              },
+              "reason": {
+                "type": "string",
+                "description": "What the push should show, in the user's words."
+              }
+            },
+            "required": [
+              "cmd",
+              "reason"
+            ],
+            "additionalProperties": false
           }
         ]
       }

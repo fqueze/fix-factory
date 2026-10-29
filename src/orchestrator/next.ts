@@ -162,6 +162,8 @@ export function similarMessages(a: string, b: string): boolean {
 }
 
 // A patch event's fields from its view, to change one of them.
+type Ask = { n: number; text: string }; // your nth verify-stack, and why
+
 // What a patch's place in the stack's order depends on once it's on Phabricator: landable patches go to the bottom.
 function landingState(p: PatchView): { accepted: boolean; commentsAddressed: boolean; landed: boolean } {
   const active = p.review?.reviewers.filter((r) => r.status !== "resigned") ?? [];
@@ -1765,14 +1767,15 @@ class Planner {
   }
 
   // The ids of the verification pushes of the stack's current code.
-  private verifyPrefix(info: StackInfo): string {
+  private verifyPrefix(info: StackInfo, ask?: Ask): string {
     // The DEBUG commits on top are part of what's pushed (none: the same ids as before them).
     const debug = this.debugGroups().flatMap((g) => g.commits);
+    if (ask) return `${info.id}-ask${ask.n}-${shortHash([info.code, ...debug]).slice(0, 4)}`;
     return `${info.id}-${shortHash([info.code, this.stepEpoch("verify on try"), ...debug]).slice(0, 4)}`;
   }
 
   // The current plan's pushes (ids) and those to make (made).
-  private verifyPushes(info: StackInfo): { ids: PushId[]; made: PushId[] } | undefined {
+  private verifyPushes(info: StackInfo, ask?: Ask): { ids: PushId[]; made: PushId[] } | undefined {
     const e = this.stepEpoch("verify on try");
     const stack = this.s.stacks[info.id];
     if (!stack || !info.wt) return undefined;
@@ -1782,13 +1785,13 @@ class Planner {
     const failuresFile = dataPath(this.config, this.s.id, `failures-${info.id}.json`);
     const initialFile = dataPath(this.config, this.s.id, "initial-pushes.json");
     const debug = this.debugGroups().flatMap((g) => g.commits);
-    const planKey = `plan:verify:${info.id}:${info.code}${e}${debug.length ? `:${shortHash(debug).slice(0, 6)}` : ""}`;
+    const planKey = `plan:verify:${info.id}:${info.code}${e}${ask ? `:ask${ask.n}` : ""}${debug.length ? `:${shortHash(debug).slice(0, 6)}` : ""}`;
     // After an earlier push of the stack: what changed since, and what it claims to fix, before planning the next.
     // Only a new plan waits for it; the current plan's own pushes aren't earlier ones.
-    const since = this.sinceLastPush(info);
+    const since = this.sinceLastPush(info, ask);
     if (since === null && !this.view.byKey.has(planKey)) return undefined;
     const planned = this.planPushes(planKey, {
-      goal: `verify the fixes of the ${info.folder ? `${info.folder} ` : ""}stack: every failure below should be gone, with no new one`,
+      goal: `verify the fixes of the ${info.folder ? `${info.folder} ` : ""}stack: every failure below should be gone, with no new one${ask ? `. The user asked for this push: “${ask.text}”` : ""}`,
       failuresFile,
       initialPushFile: initialFile,
       branch,
@@ -1840,14 +1843,14 @@ class Planner {
         },
         ...(since ? [{ path: since.file, content: JSON.stringify(since.content, null, 2) + "\n" }] : []),
       ],
-    }, (i) => `${this.verifyPrefix(info)}-${i + 1}`, info.wt, info.id, since?.push);
+    }, (i) => `${this.verifyPrefix(info, ask)}-${i + 1}`, info.wt, info.id, since?.push);
     return planned && { ids: planned.ids, made: planned.made };
   }
 
   // The stack's latest push with results, what changed since (stack.ts since: interdiffs), and what its authors were
   // told and said. undefined: no earlier push; null: still finding out.
-  private sinceLastPush(info: StackInfo): { push: PushId; rev: string; summary: string; file: string; content: unknown } | null | undefined {
-    const last = this.madePushes(info.id).filter((id) => this.s.pushes[id].result !== undefined && !id.startsWith(this.verifyPrefix(info))).at(-1);
+  private sinceLastPush(info: StackInfo, ask?: Ask): { push: PushId; rev: string; summary: string; file: string; content: unknown } | null | undefined {
+    const last = this.madePushes(info.id).filter((id) => this.s.pushes[id].result !== undefined && !id.startsWith(this.verifyPrefix(info, ask))).at(-1);
     if (!last || !info.wt) return undefined;
     const p = this.s.pushes[last];
     const dry = this.view.byKey.get(`dry-run:${last}`)!.find(succeeded)!;
@@ -2003,7 +2006,8 @@ class Planner {
     // Once verified, the stacks' pushes still waiting for you ask nothing anymore.
     if (at(this.s.step) > at("verify on try") && this.s.step !== "done") {
       for (const push of Object.values(this.s.pushes)) {
-        if (this.s.needsUser.some((n) => n.key === `approve-push:${push.id}`) && this.view.byKey.get(`dry-run:${push.id}`)?.[0].purpose.stack) {
+        const stack = this.view.byKey.get(`dry-run:${push.id}`)?.[0].purpose.stack;
+        if (this.s.needsUser.some((n) => n.key === `approve-push:${push.id}`) && stack && !push.id.startsWith(`${stack}-ask`)) {
           this.event(this.ev("try-declined", { push: push.id, text: "not needed anymore: the stack was verified", by: "factory" }));
         }
       }
@@ -2018,7 +2022,10 @@ class Planner {
       if ((this.view.pushedAt.get(push.id) ?? Infinity) < Date.parse(this.s.createdAt)) continue;
       if (stack && this.s.stacks[stack] && push.rev) this.routeTryFailures(push.id, this.s.stacks[stack].order.map((pid) => this.s.patches[pid]));
     }
-    if (this.s.step !== "verify on try") return;
+    if (this.s.step !== "verify on try") {
+      this.askedVerify();
+      return;
+    }
     // An un-skip push may still add groups to the stack: verifying it waits for its results.
     if (this.signalPushes().some((id) => id !== "initial" && this.s.pushes[id].result === undefined)) return;
     let green = this.stackInfos.size > 0;
@@ -2040,6 +2047,25 @@ class Planner {
       // Verified: no longer "on try".
       for (const info of this.stackInfos.values()) for (const p of info.patches) if (this.s.items[p.item]?.state === "in try") this.setItem(p.item, "in stack");
       this.setStep("meta bug");
+    }
+  }
+
+  // You asked for a try push of the stack as it stands (verify-stack): planned at whatever step it's at, once per ask,
+  // when its authors are done. Its failures are routed like any verification push's; the step stays.
+  private askedVerify(): void {
+    const n = this.s.verifyAsked?.length ?? 0;
+    if (!n || at(this.s.step) <= at("verify on try")) return;
+    const ask = { n, text: this.s.verifyAsked![n - 1] };
+    for (const info of this.stackInfos.values()) {
+      const all = `${info.id}-ask${n}-`;
+      // Made, or declined by you: that ask is answered, and a later change to the stack waits for your next one.
+      if (Object.values(this.s.pushes).some((p) => p.id.startsWith(all) && (p.rev || (p.declined !== undefined && !p.withdrawn)))) continue;
+      const plan = this.verifyPushes(info, ask);
+      for (const push of Object.values(this.s.pushes)) {
+        if (push.id.startsWith(all) && plan && !plan.ids.includes(push.id) && this.s.needsUser.some((x) => x.key === `approve-push:${push.id}`)) {
+          this.event(this.ev("try-declined", { push: push.id, text: "not needed anymore: the stack changed since it was planned", by: "factory" }));
+        }
+      }
     }
   }
 

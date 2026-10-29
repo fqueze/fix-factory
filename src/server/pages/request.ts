@@ -3,7 +3,7 @@ import { md } from "./md.ts";
 import { REQUEST_STEPS } from "../commands.ts";
 import type { BugDraft, ItemView, JobView, PatchView, PushView, Regression, RequestState, StackView } from "../../types.ts";
 import { html, join, type Html } from "../html.ts";
-import { actionsSummary, recoveryAnswers, pollPhabButton, redoAnnotationsButton, approvePushControls, bugBox, continueBox, copyButton, handBackButton, flagControls, flagItemOf, flagText, plannedLabel, recoveryPlanFor, hasAuthorSession, stackViewerLink, submitControls, summaryId } from "./actions.ts";
+import { actionsSummary, recoveryAnswers, pollPhabButton, verifyStackButton, redoAnnotationsButton, approvePushControls, bugBox, continueBox, copyButton, handBackButton, flagControls, flagItemOf, flagText, plannedLabel, recoveryPlanFor, hasAuthorSession, stackViewerLink, submitControls, summaryId } from "./actions.ts";
 import { groupJobs, jobLine } from "./activity.ts";
 import { flagAsk, itemBucket, itemSentence, progressLine, requestProgress, type Bucket } from "./progress.ts";
 import {
@@ -242,7 +242,7 @@ function stackSection(r: RequestState, s: StackView, ctx: RenderContext): Html {
     }</div>
     <div class="stack-submit">${
       patches.some((p) => p.revision !== undefined) && r.step !== "done"
-        ? pollPhabButton(r.id, requestUrl(r.id))
+        ? html`${pollPhabButton(r.id, requestUrl(r.id))}${verifyStackButton(r.id, requestUrl(r.id))}`
         : null
     }${submitControls(r, s, requestUrl(r.id))}</div>`;
 }
