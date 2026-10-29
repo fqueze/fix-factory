@@ -2523,6 +2523,7 @@ describe("9. review comments", () => {
     assert.equal(plan.name, "write-test-plan");
     assert.equal(plan.agent?.vars?.firefoxRepo, config.firefoxRepo);
     assert.deepEqual(plan.files?.map((f) => f.path.split("/").pop()), ["test-plan-p-test-a-investigation.json", "test-plan-p-test-a-pushes.json"]);
+    assert.throws(() => sc.complete(key, { report: { testPlan: "- Reproduced locally.\n- No try push has run this version; Windows is untested.\n", feedback: [] } }), /“No try push has run this version; Windows is untested”: a test plan says what was run/);
     sc.complete(key, { report: { testPlan: "- Reproduced by widening the race: 6/6 failures, 0/20 with the fix.\n- Green on try.\n", feedback: [] } });
     assert.equal(sc.state().patches["p-test-a"].testPlan, "- Reproduced by widening the race: 6/6 failures, 0/20 with the fix.\n- Green on try.");
     assert.ok(!sc.settle().some((k) => k.startsWith("test-plan:p-test-a:")), "written once for the same investigation and try results");

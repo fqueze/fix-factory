@@ -59,6 +59,8 @@ export interface HandlerInput {
 // invalid report, so the agent gets one retry with the error.
 export class InvalidReport extends Error {}
 
+const DOUBT = /\b(untested|not (?:been )?(?:run|tested|confirmed|verified|covered)|(?:was|were|is|has|have)n't (?:been )?(?:run|tested|confirmed|verified|covered)|no try push|isn't confirmed)\b[^.\n]*/i;
+
 export interface HandlerResult {
   events: EventInput[];
   files?: { path: string; content: string }[];
@@ -318,9 +320,14 @@ export function handleFinished(input: HandlerInput): HandlerResult {
       ev("push-changes", { stack: purpose.stack!, since: purpose.push!, changes, removed: o.removed });
       break;
     }
-    case "test-plan":
-      if (s.patches[purpose.patch!]) ev("test-plan", { patch: purpose.patch!, text: (input.report as WriteTestPlanReport).testPlan.trim() });
+    case "test-plan": {
+      const text = (input.report as WriteTestPlanReport).testPlan.trim();
+      // What wasn't done reads as doubt to a reviewer: those lines go.
+      const doubt = DOUBT.exec(text);
+      if (doubt) throw new InvalidReport(`“${doubt[0]}”: a test plan says what was run and what it showed, never what wasn't run, tested or confirmed. Drop that line, and any other like it.`);
+      if (s.patches[purpose.patch!]) ev("test-plan", { patch: purpose.patch!, text });
       break;
+    }
     case "hand-off":
       ev("hand-off", { job: job.job, items: purpose.reason!.split(" "), text: (input.report as WriteHandOffReport).prompt.trim() });
       break;
