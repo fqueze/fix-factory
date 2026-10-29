@@ -2124,6 +2124,19 @@ describe("7. meta bug", () => {
     assert.equal(sc.state().patches["p-test-b"].bug, null);
   });
 
+  it("a patch rebuilt from its author's commit, which says Bug XXXXXXX again, gets its bug back", () => {
+    const sc = annotated();
+    sc.add({ type: "meta-bug", request: ID, bug: 999 });
+    sc.add({ type: "user-done", request: ID, key: "meta-bug:root" });
+    const [rewrite] = sc.settle();
+    sc.complete(rewrite, { output: { mapping: { [sha("c")]: sha("e"), [sha("d")]: sha("f") }, titles: { [sha("e")]: "Bug 1 - Fix b/test_b.js, r=smaug.", [sha("f")]: "Bug XXXXXXX - Fix a/test_a.js, r=smaug." } } });
+    assert.equal(sc.state().patches["p-test-a"].title, "Bug XXXXXXX - Fix a/test_a.js, r=smaug.", "the commit's own title");
+    assert.equal(sc.state().patches["p-test-a"].bug, 999);
+    const [again] = sc.settle();
+    assert.match(again, /^rewrite-bugs:root:/);
+    assert.deepEqual(JSON.parse(sc.plan(again).files![0].content), { [sha("f")]: { bug: 999 } });
+  });
+
   it("a patch already on Phabricator gets its Differential Revision line along with its bug", () => {
     const sc = annotated();
     const { deps: _d, review: _r, replyDrafts: _rd, id, ...p } = sc.state().patches["p-test-a"];

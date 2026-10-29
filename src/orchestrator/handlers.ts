@@ -194,19 +194,16 @@ export function handleFinished(input: HandlerInput): HandlerResult {
     }
     case "assemble":
     case "rewrite": {
-      const o = json<{ commits?: { sha: string; newSha: string }[]; mapping?: Record<string, string> }>();
-      const pairs = [...(o.commits ?? []).map((c) => [c.sha, c.newSha] as const), ...Object.entries(o.mapping ?? {})];
-      for (const [old, sha] of pairs) {
+      const o = json<{ commits?: { sha: string; newSha: string; title: string }[]; mapping?: Record<string, string>; titles?: Record<string, string> }>();
+      const pairs = [...(o.commits ?? []).map((c) => [c.sha, c.newSha, c.title] as const), ...Object.entries(o.mapping ?? {}).map(([old, sha]) => [old, sha, o.titles?.[sha]] as const)];
+      for (const [old, sha, title] of pairs) {
         const p = byShaPrefix(old);
         if (!p) continue;
-        const changes: Partial<PatchView> = { sha, worktree: job.cwd };
+        // The commit's own title: one rebuilt from its author's commit says Bug XXXXXXX again, and the bug number
+        // kept in p.bug goes back in with the next bug rewrite.
+        // (Outputs without titles, as in tests, keep the patch's.)
         const bug = purpose.edits?.[p.id];
-        if (bug !== undefined) {
-          changes.bug = bug;
-          changes.title = p.title.replace(/^Bug X+\b/i, `Bug ${bug}`);
-        }
-        if (purpose.titles?.[p.id]) changes.title = purpose.titles[p.id];
-        patchEvent(p, changes);
+        patchEvent(p, { sha, worktree: job.cwd, title: title ?? purpose.titles?.[p.id] ?? (bug !== undefined ? p.title.replace(/^Bug X+\b/i, `Bug ${bug}`) : p.title), ...(bug !== undefined ? { bug } : {}) });
       }
       break;
     }

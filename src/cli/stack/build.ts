@@ -10,6 +10,7 @@ import {
   readCommit,
   revList,
   revParse,
+  title,
   type CommitObject,
 } from "./git.ts";
 import { editMessage, parseRevision, type MessageEdit } from "./message.ts";
@@ -27,7 +28,7 @@ interface ChainItem {
 
 interface ChainResult {
   head: string;
-  mapping: { sha: string; newSha: string }[];
+  mapping: { sha: string; newSha: string; title: string }[]; // title: the new commit's
   empty: string[]; // original shas whose change was already there; left out of the chain
   conflict?: { index: number; files: string[] };
 }
@@ -45,7 +46,7 @@ async function buildChain(cwd: string, start: string, items: ChainItem[]): Promi
       empty.push(item.commit.sha);
       continue;
     }
-    mapping.push({ sha: item.commit.sha, newSha: r.sha });
+    mapping.push({ sha: item.commit.sha, newSha: r.sha, title: title(item.message ?? item.commit.message) });
     head = r.sha;
   }
   return { head, mapping, empty };
@@ -58,7 +59,7 @@ async function branchExists(cwd: string, branch: string): Promise<boolean> {
 export interface AssembleResult {
   branch: string;
   head?: string; // the branch tip after the operation; absent when the branch doesn't exist
-  commits: { sha: string; newSha: string }[]; // picked commits, in order
+  commits: { sha: string; newSha: string; title: string }[]; // picked commits, in order
   skipped: string[]; // already in the branch (same sha)
   empty: string[]; // already in the branch under another sha, or landed: not picked
   conflict?: Conflict;
@@ -115,6 +116,7 @@ export interface RewriteResult {
   backup?: string; // ref pointing at the branch as it was before; absent when the branch wasn't touched
   shas: string[]; // new shas, in order (up to the conflict, if any)
   mapping: Record<string, string>; // old sha → new sha
+  titles: Record<string, string>; // new sha → its title
   dropped: string[]; // commits of base..branch that weren't in the order
   empty: string[];
   diffChanged: string[]; // old shas whose diff (context included) changed
@@ -169,6 +171,7 @@ export async function rewrite(
       head: oldHead,
       shas: [],
       mapping: {},
+      titles: {},
       dropped,
       empty: [],
       diffChanged: [],
@@ -192,6 +195,7 @@ export async function rewrite(
     ...(backup ? { backup } : {}),
     shas: chain.mapping.map((m) => m.newSha),
     mapping: Object.fromEntries(chain.mapping.map((m) => [m.sha, m.newSha])),
+    titles: Object.fromEntries(chain.mapping.map((m) => [m.newSha, m.title])),
     dropped,
     empty: chain.empty,
     diffChanged: [],

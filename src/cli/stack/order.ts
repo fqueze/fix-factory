@@ -9,6 +9,9 @@ import type { Dep, PatchId } from "../../types.ts";
 // in rank order, recursively). Hard deps on something that isn't a patch of the input (free text, or
 // a patch outside the stack) don't constrain the order. Soft deps never do; they are only reported
 // when the new order flips them relative to the previous one.
+//
+// keepPrevious (a stack on Phabricator, maybe reordered for landing): the previous order comes first, patches new to
+// it after, ranked as usual.
 
 export interface OrderPatch {
   id: PatchId;
@@ -25,6 +28,7 @@ export interface OrderInput {
   patches: OrderPatch[];
   deps: Dep[];
   previous?: PatchId[];
+  keepPrevious?: boolean;
 }
 
 export interface OrderOutput {
@@ -33,11 +37,13 @@ export interface OrderOutput {
   landable?: PatchId[]; // --landable: the bottom of `order` that can land now
 }
 
-function rankComparator(patches: OrderPatch[], previous: PatchId[] | undefined): (a: OrderPatch, b: OrderPatch) => number {
+function rankComparator(patches: OrderPatch[], previous: PatchId[] | undefined, keepPrevious = false): (a: OrderPatch, b: OrderPatch) => number {
   const inputIndex = new Map(patches.map((p, i) => [p.id, i]));
   const prevIndex = new Map((previous ?? []).map((id, i) => [id, i]));
   const effort = (p: OrderPatch) => p.effort ?? Infinity;
+  const kept = (p: OrderPatch) => (keepPrevious ? (prevIndex.get(p.id) ?? Infinity) : 0);
   return (a, b) =>
+    (kept(a) === kept(b) ? 0 : kept(a) < kept(b) ? -1 : 1) ||
     effort(a) - effort(b) ||
     (b.value ?? 0) - (a.value ?? 0) ||
     Number(!!b.testOnly) - Number(!!a.testOnly) ||
@@ -96,7 +102,7 @@ export function flippedSoftDeps(deps: Dep[], order: PatchId[], previous: PatchId
 
 export function orderPatches(input: OrderInput): OrderOutput {
   checkIds(input.patches);
-  const order = placeWithDeps(input.patches, input.deps, rankComparator(input.patches, input.previous));
+  const order = placeWithDeps(input.patches, input.deps, rankComparator(input.patches, input.previous, input.keepPrevious));
   return { order, flippedSoftDeps: flippedSoftDeps(input.deps, order, input.previous) };
 }
 

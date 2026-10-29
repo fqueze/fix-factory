@@ -23,6 +23,11 @@ test("ties follow the previous order before the input order", () => {
   assert.deepEqual(r.order, ["z", "x", "y"]);
 });
 
+test("keepPrevious: the previous order first, new patches after it ranked as usual, hard deps still honoured", () => {
+  const r = orderPatches({ patches: [p("a", 1), p("b", 3), p("c", 2), p("n", 1), p("m", 5)], deps: [hard("a", "b")], previous: ["c", "a", "b"], keepPrevious: true });
+  assert.deepEqual(r.order, ["c", "b", "a", "n", "m"]);
+});
+
 test("test-only first on equal effort and value", () => {
   const r = orderPatches({ patches: [p("prod", 2, 5), p("test", 2, 5, { testOnly: true })], deps: [] });
   assert.deepEqual(r.order, ["test", "prod"]);

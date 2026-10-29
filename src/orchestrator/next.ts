@@ -1550,7 +1550,8 @@ class Planner {
           {
             path: orderFile,
             content:
-              JSON.stringify({ ...orderInput, previous: prev?.order }) + "\n",
+              // On Phabricator, the stack keeps its order (the landing order puts landable patches at the bottom).
+              JSON.stringify({ ...orderInput, previous: prev?.order, ...(inStack.some((p) => this.s.patches[p.id].revision !== undefined) ? { keepPrevious: true } : {}) }) + "\n",
           },
         ],
       }),
