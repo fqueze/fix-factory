@@ -1436,7 +1436,7 @@ describe("5. stack", () => {
     const [ord] = sc.settle();
     assert.match(ord, new RegExp(`^order:root:${hash}:[0-9a-f]{6}$`));
     const input = JSON.parse(sc.plan(ord).files![0].content);
-    assert.deepEqual(input.patches, [{ id: "p-test-a", effort: 2, value: 3, testOnly: true }, { id: "p-test-b", effort: 1, value: 1, testOnly: true }]);
+    assert.deepEqual(input.patches, [{ id: "p-test-a", effort: 2, value: 3, testOnly: true, accepted: false, commentsAddressed: true }, { id: "p-test-b", effort: 1, value: 1, testOnly: true, accepted: false, commentsAddressed: true }]);
     sc.complete(ord, { output: { order: ["p-test-b", "p-test-a"], flippedSoftDeps: [] } });
     assert.deepEqual(sc.settle(), [`re${ord}`]);
     assert.deepEqual(sc.plan(`re${ord}`).cli?.args.slice(-2), ["--order", `${sha("b")},${sha("a")}`]);
@@ -2740,7 +2740,6 @@ describe("10. landing", () => {
     assert.equal(sc.state().step, "landing");
     assert.deepEqual(sc.state().stacks.root.order, ["p-test-b", "p-test-a"]);
     const key = sc.view().jobs.find((j) => j.purpose.key.startsWith("order-landable:"))!.purpose.key;
-    assert.deepEqual(sc.plan(key).cli?.args.slice(-1), ["--landable"]);
     sc.complete(key, { output: { order: ["p-test-a", "p-test-b"], flippedSoftDeps: [{ patch: "p-test-b", needs: "p-test-a", kind: "soft", reason: "shares a helper", source: "agent" }], landable: ["p-test-a"] } });
     const [rewrite] = sc.settle();
     assert.match(rewrite, /^rewrite-land:root:/);
@@ -2825,17 +2824,7 @@ describe("10. landing: the reorg flag", () => {
     assert.deepEqual(sc.state().stacks.root.submittedOrder, ["p-test-b", "p-test-a"], "copying moz-phab submit records the order");
   });
 
-  it("does not reorder when every patch is landable, and clears an earlier reorg flag", () => {
-    const { sc, key } = accepted();
-    sc.add({ type: "needs-user", request: ID, key: "land:root:old", action: "Stack reordered", detail: "", stack: "root" });
-    sc.complete(key, { output: { order: ["p-test-a", "p-test-b"], flippedSoftDeps: [], landable: ["p-test-a", "p-test-b"] } });
-    assert.deepEqual(sc.settle(), []);
-    assert.ok(!sc.view().jobs.some((j) => j.purpose.key.startsWith("rewrite-land:") || j.purpose.key.startsWith("rewrite-restore:")));
-    assert.deepEqual(sc.state().stacks.root.order, ["p-test-b", "p-test-a"]);
-    assert.deepEqual(sc.open().filter((k) => k.startsWith("land:")), []);
-  });
-
-  it("puts the stack back in the order you submitted once every patch is landable after a landing reorder", () => {
+  it("once every patch is landable, the stack goes back to its ranked order, the one you submitted, and the reorg is moot", () => {
     const sc = inReview();
     const [d100, d101] = polled("accepted");
     sc.complete("poll:0", { output: [{ ...d100, status: "needs-review", reviewers: [{ name: "smaug", status: "pending" }] }, d101] });
@@ -2845,26 +2834,23 @@ describe("10. landing: the reorg flag", () => {
     const [rewrite] = sc.settle();
     sc.complete(rewrite, { output: { mapping: { [sha("f")]: sha("5"), [sha("e")]: sha("6") } } });
     sc.settle();
-    assert.deepEqual(sc.state().stacks.root.order, ["p-test-a", "p-test-b"]);
     assert.ok(sc.open().some((k) => k.startsWith("land:root:")));
-    // D100 gets accepted too.
+    // D100 gets accepted too: landable patches keep their ranked order among themselves.
     sc.now += 10 * 60_000;
     sc.settle();
     sc.complete("poll:1", { output: polled("accepted") });
     sc.settle();
     const again = sc.view().jobs.find((j) => j.purpose.key.startsWith("order-landable:") && j.purpose.key !== key)!.purpose.key;
-    sc.complete(again, { output: { order: ["p-test-a", "p-test-b"], flippedSoftDeps: [], landable: ["p-test-a", "p-test-b"] } });
-    const [restore] = sc.settle();
-    assert.equal(restore, `rewrite-restore:root:${again.split(":").at(-1)}`);
-    const args = sc.plan(restore).cli!.args;
+    sc.complete(again, { output: { order: ["p-test-b", "p-test-a"], flippedSoftDeps: [], landable: ["p-test-b", "p-test-a"] } });
+    const [back] = sc.settle();
+    assert.equal(back, `rewrite-land:root:${again.split(":").at(-1)}`);
+    const args = sc.plan(back).cli!.args;
     assert.equal(args[args.indexOf("--order") + 1], [sha("6"), sha("5")].join(","));
-    assert.deepEqual(sc.open().filter((k) => k.startsWith("land:")), [], "the reorg is moot");
-    sc.complete(restore, { output: { mapping: { [sha("6")]: sha("7"), [sha("5")]: sha("8") } } });
+    sc.complete(back, { output: { mapping: { [sha("6")]: sha("7"), [sha("5")]: sha("8") } } });
     sc.settle();
     assert.deepEqual(sc.state().stacks.root.order, ["p-test-b", "p-test-a"]);
     assert.deepEqual(sc.settle(), []);
-    assert.equal(sc.view().jobs.filter((j) => j.purpose.key.startsWith("rewrite-restore:")).length, 1);
-    assert.deepEqual(sc.open().filter((k) => k.startsWith("land:")), []);
+    assert.deepEqual(sc.open().filter((k) => k.startsWith("land:")), [], "Phabricator has that order already");
   });
 
   it("asks for no reorg when the landing reorder gives back the order you submitted", () => {

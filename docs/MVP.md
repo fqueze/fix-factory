@@ -111,7 +111,7 @@ can read them.
 ### 10. Landing
 | Step | Who | How |
 |---|---|---|
-| Move accepted patches whose hard deps are met to the bottom, keeping trailers. Text conflicts → So, flipped soft deps → H/So, approach conflicts → author | S | `stack.ts order --landable`, `stack.ts rewrite`, `adapt-soft-dep.md` |
+| Move accepted patches whose hard deps are met to the bottom, keeping trailers. Text conflicts → So, flipped soft deps → H/So, approach conflicts → author | S | `stack.ts order`, `stack.ts rewrite`, `adapt-soft-dep.md` |
 | Copy and run the `moz-phab submit` command for the changed revisions, then land | 👤 | |
 
 ### Throughout

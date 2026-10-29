@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Dep } from "../../types.ts";
-import { orderLandable, orderPatches, type OrderPatch } from "./order.ts";
+import { orderPatches, type OrderPatch } from "./order.ts";
 
 const hard = (patch: string, needs: string): Dep => ({ patch, needs, kind: "hard", reason: "r", source: "agent" });
 const soft = (patch: string, needs: string): Dep => ({ patch, needs, kind: "soft", reason: "r", source: "agent" });
@@ -23,9 +23,11 @@ test("ties follow the previous order before the input order", () => {
   assert.deepEqual(r.order, ["z", "x", "y"]);
 });
 
-test("keepPrevious: the previous order first, new patches after it ranked as usual, hard deps still honoured", () => {
-  const r = orderPatches({ patches: [p("a", 1), p("b", 3), p("c", 2), p("n", 1), p("m", 5)], deps: [hard("a", "b")], previous: ["c", "a", "b"], keepPrevious: true });
-  assert.deepEqual(r.order, ["c", "b", "a", "n", "m"]);
+test("landable patches go to the bottom, in effort order, the others keeping theirs; an effort-0 patch that isn't landable stays above", () => {
+  const yes = { accepted: true, commentsAddressed: true };
+  const r = orderPatches({ patches: [p("ann", 0), p("a", 1), p("b", 3, 0, yes), p("c", 2), p("d", 2, 0, yes)], deps: [] });
+  assert.deepEqual(r.order, ["d", "b", "ann", "a", "c"]);
+  assert.deepEqual(r.landable, ["d", "b"]);
 });
 
 test("test-only first on equal effort and value", () => {
@@ -94,7 +96,7 @@ test("no previous order, no flipped soft deps", () => {
 });
 
 test("landable: accepted with comments addressed and deps met go to the bottom", () => {
-  const r = orderLandable({
+  const r = orderPatches({
     patches: [
       p("easy-pending", 1),
       p("ok", 3, 0, { accepted: true, commentsAddressed: true }),
@@ -109,7 +111,7 @@ test("landable: accepted with comments addressed and deps met go to the bottom",
 
 test("landable: a patch whose hard dep isn't landable stays up, transitively", () => {
   const yes = { accepted: true, commentsAddressed: true };
-  const r = orderLandable({
+  const r = orderPatches({
     patches: [p("a", 1, 0, yes), p("b", 1, 0, yes), p("c", 1, 0, yes), p("blocker", 5), p("dep", 4, 0, yes)],
     deps: [hard("a", "blocker"), hard("b", "a"), hard("c", "dep")],
   });
@@ -119,7 +121,7 @@ test("landable: a patch whose hard dep isn't landable stays up, transitively", (
 
 test("landable: landed deps count as met and landed patches leave the order", () => {
   const yes = { accepted: true, commentsAddressed: true };
-  const r = orderLandable({
+  const r = orderPatches({
     patches: [p("gone", 1, 0, { landed: true }), p("a", 2, 0, yes), p("b", 1)],
     deps: [hard("a", "gone")],
   });
@@ -128,14 +130,14 @@ test("landable: landed deps count as met and landed patches leave the order", ()
 });
 
 test("landable: a hard dep outside the stack blocks landing", () => {
-  const r = orderLandable({ patches: [p("a", 1, 0, { accepted: true, commentsAddressed: true })], deps: [hard("a", "harness fix in bug 1")] });
+  const r = orderPatches({ patches: [p("a", 1, 0, { accepted: true, commentsAddressed: true })], deps: [hard("a", "harness fix in bug 1")] });
   assert.deepEqual(r.landable, []);
   assert.deepEqual(r.order, ["a"]);
 });
 
 test("landable: soft deps flipped by moving patches down are reported", () => {
   const dep = soft("b", "a");
-  const r = orderLandable({
+  const r = orderPatches({
     patches: [p("a", 1), p("b", 2, 0, { accepted: true, commentsAddressed: true })],
     deps: [dep],
     previous: ["a", "b"],
@@ -146,5 +148,5 @@ test("landable: soft deps flipped by moving patches down are reported", () => {
 
 test("landable: cycles among landable patches are an error", () => {
   const yes = { accepted: true, commentsAddressed: true };
-  assert.throws(() => orderLandable({ patches: [p("a", 1, 0, yes), p("b", 1, 0, yes)], deps: [hard("a", "b"), hard("b", "a")] }), /cycle/);
+  assert.throws(() => orderPatches({ patches: [p("a", 1, 0, yes), p("b", 1, 0, yes)], deps: [hard("a", "b"), hard("b", "a")] }), /cycle/);
 });

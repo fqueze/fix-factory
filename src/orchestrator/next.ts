@@ -162,6 +162,16 @@ export function similarMessages(a: string, b: string): boolean {
 }
 
 // A patch event's fields from its view, to change one of them.
+// What a patch's place in the stack's order depends on once it's on Phabricator: landable patches go to the bottom.
+function landingState(p: PatchView): { accepted: boolean; commentsAddressed: boolean; landed: boolean } {
+  const active = p.review?.reviewers.filter((r) => r.status !== "resigned") ?? [];
+  return {
+    accepted: active.length > 0 && active.every((r) => r.status === "accepted"),
+    commentsAddressed: !(p.review?.comments.some((c) => !c.done) ?? false),
+    landed: p.review?.status === "published",
+  };
+}
+
 function patchFields(p: PatchView): Omit<PatchView, "id" | "deps" | "review" | "replyDrafts"> & { patch: PatchId } {
   const { id, deps: _d, review: _r, replyDrafts: _rd, ...rest } = p;
   return { patch: id, ...rest };
@@ -1536,11 +1546,11 @@ class Planner {
     const orderInput = {
       patches: inStack.map((p) => {
         const pv = this.s.patches[p.id];
-        return { id: p.id, effort: pv.effort, value: value(p.id), testOnly: pv.testOnly };
+        // A landed patch stays in the stack until the base has it: landable, as far as its order goes.
+        const { landed: _l, ...landing } = landingState(pv);
+        return { id: p.id, effort: pv.effort, value: value(p.id), testOnly: pv.testOnly, ...landing };
       }),
       deps: inStack.flatMap((p) => this.s.patches[p.id].deps).map((d) => ({ ...d, needs: this.depTarget(d.needs, inStack.map((x) => x.id)) })),
-      // On Phabricator, the stack keeps its order (the landing order puts landable patches at the bottom).
-      ...(inStack.some((p) => this.s.patches[p.id].revision !== undefined) ? { keepPrevious: true } : {}),
     };
     // Ordered again when what it's ordered by changes (an effort, a dep, how the factory ranks them).
     const oh = shortHash([JSON.stringify(orderInput)]).slice(0, 6);
@@ -2514,11 +2524,8 @@ class Planner {
   private landing(): void {
     if (this.s.step !== "review comments" && this.s.step !== "landing") return;
     const patches = Object.values(this.s.patches).filter((p) => p.revision !== undefined);
-    const landed = (p: PatchView) => p.review?.status === "published";
-    const accepted = (p: PatchView) => {
-      const active = p.review?.reviewers.filter((r) => r.status !== "resigned") ?? [];
-      return active.length > 0 && active.every((r) => r.status === "accepted");
-    };
+    const landed = (p: PatchView) => landingState(p).landed;
+    const accepted = (p: PatchView) => landingState(p).accepted;
     for (const item of Object.values(this.s.items)) {
       const own = patches.filter((p) => p.item === item.id);
       if (own.length > 0 && own.every(landed) && item.state !== "landed") this.setItem(item.id, "landed");
@@ -2531,19 +2538,18 @@ class Planner {
     if (this.s.step !== "landing") return;
     for (const st of this.liveStacks()) {
       const ps = st.order.map((pid) => this.s.patches[pid]);
-      const fresh = (p: PatchView) => p.review?.comments.some((c) => !c.done) ?? false;
       // What makes patches landable, not their order or shas: the reorder below changes those.
-      const h = shortHash(ps.map((p) => `${p.id}:${accepted(p)}:${landed(p)}:${fresh(p)}`).sort()) + this.stepEpoch("landing");
+      const h = shortHash(ps.map((p) => `${p.id}:${JSON.stringify(landingState(p))}`).sort()) + this.stepEpoch("landing");
       const file = dataPath(this.config, this.s.id, `landable-${st.id}-${h}.json`);
       const ord = this.want(`order-landable:${st.id}:${h}`, () =>
-        this.cli("order", "stack.ts", ["order", file, "--landable"], {
+        this.cli("order", "stack.ts", ["order", file], {
           purpose: { stack: st.id },
           files: [
             {
               path: file,
               content:
                 JSON.stringify({
-                  patches: ps.map((p) => ({ id: p.id, effort: p.effort, value: this.s.items[p.item ?? ""]?.group.ratePerWeek, testOnly: p.testOnly, accepted: accepted(p), commentsAddressed: !fresh(p), landed: landed(p) })),
+                  patches: ps.map((p) => ({ id: p.id, effort: p.effort, value: this.s.items[p.item ?? ""]?.group.ratePerWeek, testOnly: p.testOnly, ...landingState(p) })),
                   deps: ps.flatMap((p) => p.deps),
                   previous: st.order,
                 }) + "\n",
@@ -2555,29 +2561,7 @@ class Planner {
       const o = this.out<OrderOutput>(ord);
       // One reorg to ask for at a time: an earlier one's order is moot.
       for (const n of this.s.needsUser) if (n.key.startsWith(`land:${st.id}:`) && n.key !== `land:${st.id}:${h}`) this.clear(n.key);
-      if (!o.landable?.length || o.landable.every((pid) => landed(this.s.patches[pid]))) continue;
-      // Every patch landable: nothing to move to the bottom. The stack keeps Phabricator's order, and gets it back if a
-      // landing reorder changed it.
-      const landable = o.landable;
-      if (ps.every((p) => landed(p) || landable.includes(p.id))) {
-        const phab = st.submittedOrder?.filter((pid) => st.order.includes(pid));
-        if (phab && phab.length === st.order.length && phab.join() !== st.order.join()) {
-          const e = this.rewriteEdits(`restore-${st.id}-${h}`, ps);
-          const rw = this.want(`rewrite-restore:${st.id}:${h}`, () =>
-            this.cli("rewrite", "stack.ts", ["rewrite", "--cwd", st.worktree, "--base", st.base ?? this.config.baseRef, "--branch", st.branch, "--order", phab.map((pid) => this.s.patches[pid].sha).join(","), ...e.args], {
-              cwd: st.worktree,
-              files: e.files,
-              purpose: { stack: st.id, patches: Object.fromEntries(ps.map((p) => [p.sha.slice(0, 12), p.id])), reason: "back to Phabricator's order" },
-            }),
-          );
-          if (rw && !this.out<{ conflict?: unknown }>(rw).conflict) {
-            const { id, ...rest } = st;
-            this.event(this.ev("stack", { stack: id, ...rest, order: phab }));
-          }
-        }
-        for (const n of this.s.needsUser) if (n.key.startsWith(`land:${st.id}:`)) this.clear(n.key);
-        continue;
-      }
+      if (!o.landable.length) continue;
       if (o.order.join() !== st.order.join() || this.view.byKey.has(`rewrite-land:${st.id}:${h}`)) {
         const e = this.rewriteEdits(`land-${st.id}-${h}`, ps);
         const rw = this.want(`rewrite-land:${st.id}:${h}`, () =>
@@ -2603,14 +2587,13 @@ class Planner {
         if (adapts.some((a) => !a)) continue;
         if (adapts.length > 0 && !this.want(`refresh:${st.id}:${h}`, () => this.cli("refresh", "stack.ts", ["import", "--cwd", st.worktree, `${st.base ?? this.config.baseRef}..${st.branch}`], { cwd: st.worktree, purpose: { stack: st.id } }))) continue;
       }
-      // Only when the stack's order differs from Phabricator's: landable patches already at the bottom, or a stack put
-      // back in the order you submitted, need nothing there.
+      // Only when the stack's order differs from Phabricator's: landable patches already at the bottom need nothing there.
       const phab = st.submittedOrder?.filter((pid) => st.order.includes(pid));
       if (!this.view.byKey.has(`rewrite-land:${st.id}:${h}`) || (phab && phab.join() === st.order.join())) {
         this.clear(`land:${st.id}:${h}`);
         continue;
       }
-      const n = o.landable.filter((pid) => !landed(this.s.patches[pid])).length;
+      const n = o.landable.length;
       const k = o.flippedSoftDeps.length;
       const adapted = k ? ` (${k} soft ${k === 1 ? "dependency" : "dependencies"} adapted)` : "";
       this.raise(`land:${st.id}:${h}`, { action: `Stack reordered: ${n} landable ${n === 1 ? "patch" : "patches"} moved to the bottom`, detail: `Run moz-phab reorg so Phabricator has the new order${adapted}.`, stack: st.id });

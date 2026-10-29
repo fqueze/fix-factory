@@ -14,10 +14,10 @@
 //      conflictLeft?, remaining?}. Without --leave-conflict a conflict leaves the branch untouched.
 // deps --base <ref>
 //   → Dep[] (source "textual") for base..HEAD; patch ids are the commit shas.
-// order <input.json | -> [--landable]
+// order <input.json | ->
 //   input: {patches: [{id, effort?, value?, testOnly?, accepted?, commentsAddressed?, landed?}],
 //           deps: Dep[], previous?: PatchId[]}
-//   → {order: PatchId[], flippedSoftDeps: Dep[], landable?: PatchId[]}. Rules in stack/order.ts.
+//   → {order: PatchId[], flippedSoftDeps: Dep[], landable: PatchId[]}. Rules in stack/order.ts.
 // rewrite --base <ref> --order <sha>[,<sha>...] [<sha>...] [--edits <edits.json>] [--branch <name>] [--leave-conflict]
 //   edits: {"<sha>": {bug?: number, message?: string, diff?: string}}
 //   → {branch, head, backup?, shas, mapping: {old: new}, dropped, empty, diffChanged: [old sha],
@@ -44,7 +44,7 @@ import { check } from "./stack/check.ts";
 import { detectDeps } from "./stack/deps.ts";
 import { importStack } from "./stack/import.ts";
 import { interdiff } from "./stack/interdiff.ts";
-import { orderLandable, orderPatches, type OrderInput } from "./stack/order.ts";
+import { orderPatches, type OrderInput } from "./stack/order.ts";
 import { since, type SinceInput } from "./stack/since.ts";
 import { summary, type SummaryInput } from "./stack/summary.ts";
 
@@ -53,7 +53,7 @@ export { check } from "./stack/check.ts";
 export { detectDeps } from "./stack/deps.ts";
 export { importStack } from "./stack/import.ts";
 export { interdiff } from "./stack/interdiff.ts";
-export { orderLandable, orderPatches } from "./stack/order.ts";
+export { orderPatches } from "./stack/order.ts";
 export { since } from "./stack/since.ts";
 export { summary } from "./stack/summary.ts";
 
@@ -88,7 +88,7 @@ const subcommands: Record<string, Subcommand> = {
   deps: async (_pos, values) => detectDeps(cwdOf(values), str(values, "base")),
   order: async (pos, values) => {
     const input = readJson<OrderInput>(onePositional(pos, "an input file"));
-    return values.landable ? orderLandable(input) : orderPatches(input);
+    return orderPatches(input);
   },
   rewrite: async (pos, values) => {
     const order = [...str(values, "order").split(","), ...pos].filter(Boolean);
@@ -125,6 +125,5 @@ if (import.meta.main) {
     try: { type: "string" },
     "bugzilla-url": { type: "string" },
     "leave-conflict": { type: "boolean" },
-    landable: { type: "boolean" },
   });
 }

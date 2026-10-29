@@ -347,7 +347,7 @@ test("CLI: one JSON document on stdout, error JSON with exit 2 on usage errors",
   writeFileSync(input, JSON.stringify({ patches: [{ id: "a", effort: 2 }, { id: "b", effort: 1 }], deps: [] }));
   const cli = join(import.meta.dirname, "stack.ts");
   const out = execFileSync(process.execPath, [cli, "order", input], { encoding: "utf8" });
-  assert.deepEqual(JSON.parse(out), { order: ["b", "a"], flippedSoftDeps: [] });
+  assert.deepEqual(JSON.parse(out), { order: ["b", "a"], flippedSoftDeps: [], landable: [] });
   let failed: { status: number; stdout: string } | undefined;
   try {
     execFileSync(process.execPath, [cli, "deps"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });

@@ -10,15 +10,16 @@ import type { Dep, PatchId } from "../../types.ts";
 // a patch outside the stack) don't constrain the order. Soft deps never do; they are only reported
 // when the new order flips them relative to the previous one.
 //
-// keepPrevious (a stack on Phabricator, maybe reordered for landing): the previous order comes first, patches new to
-// it after, ranked as usual.
+// Landable patches (accepted, comments addressed, every hard dep landed or itself landable) come first, at the
+// bottom, ranked among themselves by the same rule: moving them down keeps every other patch's order. Landed patches
+// leave the order.
 
 export interface OrderPatch {
   id: PatchId;
   effort?: number; // 1-5; unknown efforts go last
   value?: number; // failures/week; unknown counts as 0
   testOnly?: boolean;
-  // --landable only:
+  // On Phabricator:
   accepted?: boolean;
   commentsAddressed?: boolean;
   landed?: boolean;
@@ -28,22 +29,20 @@ export interface OrderInput {
   patches: OrderPatch[];
   deps: Dep[];
   previous?: PatchId[];
-  keepPrevious?: boolean;
 }
 
 export interface OrderOutput {
   order: PatchId[];
   flippedSoftDeps: Dep[];
-  landable?: PatchId[]; // --landable: the bottom of `order` that can land now
+  landable: PatchId[]; // the bottom of `order` that can land now
 }
 
-function rankComparator(patches: OrderPatch[], previous: PatchId[] | undefined, keepPrevious = false): (a: OrderPatch, b: OrderPatch) => number {
+function rankComparator(patches: OrderPatch[], previous: PatchId[] | undefined, landable: Set<PatchId>): (a: OrderPatch, b: OrderPatch) => number {
   const inputIndex = new Map(patches.map((p, i) => [p.id, i]));
   const prevIndex = new Map((previous ?? []).map((id, i) => [id, i]));
   const effort = (p: OrderPatch) => p.effort ?? Infinity;
-  const kept = (p: OrderPatch) => (keepPrevious ? (prevIndex.get(p.id) ?? Infinity) : 0);
   return (a, b) =>
-    (kept(a) === kept(b) ? 0 : kept(a) < kept(b) ? -1 : 1) ||
+    Number(landable.has(b.id)) - Number(landable.has(a.id)) ||
     effort(a) - effort(b) ||
     (b.value ?? 0) - (a.value ?? 0) ||
     Number(!!b.testOnly) - Number(!!a.testOnly) ||
@@ -100,18 +99,9 @@ export function flippedSoftDeps(deps: Dep[], order: PatchId[], previous: PatchId
   });
 }
 
-export function orderPatches(input: OrderInput): OrderOutput {
-  checkIds(input.patches);
-  const order = placeWithDeps(input.patches, input.deps, rankComparator(input.patches, input.previous, input.keepPrevious));
-  return { order, flippedSoftDeps: flippedSoftDeps(input.deps, order, input.previous) };
-}
-
-// Landing order: the landable patches (accepted, comments addressed, every hard dep landed or itself
-// landable) go to the bottom, the rest after them, each part ordered by the rule above. Landed
-// patches are left out of the order. A hard dep on something outside the input (free text) blocks
-// landing: nothing tells us it landed, so it must be removed from the deps once it has.
-export function orderLandable(input: OrderInput): OrderOutput {
-  checkIds(input.patches);
+// A hard dep on something outside the input (free text) blocks landing: nothing tells us it landed, so it must be
+// removed from the deps once it has.
+function landableOf(input: OrderInput): Set<PatchId> {
   const ids = new Set(input.patches.map((p) => p.id));
   const landed = new Set(input.patches.filter((p) => p.landed).map((p) => p.id));
   const landable = new Set(input.patches.filter((p) => !p.landed && p.accepted && p.commentsAddressed).map((p) => p.id));
@@ -128,9 +118,16 @@ export function orderLandable(input: OrderInput): OrderOutput {
       }
     }
   }
-  const compare = rankComparator(input.patches, input.previous);
-  const bottom = placeWithDeps(input.patches.filter((p) => landable.has(p.id)), input.deps, compare);
-  const rest = placeWithDeps(input.patches.filter((p) => !p.landed && !landable.has(p.id)), input.deps, compare);
-  const order = [...bottom, ...rest];
-  return { order, flippedSoftDeps: flippedSoftDeps(input.deps, order, input.previous), landable: bottom };
+  return landable;
+}
+
+export function orderPatches(input: OrderInput): OrderOutput {
+  checkIds(input.patches);
+  const landable = landableOf(input);
+  const order = placeWithDeps(
+    input.patches.filter((p) => !p.landed),
+    input.deps,
+    rankComparator(input.patches, input.previous, landable),
+  );
+  return { order, flippedSoftDeps: flippedSoftDeps(input.deps, order, input.previous), landable: order.filter((id) => landable.has(id)) };
 }
