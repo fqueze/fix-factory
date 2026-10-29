@@ -428,3 +428,20 @@ test("a push declined along with another stays approved if you had approved it, 
   assert.deepEqual([s.pushes.a.declined, s.pushes.b.declined, s.pushes.c.declined], [undefined, "along with c", "too slow"]);
   assert.deepEqual([s.pushes.b.withdrawn, s.pushes.c.withdrawn], [true, undefined], "the factory took b down, you declined c");
 });
+
+test("deps naming a patch by any sha it has had, or by its title, are on that patch, once", () => {
+  const dep = (needs: string) => ev({ type: "dep", dep: { patch: "p2", needs, kind: "hard", reason: needs, source: "agent" } });
+  const title = "Bug 2086755 - Reposition popups opening against an anchor that moves after reflow, r=#layout-reviewers.";
+  const s = fold(
+    ev({ type: "patch", patch: "p1", sha: "f7e1f0e81ab6aaaa", worktree: "/wt", title, bug: 2086755 }),
+    ev({ type: "patch", patch: "p1", sha: "fc430068026abbbb", worktree: "/wt", title, bug: 2086755 }),
+    ev({ type: "patch", patch: "p2", sha: "cccc", worktree: "/wt", title: "Bug 2086755 - Make test_bug632379.xhtml scroll its menu again, r=#layout-reviewers.", bug: 2086755 }),
+    dep("f7e1f0e81ab6 Bug 2086755 - Reposition popups opening against an anchor that moves after reflow"),
+    dep("fc430068026a Bug 2086755 - Reposition popups"),
+    dep("“Reposition popups opening against an anchor that moves after reflow, r=#layout-reviewers.” (D337707)"),
+  );
+  assert.deepEqual(
+    s.patches.p2.deps.map((d) => d.needs),
+    ["p1"],
+  );
+});

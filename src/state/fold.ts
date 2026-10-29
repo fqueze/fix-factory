@@ -387,8 +387,26 @@ export function foldEvents(events: readonly Event[]): RequestState {
     s.updatedAt = e.t;
   }
 
+  // A dep naming its target by any sha that patch's commit has had, or by its title, is on that patch: one per target.
+  const all = Object.values(s.patches);
+  const targetOf = (needs: string): string => {
+    if (s.patches[needs]) return needs;
+    const shas = needs.match(/\b[0-9a-f]{7,40}\b/g) ?? [];
+    const bySha = shas.length ? all.find((x) => (s.patchShas[x.id] ?? [x.sha]).some((sha) => shas.some((h) => sha.startsWith(h)))) : undefined;
+    // A title long enough to say which patch it is.
+    const byTitle = all.find((x) => {
+      const t = x.title.replace(/^Bug (\d+|X+) - /i, "").replace(/,? r=.*$/, "");
+      return t.length >= 20 && needs.includes(t);
+    });
+    return (bySha ?? byTitle)?.id ?? needs;
+  };
   for (const p of Object.values(s.patches)) {
-    p.deps = deps.get(p.id) ?? [];
+    const resolved = new Map<string, Dep>();
+    for (const d of deps.get(p.id) ?? []) {
+      const needs = targetOf(d.needs);
+      if (needs !== p.id) resolved.set(needs, { ...d, needs });
+    }
+    p.deps = [...resolved.values()];
     const review = reviews.get(p.id);
     if (review) {
       p.review = review;
