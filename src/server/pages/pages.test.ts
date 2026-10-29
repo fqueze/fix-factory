@@ -31,8 +31,9 @@ function get(id: string): RequestState {
 
 // The row of a group (item-<id>) or patch (patch-<id>), up to the next row.
 function rowOf(h: string, id: string): string {
-  const start = h.indexOf(`<details class="row" id="${id}"`);
-  assert.ok(start >= 0, id);
+  const m = new RegExp(`<details class="row(?: you)?" id="${id}"`).exec(h);
+  assert.ok(m, id);
+  const start = m.index;
   // Up to its closing </details>, nested ones counted (or the next row, for the asks that follow it).
   const tags = /<details\b|<\/details>/g;
   tags.lastIndex = start;
@@ -40,7 +41,7 @@ function rowOf(h: string, id: string): string {
   for (let m = tags.exec(h); m; m = tags.exec(h)) {
     depth += m[0] === "</details>" ? -1 : 1;
     if (depth === 0) {
-      const next = h.indexOf('<details class="row"', tags.lastIndex);
+      const next = h.indexOf('<details class="row', tags.lastIndex);
       const end = h.indexOf("</div></div>", tags.lastIndex);
       return h.slice(start, Math.max(tags.lastIndex, next < 0 ? tags.lastIndex : Math.min(next, end < 0 ? next : end)));
     }
@@ -296,7 +297,7 @@ describe("one fixture per step of docs/MVP.md", () => {
     const line = `<div class="jobs"><details class="job" data-fold="job-j-recover-2" data-watch="/api/requests/r-20261013-tab-failures/jobs/j-recover-2/activity" data-live><summary><span class="res run">working on <span class="said" title="${said}">“${said}”</span></span> <span class="sub">Opus · running <span data-since="2026-10-15T08:59:00.000Z">1 min</span></span> <form`;
     const at = body.indexOf(line);
     assert.ok(at > 0 && at < body.indexOf('<form class="ask cmd reqask"') && body.indexOf("</details></div>", at) < body.indexOf('<form class="ask cmd reqask"'));
-    assert.ok(!body.slice(at + line.length, body.indexOf('<form class="ask cmd reqask"')).includes('<details class="row"'), "nothing between it and the box but its own line");
+    assert.ok(!body.slice(at + line.length, body.indexOf('<form class="ask cmd reqask"')).includes('<details class="row'), "nothing between it and the box but its own line");
     assert.ok(body.includes(cmd({ cmd: "stop", job: "j-recover-2", request: "r-20261013-tab-failures" })));
     const old = structuredClone(get("r-20261013-tab-failures"));
     delete old.jobs["j-recover-2"].purpose;
@@ -634,6 +635,17 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.match(h, /data-copy="mozphab-r-20261007-focus-focus">Copy the moz-phab command<\/button>/);
     assert.ok(h.includes(cmd({ cmd: "copied-submit", request: "r-20261007-focus", stack: "focus" })), "copying it tells the factory to look for the revisions");
     assert.doesNotMatch(h, /run-moz-phab/);
+  });
+
+  it("9. review comments: a patch waiting for you (resubmit after review fixes) stands out, saying what to do", () => {
+    const r = structuredClone(get("r-20261007-focus"));
+    r.patches["p-focus"].revision = 5;
+    r.step = "review comments";
+    assert.doesNotMatch(renderRequest(r, ctx, true).value, /<details class="row you" id="patch-p-focus"/);
+    r.needsUser.push({ key: "resubmit:focus:j1", action: "Post 1 reply, then resubmit D5", detail: "comments addressed", since: "2026-10-07T10:00:00.000Z", patch: "p-focus" });
+    const h = renderRequest(r, ctx, true).value;
+    assert.match(h, /<details class="row you" id="patch-p-focus"/);
+    assert.match(rowOf(h, "patch-p-focus"), /<b class="you">Post 1 reply, then resubmit D5<\/b>/);
   });
 
   it("9. review comments: Check Phabricator now, under a stack with revisions, until done", () => {

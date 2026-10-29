@@ -282,13 +282,14 @@ interface Row {
   ask?: Html; // what a group needing you asks, with its buttons: in sight without opening the row
   under?: Html | null; // opened, right under its name: a patch's bug to file
   body: Html;
+  you?: boolean; // waiting for you: the whole row stands out
 }
 
 // Opened, the box under its name comes first in the body (clicking in it mustn't fold the row), styled as hanging
 // from its label; its state and trust lines then move under the box.
 function row(x: Row): Html {
   const lines = html`<span class="state">${x.state}</span>${x.trust ? html`<span class="trust">${x.trust}</span>` : null}`;
-  const d = html`<details class="row" ${x.anchor} data-fold="${x.fold}"><summary><span class="st ${x.cls}"></span><span class="name" title="${x.title}">${x.name}</span><span class="end">${x.end}</span>${lines}${
+  const d = html`<details class="row${x.you ? " you" : null}" ${x.anchor} data-fold="${x.fold}"><summary><span class="st ${x.cls}"></span><span class="name" title="${x.title}">${x.name}</span><span class="end">${x.end}</span>${lines}${
     x.warn ? html`<span class="warn">${x.warn}</span>` : null
   }</summary>${x.under ? html`<div class="under">${x.under}<div class="lines">${lines}</div></div>` : null}<div class="rowbody">${x.body}</div></details>`;
   return x.ask ? html`<div class="asks">${d}<div class="ask-you">${x.ask}</div></div>` : d;
@@ -463,7 +464,10 @@ function patchRow(r: RequestState, p: PatchView, ctx: RenderContext): Html {
   // A blocked group's patch still in its stack counts: that row is the only one it has.
   const stacked = new Set(Object.values(r.stacks).flatMap((st) => st.order));
   const asks = item !== undefined && Object.values(r.patches).find((x) => x.item === item.id && (!isDraft(r, x) || stacked.has(x.id)) && !isDropped(r, x)) === p;
+  // What it waits for you to do (resubmit after review fixes, file its bug…), said on the row.
+  const yours = r.needsUser.filter((n) => n.patch === p.id);
   return row({
+    you: yours.length > 0 || (asks && item !== undefined && r.needsUser.some((n) => flagItemOf(r, n) === item.id)),
     anchor: html`id="patch-${p.id}" data-patch="${p.id}"`,
     fold: `patch-${p.id}`,
     cls: item ? rowClass(r, item, ctx) : landable ? "ok" : "wait",
@@ -473,7 +477,7 @@ function patchRow(r: RequestState, p: PatchView, ctx: RenderContext): Html {
     title: p.title,
     end: html`${viewLink(r, p)}${item ? costLabel(itemCost(r, item)) : null}`,
     // "in the stack" says nothing a patch row in its stack's section doesn't.
-    state: html`${item ? html`fixes <b>${groupLinks(r, item)}</b>${covered.length ? html` and <b>${join(covered.map((i) => groupLinks(r, i)), ", ")}</b>` : null}${item.state === "in stack" ? null : html` · ${item.state === "waiting for review" && p.review?.status === "accepted" ? "accepted on Phabricator" : stateText(r, item, ctx)}`}` : p.review ? p.review.status : null}${landable ? html` · <span class="landable">landable</span>` : null}`,
+    state: html`${item ? html`fixes <b>${groupLinks(r, item)}</b>${covered.length ? html` and <b>${join(covered.map((i) => groupLinks(r, i)), ", ")}</b>` : null}${item.state === "in stack" ? null : html` · ${item.state === "waiting for review" && p.review?.status === "accepted" ? "accepted on Phabricator" : stateText(r, item, ctx)}`}` : p.review ? p.review.status : null}${landable ? html` · <span class="landable">landable</span>` : null}${yours.map((n) => html` · <b class="you">${n.action}</b>`)}`,
     trust: item ? trustLine(r, item, ctx) : null,
     ask: item && asks ? askBlock(r, item, ctx, [], controls !== null) : undefined,
     under: bugBoxShown ? bugDraftBox(r, p, back) : null,

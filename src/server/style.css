@@ -193,6 +193,8 @@ details.reopen[open] > summary { display: none; }
 .rows > details.fold > summary { padding: 6px 12px; }
 details.fold > div.rows { padding: 0; }
 details.row { border-bottom: 1px solid var(--border); }
+details.row.you { background: var(--action-bg); box-shadow: inset 3px 0 0 var(--warning); }
+details.row .state b.you { font-weight: 600; }
 details.row > summary { list-style: none; cursor: pointer; display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; gap: 0 8px; padding: 5px 12px; align-items: baseline; }
 details.row > summary::-webkit-details-marker { display: none; }
 details.row > summary:hover { background: var(--bg); }
