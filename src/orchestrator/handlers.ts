@@ -300,6 +300,11 @@ export function handleFinished(input: HandlerInput): HandlerResult {
       const o = json<{ diff: string }>();
       const p = s.patches[purpose.patch!];
       const path = dataPath(config, s.id, `interdiff-${purpose.patch}-${job.job}.diff`);
+      // No change in the code (a rebase, its message): no interdiff to look at.
+      if (!o.diff.trim()) {
+        if (p?.interdiffFile !== undefined) patchEvent(p, { interdiffFile: undefined });
+        break;
+      }
       files.push({ path, content: o.diff });
       if (p) patchEvent(p, { interdiffFile: relative(config.stateDir, path) });
       break;

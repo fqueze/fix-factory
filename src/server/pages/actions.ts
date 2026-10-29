@@ -204,7 +204,7 @@ export function stopButton(request: string, job: string, back: string): Html {
 
 // Resumes the item's author with what you type.
 export function continueBox(request: string, item: string, back: string): Html {
-  return html`<form class="inline cmd" method="post" action="/api/commands">${commandFields([{ cmd: "continue", request, item }], back)}<input type="text" name="text" required placeholder="Tell its author what to do…"><button class="btn small" title="Resumes its author's session with your message; its patch then goes through lint and critical review again">Send to its author</button></form>`;
+  return html`<form class="inline cmd joined" method="post" action="/api/commands">${commandFields([{ cmd: "continue", request, item }], back)}<input type="text" name="text" required placeholder="Tell its author what to do…"><button class="btn small" title="Resumes its author's session with your message; its patch then goes through lint and critical review again">Send</button></form>`;
 }
 
 // The plan a recovery entry asks about: its job's latest plan, or the latest plan

@@ -322,7 +322,18 @@ hr.part { border: 0; border-top: 3px solid var(--border); margin: 10px -12px 0; 
 .fb .sub code { color: var(--text-muted); }
 header h1 a { color: inherit; text-decoration: none; }
 .testplan { border-left: 3px solid var(--border); padding-left: 8px; }
-.testplanctl { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin: 4px 0; }
+.testplan form.revise { margin-top: 6px; }
+.parthead { display: flex; gap: 6px; flex-wrap: wrap; align-items: baseline; margin: 10px 0 3px; }
+.rowbody .parthead h4.part { margin: 0 4px 0 0; }
+.rowbody .parthead:first-child { margin-top: 2px; }
+form.joined { display: flex; gap: 0; align-items: stretch; }
+.jobctl > form.joined { flex: 1 1 260px; }
+form.joined input[type=text], form.joined textarea { flex: 1; min-width: 0; border-top-right-radius: 0; border-bottom-right-radius: 0; }
+form.joined .btn { border-top-left-radius: 0; border-bottom-left-radius: 0; margin-left: -1px; }
+summary .onhover { visibility: hidden; display: inline-flex; gap: 8px; align-items: center; color: var(--text-secondary); font-size: 12px; }
+summary:hover .onhover, summary:focus-within .onhover { visibility: visible; }
+.stat .add { color: var(--good); }
+.stat .del { color: var(--critical); }
 .handoff { font-size: 13px; padding: 0 6px; }
 h5.verdict { margin: 8px 0 2px; font-size: 12px; font-weight: 600; }
 h5.verdict .count { font-weight: 400; color: var(--text-muted); }

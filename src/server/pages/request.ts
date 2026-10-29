@@ -3,7 +3,7 @@ import { md } from "./md.ts";
 import { REQUEST_STEPS } from "../commands.ts";
 import type { BugDraft, ItemView, JobView, PatchView, PushView, Regression, RequestState, StackView } from "../../types.ts";
 import { html, join, type Html } from "../html.ts";
-import { actionsSummary, flagPlaceOf, renderAction, recoveryAnswers, pollPhabButton, verifyStackButton, redoAnnotationsButton, approvePushControls, bugBox, continueBox, copyButton, handBackButton, flagControls, flagItemOf, flagText, plannedLabel, recoveryPlanFor, hasAuthorSession, stackViewerLink, submitControls, summaryId } from "./actions.ts";
+import { actionsSummary, flagPlaceOf, renderAction, recoveryAnswers, pollPhabButton, verifyStackButton, redoAnnotationsButton, approvePushControls, bugBox, continueBox, copyButton, flagControls, flagItemOf, flagText, plannedLabel, recoveryPlanFor, hasAuthorSession, stackViewerLink, submitControls, summaryId } from "./actions.ts";
 import { groupJobs, jobLine } from "./activity.ts";
 import { flagAsk, itemBucket, itemSentence, progressLine, requestProgress, type Bucket } from "./progress.ts";
 import {
@@ -381,7 +381,7 @@ function groupRow(r: RequestState, i: ItemView, ctx: RenderContext): Html {
     // Redo is on the top line: the group's patches are in its folded body, and it's what you'd want of it.
     end: i.id === ANNOTATIONS_ITEM && !Object.values(r.jobs).some((j) => j.item === i.id && j.endedAt === undefined)
       ? html`${redoAnnotationsButton(r.id, requestUrl(r.id))} ${costLabel(itemCost(r, i))}`
-      : costLabel(itemCost(r, i)),
+      : html`${closable(r, i, ctx) ? html`<span class="onhover">${closeButton(r, i)}</span>` : null}${costLabel(itemCost(r, i))}`,
     state: stateText(r, i, ctx),
     trust: trustLine(r, i, ctx),
     ask: askBlock(r, i, ctx, patches.filter((p) => isDraft(r, p))),
@@ -402,20 +402,35 @@ function talkBox(r: RequestState, i: ItemView, ctx: RenderContext): Html | null 
   if (s.ask || s.cls === "run" || ["fixed", "landed", "left as-is", "handed back", "taken over"].includes(i.state)) {
     return null;
   }
-  return html`<div class="jobctl">${hasAuthorSession(r, i.id) ? continueBox(r.id, i.id, requestUrl(r.id)) : null}${handBackButton(r.id, i.id, requestUrl(r.id))}</div>`;
+  return hasAuthorSession(r, i.id) ? html`<div class="jobctl">${continueBox(r.id, i.id, requestUrl(r.id))}</div>` : null;
+}
+
+// Whether the factory may still be told to stop working on a group: the row's 🗑.
+function closable(r: RequestState, i: ItemView, ctx: RenderContext): boolean {
+  const s = itemSentence(r, i, ctx);
+  return !s.ask && s.cls !== "run" && !["fixed", "landed", "left as-is", "handed back", "taken over"].includes(i.state);
+}
+
+function closeButton(r: RequestState, i: ItemView): Html {
+  return html`<form class="inline cmd" method="post" action="/api/commands">${commandFields([{ cmd: "hand-back", request: r.id, item: i.id }], requestUrl(r.id))}<button class="btn small icon" title="Close: the factory stops working on this group" aria-label="Close">🗑</button></form>`;
 }
 
 // Agents can't push to try; you can let its author make one push (it may be running).
 // The failure a group is about: its message, its tests when there are several, and where it failed, laid out like
 // tests.firefox.dev's pass/fail table (its rates are a click away).
-function failure(r: RequestState, i: ItemView, prefix = "The failure"): Html {
+function failure(r: RequestState, i: ItemView, prefix: string | null = "The failure"): Html {
   const g = i.group;
   const tests = g.tests.length > 1 ? g.tests.map((t) => (r.folder && t.startsWith(`${r.folder}/`) ? t.slice(r.folder.length + 1) : t)).join(", ") : null;
   const dashboard = /\.(toml|ini)$/.test(g.tests[0]) ? null : html` · <a href="https://tests.firefox.dev/test.html?test=${encodeURIComponent(g.tests[0])}" target="_blank" rel="noopener">rates on tests.firefox.dev ↗</a>`;
   const rate = g.ratePerWeek === undefined ? null : html` · ${g.ratePerWeek} failures/week`;
-  return html`<h4 class="part">${prefix}</h4><div class="failure">${g.message}</div>${tests ? html`<div class="sub">${tests}</div>` : null}${
+  return html`${prefix === null ? null : html`<h4 class="part">${prefix}</h4>`}<div class="failure">${g.message}</div>${tests ? html`<div class="sub">${tests}</div>` : null}${
     g.configs.length ? html`${configTable(g.configs)}<div class="sub">${plural(g.configs.length, "config")}${rate}${dashboard}</div>` : null
   }`;
+}
+
+// On a patch's row, the failure and its cause matter less than its test plan: folded.
+function whyFold(r: RequestState, i: ItemView): Html {
+  return html`<details class="fold" data-fold="why-${i.id}"><summary>The failure and its cause</summary>${failure(r, i, null)}${investigationHtml(i)}</details>`;
 }
 
 const OSES: [RegExp, string][] = [[/^linux/, "Linux"], [/^macosx/, "macOS"], [/^windows/, "Windows"], [/^android/, "Android"]];
@@ -478,17 +493,17 @@ function patchRow(r: RequestState, p: PatchView, ctx: RenderContext): Html {
       first.id === p.id ? bugLabel(p, ctx) : html`<a class="bug tofile" href="#patch-${first.id}" title="Filed from ${first.title}">same bug</a>`
     } ${patchTitle(p)}`,
     title: p.title,
-    end: html`${viewLink(r, p)}${item ? costLabel(itemCost(r, item)) : null}`,
+    end: html`${hoverInfo(r, p, item, ctx)}${viewLink(r, p)}${item ? costLabel(itemCost(r, item)) : null}`,
     // "in the stack" says nothing a patch row in its stack's section doesn't.
-    state: html`${item ? html`fixes <b>${groupLinks(r, item)}</b>${covered.length ? html` and <b>${join(covered.map((i) => groupLinks(r, i)), ", ")}</b>` : null}${item.state === "in stack" ? null : html` · ${item.state === "waiting for review" && p.review?.status === "accepted" ? "accepted on Phabricator" : stateText(r, item, ctx)}`}` : p.review ? p.review.status : null}${landable ? html` · <span class="landable">landable</span>` : null}${backoutText(r, p)}${yours.map((n) => html` · <b class="you">${n.action}</b>`)}`,
+    state: html`${item ? html`fixes <b>${groupLinks(r, item)}</b>${covered.length ? html` and <b>${join(covered.map((i) => groupLinks(r, i)), ", ")}</b>` : null}${item.state === "in stack" ? null : html` · ${item.state === "waiting for review" && p.review ? reviewText(p) : stateText(r, item, ctx)}`}` : p.review ? reviewText(p) : null}${landable ? html` · <span class="landable">landable</span>` : null}${backoutText(r, p)}${yours.map((n) => html` · <b class="you">${n.action}</b>`)}`,
     trust: item ? trustLine(r, item, ctx) : null,
     ask: (() => {
       const group = item && asks ? askBlock(r, item, ctx, [], controls !== null) : undefined;
       return group || own.length ? html`${group}${own.map((n) => renderAction(r, n, ctx))}` : undefined;
     })(),
     under: bugBoxShown ? bugDraftBox(r, p, back) : null,
-    body: html`${testPlanSection(r, p, back)}${yourComments(r, p)}${item ? failure(r, item) : null}<h4 class="part">The fix</h4>${item ? investigationHtml(item) : null}${p.effort === undefined ? null : html`<div class="sub">review effort ${p.effort}/5</div>`}${reviewers(p)}${p.deps.map((d) => depLine(r, d))}${controls && !sentence?.ask ? html`<div class="jobctl">${controls}</div>` : null}${reviewBox(r, p, back, p.interdiffFile === undefined ? undefined : ctx.interdiff?.(p))}${
-      item ? html`<h4 class="part">What the factory did</h4>${talkBox(r, item, ctx)}${itemJobs(r, item, ctx)}` : null
+    body: html`${testPlanSection(r, p, back)}${yourComments(r, p)}${item ? whyFold(r, item) : null}${p.deps.map((d) => depLine(r, d))}${controls && !sentence?.ask ? html`<div class="jobctl">${controls}</div>` : null}${reviewBox(r, p, back, p.interdiffFile === undefined ? undefined : ctx.interdiff?.(p))}${
+      item ? html`<h4 class="part">What the factory did</h4>${itemJobs(r, item, ctx)}${talkBox(r, item, ctx)}` : null
     }`,
   });
 }
@@ -522,11 +537,11 @@ function testPlanSection(r: RequestState, p: PatchView, back: string): Html | nu
     p.revision === undefined || sent?.text === text
       ? null
       : html`<form class="inline cmd" method="post" action="/api/commands">${commandFields([{ cmd: "set-test-plan", request: r.id, patch: p.id, text }], back)}<button class="btn small primary">${sent ? `Update D${p.revision}'s test plan` : `Set as D${p.revision}'s test plan`}</button></form>`;
-  return html`<h4 class="part">Test plan</h4><div class="testplan">${md(text, itemOf(r, p)?.group.tests)}</div><div class="row testplanctl"><textarea hidden id="${id}">${text}</textarea><button type="button" class="btn small" data-copy="${id}">Copy</button>${set}${status}</div>${
+  const revise =
     p.testPlan === undefined
       ? null
-      : html`<form class="cmd revise" method="post" action="/api/commands">${commandFields([{ cmd: "revise-test-plan", request: r.id, patch: p.id }], back)}<textarea name="text" required rows="2" placeholder="What should change? The agent that wrote it gets this"></textarea><button class="btn small">Revise</button></form>`
-  }`;
+      : html`<form class="cmd revise joined" method="post" action="/api/commands">${commandFields([{ cmd: "revise-test-plan", request: r.id, patch: p.id }], back)}<textarea name="text" required rows="2" placeholder="What should change? The agent that wrote it gets this"></textarea><button class="btn small">Send</button></form>`;
+  return html`<div class="parthead"><h4 class="part">Test plan</h4>${status}<textarea hidden id="${id}">${text}</textarea><button type="button" class="btn small" data-copy="${id}">Copy</button>${set}</div><div class="testplan">${md(text, itemOf(r, p)?.group.tests)}${revise}</div>`;
 }
 
 // The bug its commit message starts with; the link of one to file opens Bugzilla's form prefilled with its draft.
@@ -608,7 +623,7 @@ function investigationHtml(i: ItemView): Html | null {
   if (!inv?.cause) {
     return null;
   }
-  return html`<div class="why">${md(`Cause: ${inv.cause}`, i.group.tests)}${inv.verification ? html`<details class="fold" data-fold="verified-${i.id}"><summary>How it was verified</summary>${md(inv.verification, i.group.tests)}</details>` : null}</div>`;
+  return html`<div class="why">${md(`Cause: ${inv.cause}`, i.group.tests)}</div>`;
 }
 
 const ASK_EVIDENCE =
@@ -665,12 +680,25 @@ function depLine(r: RequestState, d: PatchView["deps"][number]): Html {
   return html`<div class="dep${met ? " met" : ""}">${d.kind === "hard" ? "⛔ hard" : "🔗 soft"}: needs ${label} (${d.reason})</div>`;
 }
 
-function reviewers(p: PatchView): Html | null {
-  if (!p.review) {
-    return null;
-  }
-  const cls = { accepted: "ok", blocking: "block", pending: "pend", resigned: "pend" } as const;
-  return html`<div>${p.review.reviewers.map((x) => html`<span class="rv ${cls[x.status]}"${x.status === "resigned" ? html` title="resigned"` : null}>${x.name}</span>`)}<span class="sub">${p.review.status}</span></div>`;
+// Who it waits for on Phabricator, or who accepted it or asked for changes.
+function reviewText(p: PatchView): string {
+  const rv = p.review!;
+  const who = (status: string) => rv.reviewers.filter((x) => x.status === status).map((x) => x.name).join(", ");
+  if (rv.status === "accepted") return `accepted by ${who("accepted") || "a reviewer"} on Phabricator`;
+  if (who("blocking")) return `changes requested by ${who("blocking")} on Phabricator`;
+  return who("pending") ? `waiting for review from ${who("pending")} on Phabricator` : `${rv.status} on Phabricator`;
+}
+
+// On the row's first line, shown on hover: its review effort (why, in its title), its size, and the 🗑 to close it.
+function hoverInfo(r: RequestState, p: PatchView, item: ItemView | undefined, ctx: RenderContext): Html | null {
+  const why = Object.values(r.jobs).findLast((j) => j.purpose?.what === "effort" && j.purpose.patch === p.id)?.outcome;
+  const stat = ctx.diffStat?.(p);
+  const parts = [
+    p.effort === undefined ? null : html`<span${why ? html` title="${why}"` : null}>review effort ${p.effort}/5</span>`,
+    stat ? html`<span class="stat"><span class="add">+${stat.added}</span> <span class="del">−${stat.removed}</span></span>` : null,
+    item && closable(r, item, ctx) ? closeButton(r, item) : null,
+  ].filter((x) => x !== null);
+  return parts.length ? html`<span class="onhover">${parts}</span>` : null;
 }
 
 // Interdiff, the comments still to answer, and the drafted replies to post.
@@ -678,7 +706,9 @@ function reviewBox(r: RequestState, p: PatchView, back: string, interdiff: strin
   const comments = p.review?.comments ?? [];
   const drafts = new Map(p.replyDrafts.map((d) => [d.commentId, d.text]));
   const shown = comments.filter((c) => !c.done || drafts.has(c.id));
-  if (p.interdiffFile === undefined && !shown.length) {
+  // An empty interdiff (from before they stopped being recorded): nothing changed.
+  const changed = p.interdiffFile !== undefined && interdiff?.trim() !== "";
+  if (!changed && !shown.length) {
     return null;
   }
   const revision = p.review?.revision ?? p.revision;
@@ -691,7 +721,7 @@ function reviewBox(r: RequestState, p: PatchView, back: string, interdiff: strin
     return html`<div class="answer"><b>Its author's answer</b>${text ? md(text) : html`<span class="sub">${job.error ?? "no answer"}</span>`}</div>`;
   };
   return html`<div class="box">
-    ${p.interdiffFile === undefined ? null : html`<h4>Interdiff</h4>${interdiff === undefined ? html`<div class="sub">${p.interdiffFile} can't be read</div>` : diff(interdiff)}`}
+    ${!changed ? null : html`<h4>Interdiff</h4>${interdiff === undefined ? html`<div class="sub">${p.interdiffFile} can't be read</div>` : diff(interdiff)}`}
     ${shown.map((c) => {
       const draft = drafts.get(c.id);
       return html`<div class="comment" data-comment="${c.id}"><b>${c.author}</b>${c.file ? html` <span class="sub mono">${c.file}${c.line ? `:${c.line}` : ""}</span>` : null}${c.kind ? html` <span class="sub">(${c.kind})</span>` : null}: ${c.text}${
@@ -705,7 +735,7 @@ function reviewBox(r: RequestState, p: PatchView, back: string, interdiff: strin
           : null
       }`;
     })}
-    <form class="row cmd" method="post" action="/api/commands">${commandFields([{ cmd: "comment-fix", request: r.id, patch: p.id }], back)}<input type="text" name="text" required placeholder="Comment on the fix…"><button class="btn small">Send</button></form>
+    <form class="row cmd joined" method="post" action="/api/commands">${commandFields([{ cmd: "comment-fix", request: r.id, patch: p.id }], back)}<input type="text" name="text" required placeholder="Comment on the fix…"><button class="btn small">Send</button></form>
   </div>`;
 }
 

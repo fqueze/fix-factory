@@ -133,6 +133,18 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
     },
   });
 
+  // Worktrees share the main checkout's objects: a removed worktree's commits are still there. Commits never change.
+  const diffStats = new Map<string, { added: number; removed: number } | undefined>();
+  function diffStat(p: PatchView): { added: number; removed: number } | undefined {
+    if (!diffStats.has(p.sha)) {
+      const out = spawnSync("git", ["show", "--numstat", "--format=", p.sha], { cwd: opts.config.firefoxRepo, encoding: "utf8" });
+      // Binary files count "-" lines.
+      const rows = out.status === 0 ? out.stdout.split("\n").filter(Boolean).map((l) => l.split("\t").map(Number)) : undefined;
+      diffStats.set(p.sha, rows && { added: rows.reduce((n, [a]) => n + (a || 0), 0), removed: rows.reduce((n, [, d]) => n + (d || 0), 0) });
+    }
+    return diffStats.get(p.sha);
+  }
+
   function readInterdiff(p: PatchView): string | undefined {
     return p.interdiffFile === undefined ? undefined : readData(p.interdiffFile);
   }
@@ -228,6 +240,7 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
       open,
       bugzillaEmail: opts.config.bugzillaEmail,
       interdiff: readInterdiff,
+      diffStat,
       readData,
       freeDiskGB: freeDiskGB(),
     };

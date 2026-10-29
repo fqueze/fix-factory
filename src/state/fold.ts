@@ -442,7 +442,7 @@ function outcomeOf(report: unknown): string | undefined {
   const count = (severity: string) => (Array.isArray(r.findings) ? r.findings.filter((f) => (f as { severity?: string }).severity === severity).length : 0);
   const findings = [count("must-fix") && `${count("must-fix")} must-fix`, count("nit") && `${count("nit")} ${count("nit") === 1 ? "nit" : "nits"}`].filter(Boolean).join(", ");
   const text =
-    typeof r.disagreement === "string" ? `disagrees with you: ${r.disagreement}` : typeof r.summary === "string" ? r.summary : typeof r.answer === "string" ? r.answer : findings || undefined;
+    typeof r.disagreement === "string" ? `disagrees with you: ${r.disagreement}` : typeof r.summary === "string" ? r.summary : typeof r.answer === "string" ? r.answer : typeof r.reason === "string" ? r.reason : findings || undefined;
   const out = [head, text].filter(Boolean).join(": ");
   return out ? out.slice(0, 300) : undefined;
 }

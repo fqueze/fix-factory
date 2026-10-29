@@ -18,6 +18,8 @@ export interface RenderContext {
   bugzillaEmail?: string; // bugs to file are assigned to you
   // The text of a patch's interdiffFile, read by the server inside stateDir.
   interdiff?: (p: PatchView) => string | undefined;
+  // The lines its commit adds and removes, read with git.
+  diffStat?: (p: PatchView) => { added: number; removed: number } | undefined;
   // A file the factory wrote, by its path relative to stateDir (an interdiff since a push).
   readData?: (rel: string) => string | undefined;
   freeDiskGB?: number; // where the worktrees go
