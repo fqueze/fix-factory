@@ -33,6 +33,7 @@ export function foldEvents(events: readonly Event[]): RequestState {
     patches: {},
     stacks: {},
     pushes: {},
+    patchSent: {},
     patchShas: {},
     pushChanges: {},
     jobs: {},
@@ -192,6 +193,7 @@ export function foldEvents(events: readonly Event[]): RequestState {
         const submittedAt = e.revision === undefined ? undefined : before?.revision !== undefined ? before.submittedAt : e.t;
         // The commit Phabricator has: the one its revision showed up on, then what you copied the moz-phab command for.
         const sentSha = e.revision === undefined ? undefined : before?.revision !== undefined ? before.sentSha : e.sha;
+        if (sentSha !== undefined && before?.sentSha !== sentSha) s.patchSent[e.patch] = [...(s.patchSent[e.patch] ?? []), { sha: sentSha, t: e.t }];
         s.patches[e.patch] = {
           id: e.patch,
           item: e.item,
@@ -277,7 +279,11 @@ export function foldEvents(events: readonly Event[]): RequestState {
         if (s.stacks[e.stack]) {
           s.stacks[e.stack].submitCopied = e.t;
           s.stacks[e.stack].submittedOrder = [...s.stacks[e.stack].order];
-          for (const id of s.stacks[e.stack].order) if (s.patches[id]?.revision !== undefined) s.patches[id].sentSha = s.patches[id].sha;
+          for (const id of s.stacks[e.stack].order) {
+            if (s.patches[id]?.revision === undefined) continue;
+            s.patches[id].sentSha = s.patches[id].sha;
+            s.patchSent[id] = [...(s.patchSent[id] ?? []), { sha: s.patches[id].sha, t: e.t }];
+          }
         }
         break;
       case "try-planned": {

@@ -2636,6 +2636,9 @@ describe("9. review comments", () => {
     sc.complete(`review:p-test-a:${job}`, { report: ok });
     // A verification push meanwhile puts it on try: its answer still goes to Phabricator.
     sc.add({ type: "item-state", request: ID, item: "i-test-a", state: "in try" });
+    // Copying the moz-phab command since doesn't change what the reviewer saw.
+    sc.now += 60_000;
+    sc.add({ type: "submit-copied", request: ID, stack: "root" });
     assert.deepEqual(sc.settle(), [`rewrite-review:root:${job}:v2`]);
     // Its commit lost its Differential Revision line: the rewrite gives every submitted patch its own back.
     const rw = sc.plan(`rewrite-review:root:${job}:v2`);

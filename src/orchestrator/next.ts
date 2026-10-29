@@ -2511,8 +2511,10 @@ class Planner {
     if (!st) return;
     const previous = this.authorJobs(item.id).filter((j) => succeeded(j) && j.startedAt < answer.startedAt && commitsOf(j.name, this.rep(j)).length > 0).at(-1);
     const index = author.commits.findIndex((_, i) => patchId(item.id, i) === p.id);
-    // Against what Phabricator has, not the author's previous commit (which may never have been sent).
-    const oldSha = p.sentSha ?? (previous ? commitsOf(previous.name, this.rep(previous))[index] : undefined);
+    // Against what Phabricator had when it was answered (what the reviewer saw), not the author's previous commit (which
+    // may never have been sent), nor a moz-phab command copied since.
+    const sentBefore = (this.s.patchSent[p.id] ?? []).filter((x) => Date.parse(x.t) < answer.startedAt).at(-1)?.sha;
+    const oldSha = sentBefore ?? p.sentSha ?? (previous ? commitsOf(previous.name, this.rep(previous))[index] : undefined);
     // Rebuilt on today's central (patches that landed drop out), with each submitted patch's Differential Revision
     // line. v2: a conflict is left for resolve-conflict, as in the stack's assembly.
     const key = `rewrite-review:${st.id}:${author.job.job}:v2`;
