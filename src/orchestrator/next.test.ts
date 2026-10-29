@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { InvalidReport } from "./handlers.ts";
 import { commandEffects } from "./commands.ts";
+import { landingState } from "../state/landing.ts";
 import type { Command } from "../types.ts";
 import { resumeAuthorPlan, similarMessages, stackId } from "./next.ts";
 import { config, HOUR, ID, Scenario, sha } from "./testkit.ts";
@@ -2411,6 +2412,76 @@ function command(sc: Scenario, c: Record<string, unknown>): void {
   }
 }
 
+describe("10. backouts", () => {
+  // Both patches landed, then a sheriff backed both out for test_b's failure.
+  function backedOut(): Scenario {
+    const sc = inReview();
+    sc.complete("poll:0", { output: polled("published") });
+    sc.settle();
+    assert.equal(sc.state().step, "done");
+    const key = sc.view().jobs.find((j) => !j.end && j.purpose.key.startsWith("landings:"))!.purpose.key;
+    assert.deepEqual(sc.plan(key).cli?.args, ["landings", "22", "999"]);
+    const pushes = [
+      { t: "2026-10-15T10:00:00Z", kind: "landed", by: "me", title: "t" },
+      { t: "2026-10-15T11:00:00Z", kind: "backed out", by: "sheriff", title: 'Revert "Bug 22, Bug 999 - …"' },
+    ];
+    const backout = { t: "2026-10-15T11:05:00Z", by: "sheriff", text: "Backed out for causing mochitest failures @test_b.js.\n* [Failure Log](https://treeherder.mozilla.org/logviewer?job_id=1)" };
+    sc.complete(key, { output: [{ bug: 22, pushes, backout }, { bug: 999, pushes, backout }] });
+    sc.settle();
+    return sc;
+  }
+
+  it("takes the request back to landing: the patch the failure names goes to its author, the other may land again", () => {
+    const sc = backedOut();
+    assert.equal(sc.state().step, "landing");
+    assert.deepEqual(sc.state().backouts["p-test-b"], { at: "2026-10-15T11:00:00Z", reason: "Backed out for causing mochitest failures @test_b.js.\n* [Failure Log](https://treeherder.mozilla.org/logviewer?job_id=1)", culprit: true });
+    assert.equal(sc.state().backouts["p-test-a"].culprit, false);
+    assert.equal(sc.state().items["i-test-a"].state, "waiting for review", "not landed anymore");
+    const told = sc.view().jobs.find((j) => j.purpose.key.startsWith("author:i-test-b:backout:p-test-b:"))!;
+    assert.match(sc.plan(told.purpose.key).agent?.message ?? "", /landed, then was backed out:\nBacked out for causing mochitest failures @test_b\.js/);
+    assert.ok(!sc.view().jobs.some((j) => j.purpose.key.startsWith("author:i-test-a:backout:")));
+    const s = sc.state();
+    assert.deepEqual(landingState(s, s.patches["p-test-a"]), { accepted: true, commentsAddressed: true, landed: false });
+    assert.equal(landingState(s, s.patches["p-test-b"]).accepted, false, "not before a green try run of its fix");
+  });
+
+  it("its fix, once reviewed, gets a try push of the failing jobs; green, it may land again", () => {
+    const sc = backedOut();
+    const told = sc.view().jobs.find((j) => j.purpose.key.startsWith("author:i-test-b:backout:"))!.purpose.key;
+    const job = sc.complete(told, { report: fixed([sha("5")]) });
+    sc.settle();
+    sc.complete(`import:${job}`, { output: imported(sha("5"), "Bug 22 - Fix test_b, r=smaug.", ["a/test_b.js"], 22).map((c) => ({ ...c, revision: 100 })) });
+    sc.settle();
+    sc.complete(`msg:p-test-b:${sha("5")}`, { output: "m" });
+    sc.settle();
+    sc.complete(`lint:p-test-b:${sha("5")}`, { output: lintOk });
+    sc.settle();
+    sc.complete(`review:p-test-b:${job}`, { report: ok });
+    const rw = sc.settle().find((k) => k.startsWith("rewrite-review:"))!;
+    sc.complete(rw, { output: { mapping: { [sha("5")]: sha("6") } } });
+    for (const k of sc.settle().filter((k) => k.startsWith("interdiff:"))) sc.complete(k, { output: { diff: "-a\n+b\n", method: "same-parent" } });
+    sc.settle();
+    assert.equal(sc.state().items["i-test-b"].state, "waiting for review");
+    assert.match(sc.state().verifyAsked?.at(-1) ?? "", /^Verify D100 \(Bug 22 - Fix test_b, r=smaug\.\) after its backout/);
+    sc.settle();
+    const since = sc.view().jobs.find((j) => !j.end && j.purpose.key.startsWith("since:root:"));
+    if (since) sc.complete(since.purpose.key, { output: { changes: [], removed: [] } });
+    sc.settle();
+    const plan = sc.view().jobs.find((j) => !j.end && j.purpose.key.startsWith("plan:verify:root:"))!.purpose.key;
+    assert.match(String(sc.plan(plan).agent?.vars?.goal), /The user asked for this push: “Verify D100/);
+    sc.complete(plan, { report: { pushes: [{ purpose: "rerun the failing job", tryArgs: ["fuzzy", "-q", "x"], rebuild: 5 }], feedback: [] } });
+    const dry = sc.settle().find((k) => k.startsWith("dry-run:"))!;
+    const push = sc.purpose(dry).push!;
+    sc.complete(dry, { output: { command: ["./mach", "try", "fuzzy"], taskCount: 5, tasks: [], tryTaskConfig: {}, commits: [], warnings: [] } });
+    sc.add({ type: "user-done", request: ID, key: `approve-push:${push}` });
+    sc.add({ type: "try-pushed", request: ID, push, rev: "fed", url: "u" });
+    sc.add({ type: "try-finished", request: ID, push, result: "green", summary: "green" });
+    sc.settle();
+    assert.equal(sc.state().backouts["p-test-b"].verified, true);
+    assert.equal(landingState(sc.state(), sc.state().patches["p-test-b"]).accepted, true, "it may land again");
+  });
+});
+
 describe("9. a try push of a submitted stack", () => {
   it("is planned when you ask, once, without the step going back", () => {
     const sc = inReview();
@@ -2957,8 +3028,10 @@ describe("10. landing", () => {
     assert.equal(s.items["i-test-a"].state, "landed");
     // Worktrees go, removed from the main checkout, never from inside themselves.
     const removes = sc.view().jobs.filter((j) => j.purpose.what === "remove");
-    assert.deepEqual(removes.map((j) => j.purpose.key).sort(), [`remove:${ID}-root`, `remove:${ID}-i-test-a`, `remove:${ID}-i-test-b`].sort());
+    assert.deepEqual(removes.map((j) => j.purpose.key).sort(), [`remove:${ID}-i-test-a`, `remove:${ID}-i-test-b`].sort(), "the stack's stays while its landings are watched");
     assert.ok(removes.every((j) => j.cwd === config.firefoxRepo));
+    sc.now += 4 * 24 * 3_600_000;
+    assert.ok(sc.settle().includes(`remove:${ID}-root`), "then goes");
   });
 });
 

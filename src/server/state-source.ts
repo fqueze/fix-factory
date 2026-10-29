@@ -92,7 +92,8 @@ export class FixtureStateSource extends MemoryStateSource {
     if (!existsSync(path)) {
       return;
     }
-    const state = JSON.parse(readFileSync(path, "utf8")) as RequestState;
+    // Fixtures written before these fields: what a fold of their events gives.
+    const state = { patchSent: {}, patchShas: {}, bugLandings: {}, backouts: {}, ...JSON.parse(readFileSync(path, "utf8")) } as RequestState;
     const eventsPath = join(this.dir, `${name}.events.jsonl`);
     const events = existsSync(eventsPath)
       ? readFileSync(eventsPath, "utf8")

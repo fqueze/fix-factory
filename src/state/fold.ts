@@ -34,6 +34,8 @@ export function foldEvents(events: readonly Event[]): RequestState {
     stacks: {},
     pushes: {},
     patchSent: {},
+    bugLandings: {},
+    backouts: {},
     patchShas: {},
     pushChanges: {},
     jobs: {},
@@ -79,6 +81,15 @@ export function foldEvents(events: readonly Event[]): RequestState {
         break;
       case "author-queued":
         s.queuedAuthors = [...(s.queuedAuthors ?? []), { item: e.item, key: e.key, reason: e.reason, message: e.message }];
+        break;
+      case "landing-status":
+        s.bugLandings[e.bug] = { status: e.status, at: e.at, ...(e.reason ? { reason: e.reason } : {}) };
+        break;
+      case "backout":
+        s.backouts[e.patch] = { at: e.at, reason: e.reason, culprit: e.culprit };
+        break;
+      case "backout-verified":
+        if (s.backouts[e.patch]) s.backouts[e.patch].verified = true;
         break;
       case "verify-asked":
         s.verifyAsked = [...(s.verifyAsked ?? []), e.text];

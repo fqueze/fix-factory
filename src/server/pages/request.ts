@@ -477,7 +477,7 @@ function patchRow(r: RequestState, p: PatchView, ctx: RenderContext): Html {
     title: p.title,
     end: html`${viewLink(r, p)}${item ? costLabel(itemCost(r, item)) : null}`,
     // "in the stack" says nothing a patch row in its stack's section doesn't.
-    state: html`${item ? html`fixes <b>${groupLinks(r, item)}</b>${covered.length ? html` and <b>${join(covered.map((i) => groupLinks(r, i)), ", ")}</b>` : null}${item.state === "in stack" ? null : html` · ${item.state === "waiting for review" && p.review?.status === "accepted" ? "accepted on Phabricator" : stateText(r, item, ctx)}`}` : p.review ? p.review.status : null}${landable ? html` · <span class="landable">landable</span>` : null}${yours.map((n) => html` · <b class="you">${n.action}</b>`)}`,
+    state: html`${item ? html`fixes <b>${groupLinks(r, item)}</b>${covered.length ? html` and <b>${join(covered.map((i) => groupLinks(r, i)), ", ")}</b>` : null}${item.state === "in stack" ? null : html` · ${item.state === "waiting for review" && p.review?.status === "accepted" ? "accepted on Phabricator" : stateText(r, item, ctx)}`}` : p.review ? p.review.status : null}${landable ? html` · <span class="landable">landable</span>` : null}${backoutText(r, p)}${yours.map((n) => html` · <b class="you">${n.action}</b>`)}`,
     trust: item ? trustLine(r, item, ctx) : null,
     ask: item && asks ? askBlock(r, item, ctx, [], controls !== null) : undefined,
     under: bugBoxShown ? bugDraftBox(r, p, back) : null,
@@ -810,6 +810,15 @@ function sinceSection(r: RequestState, p: PushView, ctx: RenderContext): Html | 
       }`
     : null;
   return html`${regressions}${list}`;
+}
+
+// Its landing backed out: whether it caused it, and what it waits for.
+function backoutText(r: RequestState, p: PatchView): Html | null {
+  const b = r.backouts[p.id];
+  if (!b || (r.bugLandings[p.bug ?? 0]?.status === "landed" && r.bugLandings[p.bug ?? 0].at > b.at)) return null;
+  const why = b.reason.split("\n")[0];
+  const state = !b.culprit ? "backed out with another patch: it can land again" : b.verified ? "backed out, its fix green on try: it can land again" : "backed out: its fix needs a green try run first";
+  return html` · <span class="bad" title="${why}">${state}</span>`;
 }
 
 // A list's first two items, the rest folded under "+n more".

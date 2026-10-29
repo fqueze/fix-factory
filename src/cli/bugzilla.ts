@@ -8,6 +8,12 @@
 //     last_change_time counts the intermittent-failure bot, so it says nothing about anyone working on it.
 //     revisions are the Phabricator revisions attached to the bug; title, status and modified come from conduit.
 //
+//   node src/cli/bugzilla.ts landings <bug>...
+//     → [{bug, pushes: [{t, kind: "landed" | "backed out", by, title}], backout?: {t, by, text}}]
+//     What pulsebot said was pushed to autoland, oldest first: a landing ("Pushed by …" and its commit title), or
+//     a backout (a "Revert …" push). backout is the latest sheriff comment saying why ("Backed out for causing …",
+//     with its Treeherder links).
+//
 //   node src/cli/bugzilla.ts enter-url <draft.json>
 //     → {url}: a prefilled enter_bug.cgi URL for a BugDraft, with the field names of the bug-filing
 //     skill's file-bug.py (product, component, short_desc, comment, blocked, bug_type, keywords).
@@ -156,6 +162,37 @@ function quote(s: string): string {
   return encodeURIComponent(s).replace(/[!'()*]/g, (c) => "%" + c.charCodeAt(0).toString(16).toUpperCase());
 }
 
+export interface BugLandings {
+  bug: number;
+  pushes: { t: string; kind: "landed" | "backed out"; by: string; title: string }[];
+  backout?: { t: string; by: string; text: string };
+}
+
+export function landingsOf(bug: number, comments: { creator: string; creation_time: string; text: string }[]): BugLandings {
+  const out: BugLandings = { bug, pushes: [] };
+  for (const c of comments) {
+    if (c.creator === "pulsebot@bmo.tld") {
+      const m = /^Pushed by (\S+?):?\n/.exec(c.text);
+      if (!m) continue;
+      const lines = c.text.split("\n").filter((l) => l.trim() && !/^https?:\/\//.test(l.trim()));
+      const title = lines.slice(1).join(" ").trim();
+      out.pushes.push({ t: c.creation_time, kind: /^(Revert "|Backed out)/i.test(title) ? "backed out" : "landed", by: m[1], title });
+    } else if (/^Backed out\b/i.test(c.text.trim())) {
+      out.backout = { t: c.creation_time, by: c.creator, text: c.text.trim().slice(0, 3000) };
+    }
+  }
+  return out;
+}
+
+export async function landings(bugs: number[], fetchFn: typeof fetch = fetch): Promise<BugLandings[]> {
+  const out: BugLandings[] = [];
+  for (const bug of bugs) {
+    const json = await getJson(`bug/${bug}/comment`, fetchFn);
+    out.push(landingsOf(bug, json.bugs[String(bug)].comments));
+  }
+  return out;
+}
+
 export function enterBugUrl(draft: BugDraft): string {
   const fields: [string, string][] = [
     ["product", draft.product],
@@ -175,6 +212,10 @@ async function main() {
     "prior-art": async (args) => {
       if (args.length !== 1) throw new UsageError("usage: prior-art <test>");
       return priorArt(args[0]);
+    },
+    landings: async (args) => {
+      if (args.length === 0 || args.some((a) => !/^\d+$/.test(a))) throw new UsageError("usage: landings <bug>...");
+      return landings(args.map(Number));
     },
     "enter-url": async (args) => {
       if (args.length !== 1) throw new UsageError("usage: enter-url <draft.json>");

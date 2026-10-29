@@ -119,7 +119,7 @@ const STACKED: ItemState[] = ["in stack", "in try", "waiting for review", "addre
 export const SETTLED: ItemState[] = ["reviewed", "in stack", "in try", "waiting for review", "addressing review comments", "fixed", "landed", "left as-is", "handed back", "taken over", "waiting for a try repro"];
 const WITH_PATCHES: ItemState[] = ["reviewed", "in stack", "in try", "waiting for review", "addressing review comments", "fixed", "landed"];
 // Author runs that can change a patch after it was submitted (besides address-review).
-const CHANGES_AFTER_SUBMIT = ["continue", "comment", "stack comments", "asked push", "try"];
+const CHANGES_AFTER_SUBMIT = ["continue", "comment", "stack comments", "asked push", "try", "backout"];
 export const TERMINAL: ItemState[] = ["left as-is", "handed back", "taken over", "landed", "fixed"];
 
 const at = (step: RequestStep) => REQUEST_STEPS.indexOf(step);
@@ -279,6 +279,9 @@ class Planner {
 
   run(): void {
     if (this.s.step === "done") {
+      // Landed patches may still be backed out: watched for a few days.
+      this.landings();
+      this.backouts();
       this.cleanup();
       this.testPlans();
       return;
@@ -311,6 +314,8 @@ class Planner {
     this.submitted();
     this.reviewComments();
     this.newPatches();
+    this.landings();
+    this.backouts();
     this.landing();
     this.testPlans();
   }
@@ -2658,6 +2663,63 @@ class Planner {
     }
   }
 
+  // Autoland's landings and backouts, from Bugzilla: while patches are closed on Phabricator, and for three days after
+  // the request is done. As often as Phabricator is checked.
+  private landings(): void {
+    const published = Object.values(this.s.patches).filter((p) => p.review?.status === "published" && p.bug !== null);
+    if (!published.length) return;
+    if (this.s.step === "done" && this.s.finishedAt && this.ctx.now - Date.parse(this.s.finishedAt) > 3 * 24 * HOUR) return;
+    const jobs = this.view.jobs.filter((j) => j.purpose.what === "landings");
+    const last = jobs.at(-1);
+    if (last && !last.end) return;
+    const every = this.ctx.presence.present ? (this.config.phabPollMinutes ?? 10) * 60_000 : (this.config.phabPollHours ?? 3) * HOUR;
+    if (last && this.ctx.now - last.startedAt < every) return;
+    const bugs = [...new Set(published.map((p) => p.bug!))].sort((a, b) => a - b);
+    this.want(`landings:${jobs.length}`, () => this.cli("landings", "bugzilla.ts", ["landings", ...bugs.map(String)], { priority: REVIEW_PRIORITY }));
+  }
+
+  // A backout: the patches it took that the sheriff's failure names (by their files or tests; all of them when it names
+  // none of theirs) are its cause. Each cause's author is told; it lands again only once a try push shows the failing
+  // jobs green with its fix. The others may land again right away.
+  private backouts(): void {
+    for (const [bug, l] of Object.entries(this.s.bugLandings)) {
+      if (l.status !== "backed out") continue;
+      const fresh = Object.values(this.s.patches).filter((p) => p.bug === Number(bug) && p.revision !== undefined && this.s.backouts[p.id]?.at !== l.at);
+      if (!fresh.length) continue;
+      if (this.s.step === "done") this.setStep("landing");
+      // One revert often takes several bugs: each has the same backout.
+      const taken = Object.values(this.s.patches).filter((p) => p.revision !== undefined && p.bug !== null && this.s.bugLandings[p.bug]?.status === "backed out" && this.s.bugLandings[p.bug].at === l.at);
+      const names = [...(l.reason ?? "").matchAll(/@\s*([\w./-]+\.(?:html|xhtml|xht|js|toml|ini))/g)].map((m) => m[1].split("/").pop()!);
+      const named = (p: PatchView) => [...this.patchFiles(p), ...(p.item ? (this.s.items[p.item]?.group.tests ?? []) : [])].some((f) => names.some((n) => f === n || f.endsWith(`/${n}`)));
+      const causes = taken.filter(named);
+      for (const p of fresh) this.event(this.ev("backout", { patch: p.id, at: l.at, reason: l.reason ?? "", culprit: causes.length ? causes.includes(p) : true }));
+    }
+    for (const [pid, b] of Object.entries(this.s.backouts)) {
+      const p = this.s.patches[pid];
+      if (!b.culprit || b.verified || !p?.item) continue;
+      const item = p.item;
+      const key = `author:${item}${this.itemEpoch(item)}:backout:${pid}:${b.at}`;
+      const run = this.resumeAuthor(
+        item,
+        key,
+        "backout",
+        `D${p.revision} landed, then was backed out:\n${b.reason}\n\nRead the failure (the log linked above, and the test's runs with fx-tests) and find whether your patch causes it. If it does, fix it by amending your commit. Either way, end with the JSON report again, saying what caused the failure. It won't land again before a try push shows those jobs green with your fix.`,
+      );
+      // Its answer reviewed and back on its way to Phabricator: then the push.
+      if (!run || this.s.items[item].state !== "waiting for review") continue;
+      const st = Object.values(this.s.stacks).find((x) => x.order.includes(pid));
+      if (!st) continue;
+      const text = `Verify D${p.revision} (${p.title}) after its backout, with its fix: the jobs that failed must be green. The backout: ${b.reason.slice(0, 1500)}`;
+      const n = (this.s.verifyAsked ?? []).indexOf(text) + 1;
+      if (!n) {
+        this.event(this.ev("verify-asked", { text }));
+        continue;
+      }
+      const pushes = Object.values(this.s.pushes).filter((x) => x.id.startsWith(`${st.id}-ask${n}-`) && x.rev);
+      if (pushes.length && pushes.every((x) => x.result === "green" || this.passing.has(x.id))) this.event(this.ev("backout-verified", { patch: pid }));
+    }
+  }
+
   // -------------------------------------------------------------------------
   // 10. Landing
 
@@ -2669,6 +2731,8 @@ class Planner {
     for (const item of Object.values(this.s.items)) {
       const own = patches.filter((p) => p.item === item.id);
       if (own.length > 0 && own.every(landed) && item.state !== "landed") this.setItem(item.id, "landed");
+      // Backed out: it waits again.
+      else if (item.state === "landed" && !own.every(landed)) this.setItem(item.id, "waiting for review");
     }
     if (patches.length > 0 && patches.every(landed)) {
       this.setStep("done");
@@ -2773,7 +2837,11 @@ class Planner {
         .filter((j) => j.purpose.what === "worktree" && succeeded(j) && !(j.purpose.item !== undefined && (this.s.splitInto || this.s.items[j.purpose.item]?.state === "taken over")))
         .map((j) => this.out<{ name: string }>(j).name),
     );
+    // The stack's stays while its landings are watched (a backout comes back to it).
+    const watched = this.s.finishedAt !== undefined && this.ctx.now - Date.parse(this.s.finishedAt) <= 3 * 24 * HOUR;
+    const stacks = new Set(Object.values(this.s.stacks).map((st) => basename(st.worktree)));
     for (const name of names) {
+      if (watched && stacks.has(name)) continue;
       this.want(`remove:${name}`, () => this.cli("remove", "worktree.ts", ["remove", name], { cwd: this.config.firefoxRepo }));
     }
   }

@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { isDeepStrictEqual } from "node:util";
-import { bugInfo, describePriorArt, enterBugUrl, isBot, priorArt, priorArtQuery, revisionsFromAttachments } from "./bugzilla.ts";
+import { bugInfo, describePriorArt, enterBugUrl, isBot, landingsOf, priorArt, priorArtQuery, revisionsFromAttachments } from "./bugzilla.ts";
 import type { Conduit } from "./phab.ts";
 
 const fixtures = new URL("../../test/fixtures/bugzilla/", import.meta.url);
@@ -127,4 +127,22 @@ test("describePriorArt: who is on the bug and its live revisions, in one line", 
     "Bug 2079911 - Intermittent test_quota.js | Quota exceeded (ASSIGNED, assigned to janv@mozilla.com, last comment by janv@mozilla.com on 2026-10-12): D2 in review, updated 2026-10-14; D3 draft.",
   );
   assert.equal(describePriorArt({ ...bug, status: "NEW", assignee: null, lastHumanComment: null, revisions: [] }), "Bug 2079911 - Intermittent test_quota.js | Quota exceeded (NEW).");
+});
+
+test("landingsOf: pulsebot's landings and reverts, and the sheriff's why", () => {
+  const l = landingsOf(1920615, [
+    { creator: "florian@mozilla.com", creation_time: "2026-10-28T19:20:01Z", text: "Created attachment 9670725\nBug 1920615 - Wait for the controls' icons" },
+    { creator: "pulsebot@bmo.tld", creation_time: "2026-10-29T10:34:25Z", text: "Pushed by fqueze@mozilla.com:\nhttps://github.com/mozilla-firefox/firefox/commit/d6b9668f5e57\nhttps://hg.mozilla.org/integration/autoland/rev/0f87bf6062e7\nWait for the controls' icons to be decoded, r=firefox-desktop-core-reviewers ,mossop." },
+    { creator: "pulsebot@bmo.tld", creation_time: "2026-10-29T11:27:32Z", text: 'Pushed by agoloman@mozilla.com:\nhttps://github.com/mozilla-firefox/firefox/commit/0dedd7ca682b\nhttps://hg.mozilla.org/integration/autoland/rev/6d32b0fd563e\nRevert "Bug 1920615, Bug 2086756 - Wait for the controls\' icons" for causing mochitest failures @test_videocontrols_audio_direction.html.' },
+    { creator: "agoloman@mozilla.com", creation_time: "2026-10-29T11:30:52Z", text: "Backed out for causing mochitest failures @test_videocontrols_audio_direction.html.\n* [Failure Log](https://treeherder.mozilla.org/logviewer?job_id=603273747&repo=autoland)" },
+  ]);
+  assert.deepEqual(
+    l.pushes.map((p) => [p.kind, p.by]),
+    [
+      ["landed", "fqueze@mozilla.com"],
+      ["backed out", "agoloman@mozilla.com"],
+    ],
+  );
+  assert.equal(l.pushes[0].title, "Wait for the controls' icons to be decoded, r=firefox-desktop-core-reviewers ,mossop.");
+  assert.match(l.backout?.text ?? "", /^Backed out for causing mochitest failures @test_videocontrols_audio_direction\.html\.\n\* \[Failure Log\]/);
 });
