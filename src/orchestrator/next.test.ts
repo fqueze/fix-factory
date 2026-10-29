@@ -2033,6 +2033,25 @@ describe("6. verify on try, again", () => {
     assert.deepEqual(dries2.map((d) => sc.purpose(d).push), [`${keep}-v2-1`, `${keep}-v2-2`]);
   });
 
+  it("a push whose query selected nothing goes back to its planner, once, before you see it", () => {
+    const sc = stacked();
+    const planKey = sc.view().jobs.find((j) => j.purpose.what === "plan-pushes")!.purpose.key;
+    sc.complete(planKey, { report: { pushes: [{ purpose: "mac", tryArgs: ["fuzzy", "-q", "'mac"], rebuild: 1 }], feedback: [] } });
+    const nothing = { command: ["./mach", "try", "fuzzy"], taskCount: 5, tasks: [], tryTaskConfig: {}, commits: [], warnings: [`-q "'mac" selected nothing: no task of the push matches it (…those need --full).`] };
+    const [dry] = sc.settle();
+    const push = sc.purpose(dry).push!;
+    sc.complete(dry, { output: nothing });
+    const [rev] = sc.settle();
+    assert.equal(rev, `${planKey}:revise:${shortHash([push]).slice(0, 8)}`);
+    assert.match(String(sc.plan(rev).agent?.message), /its dry run: -q "'mac" selected nothing/);
+    assert.equal(sc.state().pushes[push].withdrawn, true);
+    sc.complete(rev, { report: { pushes: [{ purpose: "mac", tryArgs: ["fuzzy", "--full", "-q", "'mac"], rebuild: 1 }], answer: "added --full", feedback: [] } });
+    const [dry2] = sc.settle();
+    sc.complete(dry2, { output: nothing });
+    sc.settle();
+    assert.deepEqual(sc.open(), [`approve-push:${sc.purpose(dry2).push}`], "not twice: you see it, with its warning");
+  });
+
   it("a revision of a first-round push made after the second round exists is handled in the third, the second standing", () => {
     const sc = stacked();
     const planKey = sc.view().jobs.find((j) => j.purpose.what === "plan-pushes")!.purpose.key;

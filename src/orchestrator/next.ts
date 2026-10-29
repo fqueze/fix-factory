@@ -767,6 +767,12 @@ class Planner {
       if (revised) for (const id of these) if (this.s.pushes[id] && !this.s.pushes[id].revises) this.event({ type: "try-context", request: this.s.id, push: id, revises: revised });
       ids.push(...these);
       dry.push(...(d as DryRunResult[]));
+      // A query that selected nothing goes back to its planner before you see it, once: not after its own revision.
+      these.forEach((id, i) => {
+        const nothing = (d[i] as DryRunResult).warnings.filter((w) => w.includes(" selected nothing: "));
+        const again = (revised ?? []).some((x) => this.s.pushes[x]?.withdrawn);
+        if (nothing.length && !again && waiting(id)) this.event(this.ev("try-declined", { push: id, text: `its dry run: ${nothing.join(" ")}`, replan: true, by: "factory" }));
+      });
       const pending = ids.filter((p) => this.s.pushes[p]?.replan && !handled.has(p));
       if (pending.length === 0) break;
       // This round's revision, when it exists, keeps the pushes it was asked for; those revised since wait for the next.

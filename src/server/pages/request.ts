@@ -881,7 +881,8 @@ function revisedText(r: RequestState, p: PushView): Html | null {
   if (!p.revises?.length) return null;
   const said = p.revises.map((id) => r.pushes[id]?.declined).filter((x) => x !== undefined);
   const job = Object.values(r.jobs).findLast((j) => j.purpose?.what === "plan-pushes" && j.purpose.pushes?.join() === p.revises!.join());
-  return html`revised after you said <span class="said">“${said.join("”, “")}”</span>${job?.outcome ? html` · <b>its planner:</b> ${job.outcome}` : null}`;
+  const yours = p.revises.every((id) => !r.pushes[id]?.withdrawn);
+  return html`${yours ? "revised after you said" : "revised after"} <span class="said">“${said.join("”, “")}”</span>${job?.outcome ? html` · <b>its planner:</b> ${job.outcome}` : null}`;
 }
 
 // What it's judged by: what changed in the stack since its previous push (each changed patch's interdiff and what its

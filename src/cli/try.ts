@@ -258,7 +258,7 @@ export async function dryRun(cwd: string, args: string[], opts: { pending?: Pend
   }
   const parsed = parseDryRunOutput(r.stdout);
   const commits = await stackCommits(cwd, run);
-  const warnings = [...parsed.warnings, ...unmatchedQueries(args, parsed.tasks).map((q) => `-q "${q}" selected nothing: no task of the push matches it (a platform or suite name that doesn't exist, or tasks that don't run that folder).`)];
+  const warnings = [...parsed.warnings, ...unmatchedQueries(args, parsed.tasks).map((q) => `-q "${q}" selected nothing: no task of the push matches it (a platform or suite name that doesn't exist, tasks that don't run that folder, or tasks only in the full task set, like macOS standalone mochitests: those need --full).`)];
   if (commits.length === 0) {
     warnings.push("The stack has no commits that aren't on a remote: the push would only carry the try config.");
   }
