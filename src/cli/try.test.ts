@@ -26,6 +26,7 @@ import {
   type TreeherderJob,
   type WatchDeps,
   type WatchLine,
+  unmatchedQueries,
 } from "./try.ts";
 
 const FIXTURES = new URL("../../test/fixtures/try/", import.meta.url);
@@ -668,4 +669,10 @@ test("expectedTests: the dry run's test tasks with their runs, builds excluded",
     "test-linux/opt-xpcshell-2": 7,
     "test-linux/opt-mochitest": 1,
   });
+});
+
+test("unmatchedQueries: a -q whose exact terms no selected task has", () => {
+  const tasks = ["test-linux2404-64/debug-mochitest-browser-chrome-standalone-*", "test-windows11-64-25h2/opt-mochitest-browser-chrome-*"];
+  const args = ["fuzzy", "-q", "'test-linux2404-64/debug-mochitest-browser-chrome 'standalone", "-q", "'test-macosx1500-aarch64/debug-mochitest-browser-chrome 'standalone", "-q", "'linux | 'mac", "-q", "fuzzy-only", "dir"];
+  assert.deepEqual(unmatchedQueries(args, tasks), ["'test-macosx1500-aarch64/debug-mochitest-browser-chrome 'standalone"]);
 });

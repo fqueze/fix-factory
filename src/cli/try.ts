@@ -222,6 +222,24 @@ export function findDuplicate(result: { tryTaskConfig: Record<string, unknown>; 
   return index === -1 ? undefined : (pending[index].push ?? String(index));
 }
 
+// The -q queries no selected task matches, judged by their exact terms ('x, ^x, x$) as fzf matches them; fuzzy terms,
+// negations and alternatives (|) aren't judged.
+export function unmatchedQueries(args: string[], tasks: string[]): string[] {
+  const queries = args.flatMap((a, i) => (args[i - 1] === "-q" || args[i - 1] === "--query" ? [a] : []));
+  return queries.filter((q) => {
+    if (q.includes("|")) return false;
+    const terms = q.split(/\s+/).filter(Boolean);
+    const tests = terms.flatMap((t): ((label: string) => boolean)[] => {
+      if (t.startsWith("!")) return [];
+      if (t.startsWith("'")) return [(l) => l.includes(t.slice(1))];
+      if (t.startsWith("^")) return [(l) => l.startsWith(t.slice(1))];
+      if (t.endsWith("$")) return [(l) => l.endsWith(t.slice(0, -1))];
+      return [];
+    });
+    return tests.length > 0 && !tasks.some((l) => tests.every((test) => test(l)));
+  });
+}
+
 export async function dryRun(cwd: string, args: string[], opts: { pending?: PendingPush[]; exec?: typeof exec; timeoutS?: number } = {}): Promise<DryRunResult> {
   checkTryArgs(args);
   const run = opts.exec ?? exec;
@@ -240,7 +258,7 @@ export async function dryRun(cwd: string, args: string[], opts: { pending?: Pend
   }
   const parsed = parseDryRunOutput(r.stdout);
   const commits = await stackCommits(cwd, run);
-  const warnings = [...parsed.warnings];
+  const warnings = [...parsed.warnings, ...unmatchedQueries(args, parsed.tasks).map((q) => `-q "${q}" selected nothing: no task of the push matches it (a platform or suite name that doesn't exist, or tasks that don't run that folder).`)];
   if (commits.length === 0) {
     warnings.push("The stack has no commits that aren't on a remote: the push would only carry the try config.");
   }
