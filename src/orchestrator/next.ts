@@ -2492,6 +2492,21 @@ class Planner {
       const raised = this.view.raised.get(n.key) ?? Infinity;
       if (diff ? Date.parse(diff.created) > raised : lastPoll && lastPoll.startedAt > raised) this.clear(n.key);
     }
+    // A patch whose code differs from what Phabricator has needs resubmitting, whatever happened to its flags: a
+    // waiting patch gets one once that interdiff shows a change.
+    for (const p of revisions) {
+      const st = Object.values(this.s.stacks).find((x) => x.order.includes(p.id));
+      const base = p.review?.diff?.commit;
+      const item = p.item ? this.s.items[p.item] : undefined;
+      if (!st || !base || base === p.sha || item?.state !== "waiting for review" || p.review?.status === "published") continue;
+      if (this.s.needsUser.some((n) => n.patch === p.id && (n.key.startsWith("resubmit:") || n.key.startsWith("reply:")))) continue;
+      const inter = this.want(`interdiff:${p.id}:phab-${base.slice(0, 12)}:${p.sha.slice(0, 12)}`, () =>
+        this.cli("interdiff", "stack.ts", ["interdiff", "--cwd", st.worktree, base, p.sha], { cwd: st.worktree, priority: REVIEW_PRIORITY, purpose: { patch: p.id, stack: st.id } }),
+      );
+      if (inter && this.out<{ diff: string }>(inter).diff.trim()) {
+        this.raise(`resubmit:${st.id}:phab-${p.review!.diff!.id}:${p.sha.slice(0, 12)}`, { action: `Resubmit D${p.revision}`, detail: "it differs from what Phabricator has · interdiff below", stack: st.id, patch: p.id });
+      }
+    }
     // What a resubmit would send: the patch as it is against what Phabricator has.
     for (const n of this.s.needsUser.filter((x) => x.key.startsWith("resubmit:") && x.patch !== undefined)) {
       const p = this.s.patches[n.patch!];

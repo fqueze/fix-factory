@@ -2520,6 +2520,15 @@ describe("9. a try push of a submitted stack", () => {
     assert.equal(sc.state().needsUser.find((n) => n.key === "reply:resubmit:root:jx")?.action, "Post 1 reply on D101");
   });
 
+  it("a waiting patch that differs from what Phabricator has asks to be resubmitted, flag or not", () => {
+    const sc = inReview();
+    sc.complete("poll:0", { output: polled("needs-review", [], "pending").map((x) => ({ ...x, diff: { id: 9, commit: sha("0"), created: "2026-01-01T00:00:00.000Z" } })) });
+    const inter = sc.settle().find((k) => k.startsWith("interdiff:p-test-a:phab-"))!;
+    sc.complete(inter, { output: { diff: "-a\n+b\n", method: "same-parent" } });
+    sc.settle();
+    assert.equal(sc.state().needsUser.find((n) => n.patch === "p-test-a" && n.key.startsWith("resubmit:"))?.action, "Resubmit D101");
+  });
+
   it("redo-step back before review is refused once the stack is on Phabricator", () => {
     const sc = inReview();
     command(sc, { cmd: "redo-step", step: "verify on try", reason: "another push" });
