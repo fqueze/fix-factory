@@ -2471,6 +2471,16 @@ class Planner {
       const raised = this.view.raised.get(n.key) ?? Infinity;
       if (diff ? Date.parse(diff.created) > raised : lastPoll && lastPoll.startedAt > raised) this.clear(n.key);
     }
+    // What a resubmit would send: the patch as it is against what Phabricator has.
+    for (const n of this.s.needsUser.filter((x) => x.key.startsWith("resubmit:") && x.patch !== undefined)) {
+      const p = this.s.patches[n.patch!];
+      const st = Object.values(this.s.stacks).find((x) => x.order.includes(p.id));
+      const base = p.review?.diff?.commit;
+      if (!st || !base || base === p.sha) continue;
+      this.want(`interdiff:${p.id}:phab-${base.slice(0, 12)}:${p.sha.slice(0, 12)}`, () =>
+        this.cli("interdiff", "stack.ts", ["interdiff", "--cwd", st.worktree, base, p.sha], { cwd: st.worktree, priority: REVIEW_PRIORITY, purpose: { patch: p.id, stack: st.id } }),
+      );
+    }
     for (const p of revisions) {
       if (!p.review || !p.item) continue;
       const item = p.item;
