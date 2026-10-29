@@ -102,7 +102,7 @@ export function flagControls(r: RequestState, n: NeedsUser, ctx: RenderContext):
     case "resubmit": {
       const stack = findStack(r, n);
       // Or decide against it (the patch lands as it is).
-      controls = stack ? html`${mozPhabButton(r.id, stack, false)}${dismissButton(r.id, n.key, back)}` : null;
+      controls = stack ? html`${mozPhabButton(r.id, stack, false)}${pollPhabButton(r.id, back)}${dismissButton(r.id, n.key, back)}` : null;
       break;
     }
     case "reopen-bug": {
@@ -112,7 +112,7 @@ export function flagControls(r: RequestState, n: NeedsUser, ctx: RenderContext):
     }
     case "reply":
       // Posted on Phabricator: the next poll shows them, this says you're done.
-      controls = commandButton(r.id, { cmd: "dismiss", key: n.key }, "Posted", back);
+      controls = html`${commandButton(r.id, { cmd: "dismiss", key: n.key }, "Posted", back)}${pollPhabButton(r.id, back)}`;
       break;
     case "land": {
       const stack = findStack(r, n);

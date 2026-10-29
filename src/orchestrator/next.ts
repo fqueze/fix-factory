@@ -2498,8 +2498,10 @@ class Planner {
     // You asked: whether you're present or not.
     if (this.s.pollRequested && (!last || Date.parse(this.s.pollRequested) > last.startedAt)) return true;
     if (!last) return true;
-    // Every few minutes while you're at the page, every few hours while you're away.
+    // Every few minutes while you're at the page, every few hours while you're away; every 2 minutes for 10 after you
+    // copied a moz-phab command (you're resubmitting).
     const age = this.ctx.now - last.startedAt;
+    if (Object.values(this.s.stacks).some((st) => st.submitCopied && this.ctx.now - Date.parse(st.submitCopied) < 10 * 60_000)) return age >= SUBMIT_IMPORT_MS;
     if (this.ctx.presence.present) return age >= (this.config.phabPollMinutes ?? 10) * 60_000;
     return age >= (this.config.phabPollHours ?? 3) * HOUR;
   }

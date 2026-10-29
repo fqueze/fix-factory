@@ -2734,29 +2734,38 @@ describe("9. review comments", () => {
     assert.equal(sc.state().patches["p-test-a"].testPlan, "- Locally on Ubuntu 24.04 (debug): 6/6, 0/20 with the fix.");
   });
 
-  it("polls Phabricator every 10 min while you're present, every 3 h while you're away", () => {
+  it("polls Phabricator every 2 min for 10 after you copied moz-phab, then every 10 min while you're present, every 3 h while you're away", () => {
     const sc = inReview();
     assert.deepEqual(sc.view().jobs.filter((j) => !j.end && !j.purpose.key.startsWith("test-plan:")).map((j) => j.purpose.key), ["poll:0"]);
     assert.deepEqual(sc.plan("poll:0").cli?.args, ["poll", "D100", "D101"]);
     assert.equal(sc.plan("poll:0").priority, 0);
-    sc.complete("poll:0", { output: polled("needs-review", [], "pending") });
+    const pending = () => polled("needs-review", [], "pending");
+    sc.complete("poll:0", { output: pending() });
     assert.equal(sc.state().patches["p-test-a"].review?.status, "needs-review");
+    // You just copied moz-phab submit (inReview): every 2 minutes.
+    sc.now += 2 * 60_000;
+    assert.deepEqual(sc.settle(), ["poll:1"]);
+    sc.complete("poll:1", { output: pending() });
+    sc.now += 10 * 60_000;
+    assert.deepEqual(sc.settle(), ["poll:2"]);
+    sc.complete("poll:2", { output: pending() });
+    // Then every 10 minutes.
     sc.now += 9 * 60_000;
     assert.deepEqual(sc.settle(), []);
     sc.now += 60_000;
-    assert.deepEqual(sc.settle(), ["poll:1"]);
-    sc.complete("poll:1", { output: polled("needs-review", [], "pending") });
+    assert.deepEqual(sc.settle(), ["poll:3"]);
+    sc.complete("poll:3", { output: pending() });
     sc.present = false;
     sc.now += 2 * HOUR;
     assert.deepEqual(sc.settle(), []);
     sc.now += HOUR;
-    assert.deepEqual(sc.settle(), ["poll:2"]);
-    sc.complete("poll:2", { output: polled("needs-review", [], "pending") });
+    assert.deepEqual(sc.settle(), ["poll:4"]);
+    sc.complete("poll:4", { output: pending() });
     // Back at the page: the 10 min rule again.
     sc.present = true;
     sc.presentSince = sc.now;
     sc.now += 10 * 60_000;
-    assert.deepEqual(sc.settle(), ["poll:3"]);
+    assert.deepEqual(sc.settle(), ["poll:5"]);
   });
 
   it("polls right away when you ask, even while you're away, once per request", () => {
