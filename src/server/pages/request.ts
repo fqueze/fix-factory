@@ -150,7 +150,7 @@ export function renderRequestBody(r: RequestState, ctx: RenderContext): Html {
       repro.length ? html`<h3>DEBUG commits for the stack's next try push</h3>${groupRows(r, repro, ctx, false)}` : null
     }
     ${toStack.some((i) => itemBucket(r, i, ctx) !== "closed") ? html`${stacks.length || loose.length ? html`<h3>Not in a stack yet</h3>` : null}${groupRows(r, toStack, ctx, false)}` : null}
-    ${landed.length ? html`<h3>Landed${r.metaBug && hasBug(r.metaBug) && !stacks.length ? html` · <a class="bug" href="${bugUrl(r.metaBug.bug)}" target="_blank" rel="noopener">Bug ${r.metaBug.bug}</a> ${metaSummary}` : null}</h3>${groupRows(r, landed, ctx)}` : null}
+    ${landed.length ? html`<h3>Landed${r.metaBug && hasBug(r.metaBug) && !stacks.length ? html` · <a class="bug" href="${bugUrl(r.metaBug.bug)}" target="_blank" rel="noopener">Bug ${r.metaBug.bug}</a> ${metaSummary}` : null}</h3><div class="landed-rows">${groupRows(r, landed, ctx)}</div>` : null}
     ${handOffs(r, ctx)}
     ${closedFold(r, items.filter((i) => itemBucket(r, i, ctx) === "closed" && i.state !== "taken over"), ctx)}
     ${stacks.length || loose.length || items.length || landed.length ? html`<hr class="part">` : null}
@@ -301,13 +301,14 @@ interface Row {
   under?: Html | null; // opened, right under its name: a patch's bug to file
   body: Html;
   you?: boolean; // waiting for you: the whole row stands out
+  bucket?: Bucket; // its color on its left edge, as in the progress bar
 }
 
 // Opened, the box under its name comes first in the body (clicking in it mustn't fold the row), styled as hanging
 // from its label; its state and trust lines then move under the box.
 function row(x: Row): Html {
   const lines = html`<span class="state">${x.state}</span>${x.trust ? html`<span class="trust">${x.trust}</span>` : null}`;
-  const d = html`<details class="row${x.you ? " you" : null}" ${x.anchor} data-fold="${x.fold}"><summary><span class="st ${x.cls}"></span><span class="name" title="${x.title}">${x.name}</span><span class="end">${x.end}</span>${lines}${
+  const d = html`<details class="row${x.you ? " you" : null}${x.bucket && x.bucket !== "closed" ? ` b-${x.bucket.replaceAll(" ", "-")}` : null}" ${x.anchor} data-fold="${x.fold}"><summary><span class="st ${x.cls}"></span><span class="name" title="${x.title}">${x.name}</span><span class="end">${x.end}</span>${lines}${
     x.warn ? html`<span class="warn">${x.warn}</span>` : null
   }</summary>${x.under ? html`<div class="under">${x.under}<div class="lines">${lines}</div></div>` : null}<div class="rowbody">${x.body}</div></details>`;
   return x.ask ? html`<div class="asks">${d}<div class="ask-you">${x.ask}</div></div>` : d;
@@ -392,6 +393,7 @@ function groupRow(r: RequestState, i: ItemView, ctx: RenderContext): Html {
   return row({
     anchor: html`id="item-${i.id}" data-item="${i.id}"`,
     fold: `item-${i.id}`,
+    bucket: itemBucket(r, i, ctx),
     cls: rowClass(r, i, ctx),
     name: html`${groupLabel(r, i)}`,
     title: [...i.group.tests, i.group.configs.join(", ")].join("\n"),
@@ -524,6 +526,7 @@ function patchRow(r: RequestState, p: PatchView, ctx: RenderContext): Html {
     you: yours.length > 0 || (asks && item !== undefined && r.needsUser.some((n) => flagItemOf(r, n) === item.id)),
     anchor: html`id="patch-${p.id}" data-patch="${p.id}"`,
     fold: `patch-${p.id}`,
+    bucket: item ? (landable && itemBucket(r, item, ctx) === "ready" ? "landable" : itemBucket(r, item, ctx)) : landable ? "landable" : undefined,
     cls: item ? rowClass(r, item, ctx) : landable ? "ok" : "wait",
     name: html`${p.revision ? html`<a class="phab" href="${phabUrl(p.revision)}" title="D${p.revision}" target="_blank" rel="noopener">${PHAB_ICON}</a>` : null}${
       first.id === p.id ? bugLabel(p, ctx) : html`<a class="bug tofile" href="#patch-${first.id}" title="Filed from ${first.title}">same bug</a>`

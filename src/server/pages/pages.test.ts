@@ -31,7 +31,7 @@ function get(id: string): RequestState {
 
 // The row of a group (item-<id>) or patch (patch-<id>), up to the next row.
 function rowOf(h: string, id: string): string {
-  const m = new RegExp(`<details class="row(?: you)?" id="${id}"`).exec(h);
+  const m = new RegExp(`<details class="row(?: you)?(?: b-[a-z-]+)?" id="${id}"`).exec(h);
   assert.ok(m, id);
   const start = m.index;
   // Up to its closing </details>, nested ones counted (or the next row, for the asks that follow it).
@@ -607,6 +607,11 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.ok(h.indexOf('id="push-A"') < h.indexOf(">storage/test/unit</span>"), "at the top of the body");
   });
 
+  it("each row's state on its left edge, as in the progress bar; landed rows in their own compact list", () => {
+    const h = expanded("r-20261001-mouse-button");
+    assert.match(h, /<details class="row[^"]* b-(landable|ready|landed)" id="patch-/);
+  });
+
   it("6. verify on try: finished pushes are folded under one line, the Try pushes header only for the running and planned", () => {
     const r = structuredClone(get("r-20261010-xpcshell-cwd"));
     for (const p of Object.values(r.pushes)) if (!p.result) delete r.pushes[p.id];
@@ -664,10 +669,10 @@ describe("one fixture per step of docs/MVP.md", () => {
     const r = structuredClone(get("r-20261007-focus"));
     r.patches["p-focus"].revision = 5;
     r.step = "review comments";
-    assert.doesNotMatch(renderRequest(r, ctx, true).value, /<details class="row you" id="patch-p-focus"/);
+    assert.doesNotMatch(renderRequest(r, ctx, true).value, /<details class="row you[^"]*" id="patch-p-focus"/);
     r.needsUser.push({ key: "resubmit:focus:j1", action: "Post 1 reply, then resubmit D5", detail: "comments addressed", since: "2026-10-07T10:00:00.000Z", patch: "p-focus" });
     const h = renderRequest(r, ctx, true).value;
-    assert.match(h, /<details class="row you" id="patch-p-focus"/);
+    assert.match(h, /<details class="row you[^"]*" id="patch-p-focus"/);
     assert.match(rowOf(h, "patch-p-focus"), /<b class="you">Post 1 reply, then resubmit D5<\/b>/);
     assert.ok(rowOf(h, "patch-p-focus").includes('data-key="resubmit:focus:j1"'), "its flag, with its buttons, right under its row");
     assert.equal(h.split('data-key="resubmit:focus:j1"').length, 2, "and not also at the top");
