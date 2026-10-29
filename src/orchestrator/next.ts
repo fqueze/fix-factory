@@ -1539,6 +1539,8 @@ class Planner {
         return { id: p.id, effort: pv.effort, value: value(p.id), testOnly: pv.testOnly };
       }),
       deps: inStack.flatMap((p) => this.s.patches[p.id].deps).map((d) => ({ ...d, needs: this.depTarget(d.needs, inStack.map((x) => x.id)) })),
+      // On Phabricator, the stack keeps its order (the landing order puts landable patches at the bottom).
+      ...(inStack.some((p) => this.s.patches[p.id].revision !== undefined) ? { keepPrevious: true } : {}),
     };
     // Ordered again when what it's ordered by changes (an effort, a dep, how the factory ranks them).
     const oh = shortHash([JSON.stringify(orderInput)]).slice(0, 6);
@@ -1550,8 +1552,7 @@ class Planner {
           {
             path: orderFile,
             content:
-              // On Phabricator, the stack keeps its order (the landing order puts landable patches at the bottom).
-              JSON.stringify({ ...orderInput, previous: prev?.order, ...(inStack.some((p) => this.s.patches[p.id].revision !== undefined) ? { keepPrevious: true } : {}) }) + "\n",
+              JSON.stringify({ ...orderInput, previous: prev?.order }) + "\n",
           },
         ],
       }),
