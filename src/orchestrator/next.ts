@@ -1281,6 +1281,12 @@ class Planner {
       }
       return;
     }
+    // Closed otherwise: you reopen it before it lands.
+    named.forEach((pv, i) => {
+      const bug = this.out<BugInfo>(checks[i]!);
+      if (!["RESOLVED", "VERIFIED", "CLOSED"].includes(bug.status)) return;
+      this.raise(`reopen-bug:${bug.id}`, { action: `Reopen bug ${bug.id}`, detail: `“${bug.summary}” is ${bug.status} ${bug.resolution}, and ${pv.title.replace(/,\s*r=.*$/, "")} lands under it`.slice(0, 500), patch: pv.id, item: item.id });
+    });
     const lints: { job: JobRecord; what: string }[] = [];
     let pending = false;
     for (const p of patches) {

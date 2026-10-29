@@ -105,6 +105,11 @@ export function flagControls(r: RequestState, n: NeedsUser, ctx: RenderContext):
       controls = stack ? html`${mozPhabButton(r.id, stack, false)}${dismissButton(r.id, n.key, back)}` : null;
       break;
     }
+    case "reopen-bug": {
+      const bug = n.key.split(":")[1];
+      controls = html`<a class="btn small" href="https://bugzilla.mozilla.org/show_bug.cgi?id=${bug}" target="_blank" rel="noopener">Bug ${bug} ↗</a>${commandButton(r.id, { cmd: "dismiss", key: n.key }, "Reopened", back)}`;
+      break;
+    }
     case "reply":
       // Posted on Phabricator: the next poll shows them, this says you're done.
       controls = commandButton(r.id, { cmd: "dismiss", key: n.key }, "Posted", back);

@@ -1174,7 +1174,7 @@ describe("4. investigate and fix", () => {
 });
 
 describe("a bug an author names", () => {
-  it("may be an inactive one closed as INCOMPLETE: it can be reopened", () => {
+  it("may be an inactive one closed as INCOMPLETE, which you reopen", () => {
     const sc = workList([group("ka", "a/test_a.js", "boom")]);
     sc.incompleteBugs.add(1800000);
     investigating(sc, "i-test-a");
@@ -1184,6 +1184,7 @@ describe("a bug an author names", () => {
     sc.complete(`import:${author}`, { output: imported(sha("1"), "Bug 1800000 - Fix a/test_a.js, r=smaug.", ["a/test_a.js"], 1800000) });
     sc.settle();
     assert.ok(sc.view().byKey.has(`msg:p-test-a:${sha("1")}`), "checked on as usual");
+    assert.equal(sc.state().needsUser.find((n) => n.key === "reopen-bug:1800000")?.action, "Reopen bug 1800000", "for you to reopen");
   });
 
   it("can't be a FIXED one: it goes back to the author, then to you", () => {
