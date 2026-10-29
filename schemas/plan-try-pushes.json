@@ -105,6 +105,10 @@
         ],
         "additionalProperties": false
       }
+    },
+    "answer": {
+      "type": "string",
+      "description": "Only when revising after the user's comment: what you changed and why, in one or two sentences; if you couldn't do what they asked, say so and why."
     }
   },
   "required": [

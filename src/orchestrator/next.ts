@@ -740,6 +740,7 @@ class Planner {
     // A push you revise goes back to the agent that planned it, in its session, with what you wrote; what it returns
     // replaces that push alone. Revisions of the same round go together, each round once.
     const handled = new Set<PushId>();
+    let revised: PushId[] | undefined;
     let plan = this.wantAgent(key, "plan-pushes", "plan-try-pushes", vars, opts);
     for (let round = 0; ; round++) {
       if (!plan) return undefined;
@@ -756,6 +757,8 @@ class Planner {
         const scope = planned[i].scope;
         if (scope || (since && regressions)) this.event({ type: "try-context", request: this.s.id, push: id, ...(since && regressions ? { since, regressions } : {}), ...(scope ? { scope } : {}) });
       });
+      // What it replaces: its row says what you asked and what the planner answered.
+      if (revised) for (const id of these) if (this.s.pushes[id] && !this.s.pushes[id].revises) this.event({ type: "try-context", request: this.s.id, push: id, revises: revised });
       ids.push(...these);
       dry.push(...(d as DryRunResult[]));
       const pending = ids.filter((p) => this.s.pushes[p]?.replan && !handled.has(p));
@@ -764,9 +767,10 @@ class Planner {
       const asked = this.view.jobs.find((j) => j.purpose.key.startsWith(`${key}:revise:`) && j.purpose.pushes?.every((p) => pending.includes(p)))?.purpose.pushes;
       const revise = asked ?? pending;
       for (const p of revise) handled.add(p);
+      revised = revise;
       const prev = plan;
       const asks = revise.map((p) => `push ${p} (\`${this.s.pushes[p].command.join(" ")}\`): “${this.s.pushes[p].declined}”`).join("\n");
-      const message = `The user reviewed what you planned and wants it revised:\n${asks}\n\nDo exactly what they ask.${vars.since} Return only what replaces ${revise.length === 1 ? "that push" : "those pushes"} (the plan's other pushes stand), or an empty list if they want none. End with the JSON report again.`;
+      const message = `The user reviewed what you planned and wants it revised:\n${asks}\n\nDo exactly what they ask.${vars.since} Return only what replaces ${revise.length === 1 ? "that push" : "those pushes"} (the plan's other pushes stand), or an empty list if they want none. Say in \`answer\` what you changed and why; if you can't do what they ask (a push only carries the commits of the branch it's made from), say so and why. End with the JSON report again.`;
       const k = `${key}:revise:${shortHash(revise).slice(0, 8)}`;
       plan = this.want(k, () => ({
         purpose: { key: k, what: "plan-pushes", pushes: revise },

@@ -2016,6 +2016,8 @@ describe("6. verify on try, again", () => {
     sc.complete(dry1, { output: dryOut });
     sc.settle();
     assert.deepEqual(sc.open().sort(), [`approve-push:${keep}`, `approve-push:${v1}`].sort());
+    assert.deepEqual(sc.state().pushes[v1].revises, [drop], "its row says what you asked");
+    assert.match(String(p1.agent?.message), /Say in `answer` what you changed and why/);
 
     // Its replacement revised the same way: a second round, in the same session, the earlier ones standing.
     sc.add({ type: "try-declined", request: ID, push: v1, text: "fewer jobs", replan: true });

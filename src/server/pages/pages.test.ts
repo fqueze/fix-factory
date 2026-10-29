@@ -621,6 +621,14 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.match(h, new RegExp(`<details class="fold pushes" data-fold="finished-pushes"><summary>${n} try push`));
   });
 
+  it("6. verify on try: a revised push says what you asked and what its planner answered", () => {
+    const r = structuredClone(get("r-20261010-xpcshell-cwd"));
+    r.pushes.old = { id: "old", purpose: "p", command: [], declined: "add the other patch", replan: true };
+    r.pushes.A.revises = ["old"];
+    r.jobs["j-rev"] = { job: "j-rev", kind: "agent", name: "plan-try-pushes", cmd: [], cwd: "", pid: 1, pidStartTime: 1, startedAt: "2026-10-16T07:00:00.000Z", endedAt: "2026-10-16T07:01:00.000Z", exitCode: 0, outcome: "It isn't in this branch: it can't be added.", purpose: { key: "plan:x:revise:1", what: "plan-pushes", pushes: ["old"] } };
+    assert.match(rowOf(renderRequest(r, ctx, true).value, "push-A"), /<span class="trust">revised after you said <span class="said">“add the other patch”<\/span> · <b>its planner:<\/b> It isn&#39;t in this branch: it can&#39;t be added\.<\/span>/);
+  });
+
   it("6. verify on try: a running push shows its progress", () => {
     const h = expanded("r-20261005-newtab");
     assert.match(h, /<span class="state">412\/440, 0 failures<\/span>/);

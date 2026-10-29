@@ -237,6 +237,7 @@ export function foldEvents(events: readonly Event[]): RequestState {
         if (e.since !== undefined) p.since = e.since;
         if (e.regressions !== undefined) p.regressions = e.regressions;
         if (e.scope !== undefined) p.scope = e.scope;
+        if (e.revises !== undefined) p.revises = e.revises;
         break;
       }
       case "test-plan":

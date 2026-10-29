@@ -867,12 +867,21 @@ function pushRowOf(r: RequestState, p: PushView, ctx: RenderContext): Html {
                   ? "pushed, waiting for its revision"
                   : "approved, not pushed: see its ⚑ above"
     }`,
+    trust: revisedText(r, p),
     warn: waiting ? dryRunWarnings(r, p) : null,
     // While it waits for you, what it would run; once made, what came of it, its jobs and command folded under it.
     body: html`${sinceSection(r, p, ctx)}${waiting ? null : pushAnalysis(r, p)}${
       waiting ? pushJobs(p) : html`<details class="fold" data-fold="pushjobs-${p.id}"><summary>Its jobs, commits and command</summary>${pushJobs(p)}</details>`
     }${revisable(r, p) ? reviseBox(r, p) : null}`,
   });
+}
+
+// A push planned again after your comment: what you said, and what its planner answered (its revision run's answer).
+function revisedText(r: RequestState, p: PushView): Html | null {
+  if (!p.revises?.length) return null;
+  const said = p.revises.map((id) => r.pushes[id]?.declined).filter((x) => x !== undefined);
+  const job = Object.values(r.jobs).findLast((j) => j.purpose?.what === "plan-pushes" && j.purpose.pushes?.join() === p.revises!.join());
+  return html`revised after you said <span class="said">“${said.join("”, “")}”</span>${job?.outcome ? html` · <b>its planner:</b> ${job.outcome}` : null}`;
 }
 
 // What it's judged by: what changed in the stack since its previous push (each changed patch's interdiff and what its
