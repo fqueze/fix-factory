@@ -174,13 +174,11 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
       return undefined; // not started writing yet
     }
     const transcript = transcriptOf(job) !== undefined;
-    const api = `http://${req.headers.host ?? `localhost:${opts.config.port}`}${jobUrl(request, job.job, "profile")}`;
     return {
       prompt: existsSync(join(dir, "prompt.md")) ? readFileSync(join(dir, "prompt.md"), "utf8") : undefined,
       turns: conversationOf(log),
       summary: parseStreamJson(log),
       transcript,
-      profileUrl: transcript && loadProfiler() ? `${profilerOrigin(req)}/from-url/${encodeURIComponent(api)}?thread=0` : undefined,
     };
   }
 

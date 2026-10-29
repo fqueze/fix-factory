@@ -309,7 +309,7 @@ describe("agent activity, transcript and profile", () => {
     rmSync(home, { recursive: true, force: true });
   });
 
-  it("shows an agent's run as a conversation, from its prompt, with links to its transcript and profile", async () => {
+  it("shows an agent's run as a conversation, from its prompt, with a link to its transcript", async () => {
     const h = await (await fetch(`${bases[0]}${R}/j-inv-spinner/activity`)).text();
     assert.doesNotMatch(h, /running for|tool calls ·/, "its line says it already");
     assert.match(h, /<div class="convo"><div class="turn user prompt" data-expand title="Click to expand"><div class="md"><p>Fix browser_tabSpinner\.js\.<\/p><\/div><\/div><div class="turn agent"><div class="md"><p>I&#39;ll start by reading the test\.<\/p><\/div><\/div>/);
@@ -317,9 +317,7 @@ describe("agent activity, transcript and profile", () => {
     assert.match(h, /<details class="call subagent" data-more="call-t5" title="in a subagent"><summary><b>Glob<\/b>/);
     assert.match(h, /<div class="turn agent"><div class="md"><p>The spinner waits on a paint that never comes in headless mode\.<\/p><\/div><\/div><div class="sub">working <span data-since/);
     assert.ok(h.includes(`href="${R}/j-inv-spinner/transcript"`));
-    const api = encodeURIComponent(`${bases[0]}${R}/j-inv-spinner/profile`);
-    assert.ok(h.includes(`href="http://localhost:4242/from-url/${api}?thread=0"`));
-    assert.doesNotMatch(await (await fetch(`${bases[1]}${R}/j-inv-spinner/activity`)).text(), /Profile/, "no claude-profiler, no link");
+    assert.doesNotMatch(h, />Profile</, "its cost, on its line, opens its profile");
     assert.match(await (await fetch(`${bases[0]}${R}/j-recover/activity`)).text(), /No output yet/);
     assert.equal((await fetch(`${bases[0]}${R}/j-nope/activity`)).status, 404);
   });

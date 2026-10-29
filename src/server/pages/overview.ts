@@ -1,6 +1,6 @@
 import type { RequestState } from "../../types.ts";
 import { html, type Html } from "../html.ts";
-import { commandFields, formatDate, isDraft, isDropped, plural, profileUrl, pushResultClass, pushStatus, pushUrl, requestCost, requestName, requestUrl, routeOutcome, sectionOf, shortName, type RenderContext } from "./common.ts";
+import { commandFields, formatCost, formatDate, isDraft, isDropped, plural, profileUrl, pushResultClass, pushStatus, pushUrl, requestCost, requestName, requestUrl, routeOutcome, sectionOf, shortName, type RenderContext } from "./common.ts";
 import { progressLine, requestProgress, sumProgress } from "./progress.ts";
 import { renderRequest } from "./request.ts";
 
@@ -79,7 +79,7 @@ export function renderMain(requests: RequestState[], ctx: RenderContext): Html {
   <div id="section-finished">${finished.filter((r) => r.kind !== "unrouted").map((r) => renderRequest(r, ctx, ctx.open?.includes(r.id)))}</div>
   ${finished.some((r) => r.kind === "unrouted") ? html`<div class="simple">${finished.filter((r) => r.kind === "unrouted").map(
     (r) =>
-      html`<div class="row" data-request="${r.id}" data-section="finished"><span class="grow"><b>${requestName(r)}</b> <span class="sub">· ${routeOutcome(r)}</span></span><a class="btn small" href="${profileUrl(ctx, r.id)}" target="_blank" rel="noopener">Profile</a></div>`,
+      html`<div class="row" data-request="${r.id}" data-section="finished"><span class="grow"><b>${requestName(r)}</b> <span class="sub">· ${routeOutcome(r)}</span></span>${requestCost(r) > 0 ? html`<a class="cost" href="${profileUrl(ctx, r.id)}" target="_blank" rel="noopener" title="What its agents cost: its profile">${formatCost(requestCost(r))}</a>` : null}</div>`,
   )}</div>` : null}` : null}`;
 }
 

@@ -318,7 +318,7 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.ok(rowOf(c, "item-i-spinner").includes(cmd({ cmd: "continue", request: "r-20261013-tab-failures", item: "i-spinner" })));
     assert.ok(!c.includes(cmd({ cmd: "continue", request: "r-20261013-tab-failures", item: "i-mute" })), "no author session to talk to");
     const jobs = h.slice(h.indexOf('data-fold="jobs"'));
-    assert.match(jobs, /<span class="res ok">answering you<\/span> <span class="sub">Opus · 4 min · \$0\.88<\/span>/);
+    assert.match(jobs, /<span class="res ok">answering you<\/span> <span class="sub">Opus · 4 min · <a class="cost" href="http:\/\/localhost:4242\/from-url\/[^"]*%2Fprofile\?thread=0" target="_blank" rel="noopener" title="Its profile">\$0\.88<\/a><\/span>/);
     assert.ok(!jobs.includes(cmd({ cmd: "stop", job: "j-recover", request: "r-20261013-tab-failures" })), "finished jobs can't be stopped");
   });
   it("every ⚑ has a way out: accept after the review limit, retry a failed or stopped job, continue with its author, dismiss the rest", () => {
