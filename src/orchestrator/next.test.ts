@@ -2634,6 +2634,8 @@ describe("9. review comments", () => {
     assert.match(String(reviewPlan.agent?.vars?.comments ?? ""), /It answers the review comments in .*: check each one is really dealt with/);
     assert.deepEqual(JSON.parse(reviewPlan.files![0].content).map((c: { id: number }) => c.id), [7]);
     sc.complete(`review:p-test-a:${job}`, { report: ok });
+    // A verification push meanwhile puts it on try: its answer still goes to Phabricator.
+    sc.add({ type: "item-state", request: ID, item: "i-test-a", state: "in try" });
     assert.deepEqual(sc.settle(), [`rewrite-review:root:${job}:v2`]);
     // Its commit lost its Differential Revision line: the rewrite gives every submitted patch its own back.
     const rw = sc.plan(`rewrite-review:root:${job}:v2`);

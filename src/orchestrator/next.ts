@@ -2499,8 +2499,14 @@ class Planner {
     // submitted, any change its author made goes to Phabricator: an answer to review comments, or what you told it,
     // or what it made of a try push it asked for.
     const answer = this.authorJobs(item.id).findLast((j) => j.purpose.reason !== undefined && CHANGES_AFTER_SUBMIT.includes(j.purpose.reason) || j.purpose.reason === "initial" || j.purpose.reason === "start" || j.name === "address-review");
-    if (!author || !answer || answer.purpose.reason === "initial" || answer.purpose.reason === "start" || item.state !== "reviewed") return;
-    if (answer.name !== "address-review" && !(p.submittedAt && answer.startedAt > Date.parse(p.submittedAt))) return;
+    // Reviewed, or put in the stack or on try since (a verification push while it was being answered).
+    if (!author || !answer || !["reviewed", "in stack", "in try"].includes(item.state)) return;
+    // Nothing to send: a group still "in stack" or "in try" from before submission just waits for review.
+    const nothing = answer.purpose.reason === "initial" || answer.purpose.reason === "start" || (answer.name !== "address-review" && !(p.submittedAt && answer.startedAt > Date.parse(p.submittedAt)));
+    if (nothing) {
+      if (item.state !== "reviewed") this.setItem(item.id, "waiting for review");
+      return;
+    }
     const st = Object.values(this.s.stacks).find((x) => x.order.includes(p.id));
     if (!st) return;
     const previous = this.authorJobs(item.id).filter((j) => succeeded(j) && j.startedAt < answer.startedAt && commitsOf(j.name, this.rep(j)).length > 0).at(-1);
@@ -2564,7 +2570,8 @@ class Planner {
     const own = (i: ItemView) => (this.authorReport(i.id)?.commits ?? []).map((_, n) => this.s.patches[patchId(i.id, n)]).filter((p) => p !== undefined);
     for (const st of this.liveStacks()) {
       const items = Object.values(this.s.items).filter((i) => this.stackFolder(i) === st.folder);
-      for (const i of items) if (i.state === "in stack" && own(i).length && own(i).every((p) => p.revision !== undefined && st.order.includes(p.id))) this.setItem(i.id, "waiting for review");
+      // Before its first poll (afterAddress takes over from then on).
+      for (const i of items) if (i.state === "in stack" && own(i).length && own(i).every((p) => p.revision !== undefined && p.review === undefined && st.order.includes(p.id))) this.setItem(i.id, "waiting for review");
       if (st.order.every((pid) => this.s.patches[pid].revision !== undefined)) for (const n of this.s.needsUser) if (n.key.startsWith(`submit-new:${st.id}:`)) this.clear(n.key);
       const fresh = items.filter((i) => i.state === "reviewed").flatMap(own).filter((p) => !stacked.has(p.id) && p.revision === undefined);
       if (!fresh.length) continue;
