@@ -434,9 +434,32 @@ function failure(r: RequestState, i: ItemView, prefix: string | null = "The fail
   }`;
 }
 
-// On a patch's row, the failure and its cause matter less than its test plan: folded.
+// On a patch's row, folded: the failure in one sentence, then its cause.
 function whyFold(r: RequestState, i: ItemView): Html {
-  return html`<details class="fold" data-fold="why-${i.id}"><summary>The failure and its cause</summary>${failure(r, i, null)}${investigationHtml(i)}</details>`;
+  return html`<details class="fold" data-fold="why-${i.id}"><summary>The failure and its cause</summary>${failureLine(r, i)}${investigationHtml(i)}</details>`;
+}
+
+// The harness's words for a failure it retried in a fresh browser, which say nothing on their own.
+const RETRIED = /^Test had failures, will retry$/;
+
+// “Failed, then passed when retried in a fresh browser, in debug and opt plain-standalone on Linux and Windows (4
+// configs) · 3 failures/week · rates on tests.firefox.dev ↗”, its configs in the title.
+function failureLine(r: RequestState, i: ItemView): Html {
+  const g = i.group;
+  const what = RETRIED.test(g.message) ? "Failed, then passed when retried in a fresh browser" : g.message;
+  const parsed = g.configs.map(parseConfig);
+  const known = parsed.filter((p) => p !== undefined);
+  const list = (xs: string[]) => {
+    const u = [...new Set(xs)];
+    return u.length > 1 ? `${u.slice(0, -1).join(", ")} and ${u.at(-1)}` : u.join("");
+  };
+  const where = known.length
+    ? `in ${list(known.map((p) => p.build))} ${list(known.map((p) => p.suite))} on ${list(known.map((p) => p.os))}${known.length < g.configs.length ? " and elsewhere" : ""}`
+    : g.configs.length ? `in ${g.configs.join(", ")}` : "";
+  const configs = g.configs.length ? html` <span title="${g.configs.join("\n")}">(${plural(g.configs.length, "config")})</span>` : null;
+  const rate = g.ratePerWeek === undefined ? null : html` · ${g.ratePerWeek} failures/week`;
+  const dashboard = /\.(toml|ini)$/.test(g.tests[0]) ? null : html` · <a href="https://tests.firefox.dev/test.html?test=${encodeURIComponent(g.tests[0])}" target="_blank" rel="noopener">rates on tests.firefox.dev ↗</a>`;
+  return html`<div class="failure">${what}${where ? ` ${where}` : null}${configs}${rate}${dashboard}</div>`;
 }
 
 const OSES: [RegExp, string][] = [[/^linux/, "Linux"], [/^macosx/, "macOS"], [/^windows/, "Windows"], [/^android/, "Android"]];
@@ -508,7 +531,7 @@ function patchRow(r: RequestState, p: PatchView, ctx: RenderContext): Html {
       return group || own.length ? html`${group}${own.map((n) => renderAction(r, n, ctx))}` : undefined;
     })(),
     under: bugBoxShown ? bugDraftBox(r, p, back) : null,
-    body: html`${testPlanSection(r, p, back)}${yourComments(r, p)}${item ? whyFold(r, item) : null}${p.deps.map((d) => depLine(r, d))}${controls && !sentence?.ask ? html`<div class="jobctl">${controls}</div>` : null}${reviewBox(r, p, p.interdiffFile === undefined ? undefined : ctx.interdiff?.(p))}${
+    body: html`${item ? whyFold(r, item) : null}${testPlanSection(r, p, back)}${yourComments(r, p)}${p.deps.map((d) => depLine(r, d))}${controls && !sentence?.ask ? html`<div class="jobctl">${controls}</div>` : null}${reviewBox(r, p, p.interdiffFile === undefined ? undefined : ctx.interdiff?.(p))}${
       item ? html`<h4 class="part">What the factory did</h4>${itemJobs(r, item, ctx)}${talkBox(r, item, ctx, p)}` : null
     }`,
   });

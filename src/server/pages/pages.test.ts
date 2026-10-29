@@ -592,9 +592,9 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.match(renderRequest(r, ctx, true).value, /<span class="bug none" title="Goes under the meta bug">meta bug<\/span> Save the prefs file/);
     assert.match(h, /⛔ hard: needs “Make nsLocalFile::CopyDirectoryTo/);
     assert.match(h, /🔗 soft: needs a newer sqlite on the try builders \(the vacuum test is slow without it\)/);
-    assert.match(rowOf(h, "patch-p-prefs"), /<summary>The failure and its cause<\/summary><div class="failure">Test wrote into its own directory<\/div><div class="sub">linux64\/debug, windows11-64\/opt<\/div><div class="sub">2 configs · 31 failures\/week · <a href="https:\/\/tests\.firefox\.dev\/test\.html\?test=storage%2Ftest%2Funit%2Ftest_libPrefs\.js"[^>]*>rates on tests\.firefox\.dev ↗<\/a><\/div>/);
+    assert.match(rowOf(h, "patch-p-prefs"), /<summary>The failure and its cause<\/summary><div class="failure">Test wrote into its own directory in linux64\/debug, windows11-64\/opt <span title="linux64\/debug\nwindows11-64\/opt">\(2 configs\)<\/span> · 31 failures\/week · <a href="https:\/\/tests\.firefox\.dev\/test\.html\?test=storage%2Ftest%2Funit%2Ftest_libPrefs\.js"[^>]*>rates on tests\.firefox\.dev ↗<\/a><\/div>/);
     assert.match(rowOf(h, "patch-p-prefs"), /<span class="onhover"><span>review effort 1\/5<\/span>/);
-    assert.match(h, /<div class="sub">\d+ configs? · 40 failures\/week · /);
+    assert.match(h, /\(\d+ configs?\)<\/span> · 40 failures\/week · /);
     assert.doesNotMatch(h, /Allow one try push/);
     assert.match(h, /href="\/requests\/r-20261010-xpcshell-cwd\/stacks\/storage-unit\/review"/);
   });
@@ -931,6 +931,13 @@ describe("a burndown with closed groups, running agents and a dropped patch", ()
     assert.match(h, /<div class="note"><b>Superseded by r-x\.<\/b>/);
   });
 
+  it("says a retried failure and its configs in one sentence, on a patch's row", () => {
+    const r = structuredClone(get("r-20261013-tab-failures"));
+    r.items["i-close"].group.message = "Test had failures, will retry";
+    r.items["i-close"].group.configs = ["test-linux2404-64/debug-mochitest-plain-standalone", "test-windows11-64-25h2/opt-mochitest-plain-standalone"];
+    const row = rowOf(renderRequest(r, ctx, true).value, "patch-p-close");
+    assert.match(row, /<div class="failure">Failed, then passed when retried in a fresh browser in debug and opt plain-standalone on Linux and Windows <span title="[^"]+">\(2 configs\)<\/span>/);
+  });
   it("lets you tell the author of a ready patch what to change", () => {
     const r = structuredClone(get("r-20261013-tab-failures"));
     r.jobs["j-inv-close"] = { ...r.jobs["j-inv-spinner"], job: "j-inv-close", item: "i-close", endedAt: "2026-10-15T08:00:00.000Z", exitCode: 0, sessionId: "s-close" };
@@ -1001,7 +1008,7 @@ describe("a burndown with closed groups, running agents and a dropped patch", ()
     const h = expanded("r-20261013-tab-failures");
     const patch = rowOf(h, "patch-p-close");
     assert.match(patch, /review effort \d\/5/);
-    assert.match(patch, /<div class="sub">\d+ configs? · [\d.]+ failures\/week · /);
+    assert.match(patch, /\(\d+ configs?\)<\/span> · [\d.]+ failures\/week · /);
     assert.match(patch, /<summary>The failure and its cause<\/summary>[^]*<h4 class="part">What the factory did<\/h4>/, "in that order");
     const r = structuredClone(get("r-20261013-tab-failures"));
     delete r.patches["p-close"].effort;
@@ -1262,11 +1269,11 @@ describe("hand-off", () => {
 });
 
 describe("test plan", () => {
-  it("comes first, formatted, to copy, set on the revision with a click, or revise", () => {
+  it("comes after the failure, formatted, to copy, set on the revision with a click, or revise", () => {
     const r = structuredClone(get("r-20261005-newtab"));
     r.patches["p-panel"].testPlan = "- Widened the race in `foo()`: 6/6, 0/20 with the fix.";
     let row = rowOf(renderRequest(r, ctx, true).value, "patch-p-panel");
-    assert.ok(row.indexOf('<h4 class="part">Test plan</h4>') < row.indexOf("The failure and its cause"), "before the failure");
+    assert.ok(row.indexOf('<h4 class="part">Test plan</h4>') > row.indexOf("The failure and its cause"), "after the failure");
     assert.match(row, /<div class="testplan"><div class="md"><ul><li>Widened the race in <code>foo\(\)<\/code>: 6\/6, 0\/20 with the fix\.<\/li><\/ul><\/div><form class="cmd revise joined"/);
     assert.match(row, /<textarea hidden id="test-plan-p-panel">- Widened the race in `foo\(\)`: 6\/6, 0\/20 with the fix\.<\/textarea><button type="button" class="btn small" data-copy="test-plan-p-panel">Copy<\/button>/);
     assert.ok(row.includes(cmd({ cmd: "set-test-plan", request: r.id, patch: "p-panel", text: r.patches["p-panel"].testPlan })));
