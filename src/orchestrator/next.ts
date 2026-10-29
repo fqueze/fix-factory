@@ -114,6 +114,7 @@ const TEST_PLAN_STATES = new Set<ItemState>(["reviewed", "in stack", "in try", "
 const FIXING: ItemState[] = ["fix verified locally", "in critical review", "review findings", "reviewed"];
 // The cherry-pick a conflict left in progress, if there's one: a rewrite may have left none.
 const ABORT_CHERRY_PICK = 'test ! -e "$(git rev-parse --git-path CHERRY_PICK_HEAD)" || git cherry-pick --abort';
+const PRE_SUBMIT: ItemState[] = ["in stack", "in try"];
 const STACKED: ItemState[] = ["in stack", "in try", "waiting for review", "addressing review comments", "fixed", "landed"];
 export const SETTLED: ItemState[] = ["reviewed", "in stack", "in try", "waiting for review", "addressing review comments", "fixed", "landed", "left as-is", "handed back", "taken over", "waiting for a try repro"];
 const WITH_PATCHES: ItemState[] = ["reviewed", "in stack", "in try", "waiting for review", "addressing review comments", "fixed", "landed"];
@@ -395,8 +396,14 @@ class Planner {
   setItem(item: ItemId, state: ItemState, detail?: string): void {
     const current = this.itemStates.get(item) ?? this.s.items[item]?.state;
     if (current === state) return;
+    // Once on Phabricator, a group doesn't go back to before its submission.
+    if (PRE_SUBMIT.includes(state) && this.submittedItem(item)) return;
     this.itemStates.set(item, state);
     this.event(this.ev("item-state", { item, state, ...(detail === undefined ? {} : { detail }) }));
+  }
+
+  submittedItem(item: ItemId): boolean {
+    return Object.values(this.s.patches).some((p) => p.item === item && p.revision !== undefined);
   }
 
   raise(key: string, fields: Omit<NeedsUser, "key" | "since">): void {
@@ -756,7 +763,8 @@ class Planner {
       if (!push.rev && !push.declined && dry && this.view.done.has(`approve-push:${push.id}`)) {
         const { args = [], cwd = this.config.firefoxRepo, stack } = dry.purpose;
         const commits = this.out<DryRunResult>(dry).commits;
-        const items = stack ? (this.stackInfos.get(stack)?.patches.map((x) => x.item) ?? []) : [];
+        // A submitted group stays where its review is: the push is the stack's, not a step back for it.
+        const items = stack ? (this.stackInfos.get(stack)?.patches.map((x) => x.item) ?? []).filter((i) => !this.submittedItem(i)) : [];
         const pushed = this.want(`push:${push.id}`, () =>
           this.cli("push", "try.ts", ["push", "--cwd", cwd, "--expect-commits", commits.join(","), "--", ...args], {
             cwd,
@@ -2499,14 +2507,8 @@ class Planner {
     // submitted, any change its author made goes to Phabricator: an answer to review comments, or what you told it,
     // or what it made of a try push it asked for.
     const answer = this.authorJobs(item.id).findLast((j) => j.purpose.reason !== undefined && CHANGES_AFTER_SUBMIT.includes(j.purpose.reason) || j.purpose.reason === "initial" || j.purpose.reason === "start" || j.name === "address-review");
-    // Reviewed, or put in the stack or on try since (a verification push while it was being answered).
-    if (!author || !answer || !["reviewed", "in stack", "in try"].includes(item.state)) return;
-    // Nothing to send: a group still "in stack" or "in try" from before submission just waits for review.
-    const nothing = answer.purpose.reason === "initial" || answer.purpose.reason === "start" || (answer.name !== "address-review" && !(p.submittedAt && answer.startedAt > Date.parse(p.submittedAt)));
-    if (nothing) {
-      if (item.state !== "reviewed") this.setItem(item.id, "waiting for review");
-      return;
-    }
+    if (!author || !answer || answer.purpose.reason === "initial" || answer.purpose.reason === "start" || item.state !== "reviewed") return;
+    if (answer.name !== "address-review" && !(p.submittedAt && answer.startedAt > Date.parse(p.submittedAt))) return;
     const st = Object.values(this.s.stacks).find((x) => x.order.includes(p.id));
     if (!st) return;
     const previous = this.authorJobs(item.id).filter((j) => succeeded(j) && j.startedAt < answer.startedAt && commitsOf(j.name, this.rep(j)).length > 0).at(-1);
@@ -2572,8 +2574,7 @@ class Planner {
     const own = (i: ItemView) => (this.authorReport(i.id)?.commits ?? []).map((_, n) => this.s.patches[patchId(i.id, n)]).filter((p) => p !== undefined);
     for (const st of this.liveStacks()) {
       const items = Object.values(this.s.items).filter((i) => this.stackFolder(i) === st.folder);
-      // Before its first poll (afterAddress takes over from then on).
-      for (const i of items) if (i.state === "in stack" && own(i).length && own(i).every((p) => p.revision !== undefined && p.review === undefined && st.order.includes(p.id))) this.setItem(i.id, "waiting for review");
+      for (const i of items) if (i.state === "in stack" && own(i).length && own(i).every((p) => p.revision !== undefined && st.order.includes(p.id))) this.setItem(i.id, "waiting for review");
       if (st.order.every((pid) => this.s.patches[pid].revision !== undefined)) for (const n of this.s.needsUser) if (n.key.startsWith(`submit-new:${st.id}:`)) this.clear(n.key);
       const fresh = items.filter((i) => i.state === "reviewed").flatMap(own).filter((p) => !stacked.has(p.id) && p.revision === undefined);
       if (!fresh.length) continue;

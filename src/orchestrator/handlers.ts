@@ -252,7 +252,8 @@ export function handleFinished(input: HandlerInput): HandlerResult {
       files.push({ path: dataPath(config, s.id, `summary-${id}.md`), content: o.markdown });
       for (const pid of st.order) {
         const item = s.patches[pid]?.item;
-        if (item && s.items[item]?.state === "reviewed") ev("item-state", { item, state: "in stack" });
+        // Not a submitted group's reviewed answer, which goes to Phabricator.
+        if (item && s.items[item]?.state === "reviewed" && !Object.values(s.patches).some((p) => p.item === item && p.revision !== undefined)) ev("item-state", { item, state: "in stack" });
       }
       break;
     }

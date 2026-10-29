@@ -2432,6 +2432,8 @@ describe("9. a try push of a submitted stack", () => {
     assert.ok(sc.open().includes(`approve-push:${push}`), "not withdrawn for being past verification");
     assert.equal(sc.state().step, "review comments");
     sc.add({ type: "user-done", request: ID, key: `approve-push:${push}` });
+    assert.ok(sc.settle().includes(`push:${push}`));
+    assert.deepEqual(Object.values(sc.state().items).map((i) => i.state), ["waiting for review", "waiting for review"], "its groups stay where their review is");
     sc.add({ type: "try-pushed", request: ID, push, rev: "fed", url: "u" });
     sc.add({ type: "try-finished", request: ID, push, result: "green", summary: "green" });
     sc.settle();
@@ -2634,8 +2636,6 @@ describe("9. review comments", () => {
     assert.match(String(reviewPlan.agent?.vars?.comments ?? ""), /It answers the review comments in .*: check each one is really dealt with/);
     assert.deepEqual(JSON.parse(reviewPlan.files![0].content).map((c: { id: number }) => c.id), [7]);
     sc.complete(`review:p-test-a:${job}`, { report: ok });
-    // A verification push meanwhile puts it on try: its answer still goes to Phabricator.
-    sc.add({ type: "item-state", request: ID, item: "i-test-a", state: "in try" });
     // Copying the moz-phab command since doesn't change what the reviewer saw.
     sc.now += 60_000;
     sc.add({ type: "submit-copied", request: ID, stack: "root" });
