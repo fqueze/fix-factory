@@ -592,9 +592,9 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.match(renderRequest(r, ctx, true).value, /<span class="bug none" title="Goes under the meta bug">meta bug<\/span> Save the prefs file/);
     assert.match(h, /⛔ hard: needs “Make nsLocalFile::CopyDirectoryTo/);
     assert.match(h, /🔗 soft: needs a newer sqlite on the try builders \(the vacuum test is slow without it\)/);
-    assert.match(rowOf(h, "patch-p-prefs"), /<summary>The failure and its cause<\/summary><div class="failure">Test wrote into its own directory in linux64\/debug, windows11-64\/opt <span title="linux64\/debug\nwindows11-64\/opt">\(2 configs\)<\/span> · 31 failures\/week · <a href="https:\/\/tests\.firefox\.dev\/test\.html\?test=storage%2Ftest%2Funit%2Ftest_libPrefs\.js"[^>]*>rates on tests\.firefox\.dev ↗<\/a><\/div>/);
+    assert.match(rowOf(h, "patch-p-prefs"), /<summary>The failure and its cause<\/summary><div class="failure">Test wrote into its own directory · 31 failures\/week · <a href="https:\/\/tests\.firefox\.dev\/test\.html\?test=storage%2Ftest%2Funit%2Ftest_libPrefs\.js"[^>]*>rates on tests\.firefox\.dev ↗<\/a><\/div><div class="sub">linux64\/debug, windows11-64\/opt<\/div>/);
     assert.match(rowOf(h, "patch-p-prefs"), /<span class="onhover"><span>review effort 1\/5<\/span>/);
-    assert.match(h, /\(\d+ configs?\)<\/span> · 40 failures\/week · /);
+    assert.match(h, /<div class="failure">[^<]* · 40 failures\/week · /);
     assert.doesNotMatch(h, /Allow one try push/);
     assert.match(h, /href="\/requests\/r-20261010-xpcshell-cwd\/stacks\/storage-unit\/review"/);
   });
@@ -931,12 +931,12 @@ describe("a burndown with closed groups, running agents and a dropped patch", ()
     assert.match(h, /<div class="note"><b>Superseded by r-x\.<\/b>/);
   });
 
-  it("says a retried failure and its configs in one sentence, on a patch's row", () => {
+  it("says a retried failure in words, then where in a table, on a patch's row", () => {
     const r = structuredClone(get("r-20261013-tab-failures"));
     r.items["i-close"].group.message = "Test had failures, will retry";
     r.items["i-close"].group.configs = ["test-linux2404-64/debug-mochitest-plain-standalone", "test-windows11-64-25h2/opt-mochitest-plain-standalone"];
     const row = rowOf(renderRequest(r, ctx, true).value, "patch-p-close");
-    assert.match(row, /<div class="failure">Failed, then passed when retried in a fresh browser in debug and opt plain-standalone on Linux and Windows <span title="[^"]+">\(2 configs\)<\/span>/);
+    assert.match(row, /<div class="failure">Failed, then passed when retried in a fresh browser[^<]*<a [^>]*>[^<]*<\/a><\/div><table class="ptable"><thead><tr><th>Job<\/th><th>Linux<\/th><th>Windows<\/th>/);
   });
   it("lets you tell the author of a ready patch what to change", () => {
     const r = structuredClone(get("r-20261013-tab-failures"));
@@ -1008,7 +1008,7 @@ describe("a burndown with closed groups, running agents and a dropped patch", ()
     const h = expanded("r-20261013-tab-failures");
     const patch = rowOf(h, "patch-p-close");
     assert.match(patch, /review effort \d\/5/);
-    assert.match(patch, /\(\d+ configs?\)<\/span> · [\d.]+ failures\/week · /);
+    assert.match(patch, /<div class="failure">[^<]* · [\d.]+ failures\/week · /);
     assert.match(patch, /<summary>The failure and its cause<\/summary>[^]*<h4 class="part">What the factory did<\/h4>/, "in that order");
     const r = structuredClone(get("r-20261013-tab-failures"));
     delete r.patches["p-close"].effort;

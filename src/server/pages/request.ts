@@ -442,24 +442,14 @@ function whyFold(r: RequestState, i: ItemView): Html {
 // The harness's words for a failure it retried in a fresh browser, which say nothing on their own.
 const RETRIED = /^Test had failures, will retry$/;
 
-// “Failed, then passed when retried in a fresh browser, in debug and opt plain-standalone on Linux and Windows (4
-// configs) · 3 failures/week · rates on tests.firefox.dev ↗”, its configs in the title.
+// “Failed, then passed when retried in a fresh browser · 3 failures/week · rates on tests.firefox.dev ↗”, then where,
+// laid out like tests.firefox.dev's pass/fail table.
 function failureLine(r: RequestState, i: ItemView): Html {
   const g = i.group;
   const what = RETRIED.test(g.message) ? "Failed, then passed when retried in a fresh browser" : g.message;
-  const parsed = g.configs.map(parseConfig);
-  const known = parsed.filter((p) => p !== undefined);
-  const list = (xs: string[]) => {
-    const u = [...new Set(xs)];
-    return u.length > 1 ? `${u.slice(0, -1).join(", ")} and ${u.at(-1)}` : u.join("");
-  };
-  const where = known.length
-    ? `in ${list(known.map((p) => p.build))} ${list(known.map((p) => p.suite))} on ${list(known.map((p) => p.os))}${known.length < g.configs.length ? " and elsewhere" : ""}`
-    : g.configs.length ? `in ${g.configs.join(", ")}` : "";
-  const configs = g.configs.length ? html` <span title="${g.configs.join("\n")}">(${plural(g.configs.length, "config")})</span>` : null;
   const rate = g.ratePerWeek === undefined ? null : html` · ${g.ratePerWeek} failures/week`;
   const dashboard = /\.(toml|ini)$/.test(g.tests[0]) ? null : html` · <a href="https://tests.firefox.dev/test.html?test=${encodeURIComponent(g.tests[0])}" target="_blank" rel="noopener">rates on tests.firefox.dev ↗</a>`;
-  return html`<div class="failure">${what}${where ? ` ${where}` : null}${configs}${rate}${dashboard}</div>`;
+  return html`<div class="failure">${what}${rate}${dashboard}</div>${g.configs.length ? configTable(g.configs) : null}`;
 }
 
 const OSES: [RegExp, string][] = [[/^linux/, "Linux"], [/^macosx/, "macOS"], [/^windows/, "Windows"], [/^android/, "Android"]];
