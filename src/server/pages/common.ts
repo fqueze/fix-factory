@@ -71,8 +71,9 @@ export function requestUrl(id: string): string {
   return `/requests/${encodeURIComponent(id)}`;
 }
 
-export function profileUrl(ctx: RenderContext, id: string): string {
-  const url = `${ctx.baseUrl}/api/requests/${encodeURIComponent(id)}/profile`;
+// The request's profile, or only one group's track.
+export function profileUrl(ctx: RenderContext, id: string, item?: string): string {
+  const url = `${ctx.baseUrl}/api/requests/${encodeURIComponent(id)}/profile${item === undefined ? "" : `?item=${encodeURIComponent(item)}`}`;
   return `${ctx.profilerOrigin}/from-url/${encodeURIComponent(url)}?thread=0`;
 }
 

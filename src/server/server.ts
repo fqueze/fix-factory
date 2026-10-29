@@ -325,7 +325,8 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
     if ((m = path.match(/^\/api\/requests\/([^/]+)\/profile$/))) {
       const id = decodeURIComponent(m[1]);
       const r = getRequest(id);
-      const body = Buffer.from(JSON.stringify(buildRequestProfile(r, opts.state.getEvents?.(id) ?? [], now())), "utf8");
+      const item = url.searchParams.get("item") ?? undefined;
+      const body = Buffer.from(JSON.stringify(buildRequestProfile(r, opts.state.getEvents?.(id) ?? [], now(), item)), "utf8");
       res.writeHead(200, {
         "Content-Type": "application/json; charset=utf-8",
         "Content-Length": body.length,

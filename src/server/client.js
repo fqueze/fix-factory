@@ -356,8 +356,16 @@
     }, cls === "error" ? 6000 : 1500);
   }
 
-  // An open ⋯ menu closes on a click anywhere else.
+  // An open ⋯ menu closes on a click anywhere else. In a request's summary line, opening it mustn't fold the request.
   document.addEventListener("click", function (event) {
+    var own = event.target.closest && event.target.closest("details.menu > summary");
+    if (own) {
+      event.preventDefault();
+      own.parentElement.open = !own.parentElement.open;
+    }
+    if (event.target.closest && event.target.closest("details.menu > .menu-items") && !event.target.closest("button, a, input")) {
+      event.preventDefault();
+    }
     document.querySelectorAll("details.menu[open]").forEach(function (menu) {
       if (!menu.contains(event.target)) menu.open = false;
     });

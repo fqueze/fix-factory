@@ -80,6 +80,15 @@ describe("request profile", () => {
     assert.ok(p.threads.some((t) => t.name === "browser/components/migration/tests/unit (31 tests)"));
   });
 
+  it("has only one group's track when asked for it", () => {
+    const state = source.getRequest(ID)!;
+    const item = Object.values(state.items).find((i) => i.jobs.length)!;
+    const p = buildRequestProfile(state, source.getEvents(ID), NOW, item.id) as Profile;
+    assert.equal(p.threads.length, 1);
+    assert.equal(p.threads[0].name, item.group.tests.length === 1 ? item.group.tests[0] : `${item.folder} (${item.group.tests.length} tests)`);
+    assert.equal(p.threads[0].markers.length >= item.jobs.length, true);
+  });
+
   it("has an interval marker per job, on its item's track, with kind, model, exit code, duration and cost", () => {
     const p = build();
     const copy = p.threads.find((t) => t.name === "storage/test/unit/test_backup.js")!;

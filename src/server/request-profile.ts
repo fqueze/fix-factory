@@ -80,7 +80,8 @@ interface Track {
 }
 
 // `now` (ms) closes the intervals that haven't ended yet.
-export function buildRequestProfile(state: RequestState, events: Event[], now: number): object {
+// only: one group's track and nothing else.
+export function buildRequestProfile(state: RequestState, events: Event[], now: number, only?: ItemId): object {
   const startTime = Date.parse(state.createdAt);
   const strings: string[] = [];
   const stringIndex = new Map<string, number>();
@@ -109,6 +110,7 @@ export function buildRequestProfile(state: RequestState, events: Event[], now: n
   const trackFor = (item: ItemId | undefined): Track => (item !== undefined && itemTracks.get(item)) || requestTrack;
 
   const add = (track: Track, name: string, start: number, end: number, category: number, data: Record<string, unknown>) => {
+    if (only !== undefined && track !== itemTracks.get(only)) return;
     const s = start - startTime;
     const e = Math.max(end, start) - startTime;
     const m = track.markers;
@@ -178,7 +180,7 @@ export function buildRequestProfile(state: RequestState, events: Event[], now: n
   }
 
   const end = Math.max(now, Date.parse(state.updatedAt)) - startTime;
-  const tracks = [requestTrack, ...itemTracks.values()];
+  const tracks = only === undefined ? [requestTrack, ...itemTracks.values()] : itemTracks.has(only) ? [itemTracks.get(only)!] : [];
   const threads = tracks.map((track, index) => ({
     processType: "default",
     processName: track.processName,

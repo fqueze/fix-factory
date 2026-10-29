@@ -75,10 +75,10 @@ describe("overview", () => {
     assert.ok(page.includes(cmd({ cmd: "start-now", request: "r-20261016-popups" })));
   });
 
-  it("shows one line per active request with its cost and Profile button", () => {
+  it("shows one line per active request with its cost, a link to its profile", () => {
     assert.equal((page.match(/<details class="req/g) ?? []).length, 12, "11 active, 1 finished");
     assert.doesNotMatch(page, /class="step"/, "no internal step names");
-    assert.match(page, /\$[\d.]+ spent/);
+    assert.match(page, /<a class="cost hide-sm" href="[^"]*" target="_blank" rel="noopener" title="[^"]*">\$[\d.]+<\/a>/);
     const url = encodeURIComponent("http://factory:4300/api/requests/r-20261005-newtab/profile");
     assert.ok(page.includes(`href="http://localhost:4242/from-url/${url}?thread=0"`));
   });
@@ -604,7 +604,7 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.match(h, /<h3>Try pushes <form[^]*?>Approve both<\/button><\/form><\/h3>/);
     const done = Object.values(get("r-20261010-xpcshell-cwd").pushes).find((p) => p.result === "failures")!;
     assert.match(rowOf(h, `push-${done.id}`), /<span class="state">291 failures, 12 groups<\/span>/);
-    assert.ok(h.indexOf('id="push-A"') < h.indexOf(">storage/test/unit</span>"), "at the top of the body");
+    assert.ok(h.indexOf('id="push-A"') < h.indexOf('data-patch="'), "at the top of the body");
   });
 
   it("each row's state on its left edge, as in the progress bar; landed rows in their own compact list", () => {
@@ -685,7 +685,7 @@ describe("one fixture per step of docs/MVP.md", () => {
     r.patches["p-focus"].revision = 5;
     assert.ok(renderRequest(r, ctx, true).value.includes(button), "whatever the step, once a patch is on Phabricator");
     r.step = "review comments";
-    assert.match(renderRequest(r, ctx, true).value, /<h3 class="stackhead">[^]*?<details class="menu"><summary class="btn small" title="More">⋯<\/summary><div class="menu-items"><form[^]*?Check Phabricator now<\/button><\/form>[^]*<\/details><\/h3>/);
+    assert.match(renderRequest(r, ctx, true).value, /<span class="rright">[^]*?<details class="menu"><summary class="btn small" title="More">⋯<\/summary><div class="menu-items"><form[^]*?Check Phabricator now<\/button><\/form>[^]*?<\/details><\/span>/, "one stack: on the request's line");
     r.jobs["j-poll"] = { job: "j-poll", kind: "script", name: "phab.ts poll", cmd: [], cwd: "", pid: 1, pidStartTime: 1, startedAt: "2026-10-16T07:00:00.000Z", endedAt: "2026-10-16T07:30:00.000Z", exitCode: 0 };
     assert.match(renderRequest(r, ctx, true).value, /last checked <span data-since="2026-10-16T07:30:00.000Z">/);
     delete r.jobs["j-poll"].endedAt;
@@ -739,9 +739,9 @@ describe("one fixture per step of docs/MVP.md", () => {
     // Filed: its link.
     r.metaBug = { bug: 2079009, draft: r.metaBug!.draft };
     assert.equal(box(r), null);
-    // Filed, it names the stack: one heading line instead of a meta bug line above the folder.
+    // Filed, it names the request (its only stack).
     const filed = renderRequest(r, ctx, true).value;
-    assert.match(filed, /<h3 class="stackhead"><span [^>]*><a class="bug" href="[^"]*2079009" target="_blank" rel="noopener">Bug 2079009<\/a> /);
+    assert.match(filed, /<span class="rname"><a class="bug" href="[^"]*2079009" target="_blank" rel="noopener">Bug 2079009<\/a> /);
     assert.doesNotMatch(filed, /Meta bug: <a/);
   });
 
@@ -825,21 +825,21 @@ describe("one fixture per step of docs/MVP.md", () => {
     r.items["i-new"] = { ...first, id: "i-new", state: "waiting for review" };
     const h = renderRequest(r, ctx, true).value;
     const notYet = h.indexOf("<h3>Not in a stack yet</h3>");
-    const landed = h.indexOf("<h3>Landed</h3>");
+    const landed = h.indexOf('<h3 class="landed-head">Landed</h3>');
     assert.ok(notYet >= 0 && notYet < h.indexOf('data-item="i-new"') && h.indexOf('data-item="i-new"') < landed && landed < h.indexOf('data-item="i-gone"'));
     assert.doesNotMatch(expanded("r-20260930-errorsummary"), /Not in a stack yet/);
-    assert.match(expanded("r-20260930-errorsummary"), /<h3>Landed<\/h3>/);
+    assert.match(expanded("r-20260930-errorsummary"), /<h3 class="landed-head">Landed<\/h3>/);
   });
 
   it("a landed patch leaves its stack; a stack with no patch left isn't shown, its groups are under Landed", () => {
     const r = structuredClone(get("r-20261001-mouse-button"));
     const before = renderRequest(r, ctx, true).value;
-    assert.match(before, /<h3 class="stackhead">/);
+    assert.match(before, /<div class="stack-submit">/);
     // i-m2 landed; p-m1 lands on Phabricator while its group still waits for review.
     r.patches["p-m1"].review!.status = "published";
     const h = renderRequest(r, ctx, true).value;
-    assert.doesNotMatch(h, /<h3 class="stackhead">/);
-    const landed = h.indexOf("<h3>Landed</h3>");
+    assert.doesNotMatch(h, /<div class="stack-submit">/);
+    const landed = h.indexOf('<h3 class="landed-head">Landed</h3>');
     assert.ok(landed >= 0 && landed < h.indexOf('id="patch-p-m1"') && landed < h.indexOf('id="patch-p-m2"'));
   });
 
@@ -884,7 +884,7 @@ describe("a burndown with closed groups, running agents and a dropped patch", ()
     assert.match(row, /<div class="rowbody"><h4 class="part">The failure<\/h4><div class="failure">leaked 1 window\(s\) until shutdown \[url = about:preferences#etp\]<\/div>/);
   });
   it("shows running work in the group rows, with the group's cost at the end of its line", () => {
-    assert.match(h, /<span class="end"><span class="cost" title="Agent cost of this group so far">\$0\.40<\/span><\/span><span class="state"><span class="working">investigating · <span data-since="2026-10-15T08:53:00.000Z">7 min<\/span><\/span><\/span>/);
+    assert.match(h, /<span class="end"><a class="cost" href="[^"]*%3Fitem%3Di-[^"]*" target="_blank" rel="noopener" title="Agent cost of this group so far: its profile">\$0\.40<\/a><\/span><span class="state"><span class="working">investigating · <span data-since="2026-10-15T08:53:00.000Z">7 min<\/span><\/span><\/span>/);
     assert.match(h, /<span class="state"><span class="working">investigating · <span data-since="2026-10-15T08:54:00.000Z">6 min<\/span><\/span><\/span>/);
     assert.match(h, /<span class="state"><span class="working">building its worktree · <span data-since/);
   });
@@ -896,7 +896,7 @@ describe("a burndown with closed groups, running agents and a dropped patch", ()
     for (const closed of ["i-annotations", "i-browser-policy-firefoxhome", "i-browser-policy-firefoxhome-2", "i-browser-policy-sitepolicies-jit"]) {
       assert.ok(at(closed) > fold, closed);
     }
-    assert.match(rowOf(h, "item-i-annotations"), /<span class="cost" title="Agent cost of this group so far">\$0\.62<\/span><\/span><span class="state">closed: Dropped the run-if commit per review;[^<]*nothing left to convert and the DEBUG un-skip push showed no failures to fix\.<\/span>/);
+    assert.match(rowOf(h, "item-i-annotations"), /<a class="cost" href="[^"]*" target="_blank" rel="noopener" title="Agent cost of this group so far: its profile">\$0\.62<\/a><\/span><span class="state">closed: Dropped the run-if commit per review;[^<]*nothing left to convert and the DEBUG un-skip push showed no failures to fix\.<\/span>/);
 
     const r = structuredClone(get(ID));
     r.jobs["j-wt-sw2"].endedAt = "2026-10-15T09:00:00.000Z";
@@ -1103,7 +1103,7 @@ describe("a group's jobs", () => {
     assert.match(before, /data-fold="job-j-a2" data-watch="[^"]*" data-live>/, "running");
     assert.match(before, /lint message/, "a failure nothing ran again after");
     assert.doesNotMatch(before, /build worktree|data-fold="job-j-a1"|data-fold="job-j-r1"/);
-    assert.match(fold, /^<details class="fold ended" data-fold="jobs-i-spinner"><summary>2 agent runs, 1 other job · <span class="cost" title="Opus \$1\.50 · Sonnet \$0\.25">\$1\.75<\/span><\/summary>/);
+    assert.match(fold, /^<details class="fold ended" data-fold="jobs-i-spinner"><summary>2 agent runs, 1 other job · <a class="cost" href="[^"]*item%3Di-spinner[^"]*" target="_blank" rel="noopener" title="Opus \$1\.50 · Sonnet \$0\.25 · its profile">\$1\.75<\/a><\/summary>/);
     assert.match(fold, /build worktree/, "the failed build that ran again since is in the fold");
     assert.doesNotMatch(row, /class="talk"/, "its author is running: nothing reaches it");
   });

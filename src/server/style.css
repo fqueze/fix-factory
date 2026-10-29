@@ -37,7 +37,8 @@ main { max-width: 1100px; margin: 0 auto; padding: 12px; }
 h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--text-secondary); margin: 18px 0 6px; font-weight: 600; }
 h2 .count { color: var(--text-muted); font-weight: normal; }
 details.req { background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 6px; overflow: hidden; }
-details.req.needs { border-left: 4px solid var(--warning); }
+/* A request needing you: its top, where its ⚑s are, not the whole card. */
+details.req.needs > summary { box-shadow: inset 4px 0 0 var(--warning); }
 details.req > summary { list-style: none; cursor: pointer; padding: 8px 12px; display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; align-items: center; }
 details.req > summary::-webkit-details-marker { display: none; }
 .rname { font-weight: 600; }
@@ -384,7 +385,11 @@ details.row.b-working { border-left-color: var(--text-muted); }
 details.row.b-pending { border-left-color: var(--border); }
 details.row.b-needs-you, details.row.you { border-left-color: var(--serious); animation: none; }
 @media (prefers-reduced-motion: reduce) { details.row.b-landable { animation: none; } }
-/* Landed rows: their first line only, the rest on hover. */
-.landed-rows details.row:not([open]) { border-bottom-color: transparent; }
-.landed-rows details.row:not([open]):hover { border-bottom-color: var(--border); box-shadow: 0 -1px 0 var(--border); }
+/* Landed rows: their first line only; on hover the rest shows over the rows below, which don't move. */
+h3.landed-head { border-left: 3px solid var(--good); padding-left: 8px; }
+.landed-rows details.row:not([open]) { border-bottom-color: transparent; position: relative; height: 30px; box-sizing: border-box; }
+.landed-rows details.row:not([open]) > summary { line-height: 20px; }
+.landed-rows details.row:not([open]):hover { z-index: 5; }
+.landed-rows details.row:not([open]):hover > summary { position: absolute; top: 0; left: -3px; right: 0; border-left: 3px solid var(--good); background: var(--surface-1); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); margin-top: -1px; box-shadow: 0 2px 6px rgb(0 0 0 / .12); }
 .landed-rows details.row:not([open]):not(:hover) > summary > :is(.state, .trust, .warn) { display: none; }
+a.cost { color: inherit; }

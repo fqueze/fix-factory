@@ -4,7 +4,7 @@ import { isPushJob } from "../../state/flags.ts";
 import type { ItemView, JobView, RequestId, RequestState } from "../../types.ts";
 import { html, type Html } from "../html.ts";
 import { continueBox, stopButton } from "./actions.ts";
-import { elapsed, formatCost, formatDuration, jobLabel, modelLabel, plural, requestUrl, stateClass, type RenderContext } from "./common.ts";
+import { elapsed, formatCost, formatDuration, jobLabel, modelLabel, plural, profileUrl, requestUrl, stateClass, type RenderContext } from "./common.ts";
 import { runningSentence, workLabel } from "./progress.ts";
 
 export function jobUrl(request: RequestId, job: string, what: "activity" | "transcript" | "profile" | "log" | `mach-profile-${number}`): string {
@@ -64,7 +64,7 @@ export function groupJobs(r: RequestState, i: ItemView, jobs: JobView[], ctx: Re
     agents.length ? `${plural(agents.length, "agent run")}${sessions < agents.length ? ` in ${plural(sessions, "session")}` : ""}` : null,
     ended.length > agents.length ? plural(ended.length - agents.length, agents.length ? "other job" : "job") : null,
   ].filter((x) => x !== null);
-  const summary = html`${parts.join(", ")}${byModel.size ? html` · <span class="cost" title="${[...byModel].sort((x, y) => y[1] - x[1]).map(([m, c]) => `${m} ${formatCost(c)}`).join(" · ")}">${formatCost(cost)}</span>` : null}`;
+  const summary = html`${parts.join(", ")}${byModel.size ? html` · <a class="cost" href="${profileUrl(ctx, r.id, i.id)}" target="_blank" rel="noopener" title="${[...byModel].sort((x, y) => y[1] - x[1]).map(([m, c]) => `${m} ${formatCost(c)}`).join(" · ")} · its profile">${formatCost(cost)}</a>` : null}`;
   return html`<div class="jobs">${shown.map((j) => jobLine(r, j, ctx))}<details class="fold ended" data-fold="jobs-${i.id}"><summary>${summary}</summary><div class="jobs">${ended.map((j) => jobLine(r, j, ctx))}</div></details></div>`;
 }
 

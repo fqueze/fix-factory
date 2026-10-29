@@ -51,11 +51,17 @@ export function renderRequest(r: RequestState, ctx: RenderContext, open = ctx.op
   const needs = needsYou(r);
   const cost = requestCost(r);
   const summary = requestSummary(r);
+  // One stack: its buttons are the request's, at the top right, and its meta bug, once filed, names the request.
+  const stacks = liveStacks(r);
+  const one = stacks.length === 1 ? stacks[0] : undefined;
+  const meta = r.metaBug && hasBug(r.metaBug) ? r.metaBug : undefined;
   return html`<details class="req${needs ? " needs" : ""}" id="req-${r.id}" data-request="${r.id}" data-section="${sectionOf(r)}"${open ? html` open` : null}>
     <summary>
-      <span class="rname">${requestName(r)}</span>
+      <span class="rname">${meta ? html`<a class="bug" href="${bugUrl(meta.bug!)}" target="_blank" rel="noopener">Bug ${meta.bug}</a> ${r.metaBug!.draft?.summary ?? requestName(r)}` : requestName(r)}</span>
       <span class="rsum"><span class="rprog">${progressLine(requestProgress(r, ctx))}</span>${summary ? ` · ${summary}` : null}</span>
-      <span class="rright">${cost > 0 ? html`<span class="hide-sm" title="What the agents of this request cost so far">${formatCost(cost)} spent</span>` : null}<a class="btn small" href="${profileUrl(ctx, r.id)}" target="_blank" rel="noopener">Profile</a></span>
+      <span class="rright">${cost > 0 ? html`<a class="cost hide-sm" href="${profileUrl(ctx, r.id)}" target="_blank" rel="noopener" title="What the agents of this request cost so far: its profile">${formatCost(cost)}</a>` : null}${
+        one ? html`${stackViewerLink(r, one)}${stackMenu(r, one, ctx)}` : null
+      }</span>
       ${actionsSummary(r, ctx)}
     </summary>
     ${open ? renderRequestBody(r, ctx) : html`<div class="rbody" data-lazy><a href="${requestUrl(r.id)}">Open this request</a></div>`}
@@ -98,10 +104,14 @@ export function requestSummary(r: RequestState): string {
   return parts.join(" · ");
 }
 
+// A landed patch leaves its stack, for the Landed section; a stack with nothing left isn't shown.
+function liveStacks(r: RequestState): StackView[] {
+  return Object.values(r.stacks).filter((s) => livePatches(r, s).length > 0);
+}
+
 export function renderRequestBody(r: RequestState, ctx: RenderContext): Html {
   const back = requestUrl(r.id);
-  // A landed patch leaves its stack, for the Landed section; a stack with nothing left isn't shown.
-  const stacks = Object.values(r.stacks).filter((s) => livePatches(r, s).length > 0);
+  const stacks = liveStacks(r);
   const stacked = new Set(Object.values(r.stacks).flatMap((s) => s.order));
   const stackedItems = new Set(stacks.flatMap((s) => livePatches(r, s).map((p) => p.item)));
   // Patches without a group (annotation patches) get a row of their own.
@@ -143,14 +153,14 @@ export function renderRequestBody(r: RequestState, ctx: RenderContext): Html {
         : null
     }<hr class="part">` : null}
     ${r.metaBug && !(hasBug(r.metaBug) && (stacks.length || landed.length)) ? metaBugLine(r, back, ctx) : null}
-    ${stacks.map((s) => stackSection(r, s, ctx))}
+    ${stacks.map((s) => stackSection(r, s, ctx, stacks.length > 1))}
     ${loose.length ? html`<h3>Patches</h3><div class="rows">${loose.map((p) => patchRow(r, p, ctx))}</div>` : null}
     ${
       // Groups with only DEBUG commits aren't on their way into the stack: those commits ride on top of its next push.
       repro.length ? html`<h3>DEBUG commits for the stack's next try push</h3>${groupRows(r, repro, ctx, false)}` : null
     }
     ${toStack.some((i) => itemBucket(r, i, ctx) !== "closed") ? html`${stacks.length || loose.length ? html`<h3>Not in a stack yet</h3>` : null}${groupRows(r, toStack, ctx, false)}` : null}
-    ${landed.length ? html`<h3>Landed${r.metaBug && hasBug(r.metaBug) && !stacks.length ? html` · <a class="bug" href="${bugUrl(r.metaBug.bug)}" target="_blank" rel="noopener">Bug ${r.metaBug.bug}</a> ${metaSummary}` : null}</h3><div class="landed-rows">${groupRows(r, landed, ctx)}</div>` : null}
+    ${landed.length ? html`<h3 class="landed-head">Landed${r.metaBug && hasBug(r.metaBug) && !stacks.length ? html` · <a class="bug" href="${bugUrl(r.metaBug.bug)}" target="_blank" rel="noopener">Bug ${r.metaBug.bug}</a> ${metaSummary}` : null}</h3><div class="landed-rows">${groupRows(r, landed, ctx)}</div>` : null}
     ${handOffs(r, ctx)}
     ${closedFold(r, items.filter((i) => itemBucket(r, i, ctx) === "closed" && i.state !== "taken over"), ctx)}
     ${stacks.length || loose.length || items.length || landed.length ? html`<hr class="part">` : null}
@@ -236,14 +246,15 @@ function livePatches(r: RequestState, s: StackView): PatchView[] {
   return stackPatches(r, s).filter((p) => !isLanded(r, p));
 }
 
-function stackSection(r: RequestState, s: StackView, ctx: RenderContext): Html {
+// Its header only when the request has several: one stack's title and buttons are the request's.
+function stackSection(r: RequestState, s: StackView, ctx: RenderContext, header: boolean): Html {
   const patches = livePatches(r, s);
   const dropped = patches.filter((p) => isDropped(r, p));
   // Once the meta bug is filed, it names the stack.
   const meta = r.metaBug && hasBug(r.metaBug) ? r.metaBug : undefined;
   const title = meta ? html`<a class="bug" href="${bugUrl(meta.bug!)}" target="_blank" rel="noopener">Bug ${meta.bug}</a> ${r.metaBug?.draft?.summary ?? s.folder}` : html`${s.folder}`;
   const submitted = patches.some((p) => p.revision !== undefined) && r.step !== "done";
-  return html`<h3 class="stackhead"><span title="Branch ${s.branch}; patches in review order: easy and valuable first, each after its hard deps">${title}</span>${stackViewerLink(r, s)}${submitted ? phabCheck(r, ctx) : null}</h3>
+  return html`${header ? html`<h3 class="stackhead"><span title="Branch ${s.branch}; patches in review order: easy and valuable first, each after its hard deps">${title}</span>${stackViewerLink(r, s)}${stackMenu(r, s, ctx)}</h3>` : null}
     ${r.needsUser.filter((n) => flagItemOf(r, n) === undefined && n.patch === undefined && n.stack === s.id && flagPlaceOf(r, n) !== undefined).map((n) => renderAction(r, n, ctx))}
     ${optionalMetaBug(r, s, ctx)}
     <div class="rows">${patches.filter((p) => !isDropped(r, p)).map((p) => patchRow(r, p, ctx))}${
@@ -252,6 +263,10 @@ function stackSection(r: RequestState, s: StackView, ctx: RenderContext): Html {
     <div class="stack-submit">${
 submitted ? verifyStackButton(r.id, requestUrl(r.id)) : null
     }${submitControls(r, s, requestUrl(r.id))}</div>`;
+}
+
+function stackMenu(r: RequestState, s: StackView, ctx: RenderContext): Html | null {
+  return stackPatches(r, s).some((p) => p.revision !== undefined) && r.step !== "done" ? phabCheck(r, ctx) : null;
 }
 
 // When Phabricator was last read, and the button to read it now; "checking" while it's read.
@@ -370,8 +385,10 @@ function itemCost(r: RequestState, i: ItemView): number {
   return i.jobs.reduce((sum, j) => sum + (r.jobs[j].costUsd ?? 0), 0);
 }
 
-function costLabel(usd: number): Html | null {
-  return usd > 0 ? html`<span class="cost" title="Agent cost of this group so far">${formatCost(usd)}</span>` : null;
+// A group's cost opens its own profile.
+function costLabel(r: RequestState, i: ItemView, ctx: RenderContext): Html | null {
+  const usd = itemCost(r, i);
+  return usd > 0 ? html`<a class="cost" href="${profileUrl(ctx, r.id, i.id)}" target="_blank" rel="noopener" title="Agent cost of this group so far: its profile">${formatCost(usd)}</a>` : null;
 }
 
 function stateText(r: RequestState, i: ItemView, ctx: RenderContext): Html {
@@ -399,8 +416,8 @@ function groupRow(r: RequestState, i: ItemView, ctx: RenderContext): Html {
     title: [...i.group.tests, i.group.configs.join(", ")].join("\n"),
     // Redo is on the top line: the group's patches are in its folded body, and it's what you'd want of it.
     end: i.id === ANNOTATIONS_ITEM && !Object.values(r.jobs).some((j) => j.item === i.id && j.endedAt === undefined)
-      ? html`${redoAnnotationsButton(r.id, requestUrl(r.id))} ${costLabel(itemCost(r, i))}`
-      : html`${closable(r, i, ctx) ? html`<span class="onhover">${closeButton(r, i)}</span>` : null}${costLabel(itemCost(r, i))}`,
+      ? html`${redoAnnotationsButton(r.id, requestUrl(r.id))} ${costLabel(r, i, ctx)}`
+      : html`${closable(r, i, ctx) ? html`<span class="onhover">${closeButton(r, i)}</span>` : null}${costLabel(r, i, ctx)}`,
     state: stateText(r, i, ctx),
     trust: trustLine(r, i, ctx),
     ask: askBlock(r, i, ctx, patches.filter((p) => isDraft(r, p))),
@@ -532,7 +549,7 @@ function patchRow(r: RequestState, p: PatchView, ctx: RenderContext): Html {
       first.id === p.id ? bugLabel(p, ctx) : html`<a class="bug tofile" href="#patch-${first.id}" title="Filed from ${first.title}">same bug</a>`
     } ${patchTitle(p)}`,
     title: p.title,
-    end: html`${hoverInfo(r, p, item, ctx)}${viewLink(r, p)}${item ? costLabel(itemCost(r, item)) : null}`,
+    end: html`${hoverInfo(r, p, item, ctx)}${viewLink(r, p)}${item ? costLabel(r, item, ctx) : null}`,
     // "in the stack" says nothing a patch row in its stack's section doesn't.
     // What matters most first (where its review stands, landable, what you need to do): a long list of tests is cut off.
     state: html`${[
