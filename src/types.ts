@@ -145,7 +145,7 @@ export type Event =
   | (EventBase & { type: "config-set"; config: Record<string, unknown> })
   | (EventBase & { type: "step"; step: RequestStep })
   | (EventBase & { type: "item-created"; item: ItemId; folder: string; group: FailureGroup })
-  | (EventBase & { type: "item-state"; item: ItemId; state: ItemState; detail?: string })
+  | (EventBase & { type: "item-state"; item: ItemId; state: ItemState; detail?: string; coveredBy?: PatchId }) // coveredBy: the patch that fixes it too
   | (EventBase & {
       type: "job-started";
       job: JobId;
@@ -291,6 +291,7 @@ export interface InvestigateReport {
   bugDrafts?: { commits: string[]; draft: BugDraft }[]; // one per bug to file, with the commits it's for
   bugDraft?: BugDraft; // reports from before 2026-10-23: one draft, for its first commit without a bug
   tryRequest?: string; // a try push it needs: what to run and why; the factory plans it and asks you
+  coveredBy?: string; // left as-is because a commit of the stack already fixes it: that commit
   landsAfter: { what: string; reason: string }[];
   feedback: Feedback[];
 }
@@ -342,6 +343,7 @@ export interface ItemView {
   group: FailureGroup;
   state: ItemState;
   detail?: string;
+  coveredBy?: PatchId; // left as-is because that patch fixes it too
   jobs: JobId[]; // oldest first
   lastReport?: { prompt: string; report: unknown; job: JobId };
   commitCount?: number; // its latest fix's commits (patches p-<item>, p-<item>-2…)

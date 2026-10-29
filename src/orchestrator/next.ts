@@ -315,16 +315,20 @@ class Planner {
       if (!item || !TEST_PLAN_STATES.has(item.state) || (!verified && p.revision === undefined)) continue;
       const author = item.jobs.map((j) => this.s.jobs[j]).findLast((j) => j?.name === "investigate-and-fix");
       const inv = item.investigation ?? null;
+      // Groups this patch fixes too, their own fix dropped as covered by it.
+      const alsoFixes = Object.values(this.s.items)
+        .filter((i) => i.coveredBy === p.id)
+        .map((i) => ({ tests: i.group.tests, failure: i.group.message, covered: i.detail, cause: i.investigation?.cause, reproduction: i.investigation?.reproduction, verification: i.investigation?.verification }));
       // The version changes with the prompt: an earlier version's session isn't resumed.
       const version = `test-plan:${p.id}:${TEST_PLAN_VERSION}:`;
       // passes-v1: plans written before told to confirm a push's runs with fx-tests --test are rewritten in their session.
-      const key = `${version}${shortHash([JSON.stringify([inv, results]), "passes-v1"]).slice(0, 8)}`;
+      const key = `${version}${shortHash([JSON.stringify([inv, results]), "passes-v1", ...(alsoFixes.length ? [JSON.stringify(alsoFixes)] : [])]).slice(0, 8)}`;
       const investigationFile = dataPath(this.config, this.s.id, `test-plan-${p.id}-investigation.json`);
       const pushesFile = dataPath(this.config, this.s.id, `test-plan-${p.id}-pushes.json`);
       const notes = Object.values(inv?.files ?? {});
       const dir = author?.cwd ?? p.worktree;
       const files = [
-        { path: investigationFile, content: JSON.stringify({ tests: item.group.tests, failure: item.group.message, ...inv }, null, 2) + "\n" },
+        { path: investigationFile, content: JSON.stringify({ tests: item.group.tests, failure: item.group.message, ...inv, ...(alsoFixes.length ? { alsoFixes } : {}) }, null, 2) + "\n" },
         { path: pushesFile, content: JSON.stringify(results, null, 2) + "\n" },
       ];
       // New results go to the session that wrote it, which keeps what you asked of it.
@@ -1497,7 +1501,7 @@ class Planner {
           item,
           `author:${item}${this.itemEpoch(item)}:covered:${res.job}`,
           "covered",
-          `Assembling the stack, your commit ${conflict.sha.slice(0, 12)} conflicted with a change that already does what it does: ${r.explanation}\n\nThat commit is in this repository (\`git show\` it). Rebase your commits on top of it and keep only what it doesn't already do (each part you keep has to be needed on its own). If nothing is left, drop your commits and report "left as-is", saying which commit covers your fix. Then end with the JSON report again.`,
+          `Assembling the stack, your commit ${conflict.sha.slice(0, 12)} conflicted with a change that already does what it does: ${r.explanation}\n\nThat commit is in this repository (\`git show\` it). Rebase your commits on top of it and keep only what it doesn't already do (each part you keep has to be needed on its own). If nothing is left, drop your commits and report "left as-is", with that commit's sha in \`coveredBy\`. Then end with the JSON report again.`,
         );
         return;
       }
@@ -1522,7 +1526,7 @@ class Planner {
         p.item,
         `author:${p.item}${this.itemEpoch(p.item)}:empty:${p.source.slice(0, 12)}`,
         "covered",
-        `Assembling the stack, your commit ${p.source.slice(0, 12)} made no change: the stack's other patches (on branch ${info.branch}) or the base already do what it does. Find which commit does (\`git log -p ${this.config.baseRef}..${info.branch}\` in this repository), then keep only what it doesn't already do (each part you keep has to be needed on its own), or, if nothing is left, drop your commits and report "left as-is", saying which commit covers your fix. Then end with the JSON report again.`,
+        `Assembling the stack, your commit ${p.source.slice(0, 12)} made no change: the stack's other patches (on branch ${info.branch}) or the base already do what it does. Find which commit does (\`git log -p ${this.config.baseRef}..${info.branch}\` in this repository), then keep only what it doesn't already do (each part you keep has to be needed on its own), or, if nothing is left, drop your commits and report "left as-is", with that commit's sha in \`coveredBy\`. Then end with the JSON report again.`,
       );
     }
     const kept = info.patches.filter((p) => !among(empty, p.source));
@@ -1623,7 +1627,7 @@ class Planner {
           item,
           `author:${item}${this.itemEpoch(item)}:stack-review:${review.job}`,
           "stack review",
-          `The review of the whole stack found problems with your patch:\n${lines.join("\n")}\n\nAddress them by amending your commit. If another patch of the stack already does what yours does, drop your commits and report "left as-is", saying which commit covers your fix. Then end with the JSON report again.`,
+          `The review of the whole stack found problems with your patch:\n${lines.join("\n")}\n\nAddress them by amending your commit. If another patch of the stack already does what yours does, drop your commits and report "left as-is", with that commit's sha in \`coveredBy\`. Then end with the JSON report again.`,
         );
       }
       return;

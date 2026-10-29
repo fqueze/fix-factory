@@ -1638,8 +1638,11 @@ describe("5. stack", () => {
     const started = sc.settle();
     const told = started.find((k) => k.startsWith("author:i-test-b:empty:"))!;
     assert.ok(told, String(started));
-    assert.match(sc.plan(told).agent?.message ?? "", /made no change[^]*report "left as-is", saying which commit covers your fix/);
+    assert.match(sc.plan(told).agent?.message ?? "", /made no change[^]*report "left as-is", with that commit's sha in `coveredBy`/);
     assert.equal(sc.state().items["i-test-b"].state, "investigating");
+    // Its answer names the covering patch, which then fixes its tests too.
+    sc.complete(told, { report: { ...fixed([]), state: "left as-is", summary: "covered by test_a's fix", coveredBy: sha("a").slice(0, 12) } });
+    assert.equal(sc.state().items["i-test-b"].coveredBy, "p-test-a");
   });
 
   it("hands a text conflict to resolve-conflict, then assembles the rest", () => {

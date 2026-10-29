@@ -116,6 +116,8 @@ export function foldEvents(events: readonly Event[]): RequestState {
         const item = s.items[e.item];
         if (!item) continue;
         item.state = e.state;
+        if (e.coveredBy === undefined) delete item.coveredBy;
+        else item.coveredBy = e.coveredBy;
         if (e.detail === undefined) {
           delete item.detail;
         } else {

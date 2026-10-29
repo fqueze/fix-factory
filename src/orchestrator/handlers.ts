@@ -17,6 +17,7 @@ import type {
   InlineComment,
   InvestigateReport,
   JobId,
+  PatchId,
   PatchView,
   PushId,
   RecoverReport,
@@ -386,7 +387,14 @@ function authorReport(input: HandlerInput, ev: <T extends EventInput["type"]>(ty
         blocked(r.summary, "Fixed without reproducing the failure");
         return;
       }
-      ev("item-state", { item, state: r.state, detail: r.summary.slice(0, 300) });
+      // Covered by a patch of the stack: that patch's row and test plan name this group's tests too.
+      let coveredBy: PatchId | undefined;
+      if (r.state === "left as-is" && r.coveredBy) {
+        const sha = r.coveredBy;
+        coveredBy = Object.values(input.state.patches).find((p) => p.item !== item && (p.sha.startsWith(sha) || sha.startsWith(p.sha.slice(0, 12))))?.id;
+        if (!coveredBy) throw new InvalidReport(`coveredBy: ${sha} isn't a patch of the stack; name the stack's commit that fixes it (\`git log\` on its branch).`);
+      }
+      ev("item-state", { item, state: r.state, detail: r.summary.slice(0, 300), ...(coveredBy ? { coveredBy } : {}) });
       // A refusal of what you told it waits for you.
       if (r.disagreement && YOUR_MESSAGES.includes(job.purpose?.reason ?? "")) {
         ev("needs-user", { key: `disagrees:${job.job}`, action: "Its author disagrees with you", detail: r.disagreement.slice(0, 1000), job: job.job, item });

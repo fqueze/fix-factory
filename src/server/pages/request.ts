@@ -452,6 +452,8 @@ function patchRow(r: RequestState, p: PatchView, ctx: RenderContext): Html {
   const item = itemOf(r, p);
   const sentence = item ? itemSentence(r, item, ctx) : undefined;
   const landable = isLandable(r, p);
+  // Groups whose own fix was dropped because this patch fixes them too.
+  const covered = Object.values(r.items).filter((i) => i.coveredBy === p.id);
   // Patches sharing a bug draft have it filed once, from the first one's row.
   const first = sameBugDraft(r, p.id)[0];
   const bugBoxShown = !hasBug(p) && p.bugDraft !== undefined && first.id === p.id;
@@ -471,7 +473,7 @@ function patchRow(r: RequestState, p: PatchView, ctx: RenderContext): Html {
     title: p.title,
     end: html`${viewLink(r, p)}${item ? costLabel(itemCost(r, item)) : null}`,
     // "in the stack" says nothing a patch row in its stack's section doesn't.
-    state: html`${item ? html`fixes <b>${groupLinks(r, item)}</b>${item.state === "in stack" ? null : html` · ${item.state === "waiting for review" && p.review?.status === "accepted" ? "accepted on Phabricator" : stateText(r, item, ctx)}`}` : p.review ? p.review.status : null}${landable ? html` · <span class="landable">landable</span>` : null}`,
+    state: html`${item ? html`fixes <b>${groupLinks(r, item)}</b>${covered.length ? html` and <b>${join(covered.map((i) => groupLinks(r, i)), ", ")}</b>` : null}${item.state === "in stack" ? null : html` · ${item.state === "waiting for review" && p.review?.status === "accepted" ? "accepted on Phabricator" : stateText(r, item, ctx)}`}` : p.review ? p.review.status : null}${landable ? html` · <span class="landable">landable</span>` : null}`,
     trust: item ? trustLine(r, item, ctx) : null,
     ask: item && asks ? askBlock(r, item, ctx, [], controls !== null) : undefined,
     under: bugBoxShown ? bugDraftBox(r, p, back) : null,
