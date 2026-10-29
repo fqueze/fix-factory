@@ -109,7 +109,11 @@ export function itemSentence(r: RequestState, i: ItemView, ctx: RenderContext): 
       controls,
       detail: i.detail,
       ask: html`<p>The factory should be working on it, but nothing runs and nothing will on its own: a factory bug, or a job that was lost. ${
-        hasAuthorSession(r, i.id) ? "Retry its last job, tell its author what to do, or drop it (🗑)." : "Retry its last job, or drop it (🗑)."
+        [retryable(r, i) ? "retry its last job" : null, hasAuthorSession(r, i.id) ? "tell its author what to do" : null, "drop it (🗑)"]
+          .filter((x) => x !== null)
+          .join(", ")
+          .replace(/, (?=[^,]*$)/, ", or ")
+          .replace(/^./, (c) => c.toUpperCase()) + "."
       }</p>`,
     };
   }
@@ -169,10 +173,16 @@ function stalledText(r: RequestState, i: ItemView): string {
   return "stalled: nothing running";
 }
 
+// Only a failed job is worth running again.
+function retryable(r: RequestState, i: ItemView): boolean {
+  const last = i.jobs.map((j) => r.jobs[j]).at(-1);
+  return last !== undefined && last.exitCode !== 0 && canRetry(r, last);
+}
+
 function stalledControls(r: RequestState, i: ItemView): Html {
   const back = requestUrl(r.id);
   const last = i.jobs.map((j) => r.jobs[j]).at(-1);
-  const retry = last && last.exitCode !== 0 && canRetry(r, last) ? retryButton(r.id, last, back) : null;
+  const retry = last && retryable(r, i) ? retryButton(r.id, last, back) : null;
   const talk = hasAuthorSession(r, i.id) ? continueBox(r.id, i.id, back) : null;
   return html`${retry}${talk}${handBackButton(r.id, i.id, back)}`;
 }

@@ -1070,6 +1070,7 @@ describe("4. investigate and fix", () => {
     sc.complete(`dry-run:${push}`, { output: dryOut });
     sc.settle();
     assert.deepEqual(sc.open().filter((k) => k.startsWith("approve-push:")), [`approve-push:${push}`]);
+    assert.equal(sc.state().needsUser.find((n) => n.key === `approve-push:${push}`)?.item, "i-test-a", "its group waits for it");
     sc.add({ type: "user-done", request: ID, key: `approve-push:${push}` });
     assert.deepEqual(sc.settle(), [`push:${push}`]);
     sc.complete(`push:${push}`, { output: { rev: "fed" } });

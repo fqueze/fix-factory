@@ -175,6 +175,8 @@ export function handleFinished(input: HandlerInput): HandlerResult {
         action: `Approve try push ${purpose.push}`,
         detail: [`${d.taskCount} tasks`, purpose.purpose, ...d.warnings].filter(Boolean).join(" · ").slice(0, 1000),
         push: purpose.push,
+        // A push its author asked for: its group waits for it.
+        ...(purpose.item ? { item: purpose.item } : {}),
       });
       break;
     }
