@@ -524,7 +524,16 @@ function patchRow(r: RequestState, p: PatchView, ctx: RenderContext): Html {
     title: p.title,
     end: html`${hoverInfo(r, p, item, ctx)}${viewLink(r, p)}${item ? costLabel(itemCost(r, item)) : null}`,
     // "in the stack" says nothing a patch row in its stack's section doesn't.
-    state: html`${item ? html`fixes <b>${groupLinks(r, item)}</b>${covered.length ? html` and <b>${join(covered.map((i) => groupLinks(r, i)), ", ")}</b>` : null}${item.state === "in stack" ? null : html` · ${item.state === "waiting for review" && p.review ? reviewText(p) : stateText(r, item, ctx)}`}` : p.review ? reviewText(p) : null}${landable ? html` · <span class="landable">landable</span>` : null}${backoutText(r, p)}${yours.map((n) => html` · <b class="you">${n.action}</b>`)}`,
+    // What matters most first (where its review stands, landable, what you need to do): a long list of tests is cut off.
+    state: html`${[
+      item ? (item.state === "in stack" ? null : item.state === "waiting for review" && p.review ? html`${reviewText(p)}` : html`${stateText(r, item, ctx)}`) : p.review ? html`${reviewText(p)}` : null,
+      landable ? html`<span class="landable">landable</span>` : null,
+      backoutText(r, p),
+      ...yours.map((n) => html`<b class="you">${n.action}</b>`),
+      item ? html`fixes <b>${groupLinks(r, item)}</b>${covered.length ? html` and <b>${join(covered.map((i) => groupLinks(r, i)), ", ")}</b>` : null}` : null,
+    ]
+      .filter((x) => x !== null)
+      .map((x, i) => (i ? html` · ${x}` : x))}`,
     trust: item ? trustLine(r, item, ctx) : null,
     ask: (() => {
       const group = item && asks ? askBlock(r, item, ctx, [], controls !== null) : undefined;
@@ -894,7 +903,7 @@ function backoutText(r: RequestState, p: PatchView): Html | null {
   if (!b || p.review?.status === "published") return null;
   const why = b.reason.split("\n")[0];
   const state = !b.culprit ? "backed out with another patch: it can land again" : b.verified ? "backed out, its fix green on try: it can land again" : "backed out: its fix needs a green try run first";
-  return html` · <span class="bad" title="${why}">${state}</span>`;
+  return html`<span class="bad" title="${why}">${state}</span>`;
 }
 
 // A list's first two items, the rest folded under "+n more".

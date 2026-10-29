@@ -573,7 +573,7 @@ describe("one fixture per step of docs/MVP.md", () => {
     const mine = rowOf(renderRequest(source.getRequest("r-20261010-xpcshell-cwd")!, { ...ctx, bugzillaEmail: "me@mozilla.com" }, true).value, "patch-p-copydir");
     assert.match(mine, /&amp;assigned_to=me%40mozilla\.com&amp;bug_status=ASSIGNED/, "yours to attach its patch to");
     assert.match(row, /<\/summary><div class="under"><div class="box tofile">\n    <h4>Core::XPCOM · “CopyDirectoryTo leaves a read-only source directory&#39;s contents behind”/, "first in the body: clicking in it doesn't fold the row");
-    assert.match(row, /<\/div><div class="lines"><span class="state">fixes <b>/, "its state under it");
+    assert.match(row, /<\/div><div class="lines"><span class="state">[^]*?fixes <b>/, "its state under it");
     assert.ok(row.includes(cmd({ cmd: "set-bug", request: "r-20261010-xpcshell-cwd", patch: "p-copydir" })));
     assert.equal((row.match(/name="bugOrText"/g) ?? []).length, 1, "the ⚑'s buttons are the bug box");
 
@@ -951,7 +951,7 @@ describe("a burndown with closed groups, running agents and a dropped patch", ()
     const h = expanded("r-20261013-tab-failures");
     assert.match(
       rowOf(h, "patch-p-close"),
-      /<span class="state">fixes <b><a href="https:\/\/tests\.firefox\.dev\/test\.html\?test=browser%2Fbase%2Fcontent%2Ftest%2Ftabs%2Fbrowser_tabCloseSpacer\.js" target="_blank" rel="noopener" title="Its failures on tests\.firefox\.dev">browser\/base\/content\/test\/tabs\/browser_tabCloseSpacer\.js<\/a><\/b> · reviewed: waiting for the rest of the stack<\/span>/,
+      /<span class="state">reviewed: waiting for the rest of the stack · fixes <b><a href="https:\/\/tests\.firefox\.dev\/test\.html\?test=browser%2Fbase%2Fcontent%2Ftest%2Ftabs%2Fbrowser_tabCloseSpacer\.js" target="_blank" rel="noopener" title="Its failures on tests\.firefox\.dev">browser\/base\/content\/test\/tabs\/browser_tabCloseSpacer\.js<\/a><\/b><\/span>/,
     );
   });
 
