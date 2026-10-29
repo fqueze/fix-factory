@@ -3,7 +3,7 @@ import { md } from "./md.ts";
 import { REQUEST_STEPS } from "../commands.ts";
 import type { BugDraft, ItemView, JobView, PatchView, PushView, Regression, RequestState, StackView } from "../../types.ts";
 import { html, join, type Html } from "../html.ts";
-import { actionsSummary, recoveryAnswers, pollPhabButton, verifyStackButton, redoAnnotationsButton, approvePushControls, bugBox, continueBox, copyButton, handBackButton, flagControls, flagItemOf, flagText, plannedLabel, recoveryPlanFor, hasAuthorSession, stackViewerLink, submitControls, summaryId } from "./actions.ts";
+import { actionsSummary, flagPlaceOf, renderAction, recoveryAnswers, pollPhabButton, verifyStackButton, redoAnnotationsButton, approvePushControls, bugBox, continueBox, copyButton, handBackButton, flagControls, flagItemOf, flagText, plannedLabel, recoveryPlanFor, hasAuthorSession, stackViewerLink, submitControls, summaryId } from "./actions.ts";
 import { groupJobs, jobLine } from "./activity.ts";
 import { flagAsk, itemBucket, itemSentence, progressLine, requestProgress, type Bucket } from "./progress.ts";
 import {
@@ -236,6 +236,7 @@ function stackSection(r: RequestState, s: StackView, ctx: RenderContext): Html {
   const meta = r.metaBug && hasBug(r.metaBug) ? r.metaBug : undefined;
   const title = meta ? html`<a class="bug" href="${bugUrl(meta.bug!)}" target="_blank" rel="noopener">Bug ${meta.bug}</a> ${r.metaBug?.draft?.summary ?? s.folder}` : html`${s.folder}`;
   return html`<h3 class="stackhead"><span title="Branch ${s.branch}; patches in review order: easy and valuable first, each after its hard deps">${title}</span>${stackViewerLink(r, s)}</h3>
+    ${r.needsUser.filter((n) => flagItemOf(r, n) === undefined && n.patch === undefined && n.stack === s.id && flagPlaceOf(r, n) !== undefined).map((n) => renderAction(r, n, ctx))}
     ${optionalMetaBug(r, s, ctx)}
     <div class="rows">${patches.filter((p) => !isDropped(r, p)).map((p) => patchRow(r, p, ctx))}${
       dropped.length ? html`<details class="fold" data-fold="dropped-${s.id}"><summary>${dropped.length} dropped</summary><div class="rows">${dropped.map((p) => patchRow(r, p, ctx))}</div></details>` : null
@@ -464,8 +465,10 @@ function patchRow(r: RequestState, p: PatchView, ctx: RenderContext): Html {
   // A blocked group's patch still in its stack counts: that row is the only one it has.
   const stacked = new Set(Object.values(r.stacks).flatMap((st) => st.order));
   const asks = item !== undefined && Object.values(r.patches).find((x) => x.item === item.id && (!isDraft(r, x) || stacked.has(x.id)) && !isDropped(r, x)) === p;
-  // What it waits for you to do (resubmit after review fixes, file its bug…), said on the row.
+  // What it waits for you to do (resubmit after review fixes, file its bug…), said on the row; those about no group are
+  // asked right under it.
   const yours = r.needsUser.filter((n) => n.patch === p.id);
+  const own = yours.filter((n) => flagItemOf(r, n) === undefined && flagPlaceOf(r, n) !== undefined);
   return row({
     you: yours.length > 0 || (asks && item !== undefined && r.needsUser.some((n) => flagItemOf(r, n) === item.id)),
     anchor: html`id="patch-${p.id}" data-patch="${p.id}"`,
@@ -479,7 +482,10 @@ function patchRow(r: RequestState, p: PatchView, ctx: RenderContext): Html {
     // "in the stack" says nothing a patch row in its stack's section doesn't.
     state: html`${item ? html`fixes <b>${groupLinks(r, item)}</b>${covered.length ? html` and <b>${join(covered.map((i) => groupLinks(r, i)), ", ")}</b>` : null}${item.state === "in stack" ? null : html` · ${item.state === "waiting for review" && p.review?.status === "accepted" ? "accepted on Phabricator" : stateText(r, item, ctx)}`}` : p.review ? p.review.status : null}${landable ? html` · <span class="landable">landable</span>` : null}${backoutText(r, p)}${yours.map((n) => html` · <b class="you">${n.action}</b>`)}`,
     trust: item ? trustLine(r, item, ctx) : null,
-    ask: item && asks ? askBlock(r, item, ctx, [], controls !== null) : undefined,
+    ask: (() => {
+      const group = item && asks ? askBlock(r, item, ctx, [], controls !== null) : undefined;
+      return group || own.length ? html`${group}${own.map((n) => renderAction(r, n, ctx))}` : undefined;
+    })(),
     under: bugBoxShown ? bugDraftBox(r, p, back) : null,
     body: html`${testPlanSection(r, p, back)}${yourComments(r, p)}${item ? failure(r, item) : null}<h4 class="part">The fix</h4>${item ? investigationHtml(item) : null}${p.effort === undefined ? null : html`<div class="sub">review effort ${p.effort}/5</div>`}${reviewers(p)}${p.deps.map((d) => depLine(r, d))}${controls && !sentence?.ask ? html`<div class="jobctl">${controls}</div>` : null}${reviewBox(r, p, back, p.interdiffFile === undefined ? undefined : ctx.interdiff?.(p))}${
       item ? html`<h4 class="part">What the factory did</h4>${talkBox(r, item, ctx)}${itemJobs(r, item, ctx)}` : null

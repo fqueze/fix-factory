@@ -3,8 +3,8 @@ import { mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } from "node:
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
-import { afterEach, beforeEach, describe, it } from "node:test";
-import { watchTree } from "./supervise.ts";
+import { afterEach, beforeEach, describe, it, test } from "node:test";
+import { codeFingerprint, watchTree } from "./supervise.ts";
 
 describe("watchTree", () => {
   let base: string;
@@ -50,4 +50,15 @@ describe("watchTree", () => {
     await sees(() => mkdirSync(join(dir, "b")));
     await sees(() => writeFileSync(join(dir, "b", "y.ts"), "1"));
   });
+});
+
+test("codeFingerprint: the same code, the same fingerprint; any change under src/, another", () => {
+  const root = mkdtempSync(join(tmpdir(), "fp-"));
+  mkdirSync(join(root, "src"));
+  writeFileSync(join(root, "src", "a.ts"), "export const a = 1;\n");
+  writeFileSync(join(root, "package.json"), "{}\n");
+  const first = codeFingerprint(root);
+  assert.equal(codeFingerprint(root), first);
+  writeFileSync(join(root, "src", "a.ts"), "export const a = 2;\n");
+  assert.notEqual(codeFingerprint(root), first);
 });

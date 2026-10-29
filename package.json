@@ -8,7 +8,7 @@
   "scripts": {
     "test": "node --test \"src/**/*.test.ts\"",
     "typecheck": "tsc --noEmit",
-    "start": "node src/tools/supervise.ts src/server/main.ts",
+    "start": "node src/tools/supervise.ts --check src/server/main.ts",
     "orchestrator": "node src/tools/supervise.ts --check src/orchestrator/main.ts",
     "tools": "node src/cli/tools.ts update"
   },

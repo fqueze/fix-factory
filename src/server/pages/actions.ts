@@ -2,7 +2,7 @@ import type { JobView, NeedsUser, PlannedCommand, PushView, RefusedCommand, Requ
 import { md } from "./md.ts";
 import { canDismiss, canRetry, reviewLimitFlag } from "../../state/flags.ts";
 import { html, join, type Html } from "../html.ts";
-import { actionKind, COMMAND_LABELS, linkify, commandFields, enterBugUrl, metaBugUrl, groupLabel, jobLabel, pushName, jobNoun, refusedOf, needsMetaBug, plural, requestUrl, stackOfPatch, submitChecks, regressionStatus, type RenderContext } from "./common.ts";
+import { actionKind, COMMAND_LABELS, isLanded, linkify, commandFields, enterBugUrl, metaBugUrl, groupLabel, jobLabel, pushName, jobNoun, refusedOf, needsMetaBug, plural, requestUrl, stackOfPatch, submitChecks, regressionStatus, type RenderContext } from "./common.ts";
 
 // The ⚑ area of one open needs-user entry: what you're asked, why, and the buttons.
 export function renderAction(r: RequestState, n: NeedsUser, ctx: RenderContext): Html {
@@ -396,7 +396,16 @@ function instructions(c: PlannedCommand, r: RequestState): string | undefined {
 // A group's ⚑ is handled on its row, a try push's on its row too; the request's own ⚑s (recovery plans,
 // meta bug, submit…) here, under its name.
 export function actionsSummary(r: RequestState, ctx: RenderContext): Html {
-  return join([...r.needsUser.filter((n) => flagItemOf(r, n) === undefined && !isPushApproval(r, n) && !recoveryPlanFor(r, n)).map((n) => renderAction(r, n, ctx)), ...refusedOf(r).map((x) => renderRefused(r, x))], "");
+  return join([...r.needsUser.filter((n) => flagItemOf(r, n) === undefined && flagPlaceOf(r, n) === undefined && !isPushApproval(r, n) && !recoveryPlanFor(r, n)).map((n) => renderAction(r, n, ctx)), ...refusedOf(r).map((x) => renderRefused(r, x))], "");
+}
+
+// Where a ⚑ about no group is asked instead of at the top: on its patch's row (resubmit, reply), or on its stack (reorg).
+export function flagPlaceOf(r: RequestState, n: NeedsUser): { patch: string } | { stack: string } | undefined {
+  // Shown: a stack with a patch not landed yet, and such a patch's row.
+  const live = (pid: string) => r.patches[pid] !== undefined && !isLanded(r, r.patches[pid]);
+  if (n.patch !== undefined && live(n.patch) && Object.values(r.stacks).some((st) => st.order.includes(n.patch!))) return { patch: n.patch };
+  if (n.patch === undefined && n.stack !== undefined && r.stacks[n.stack]?.order.some(live)) return { stack: n.stack };
+  return undefined;
 }
 
 // Answers to what you typed in the request's box go right above that box, in its body: folds there open.

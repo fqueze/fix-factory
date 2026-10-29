@@ -2,10 +2,27 @@
 //
 // Runs a factory process and restarts it when anything under src/ changes (prompts and schemas are read
 // fresh by every job already). With --check, it restarts only once the typecheck and the tests pass, so a
-// half-done edit never runs: the orchestrator uses it, the stateless web server doesn't need it.
+// half-done edit never runs: the orchestrator and the web server both use it (a page reloaded on a broken one is stuck).
+// The supervisors share one check per version of the code: a second one waits for the first's result.
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
-import { readdirSync, statSync, watch, type FSWatcher } from "node:fs";
+import { createHash } from "node:crypto";
+import { mkdirSync, readdirSync, readFileSync, rmSync, statSync, watch, writeFileSync, type FSWatcher } from "node:fs";
 import { join, sep } from "node:path";
+
+// What the typecheck and the tests read: a version of the code.
+export function codeFingerprint(root: string): string {
+  const hash = createHash("sha1");
+  const walk = (d: string): void => {
+    for (const e of readdirSync(d, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+      const path = join(d, e.name);
+      if (e.isDirectory()) walk(path);
+      else if (e.isFile()) hash.update(path).update(readFileSync(path));
+    }
+  };
+  for (const d of ["src", "test", "schemas", "prompts", "docs"]) if (statSync(join(root, d), { throwIfNoEntry: false })?.isDirectory()) walk(join(root, d));
+  for (const f of ["package.json", "tsconfig.json"]) if (statSync(join(root, f), { throwIfNoEntry: false })) hash.update(f).update(readFileSync(join(root, f)));
+  return hash.digest("hex");
+}
 
 const log = (text: string) => process.stderr.write(`supervise: ${text}\n`);
 
@@ -100,6 +117,42 @@ function main(): void {
     return false;
   }
 
+  // One check per version of the code, whichever supervisor runs it.
+  const cacheDir = join(root, "node_modules/.cache/fix-factory");
+  const resultFile = join(cacheDir, "check.json");
+  const lockFile = join(cacheDir, "check.lock");
+  const readJson = (f: string): { fp: string; ok?: boolean; pid?: number } | undefined => {
+    try {
+      return JSON.parse(readFileSync(f, "utf8"));
+    } catch {
+      return undefined; // none yet
+    }
+  };
+  const alive = (pid: number) => {
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  async function checked(): Promise<boolean> {
+    mkdirSync(cacheDir, { recursive: true });
+    const fp = codeFingerprint(root);
+    for (;;) {
+      const result = readJson(resultFile);
+      if (result?.fp === fp) return result.ok === true;
+      const lock = readJson(lockFile);
+      if (!lock || lock.fp !== fp || !alive(lock.pid!)) break;
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+    writeFileSync(lockFile, JSON.stringify({ fp, pid: process.pid }));
+    const ok = passes(["npx", "tsc", "--noEmit"]) && passes(["npm", "test", "--silent"]);
+    writeFileSync(resultFile, JSON.stringify({ fp, ok }));
+    rmSync(lockFile, { force: true });
+    return ok;
+  }
+
   let busy = false;
   let again = false;
   async function restart(): Promise<void> {
@@ -110,7 +163,7 @@ function main(): void {
     busy = true;
     do {
       again = false;
-      if (check && !(passes(["npx", "tsc", "--noEmit"]) && passes(["npm", "test", "--silent"]))) {
+      if (check && !(await checked())) {
         log("keeping the running version");
         continue;
       }

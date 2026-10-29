@@ -43,7 +43,9 @@ function rowOf(h: string, id: string): string {
     if (depth === 0) {
       const next = h.indexOf('<details class="row', tags.lastIndex);
       const end = h.indexOf("</div></div>", tags.lastIndex);
-      return h.slice(start, Math.max(tags.lastIndex, next < 0 ? tags.lastIndex : Math.min(next, end < 0 ? next : end)));
+      // The last row's asks end where its list does.
+      const stop = next < 0 ? (end < 0 ? tags.lastIndex : end) : Math.min(next, end < 0 ? next : end);
+      return h.slice(start, Math.max(tags.lastIndex, stop));
     }
   }
   return h.slice(start);
@@ -657,6 +659,8 @@ describe("one fixture per step of docs/MVP.md", () => {
     const h = renderRequest(r, ctx, true).value;
     assert.match(h, /<details class="row you" id="patch-p-focus"/);
     assert.match(rowOf(h, "patch-p-focus"), /<b class="you">Post 1 reply, then resubmit D5<\/b>/);
+    assert.ok(rowOf(h, "patch-p-focus").includes('data-key="resubmit:focus:j1"'), "its flag, with its buttons, right under its row");
+    assert.equal(h.split('data-key="resubmit:focus:j1"').length, 2, "and not also at the top");
   });
 
   it("9. review comments: Check Phabricator now, under a stack with revisions, until done", () => {
@@ -740,7 +744,7 @@ describe("one fixture per step of docs/MVP.md", () => {
     const r = structuredClone(get("r-20261005-newtab"));
     r.stacks.other = { ...r.stacks.newtab, id: "other" };
     r.needsUser = [{ key: "resubmit:x", action: "Resubmit", detail: "", stack: "other", since: r.createdAt }];
-    const h = renderRequest(r, ctx).value;
+    const h = renderRequest(r, ctx, true).value; // on its stack, in the open request
     assert.match(h, /data-copy="mozphab-r-20261005-newtab-other"/);
     const flag = h.slice(h.indexOf('data-key="resubmit:x"'), h.indexOf("</div>", h.indexOf('data-key="resubmit:x"')));
     assert.ok(flag.includes(cmd({ cmd: "dismiss", key: "resubmit:x", request: "r-20261005-newtab" })), "a resubmit you decide against can be dismissed");
