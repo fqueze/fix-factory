@@ -337,4 +337,7 @@ form.inline-tell input { flex: 1; font: inherit; font-size: 12px; padding: 2px 6
 .yourcomment .comment-text pre { white-space: pre-wrap; overflow-wrap: anywhere; }
 .yourcomment .answer { border-top: 1px dashed var(--border); padding-top: 4px; }
 ul.changes li.more { list-style: none; }
+/* "+n more" at the level of the items: its ▸ where their bullets are. */
+ul.changes li.more > details > summary { font-size: inherit; color: var(--text-primary); padding: 2px 0; margin-left: -1.1em; }
+ul.changes li.more > details > summary::before { display: inline-block; width: 1.1em; }
 ul.changes li.more ul.changes { padding-left: 0; margin: 0; }
