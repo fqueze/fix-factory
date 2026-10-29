@@ -397,12 +397,18 @@ function groupRow(r: RequestState, i: ItemView, ctx: RenderContext): Html {
 
 // Whatever its state, you can tell its author what to change, or close it; a group asking you has these in its
 // question, a closed one Reopen.
-function talkBox(r: RequestState, i: ItemView, ctx: RenderContext): Html | null {
+// On a patch's row, what you say is a comment on its fix: listed under Your comments with its answer.
+function talkBox(r: RequestState, i: ItemView, ctx: RenderContext, p?: PatchView): Html | null {
   const s = itemSentence(r, i, ctx);
   if (s.ask || s.cls === "run" || ["fixed", "landed", "left as-is", "handed back", "taken over"].includes(i.state)) {
     return null;
   }
-  return hasAuthorSession(r, i.id) ? html`<div class="jobctl">${continueBox(r.id, i.id, requestUrl(r.id))}</div>` : null;
+  if (!hasAuthorSession(r, i.id)) return null;
+  return html`<div class="jobctl">${
+    p
+      ? html`<form class="inline cmd joined" method="post" action="/api/commands">${commandFields([{ cmd: "comment-fix", request: r.id, patch: p.id }], requestUrl(r.id))}<input type="text" name="text" required placeholder="Tell its author what to do…"><button class="btn small" title="Resumes its author's session with your message; its patch then goes through lint and critical review again">Send</button></form>`
+      : continueBox(r.id, i.id, requestUrl(r.id))
+  }</div>`;
 }
 
 // Whether the factory may still be told to stop working on a group: the row's 🗑.
@@ -502,8 +508,8 @@ function patchRow(r: RequestState, p: PatchView, ctx: RenderContext): Html {
       return group || own.length ? html`${group}${own.map((n) => renderAction(r, n, ctx))}` : undefined;
     })(),
     under: bugBoxShown ? bugDraftBox(r, p, back) : null,
-    body: html`${testPlanSection(r, p, back)}${yourComments(r, p)}${item ? whyFold(r, item) : null}${p.deps.map((d) => depLine(r, d))}${controls && !sentence?.ask ? html`<div class="jobctl">${controls}</div>` : null}${reviewBox(r, p, back, p.interdiffFile === undefined ? undefined : ctx.interdiff?.(p))}${
-      item ? html`<h4 class="part">What the factory did</h4>${itemJobs(r, item, ctx)}${talkBox(r, item, ctx)}` : null
+    body: html`${testPlanSection(r, p, back)}${yourComments(r, p)}${item ? whyFold(r, item) : null}${p.deps.map((d) => depLine(r, d))}${controls && !sentence?.ask ? html`<div class="jobctl">${controls}</div>` : null}${reviewBox(r, p, p.interdiffFile === undefined ? undefined : ctx.interdiff?.(p))}${
+      item ? html`<h4 class="part">What the factory did</h4>${itemJobs(r, item, ctx)}${talkBox(r, item, ctx, p)}` : null
     }`,
   });
 }
@@ -702,7 +708,7 @@ function hoverInfo(r: RequestState, p: PatchView, item: ItemView | undefined, ct
 }
 
 // Interdiff, the comments still to answer, and the drafted replies to post.
-function reviewBox(r: RequestState, p: PatchView, back: string, interdiff: string | undefined): Html | null {
+function reviewBox(r: RequestState, p: PatchView, interdiff: string | undefined): Html | null {
   const comments = p.review?.comments ?? [];
   const drafts = new Map(p.replyDrafts.map((d) => [d.commentId, d.text]));
   const shown = comments.filter((c) => !c.done || drafts.has(c.id));
@@ -720,22 +726,21 @@ function reviewBox(r: RequestState, p: PatchView, back: string, interdiff: strin
     const text = job.said ?? job.outcome;
     return html`<div class="answer"><b>Its author's answer</b>${text ? md(text) : html`<span class="sub">${job.error ?? "no answer"}</span>`}</div>`;
   };
-  return html`<div class="box">
-    ${!changed ? null : html`<h4>Interdiff</h4>${interdiff === undefined ? html`<div class="sub">${p.interdiffFile} can't be read</div>` : diff(interdiff)}`}
-    ${shown.map((c) => {
-      const draft = drafts.get(c.id);
-      return html`<div class="comment" data-comment="${c.id}"><b>${c.author}</b>${c.file ? html` <span class="sub mono">${c.file}${c.line ? `:${c.line}` : ""}</span>` : null}${c.kind ? html` <span class="sub">(${c.kind})</span>` : null}: ${c.text}${
-        c.suggestion ? html`<pre class="diff">${c.suggestion}</pre>` : null
-      }</div>${c.author === p.review?.author ? null : answer(c.id)}${
-        draft !== undefined
-          ? html`<div class="draftreply"><div class="parthead"><h4>Draft reply</h4>${copyButton(`reply-${p.id}-${c.id}`, "Copy reply", true)}${
-              revision ? html`<a class="btn small" href="${phabUrl(revision, c.id)}" target="_blank" rel="noopener" title="D${revision}#inline-${c.id}">Open comment ↗</a>` : null
-            }</div><textarea rows="${replyRows(draft)}" id="reply-${p.id}-${c.id}">${draft}</textarea></div>`
-          : null
-      }`;
-    })}
-    <form class="row cmd joined" method="post" action="/api/commands">${commandFields([{ cmd: "comment-fix", request: r.id, patch: p.id }], back)}<input type="text" name="text" required placeholder="Comment on the fix…"><button class="btn small">Send</button></form>
-  </div>`;
+  // Each comment a thread under one bar: the comment, its author's answer, the reply to post.
+  return html`${!changed ? null : html`<h4 class="part">Interdiff</h4>${interdiff === undefined ? html`<div class="sub">${p.interdiffFile} can't be read</div>` : diff(interdiff)}`}${
+    shown.length ? html`<h4 class="part">Review comments</h4>` : null
+  }${shown.map((c) => {
+    const draft = drafts.get(c.id);
+    return html`<div class="thread" data-comment="${c.id}"><div class="comment"><b>${c.author}</b>${c.file ? html` <span class="sub mono">${c.file}${c.line ? `:${c.line}` : ""}</span>` : null}${c.kind ? html` <span class="sub">(${c.kind})</span>` : null}: ${c.text}${
+      c.suggestion ? html`<pre class="diff">${c.suggestion}</pre>` : null
+    }</div>${c.author === p.review?.author ? null : answer(c.id)}${
+      draft !== undefined
+        ? html`<div class="draftreply"><div class="parthead"><b>Draft reply</b>${copyButton(`reply-${p.id}-${c.id}`, "Copy reply", true)}${
+            revision ? html`<a class="btn small" href="${phabUrl(revision, c.id)}" target="_blank" rel="noopener" title="D${revision}#inline-${c.id}">Open comment ↗</a>` : null
+          }</div><textarea rows="${replyRows(draft)}" id="reply-${p.id}-${c.id}">${draft}</textarea></div>`
+        : null
+    }</div>`;
+  })}`;
 }
 
 // Tall enough to read it whole, wrapped at about 110 characters, up to 8 lines.

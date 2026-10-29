@@ -769,7 +769,8 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.match(h, /<textarea rows="1" id="reply-p-sponsored-1873402">Done\.<\/textarea>/);
     assert.match(h, /data-copy="reply-p-sponsored-1873402">Copy reply</);
     assert.match(h, /href="https:\/\/phabricator\.services\.mozilla\.com\/D327101#inline-1873402"/);
-    assert.ok(h.includes(cmd({ cmd: "comment-fix", request: "r-20261005-newtab", patch: "p-sponsored" })));
+    assert.match(h, /<h4 class="part">Review comments<\/h4><div class="thread" data-comment="1873402">/);
+    assert.doesNotMatch(h, /Comment on the fix/, "the row's Tell its author box says it");
   });
   it("10. landing: an accepted patch whose group still waits for review says it's accepted", () => {
     const r = structuredClone(get("r-20261001-mouse-button"));
@@ -935,7 +936,7 @@ describe("a burndown with closed groups, running agents and a dropped patch", ()
     r.jobs["j-inv-close"] = { ...r.jobs["j-inv-spinner"], job: "j-inv-close", item: "i-close", endedAt: "2026-10-15T08:00:00.000Z", exitCode: 0, sessionId: "s-close" };
     r.items["i-close"].jobs.push("j-inv-close");
     const row = rowOf(renderRequest(r, ctx, true).value, "patch-p-close");
-    assert.ok(row.includes(cmd({ cmd: "continue", request: r.id, item: "i-close" })));
+    assert.ok(row.includes(cmd({ cmd: "comment-fix", request: r.id, patch: "p-close" })), "listed under Your comments with its answer");
     assert.match(row, />Send</);
   });
 

@@ -352,9 +352,10 @@ ul.changes li.more { list-style: none; }
 ul.changes li.more > details > summary { font-size: inherit; color: var(--text-primary); padding: 2px 0; margin-left: -1.1em; }
 ul.changes li.more > details > summary::before { display: inline-block; width: 1.1em; }
 ul.changes li.more ul.changes { padding-left: 0; margin: 0; }
-.box .comment + .answer { margin: 2px 0 8px 12px; padding-left: 8px; border-left: 2px solid var(--border); }
-.box .comment + .answer b { display: block; font-size: 12px; color: var(--text-secondary); }
-.draftreply { border-left: 3px solid var(--border); padding-left: 8px; margin: 6px 0; }
+.thread { border-left: 3px solid var(--border); padding-left: 8px; margin: 4px 0 10px; font-size: 12px; }
+.thread .comment { border: 0; padding: 0; margin: 0; }
+.thread .answer, .thread .draftreply { margin-top: 6px; }
+.thread .answer b, .thread .draftreply b { display: block; color: var(--text-secondary); }
+.thread .draftreply b { display: inline; }
 .draftreply .parthead { margin: 0 0 3px; }
-.draftreply .parthead h4 { margin: 0 4px 0 0; }
 .draftreply textarea { width: 100%; box-sizing: border-box; font: inherit; }
