@@ -117,9 +117,9 @@ export function renderRequestBody(r: RequestState, ctx: RenderContext): Html {
   // Patches without a group (annotation patches) get a row of their own.
   const loose = Object.values(r.patches).filter((p) => !stacked.has(p.id) && itemOf(r, p) === undefined);
   const unstacked = Object.values(r.items).filter((i) => !stackedItems.has(i.id));
-  // Groups whose patches landed have left their stack.
   // The abandoned groups come last, after what landed.
   const own = (i: ItemView) => Object.values(r.patches).filter((p) => p.item === i.id && !isDropped(r, p));
+  // Groups whose patches landed have left their stack.
   const landed = unstacked.filter((i) => i.state === "landed" || (own(i).length > 0 && own(i).every((p) => isLanded(r, p))));
   const items = unstacked.filter((i) => !landed.includes(i));
   // Newest first, as on Treeherder; those waiting for you are the newest anyway.
