@@ -728,15 +728,19 @@ function reviewBox(r: RequestState, p: PatchView, back: string, interdiff: strin
         c.suggestion ? html`<pre class="diff">${c.suggestion}</pre>` : null
       }</div>${c.author === p.review?.author ? null : answer(c.id)}${
         draft !== undefined
-          ? html`<h4>Draft reply</h4><textarea rows="${Math.min(6, draft.split("\n").length)}" id="reply-${p.id}-${c.id}">${draft}</textarea>
-            <div class="row">${copyButton(`reply-${p.id}-${c.id}`, "Copy reply", true)}${
+          ? html`<div class="draftreply"><div class="parthead"><h4>Draft reply</h4>${copyButton(`reply-${p.id}-${c.id}`, "Copy reply", true)}${
               revision ? html`<a class="btn small" href="${phabUrl(revision, c.id)}" target="_blank" rel="noopener" title="D${revision}#inline-${c.id}">Open comment ↗</a>` : null
-            }</div>`
+            }</div><textarea rows="${replyRows(draft)}" id="reply-${p.id}-${c.id}">${draft}</textarea></div>`
           : null
       }`;
     })}
     <form class="row cmd joined" method="post" action="/api/commands">${commandFields([{ cmd: "comment-fix", request: r.id, patch: p.id }], back)}<input type="text" name="text" required placeholder="Comment on the fix…"><button class="btn small">Send</button></form>
   </div>`;
+}
+
+// Tall enough to read it whole, wrapped at about 110 characters, up to 8 lines.
+function replyRows(text: string): number {
+  return Math.min(8, text.split("\n").reduce((n, line) => n + Math.max(1, Math.ceil(line.length / 110)), 0));
 }
 
 export function diff(text: string): Html {
