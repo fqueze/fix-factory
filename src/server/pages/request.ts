@@ -676,13 +676,21 @@ function reviewBox(r: RequestState, p: PatchView, back: string, interdiff: strin
     return null;
   }
   const revision = p.review?.revision ?? p.revision;
+  // Who answered each comment, and what it said: the latest of its author's runs given it.
+  const answer = (id: number): Html => {
+    const job = Object.values(r.jobs).findLast((j) => j.purpose?.patch === p.id && j.purpose.comments?.includes(id));
+    if (!job) return html`<div class="answer sub">not answered yet</div>`;
+    if (job.endedAt === undefined) return html`<div class="answer"><span class="working">being answered by its author</span></div>`;
+    const text = job.said ?? job.outcome;
+    return html`<div class="answer"><b>Its author's answer</b>${text ? md(text) : html`<span class="sub">${job.error ?? "no answer"}</span>`}</div>`;
+  };
   return html`<div class="box">
     ${p.interdiffFile === undefined ? null : html`<h4>Interdiff</h4>${interdiff === undefined ? html`<div class="sub">${p.interdiffFile} can't be read</div>` : diff(interdiff)}`}
     ${shown.map((c) => {
       const draft = drafts.get(c.id);
       return html`<div class="comment" data-comment="${c.id}"><b>${c.author}</b>${c.file ? html` <span class="sub mono">${c.file}${c.line ? `:${c.line}` : ""}</span>` : null}${c.kind ? html` <span class="sub">(${c.kind})</span>` : null}: ${c.text}${
         c.suggestion ? html`<pre class="diff">${c.suggestion}</pre>` : null
-      }</div>${
+      }</div>${c.author === p.review?.author ? null : answer(c.id)}${
         draft !== undefined
           ? html`<h4>Draft reply</h4><textarea rows="${Math.min(6, draft.split("\n").length)}" id="reply-${p.id}-${c.id}">${draft}</textarea>
             <div class="row">${copyButton(`reply-${p.id}-${c.id}`, "Copy reply", true)}${
