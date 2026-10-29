@@ -2436,6 +2436,44 @@ describe("9. a try push of a submitted stack", () => {
     assert.equal(sc.view().jobs.filter((j) => j.purpose.what === "plan-pushes" && j.purpose.key.includes(":ask")).length, 1, "that ask is answered");
   });
 
+  it("a fix made after submission goes on top of the stack once reviewed, for you to submit, without the step going back", () => {
+    const sc = inReview();
+    sc.complete("poll:0", { output: polled("needs-review", [], "pending") });
+    sc.settle();
+    sc.add({ type: "item-created", request: ID, item: "i-test-c", folder: "a", group: { message: "crash", tests: ["a/test_c.js"], configs: [] } });
+    investigating(sc, "i-test-c");
+    reviewed(sc, "i-test-c", sha("3"), "a/test_c.js", { title: "Bug 33 - Fix test_c, r=smaug.", bug: 33 });
+    assert.equal(sc.state().step, "review comments");
+    const st = sc.state().stacks.root;
+    const append = sc.view().jobs.find((j) => j.purpose.key.startsWith("append:root:"))!;
+    const args = sc.plan(append.purpose.key).cli!.args;
+    assert.equal(args[args.indexOf("--order") + 1], [...st.order.map((pid) => sc.state().patches[pid].sha), sha("3")].join(","));
+    assert.ok(args.includes("--edits"), "the submitted patches keep their Differential Revision lines");
+    sc.complete(append.purpose.key, { output: { mapping: { [sha("3")]: sha("9") } } });
+    sc.settle();
+    assert.deepEqual(sc.state().stacks.root.order, [...st.order, "p-test-c"]);
+    assert.equal(sc.state().items["i-test-c"].state, "in stack");
+    const flag = sc.state().needsUser.find((n) => n.key.startsWith("submit-new:root:"))!;
+    assert.equal(flag.action, "Submit 1 new patch");
+    assert.equal(sc.view().jobs.filter((j) => j.purpose.key.startsWith("append:")).length, 1, "added once");
+    // You submit it: its revision is found, and it waits for review like the others.
+    sc.add({ type: "submit-copied", request: ID, stack: "root" });
+    sc.settle();
+    const imp = sc.view().jobs.find((j) => !j.end && j.purpose.key.startsWith("import-submit:root:"))!.purpose.key;
+    sc.complete(imp, {
+      output: [
+        { ...imported(sha("e"), "Bug 22 - Fix test_b, r=smaug.", [], 22)[0], revision: 100 },
+        { ...imported(sha("f"), "Bug 999 - Fix a, r=smaug.", [], 999)[0], revision: 101 },
+        { ...imported(sha("9"), "Bug 33 - Fix test_c, r=smaug.", [], 33)[0], revision: 102 },
+      ],
+    });
+    sc.settle();
+    assert.equal(sc.state().patches["p-test-c"].revision, 102);
+    assert.equal(sc.state().items["i-test-c"].state, "waiting for review");
+    assert.ok(!sc.open().some((k) => k.startsWith("submit-new:")));
+    assert.equal(sc.state().step, "review comments");
+  });
+
   it("redo-step back before review is refused once the stack is on Phabricator", () => {
     const sc = inReview();
     command(sc, { cmd: "redo-step", step: "verify on try", reason: "another push" });

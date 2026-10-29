@@ -297,6 +297,7 @@ class Planner {
     this.submit();
     this.submitted();
     this.reviewComments();
+    this.newPatches();
     this.landing();
     this.testPlans();
   }
@@ -928,7 +929,9 @@ class Planner {
         this.createItem({ message: c.evidence.slice(0, 300), tests: [c.test], configs: c.config ? [c.config] : [], ...(c.taskId ? { taskIds: [c.taskId] } : {}) });
       }
     }
-    if (created && at(this.s.step) > at("investigate and fix")) this.setStep("investigate and fix");
+    // Once on Phabricator, the request stays where it is: their patches go on top of the stack (newPatches).
+    const submitted = Object.values(this.s.patches).some((p) => p.revision !== undefined);
+    if (created && !submitted && at(this.s.step) > at("investigate and fix")) this.setStep("investigate and fix");
   }
 
   private itemsFromTriage(report: TriageTryReport): void {
@@ -2260,11 +2263,12 @@ class Planner {
   // works whenever you copy it. After you copy it, stack.ts import looks for the Differential Revision trailers
   // moz-phab adds, every few minutes for a while, until each patch has its revision.
   private submitted(): void {
-    if (at(this.s.step) < at("stack") || at(this.s.step) > at("submit")) return;
-    for (const info of this.stackInfos.values()) {
-      const st = this.s.stacks[info.id];
-      if (!st || !info.ready || st.order.every((pid) => this.s.patches[pid].revision !== undefined)) continue;
-      if (this.s.step !== "submit") this.reviewers(st, this.stepEpoch("stack"));
+    if (at(this.s.step) < at("stack") || this.s.step === "done") return;
+    // After submission, patches added on top (newPatches) are looked for the same way.
+    const after = at(this.s.step) > at("submit");
+    for (const st of after ? this.liveStacks() : [...this.stackInfos.values()].flatMap((info) => (info.ready && this.s.stacks[info.id] ? [this.s.stacks[info.id]] : []))) {
+      if (st.order.every((pid) => this.s.patches[pid].revision !== undefined)) continue;
+      if (this.s.step !== "submit" && !after) this.reviewers(st, this.stepEpoch("stack"));
       if (!st.submitCopied || this.ctx.now - Date.parse(st.submitCopied) > SUBMIT_WATCH_MS) continue;
       const imports = this.view.jobs.filter((j) => j.purpose.what === "import-submit" && j.purpose.stack === st.id);
       const last = imports.at(-1);
@@ -2534,6 +2538,46 @@ class Planner {
       patch: p.id,
     });
     this.setItem(item.id, "waiting for review");
+  }
+
+  // After submission, fixes made since (tests you asked to fix, failures a push found) go on top of the stack once
+  // reviewed, for you to submit; the step stays. Once on Phabricator, they wait for review like the others.
+  private newPatches(): void {
+    if (this.s.step !== "review comments" && this.s.step !== "landing") return;
+    const stacked = new Set(Object.values(this.s.stacks).flatMap((st) => st.order));
+    const own = (i: ItemView) => (this.authorReport(i.id)?.commits ?? []).map((_, n) => this.s.patches[patchId(i.id, n)]).filter((p) => p !== undefined);
+    for (const st of this.liveStacks()) {
+      const items = Object.values(this.s.items).filter((i) => this.stackFolder(i) === st.folder);
+      for (const i of items) if (i.state === "in stack" && own(i).length && own(i).every((p) => p.revision !== undefined && st.order.includes(p.id))) this.setItem(i.id, "waiting for review");
+      if (st.order.every((pid) => this.s.patches[pid].revision !== undefined)) for (const n of this.s.needsUser) if (n.key.startsWith(`submit-new:${st.id}:`)) this.clear(n.key);
+      const fresh = items.filter((i) => i.state === "reviewed").flatMap(own).filter((p) => !stacked.has(p.id) && p.revision === undefined);
+      if (!fresh.length) continue;
+      const all = [...st.order.map((pid) => this.s.patches[pid]), ...fresh];
+      // By their authors' runs, not their shas, which the rewrite changes.
+      const h = shortHash(fresh.map((p) => `${p.id}:${p.item ? this.latestAuthor(p.item)?.job : ""}`)).slice(0, 10);
+      const e = this.rewriteEdits(`append-${st.id}-${h}`, all);
+      const rw = this.want(`append:${st.id}:${h}`, () =>
+        this.cli("rewrite", "stack.ts", ["rewrite", "--cwd", st.worktree, "--base", st.base ?? this.config.baseRef, "--branch", st.branch, "--order", all.map((p) => p.sha).join(","), ...e.args], {
+          cwd: st.worktree,
+          files: e.files,
+          purpose: { stack: st.id, reason: "new patches on top", patches: Object.fromEntries(all.map((p) => [p.sha.slice(0, 12), p.id])) },
+        }),
+      );
+      if (!rw) continue;
+      if (this.out<{ conflict?: unknown }>(rw).conflict) {
+        this.raise(`failed:${rw.job}`, { action: "Conflict while adding new patches on top of the stack", detail: "stack.ts rewrite stopped on a conflict", job: rw.job, stack: st.id });
+        continue;
+      }
+      const { id, ...rest } = st;
+      this.event(this.ev("stack", { stack: id, ...rest, order: all.map((p) => p.id) }));
+      for (const i of new Set(fresh.map((p) => p.item!))) this.setItem(i, "in stack");
+      const unfiled = fresh.some((p) => p.bug === null && p.bugDraft);
+      this.raise(`submit-new:${st.id}:${h}`, {
+        action: `Submit ${fresh.length} new ${fresh.length === 1 ? "patch" : "patches"}`,
+        detail: `${fresh.map((p) => p.title.replace(/,\s*r=.*$/, "")).join("; ")}: on top of the stack, reviewed. ${unfiled ? "File its bug (the draft on its row), then copy" : "Copy"} the moz-phab submit command.`.slice(0, 500),
+        stack: st.id,
+      });
+    }
   }
 
   // -------------------------------------------------------------------------
