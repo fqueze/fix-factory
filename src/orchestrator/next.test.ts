@@ -2498,10 +2498,26 @@ describe("9. a try push of a submitted stack", () => {
     const queued = sc.state().queuedAuthors![0].key;
     assert.ok(!sc.view().byKey.has(queued), "not resumed in a missing worktree");
     const restore = sc.settle().find((k) => k.startsWith(`wt-restore:${name}:`))!;
-    assert.deepEqual(sc.plan(restore).cli?.args.slice(0, 2), ["create", name]);
+    assert.deepEqual(sc.plan(restore).cli?.args, ["create", name, "--build", "artifact"], "on its kept branch: no --base");
     sc.complete(restore, { output: { name, path: `/wt/${name}` } });
     assert.ok(sc.settle().includes(queued));
     assert.match(sc.plan(queued).agent?.message ?? "", /Post the reply\./);
+  });
+
+  it("an answer that changes no code asks only to post its replies; comments from anyone but you count", () => {
+    const sc = inReview();
+    sc.complete("poll:0", { output: polled("needs-revision", [{ id: 7, author: "emilio", text: "Why not CheckForAnchorChange?", done: false, length: 0 }, { id: 8, author: "florian", text: "my note", done: false, length: 0 }], "blocking").map((x) => ({ ...x, author: "florian" })) });
+    const classify = sc.settle().find((k) => k.startsWith("classify-comments:p-test-a:"));
+    assert.ok(classify, "emilio isn't a listed reviewer, but his question is answered");
+    assert.ok(!sc.view().jobs.some((j) => j.purpose.key.startsWith("classify-comments:p-test-b:")));
+    const p = sc.state().patches["p-test-a"];
+    sc.add({ type: "needs-user", request: ID, key: "resubmit:root:jx", action: "Post 1 reply, then resubmit D101", detail: "", stack: "root", patch: "p-test-a" });
+    sc.add({ type: "review-status", request: ID, patch: "p-test-a", ...p.review!, diff: { id: 1, commit: sha("0"), created: "2026-01-01T00:00:00.000Z" } });
+    const inter = sc.settle().find((k) => k.startsWith("interdiff:p-test-a:phab-"))!;
+    sc.complete(inter, { output: { diff: "", method: "same-parent" } });
+    sc.settle();
+    assert.ok(!sc.open().includes("resubmit:root:jx"));
+    assert.equal(sc.state().needsUser.find((n) => n.key === "reply:resubmit:root:jx")?.action, "Post 1 reply on D101");
   });
 
   it("redo-step back before review is refused once the stack is on Phabricator", () => {

@@ -105,6 +105,10 @@ export function flagControls(r: RequestState, n: NeedsUser, ctx: RenderContext):
       controls = stack ? html`${mozPhabButton(r.id, stack, false)}${dismissButton(r.id, n.key, back)}` : null;
       break;
     }
+    case "reply":
+      // Posted on Phabricator: the next poll shows them, this says you're done.
+      controls = commandButton(r.id, { cmd: "dismiss", key: n.key }, "Posted", back);
+      break;
     case "land": {
       const stack = findStack(r, n);
       controls = stack ? reorgButton(r.id, stack, n.key) : null;

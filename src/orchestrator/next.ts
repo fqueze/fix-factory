@@ -19,7 +19,7 @@ import type { OrderOutput } from "../cli/stack/order.ts";
 import { expectedTests, type DryRunResult } from "../cli/try.ts";
 import { keptDir } from "../lib/kept.ts";
 import { REQUEST_STEPS } from "../server/commands.ts";
-import { landingState } from "../state/landing.ts";
+import { isReviewComment, landingState } from "../state/landing.ts";
 import { COMMITS_CHANGED } from "../state/flags.ts";
 import { ANNOTATIONS_ITEM, lacksBug, needsMetaBug, sameBugDraft } from "../state/meta-bug.ts";
 import type { EventInput } from "../state/events.ts";
@@ -1011,7 +1011,8 @@ class Planner {
     const removed = session && removedWorktree(this.view, session.cwd);
     if (removed) {
       const removal = this.view.jobs.findLast((j) => j.purpose.key === `remove:${removed}`)!;
-      this.want(`wt-restore:${removed}:${removal.job}`, () => this.worktree(removed, { item }));
+      // On its kept branch, as it was: no --base.
+      this.want(`wt-restore:${removed}:${removal.job}:v2`, () => ({ ...this.worktree(removed, { item }), cli: { tool: "worktree.ts", args: ["create", removed, "--build", "artifact"] } }));
       return undefined;
     }
     // Its own commit has no Differential Revision line (the stack's has): without the revision it can't read the reviews.
@@ -2500,15 +2501,17 @@ class Planner {
       const inter = this.want(`interdiff:${p.id}:phab-${base.slice(0, 12)}:${p.sha.slice(0, 12)}`, () =>
         this.cli("interdiff", "stack.ts", ["interdiff", "--cwd", st.worktree, base, p.sha], { cwd: st.worktree, priority: REVIEW_PRIORITY, purpose: { patch: p.id, stack: st.id } }),
       );
-      // Phabricator has that code already: nothing to resubmit.
-      if (inter && !this.out<{ diff: string }>(inter).diff.trim()) this.clear(n.key);
+      // Phabricator has that code already: nothing to resubmit, only its replies to post (an answer that changed no code).
+      if (inter && !this.out<{ diff: string }>(inter).diff.trim()) {
+        if (n.action.startsWith("Post ")) this.raise(`reply:${n.key}`, { action: n.action.replace(", then resubmit", " on"), detail: "an answer that changes no code: the draft replies are on its row", stack: n.stack, patch: p.id });
+        this.clear(n.key);
+      }
     }
     for (const p of revisions) {
       if (!p.review || !p.item) continue;
       const item = p.item;
-      const reviewers = new Set(p.review.reviewers.map((r) => r.name).filter((name) => !name.startsWith("#")));
       const handled = new Set(this.view.jobs.filter((j) => j.purpose.patch === p.id && j.purpose.comments).flatMap((j) => j.purpose.comments!));
-      const fresh = p.review.comments.filter((c) => !c.done && reviewers.has(c.author) && !handled.has(c.id));
+      const fresh = p.review.comments.filter((c) => !c.done && isReviewComment(p, c) && !handled.has(c.id));
       if (fresh.length > 0) {
         const h = shortHash(fresh.map((c) => String(c.id))) + this.stepEpoch("review comments");
         const cls = this.wantAgent(`classify-comments:${p.id}:${h}`, "classify-comments", "classify-review-comments", { revision: `D${p.revision}` }, { priority: REVIEW_PRIORITY, item, purpose: { patch: p.id } });

@@ -318,7 +318,7 @@ export function foldEvents(events: readonly Event[]): RequestState {
         break;
       }
       case "review-status":
-        reviews.set(e.patch, { revision: e.revision, status: e.status, reviewers: e.reviewers, comments: e.comments, ...(e.diff ? { diff: e.diff } : {}) });
+        reviews.set(e.patch, { revision: e.revision, status: e.status, reviewers: e.reviewers, comments: e.comments, ...(e.diff ? { diff: e.diff } : {}), ...(e.author ? { author: e.author } : {}) });
         if (e.diff?.commit && s.patchSent[e.patch]?.at(-1)?.sha !== e.diff.commit) s.patchSent[e.patch] = [...(s.patchSent[e.patch] ?? []), { sha: e.diff.commit, t: e.diff.created }];
         break;
       case "reply-draft": {

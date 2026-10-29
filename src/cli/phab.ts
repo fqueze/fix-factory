@@ -108,6 +108,7 @@ export interface PollResult {
   revision: number;
   phid: string;
   title: string;
+  author?: string; // who submitted it: your own comments aren't review comments
   status: string;
   reviewers: ReviewerStatus[];
   comments: PolledComment[];
@@ -168,6 +169,7 @@ export async function poll(revisions: number[], conduit: Conduit = makeConduit()
   const phids = new Set<string>();
   for (const r of revs) {
     for (const rv of r.attachments.reviewers.reviewers) phids.add(rv.reviewerPHID);
+    phids.add(r.fields.authorPHID);
   }
   for (const txns of txnsByRev.values()) {
     for (const t of txns) if (t.type === "inline" || t.type === "comment") for (const c of t.comments) phids.add(c.authorPHID);
@@ -217,6 +219,7 @@ export async function poll(revisions: number[], conduit: Conduit = makeConduit()
       revision: id,
       phid: r.phid,
       title: r.fields.title,
+      author: nameOf.get(r.fields.authorPHID) ?? r.fields.authorPHID,
       status: r.fields.status.value,
       reviewers: r.attachments.reviewers.reviewers.map((rv: any) => ({
         name: nameOf.get(rv.reviewerPHID) ?? rv.reviewerPHID,
