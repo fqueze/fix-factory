@@ -373,12 +373,13 @@ function authorReport(input: HandlerInput, ev: <T extends EventInput["type"]>(ty
     ev("item-state", { item, state: "blocked", detail: summary.slice(0, 300) });
     ev("needs-user", { key: `failed:${job.job}`, action, detail: summary.slice(0, 500), job: job.job, item });
   };
+  // An agent may write a sha from memory, its start right and the rest made up: whatever author it is.
+  const commits = (input.report as { commits?: string[] }).commits ?? [];
+  const missing = input.commitExists ? commits.filter((c) => !input.commitExists!(job.cwd, c)) : [];
+  if (missing.length) throw new InvalidReport(`${missing.join(", ")} ${missing.length === 1 ? "isn't a commit" : "aren't commits"} in ${job.cwd}: report each commit's sha exactly as \`git log --format=%H\` prints it.`);
   switch (job.name) {
     case "investigate-and-fix": {
       const r = input.report as InvestigateReport;
-      // An agent may write a sha from memory, its start right and the rest made up.
-      const missing = input.commitExists ? r.commits.filter((c) => !input.commitExists!(job.cwd, c)) : [];
-      if (missing.length) throw new InvalidReport(`${missing.join(", ")} ${missing.length === 1 ? "isn't a commit" : "aren't commits"} in ${job.cwd}: report each commit's sha exactly as \`git log --format=%H\` prints it.`);
       if (r.state === "blocked") {
         blocked(r.summary);
         return;

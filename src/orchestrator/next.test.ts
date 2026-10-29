@@ -2837,6 +2837,9 @@ describe("9. review comments", () => {
     assert.deepEqual(JSON.parse(plan.files![0].content).map((c: { id: number }) => c.id), [7]);
     assert.equal(sc.state().items["i-test-a"].state, "addressing review comments");
 
+    // A sha it made up (its git log cut off) goes back to it, whatever author it is.
+    sc.commitExists = (_cwd, c) => c === sha("7");
+    assert.throws(() => sc.complete(address, { report: { state: "addressed", summary: "s", commits: ["f1e9d2a8c47b"], replies: [], feedback: [] } }), (e: Error) => e instanceof InvalidReport && e.message.startsWith("f1e9d2a8c47b isn't a commit in "));
     const job = sc.complete(address, { report: { state: "addressed", summary: "s", commits: [sha("7")], replies: [{ commentId: 7, text: "waitForCondition hides the race." }], feedback: [] } });
     assert.deepEqual(sc.state().patches["p-test-a"].replyDrafts, [{ commentId: 7, text: "waitForCondition hides the race." }]);
     sc.settle();
@@ -2915,6 +2918,9 @@ it("an addressed commit that conflicts on today's central goes to resolve-confli
     assert.deepEqual(JSON.parse(plan.files![0].content).map((c: { id: number }) => c.id), [7]);
     assert.equal(sc.state().items["i-test-a"].state, "addressing review comments");
 
+    // A sha it made up (its git log cut off) goes back to it, whatever author it is.
+    sc.commitExists = (_cwd, c) => c === sha("7");
+    assert.throws(() => sc.complete(address, { report: { state: "addressed", summary: "s", commits: ["f1e9d2a8c47b"], replies: [], feedback: [] } }), (e: Error) => e instanceof InvalidReport && e.message.startsWith("f1e9d2a8c47b isn't a commit in "));
     const job = sc.complete(address, { report: { state: "addressed", summary: "s", commits: [sha("7")], replies: [{ commentId: 7, text: "waitForCondition hides the race." }], feedback: [] } });
     assert.deepEqual(sc.state().patches["p-test-a"].replyDrafts, [{ commentId: 7, text: "waitForCondition hides the race." }]);
     sc.settle();
