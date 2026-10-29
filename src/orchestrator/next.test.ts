@@ -2686,6 +2686,14 @@ describe("9. review comments", () => {
     assert.ok(sc.settle().includes("poll:1"));
   });
 
+  it("looks for the revisions you submitted while the stack is still being reworked", () => {
+    const sc = stacked();
+    // A group being reworked: the stack isn't ready for this version, which never stopped you submitting.
+    sc.add({ type: "item-state", request: ID, item: "i-test-a", state: "investigating" });
+    sc.add({ type: "submit-copied", request: ID, stack: "root" });
+    assert.ok(sc.settle().some((k) => k.startsWith("import-submit:root:")));
+  });
+
   it("keeps a plan already written up to date before the stack is verified (a split copies plans)", () => {
     const sc = stacked();
     assert.ok(!sc.view().jobs.some((j) => j.purpose.key.startsWith("test-plan:p-test-a:")), "none written before verification");

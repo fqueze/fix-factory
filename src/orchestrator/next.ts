@@ -2352,11 +2352,12 @@ class Planner {
   // moz-phab adds, every few minutes for a while, until each patch has its revision.
   private submitted(): void {
     if (at(this.s.step) < at("stack") || this.s.step === "done") return;
-    // After submission, patches added on top (newPatches) are looked for the same way.
+    // Its reviewers are fixed once it's built; the revisions you submit are looked for whatever it's doing (verified on
+    // try or not: you may submit before), after submission too (patches added on top).
     const after = at(this.s.step) > at("submit");
-    for (const st of after ? this.liveStacks() : [...this.stackInfos.values()].flatMap((info) => (info.ready && this.s.stacks[info.id] ? [this.s.stacks[info.id]] : []))) {
+    for (const st of this.liveStacks()) {
       if (st.order.every((pid) => this.s.patches[pid].revision !== undefined)) continue;
-      if (this.s.step !== "submit" && !after) this.reviewers(st, this.stepEpoch("stack"));
+      if (this.s.step !== "submit" && !after && this.stackInfos.get(st.id)?.ready) this.reviewers(st, this.stepEpoch("stack"));
       if (!st.submitCopied || this.ctx.now - Date.parse(st.submitCopied) > SUBMIT_WATCH_MS) continue;
       const imports = this.view.jobs.filter((j) => j.purpose.what === "import-submit" && j.purpose.stack === st.id);
       const last = imports.at(-1);
