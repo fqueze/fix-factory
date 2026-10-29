@@ -470,6 +470,7 @@ export interface RequestState {
   patches: Record<PatchId, PatchView>;
   stacks: Record<string, StackView>;
   pushes: Record<PushId, PushView>; // in creation order
+  patchShas: Record<PatchId, string[]>; // every commit each patch has been, oldest first: what tells whether a push had it
   pushChanges: Record<string, { since: PushId; changes: PushChange[]; removed: { sha: string; title: string }[] }>; // per stack, the latest
   jobs: Record<JobId, JobView>;
   needsUser: NeedsUser[]; // open ones only

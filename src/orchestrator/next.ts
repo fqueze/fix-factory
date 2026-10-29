@@ -307,22 +307,33 @@ class Planner {
   // request has new try results.
   private testPlans(): void {
     const verified = at(this.s.step) >= at("meta bug");
-    const results = Object.values(this.s.pushes)
+    // Each push with results, and the commits it had (its dry run's).
+    const pushes = Object.values(this.s.pushes)
       .filter((p) => p.result !== undefined)
-      .map((p) => ({ purpose: p.purpose, rev: p.rev, url: p.url, result: p.result, summary: p.summary }));
+      .map((p) => {
+        const dry = this.view.byKey.get(`dry-run:${p.id}`)?.find(succeeded);
+        return { push: p, commits: dry ? this.out<DryRunResult>(dry).commits : [] };
+      });
+    const same = (a: string, b: string) => a.startsWith(b.slice(0, 12)) || b.startsWith(a.slice(0, 12));
     for (const p of Object.values(this.s.patches)) {
       const item = p.item === undefined ? undefined : this.s.items[p.item];
       if (!item || !TEST_PLAN_STATES.has(item.state) || (!verified && p.revision === undefined)) continue;
       const author = item.jobs.map((j) => this.s.jobs[j]).findLast((j) => j?.name === "investigate-and-fix");
       const inv = item.investigation ?? null;
+      // Only the pushes that had this patch: a plan may cite no other.
+      const shas = this.s.patchShas[p.id] ?? [p.sha];
+      const results = pushes
+        .filter(({ commits }) => commits.some((c) => shas.some((x) => same(c, x))))
+        .map(({ push, commits }) => ({ purpose: push.purpose, rev: push.rev, url: push.url, result: push.result, summary: push.summary, thisVersion: commits.some((c) => same(c, p.sha)) }));
       // Groups this patch fixes too, their own fix dropped as covered by it.
       const alsoFixes = Object.values(this.s.items)
         .filter((i) => i.coveredBy === p.id)
         .map((i) => ({ tests: i.group.tests, failure: i.group.message, covered: i.detail, cause: i.investigation?.cause, reproduction: i.investigation?.reproduction, verification: i.investigation?.verification }));
       // The version changes with the prompt: an earlier version's session isn't resumed.
       const version = `test-plan:${p.id}:${TEST_PLAN_VERSION}:`;
-      // passes-v1: plans written before told to confirm a push's runs with fx-tests --test are rewritten in their session.
-      const key = `${version}${shortHash([JSON.stringify([inv, results]), "passes-v1", ...(alsoFixes.length ? [JSON.stringify(alsoFixes)] : [])]).slice(0, 8)}`;
+      // passes-v1: plans written before told to confirm a push's runs with fx-tests --test are rewritten in their session;
+      // pushes-v2: and those given every push of the request, whether it had the patch or not.
+      const key = `${version}${shortHash([JSON.stringify([inv, results]), "passes-v1", "pushes-v2", ...(alsoFixes.length ? [JSON.stringify(alsoFixes)] : [])]).slice(0, 8)}`;
       const investigationFile = dataPath(this.config, this.s.id, `test-plan-${p.id}-investigation.json`);
       const pushesFile = dataPath(this.config, this.s.id, `test-plan-${p.id}-pushes.json`);
       const notes = Object.values(inv?.files ?? {});
@@ -341,7 +352,7 @@ class Planner {
           item: item.id,
           cwd: last.cwd,
           files,
-          agent: { sessionId: last.sessionId!, resume: true, message: `Its investigation, its request's try results or your instructions changed: ${investigationFile} and ${pushesFile} are up to date. Say a push shows the test passing only once \`fx-tests try <rev> --all-jobs --test <full path>\` shows its runs passing, with how many; leave out a push you can't confirm, and say nothing about what a tool could or couldn't show. Write the test plan again, keeping what you were asked before, then end with the JSON report.` },
+          agent: { sessionId: last.sessionId!, resume: true, message: `Its investigation, its request's try results or your instructions changed: ${investigationFile} and ${pushesFile} are up to date. ${pushesFile} lists only the pushes that had this commit (\`thisVersion: false\`: an earlier version of it): cite no other push, and drop anything you wrote about one that isn't there. Say a push shows the test passing only once \`fx-tests try <rev> --all-jobs --test <full path>\` shows its runs passing, with how many; leave out a push you can't confirm, and say nothing about what a tool could or couldn't show. Write the test plan again, keeping what you were asked before, then end with the JSON report.` },
         }));
         continue;
       }

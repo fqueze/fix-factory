@@ -2494,6 +2494,28 @@ describe("9. review comments", () => {
     assert.ok(sc.settle().includes("poll:1"));
   });
 
+  it("gives a test plan only the pushes that had its patch, saying whether they had this version of it", () => {
+    const sc = stacked();
+    const planKey = sc.view().jobs.find((j) => j.purpose.what === "plan-pushes")!.purpose.key;
+    sc.complete(planKey, { report: { pushes: [{ purpose: "verify", tryArgs: ["fuzzy", "-q", "x"], rebuild: 5 }], feedback: [] } });
+    const [dry] = sc.settle();
+    const push = sc.purpose(dry).push!;
+    // Only test_a's patch, as it was then, went to try.
+    sc.complete(dry, { output: { command: ["./mach", "try", "fuzzy"], taskCount: 5, tasks: [], tryTaskConfig: {}, commits: [sha("d")], warnings: [] } });
+    sc.add({ type: "user-done", request: ID, key: `approve-push:${push}` });
+    sc.add({ type: "try-pushed", request: ID, push, rev: "fed", url: "u" });
+    sc.add({ type: "try-finished", request: ID, push, result: "green", summary: "green" });
+    sc.settle();
+    sc.complete(`try-table:${push}:final`, { output: table() });
+    sc.settle();
+    const { deps: _d, review: _r, replyDrafts: _rd, id, ...a } = sc.state().patches["p-test-a"];
+    sc.add({ type: "patch", request: ID, patch: id, ...a, sha: sha("7") });
+    sc.settle();
+    const pushesOf = (pid: string) => JSON.parse(sc.plan(sc.view().jobs.findLast((j) => j.purpose.key.startsWith(`test-plan:${pid}:`))!.purpose.key).files![1].content);
+    assert.deepEqual(pushesOf("p-test-a").map((x: { rev: string; thisVersion: boolean }) => [x.rev, x.thisVersion]), [["fed", false]]);
+    assert.deepEqual(pushesOf("p-test-b"), [], "that push didn't have test_b's patch");
+  });
+
   it("writes each accepted patch's test plan, which you set on its revision with a click", () => {
     const sc = inReview();
     const key = sc.view().jobs.find((j) => !j.end && j.purpose.key.startsWith("test-plan:p-test-a:"))!.purpose.key;

@@ -33,6 +33,7 @@ export function foldEvents(events: readonly Event[]): RequestState {
     patches: {},
     stacks: {},
     pushes: {},
+    patchShas: {},
     pushChanges: {},
     jobs: {},
     needsUser: [],
@@ -187,6 +188,7 @@ export function foldEvents(events: readonly Event[]): RequestState {
       case "patch": {
         // When its revision first showed up: what its author changes after that has to be resubmitted.
         const before = s.patches[e.patch];
+        if (!(s.patchShas[e.patch] ?? []).includes(e.sha)) s.patchShas[e.patch] = [...(s.patchShas[e.patch] ?? []), e.sha];
         const submittedAt = e.revision === undefined ? undefined : before?.revision !== undefined ? before.submittedAt : e.t;
         // The commit Phabricator has: the one its revision showed up on, then what you copied the moz-phab command for.
         const sentSha = e.revision === undefined ? undefined : before?.revision !== undefined ? before.sentSha : e.sha;
