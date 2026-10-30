@@ -2139,8 +2139,7 @@ class Planner {
       if (stack && this.s.stacks[stack] && push.rev) this.routeTryFailures(push.id, this.s.stacks[stack].order.map((pid) => this.s.patches[pid]));
     }
     if (this.s.step !== "verify on try") {
-      this.fixesToVerify();
-      this.askedVerify();
+      this.askedVerify(this.fixesToVerify());
       return;
     }
     // An un-skip push may still add groups to the stack: verifying it waits for its results.
@@ -2169,22 +2168,28 @@ class Planner {
 
   // Past verification, an author's fix for failures a push of the stack found goes to try again, once reviewed and back
   // on its way to Phabricator: those jobs must be green before it lands.
-  private fixesToVerify(): void {
+  // Only for pushes made once its patches were on Phabricator: before, the stack's own verification covers them.
+  // Returns the asks that stand (earlier versions of the factory raised some for older pushes).
+  private fixesToVerify(): Set<string> {
+    const asks = new Set<string>();
     for (const j of this.view.jobs) {
       if (j.purpose.reason !== "try" || !j.item || !succeeded(j)) continue;
       const push = /:try:([^:]+)/.exec(j.purpose.key)?.[1];
       const r = this.rep<{ state?: string; commits?: string[] }>(j);
       if (!push || !this.s.pushes[push] || r.state !== "fix verified locally" || !r.commits?.length) continue;
-      if (this.s.items[j.item].state !== "waiting for review") continue;
-      const ds = Object.values(this.s.patches).filter((p) => p.item === j.item && p.revision !== undefined).map((p) => `D${p.revision}`);
-      const text = `Verify the fix of ${ds.join(", ") || j.item} for what try push ${this.s.pushes[push].rev ?? push} found broken by it (${shortHash([j.job]).slice(0, 4)}): those jobs must be green.`;
-      if (!(this.s.verifyAsked ?? []).includes(text)) this.event(this.ev("verify-asked", { text }));
+      const patches = Object.values(this.s.patches).filter((p) => p.item === j.item && p.revision !== undefined);
+      const submitted = Math.min(...patches.map((p) => (p.submittedAt ? Date.parse(p.submittedAt) : Infinity)));
+      if (!((this.view.pushedAt.get(push) ?? 0) > submitted)) continue;
+      const text = `Verify the fix of ${patches.map((p) => `D${p.revision}`).join(", ")} for what try push ${this.s.pushes[push].rev ?? push} found broken by it (${shortHash([j.job]).slice(0, 4)}): those jobs must be green.`;
+      asks.add(text);
+      if (this.s.items[j.item].state === "waiting for review" && !(this.s.verifyAsked ?? []).includes(text)) this.event(this.ev("verify-asked", { text }));
     }
+    return asks;
   }
 
   // You asked for a try push of the stack as it stands (verify-stack): planned at whatever step it's at, once per ask,
   // when its authors are done. Its failures are routed like any verification push's; the step stays.
-  private askedVerify(): void {
+  private askedVerify(fixAsks: Set<string>): void {
     const n = this.s.verifyAsked?.length ?? 0;
     if (!n || at(this.s.step) <= at("verify on try")) return;
     for (const info of this.stackInfos.values()) {
@@ -2192,7 +2197,9 @@ class Planner {
       // An ask is answered by its push or a later ask's.
       const answered = (k: number) => Array.from({ length: n - k + 1 }, (_, i) => k + i).some(answeredBy);
       // The latest ask's push carries the earlier ones no push answered (several fixes asking at once).
-      const texts = this.s.verifyAsked!.filter((_, i) => i === n - 1 || !answered(i + 1));
+      const stands = (t: string) => !/^Verify the fix of .* found broken by it \(/.test(t) || fixAsks.has(t);
+      const texts = this.s.verifyAsked!.filter((t, i) => stands(t) && (i === n - 1 || !answered(i + 1)));
+      if (!texts.length) continue;
       const ask = { n, text: texts.join("\n") };
       const all = `${info.id}-ask${n}-`;
       // Made, or declined by you: that ask is answered, and a later change to the stack waits for your next one. One you
