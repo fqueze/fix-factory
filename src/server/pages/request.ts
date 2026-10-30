@@ -1028,11 +1028,11 @@ function pushAnalysis(r: RequestState, p: PushView): Html | null {
   const testKey = (t: string) => t.replace(/\s*\([^)]*\)/g, "").trim().split("/").pop()!;
   const configsOf = (c: string | undefined) => (c ?? "").split(/[;,]\s*/).map((x) => x.trim().replace(/^test-/, "")).filter(Boolean);
   const patchOf = (ref: string) => r.patches[ref] ?? Object.values(r.patches).find((x) => [x.sha, ...(x.pastShas ?? [])].some((s) => s.startsWith(ref) || ref.startsWith(s)));
-  const groups = new Map<string, { verdict: string; test: string; patches: Html[]; seen: Set<string>; configs: string[]; evidence: string }>();
+  const groups = new Map<string, { verdict: string; test: string; patches: Html[]; seen: Set<string>; configs: string[]; evidence: string; pids: string[] }>();
   for (const c of p.analysis) {
     const test = c.test ? relativeTest(r, c.test) : (c.taskId ?? "a job");
     const key = `${c.verdict}\n${testKey(test)}`;
-    const g = groups.get(key) ?? { verdict: c.verdict, test, patches: [], seen: new Set<string>(), configs: [], evidence: c.evidence };
+    const g = groups.get(key) ?? { verdict: c.verdict, test, patches: [], seen: new Set<string>(), configs: [], evidence: c.evidence, pids: [] };
     if (test.replace(/\s*\([^)]*\)/g, "").length > g.test.length) g.test = test.replace(/\s*\([^)]*\)/g, "").trim();
     for (const x of configsOf(c.config)) if (!g.configs.includes(x)) g.configs.push(x);
     if (c.patch) {
@@ -1040,14 +1040,33 @@ function pushAnalysis(r: RequestState, p: PushView): Html | null {
       const id = pv?.id ?? c.patch;
       if (!g.seen.has(id)) {
         g.seen.add(id);
+        if (pv) g.pids.push(pv.id);
         g.patches.push(pv ? html`<a href="#patch-${pv.id}">${patchTitle(pv)}</a>` : html`<span class="mono">${c.patch.slice(0, 12)}</span>`);
       }
     }
     g.evidence = c.evidence; // the latest triage's
     groups.set(key, g);
   }
-  const li = (g: { test: string; patches: Html[]; configs: string[]; evidence: string }) =>
-    html`<li>${g.test}${g.configs.length ? html` <span class="sub">on ${g.configs.join(", ")}</span>` : null}${g.patches.length ? html` <span class="sub">· ${join(g.patches, ", ")}</span>` : null}<div class="sub clamp1" data-expand title="Click to see all of it">${g.evidence}</div></li>`;
+  // What came of a failure pinned on a patch: its author's run for this push, or why there's none.
+  const next = (g: { verdict: string; pids: string[] }): Html | null => {
+    if (g.verdict !== "broken by patch") return null;
+    return join(
+      g.pids.map((pid) => {
+        const item = r.patches[pid]?.item;
+        const job = Object.values(r.jobs).findLast((j) => j.item === item && j.purpose?.reason === "try" && j.purpose.key.includes(`:try:${p.id}`));
+        const t = r.tryNeeded?.[pid];
+        if (!job) return html`not sent to its author${t && !t.verified ? ": its newer fix wasn't in this push, and goes to try in a push of its own" : ""}`;
+        if (job.endedAt === undefined) return html`<span class="working">its author is looking at it</span>`;
+        const said = job.said ?? job.outcome;
+        return html`its author: ${said ?? job.error ?? "no answer"}`;
+      }),
+      " · ",
+    );
+  };
+  const li = (g: { verdict: string; test: string; patches: Html[]; configs: string[]; evidence: string; pids: string[] }) =>
+    html`<li>${g.test}${g.configs.length ? html` <span class="sub">on ${g.configs.join(", ")}</span>` : null}${g.patches.length ? html` <span class="sub">· ${join(g.patches, ", ")}</span>` : null}<div class="sub clamp1" data-expand title="Click to see all of it">${g.evidence}</div>${
+      next(g) ? html`<div class="next clamp1" data-expand title="Click to see all of it">→ ${next(g)}</div>` : null
+    }</li>`;
   const all = [...groups.values()];
   return html`<h4 class="part">What the factory made of its failures</h4>${VERDICT_ORDER.filter((v) => all.some((g) => g.verdict === v)).map((v) => {
     const these = all.filter((g) => g.verdict === v);
