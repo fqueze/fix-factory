@@ -5,7 +5,8 @@ import type { InlineComment, PatchView, RequestState } from "../types.ts";
 // A comment to answer: anyone's on the revision but its author's (you) and bots', reviewer or not. Before polls
 // named the author: its reviewers' only.
 export function isReviewComment(p: PatchView, c: InlineComment): boolean {
-  if (/bot$/i.test(c.author)) return false;
+  // Bots, and Phabricator's own applications (Herald asking for a testing tag), which have no user name.
+  if (/bot$/i.test(c.author) || c.author.startsWith("PHID-APPS-")) return false;
   return p.review?.author !== undefined ? c.author !== p.review.author : (p.review?.reviewers ?? []).some((r) => r.name === c.author);
 }
 

@@ -2568,6 +2568,19 @@ class Planner {
     this.want(`poll:${n}`, () => this.cli("poll", "phab.ts", ["poll", ...ds.map((d) => `D${d}`)], { priority: REVIEW_PRIORITY }));
   }
 
+  // The commit Phabricator's latest diff came from, when this repository has it: one you submitted from elsewhere (your
+  // own checkout, after a reorg) isn't, and what the factory last sent stands for it.
+  private phabBase(p: PatchView): string | undefined {
+    const commit = p.review?.diff?.commit;
+    if (commit === undefined) return undefined;
+    return this.knownCommit(p, commit) ? commit : p.sentSha;
+  }
+
+  // One of its own commits, now or before: this repository has it.
+  private knownCommit(p: PatchView, sha: string): boolean {
+    return sha === p.sha || sha === p.sentSha || (p.pastShas ?? []).includes(sha);
+  }
+
   private reviewComments(): void {
     const revisions = Object.values(this.s.patches).filter((p) => p.revision !== undefined);
     this.pollPhab();
@@ -2579,11 +2592,15 @@ class Planner {
       const raised = this.view.raised.get(n.key) ?? Infinity;
       if (diff ? Date.parse(diff.created) > raised : lastPoll && lastPoll.startedAt > raised) this.clear(n.key);
     }
+    // Landed: nothing left to resubmit or reply to.
+    for (const n of this.s.needsUser) {
+      if (n.patch !== undefined && /^(resubmit|reply):/.test(n.key) && this.s.patches[n.patch]?.review?.status === "published") this.clear(n.key);
+    }
     // A patch whose code differs from what Phabricator has needs resubmitting, whatever happened to its flags: a
     // waiting patch gets one once that interdiff shows a change.
     for (const p of revisions) {
       const st = Object.values(this.s.stacks).find((x) => x.order.includes(p.id));
-      const base = p.review?.diff?.commit;
+      const base = this.phabBase(p);
       const item = p.item ? this.s.items[p.item] : undefined;
       if (!st || !base || base === p.sha || item?.state !== "waiting for review" || p.review?.status === "published") continue;
       if (this.s.needsUser.some((n) => n.patch === p.id && (n.key.startsWith("resubmit:") || n.key.startsWith("reply:")))) continue;
@@ -2598,7 +2615,7 @@ class Planner {
     for (const n of this.s.needsUser.filter((x) => x.key.startsWith("resubmit:") && x.patch !== undefined)) {
       const p = this.s.patches[n.patch!];
       const st = Object.values(this.s.stacks).find((x) => x.order.includes(p.id));
-      const base = p.review?.diff?.commit;
+      const base = this.phabBase(p);
       if (!st || !base || base === p.sha) continue;
       const inter = this.want(`interdiff:${p.id}:phab-${base.slice(0, 12)}:${p.sha.slice(0, 12)}`, () =>
         this.cli("interdiff", "stack.ts", ["interdiff", "--cwd", st.worktree, base, p.sha], { cwd: st.worktree, priority: REVIEW_PRIORITY, purpose: { patch: p.id, stack: st.id } }),
@@ -2654,7 +2671,7 @@ class Planner {
     const index = author.commits.findIndex((_, i) => patchId(item.id, i) === p.id);
     // Against what Phabricator had when it was answered (what the reviewer saw), not the author's previous commit (which
     // may never have been sent), nor a moz-phab command copied since.
-    const sentBefore = (this.s.patchSent[p.id] ?? []).filter((x) => Date.parse(x.t) < answer.startedAt).at(-1)?.sha;
+    const sentBefore = (this.s.patchSent[p.id] ?? []).filter((x) => Date.parse(x.t) < answer.startedAt && this.knownCommit(p, x.sha)).at(-1)?.sha;
     const oldSha = sentBefore ?? p.sentSha ?? (previous ? commitsOf(previous.name, this.rep(previous))[index] : undefined);
     // Rebuilt on today's central (patches that landed drop out), with each submitted patch's Differential Revision
     // line. v2: a conflict is left for resolve-conflict, as in the stack's assembly.

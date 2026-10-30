@@ -405,7 +405,9 @@ export function flagPlaceOf(r: RequestState, n: NeedsUser): { patch: string } | 
   // Shown: a stack with a patch not landed yet, and such a patch's row.
   const live = (pid: string) => r.patches[pid] !== undefined && !isLanded(r, r.patches[pid]);
   if (n.patch !== undefined && live(n.patch) && Object.values(r.stacks).some((st) => st.order.includes(n.patch!))) return { patch: n.patch };
-  if (n.patch === undefined && n.stack !== undefined && r.stacks[n.stack]?.order.some(live)) return { stack: n.stack };
+  // A request with one stack shows its stack's ⚑s at the top with the others: it has no stack header.
+  const stacks = Object.values(r.stacks).filter((st) => st.order.some(live));
+  if (n.patch === undefined && n.stack !== undefined && stacks.length > 1 && r.stacks[n.stack]?.order.some(live)) return { stack: n.stack };
   return undefined;
 }
 

@@ -2674,8 +2674,10 @@ describe("9. a try push of a submitted stack", () => {
     assert.ok(classify, "emilio isn't a listed reviewer, but his question is answered");
     assert.ok(!sc.view().jobs.some((j) => j.purpose.key.startsWith("classify-comments:p-test-b:")));
     const p = sc.state().patches["p-test-a"];
+    // Submitted from an earlier commit of it.
+    const past = p.pastShas![0];
     sc.add({ type: "needs-user", request: ID, key: "resubmit:root:jx", action: "Post 1 reply, then resubmit D101", detail: "", stack: "root", patch: "p-test-a" });
-    sc.add({ type: "review-status", request: ID, patch: "p-test-a", ...p.review!, diff: { id: 1, commit: sha("0"), created: "2026-01-01T00:00:00.000Z" } });
+    sc.add({ type: "review-status", request: ID, patch: "p-test-a", ...p.review!, diff: { id: 1, commit: past, created: "2026-01-01T00:00:00.000Z" } });
     const inter = sc.settle().find((k) => k.startsWith("interdiff:p-test-a:phab-"))!;
     sc.complete(inter, { output: { diff: "", method: "same-parent" } });
     sc.settle();
@@ -2685,11 +2687,20 @@ describe("9. a try push of a submitted stack", () => {
 
   it("a waiting patch that differs from what Phabricator has asks to be resubmitted, flag or not", () => {
     const sc = inReview();
-    sc.complete("poll:0", { output: polled("needs-review", [], "pending").map((x) => ({ ...x, diff: { id: 9, commit: sha("0"), created: "2026-01-01T00:00:00.000Z" } })) });
+    const past = sc.state().patches["p-test-a"].pastShas![0];
+    sc.complete("poll:0", { output: polled("needs-review", [], "pending").map((x) => ({ ...x, diff: { id: 9, commit: past, created: "2026-01-01T00:00:00.000Z" } })) });
     const inter = sc.settle().find((k) => k.startsWith("interdiff:p-test-a:phab-"))!;
     sc.complete(inter, { output: { diff: "-a\n+b\n", method: "same-parent" } });
     sc.settle();
     assert.equal(sc.state().needsUser.find((n) => n.patch === "p-test-a" && n.key.startsWith("resubmit:"))?.action, "Resubmit D101");
+  });
+
+  it("a diff submitted from a commit this repository doesn't have is compared with what the factory sent", () => {
+    const sc = inReview();
+    const sent = sc.state().patches["p-test-a"].sentSha!;
+    sc.complete("poll:0", { output: polled("needs-review", [], "pending").map((x) => ({ ...x, diff: { id: 9, commit: "75fcba685a34f24f98e8cad94c4ea933680747f6", created: "2026-01-01T00:00:00.000Z" } })) });
+    const inter = sc.settle().find((k) => k.startsWith("interdiff:p-test-a:phab-"));
+    if (inter) assert.equal(sc.plan(inter).cli!.args.at(-2), sent);
   });
 
   it("a comment on a fix shows its author its draft replies, which its answer may rewrite", () => {
