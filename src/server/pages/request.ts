@@ -1055,17 +1055,20 @@ function pushAnalysis(r: RequestState, p: PushView): Html | null {
         const item = r.patches[pid]?.item;
         const job = Object.values(r.jobs).findLast((j) => j.item === item && j.purpose?.reason === "try" && j.purpose.key.includes(`:try:${p.id}`));
         const t = r.tryNeeded?.[pid];
-        if (!job) return html`not sent to its author${t && !t.verified ? ": its newer fix wasn't in this push, and goes to try in a push of its own" : ""}`;
+        if (item && r.followUps?.includes(`${p.id} ${item}`)) return html`left as a follow-up by you: it doesn't hold its patch back`;
+        // Not worth a fix now (a test too slow in chaos mode…): it neither goes to its author nor holds its patch back.
+        const followUp = html` <form class="inline cmd" method="post" action="/api/commands">${commandFields([{ cmd: "follow-up", request: r.id, push: p.id, patch: pid }], requestUrl(r.id))}<button class="btn small" title="It doesn't go to its author and doesn't keep its patch from landing">Leave as a follow-up</button></form>`;
+        if (!job) return html`not sent to its author${t && !t.verified ? ": its newer fix wasn't in this push, and goes to try in a push of its own" : ""}${followUp}`;
         if (job.endedAt === undefined) return html`<span class="working">its author is looking at it</span>`;
         const said = job.said ?? job.outcome;
-        return html`its author: ${said ?? job.error ?? "no answer"}`;
+        return html`its author: ${said ?? job.error ?? "no answer"}${followUp}`;
       }),
       " · ",
     );
   };
   const li = (g: { verdict: string; test: string; patches: Html[]; configs: string[]; evidence: string; pids: string[] }) =>
     html`<li>${g.test}${g.configs.length ? html` <span class="sub">on ${g.configs.join(", ")}</span>` : null}${g.patches.length ? html` <span class="sub">· ${join(g.patches, ", ")}</span>` : null}<div class="sub clamp1" data-expand title="Click to see all of it">${g.evidence}</div>${
-      next(g) ? html`<div class="next clamp1" data-expand title="Click to see all of it">→ ${next(g)}</div>` : null
+      next(g) ? html`<div class="next">→ ${next(g)}</div>` : null
     }</li>`;
   const all = [...groups.values()];
   return html`<h4 class="part">What the factory made of its failures</h4>${VERDICT_ORDER.filter((v) => all.some((g) => g.verdict === v)).map((v) => {

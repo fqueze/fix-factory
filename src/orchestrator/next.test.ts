@@ -1735,6 +1735,24 @@ describe("5. stack", () => {
 });
 
 describe("6. verify on try", () => {
+  it("a failure you leave as a follow-up doesn't go to its author", () => {
+    const sc = stacked();
+    const planKey = sc.view().jobs.find((j) => j.purpose.what === "plan-pushes")!.purpose.key;
+    sc.complete(planKey, { report: { pushes: [{ purpose: "verify", tryArgs: ["fuzzy", "-q", "x"], rebuild: 5 }], feedback: [] } });
+    const [dry] = sc.settle();
+    const push = sc.purpose(dry).push!;
+    sc.complete(dry, { output: { command: ["./mach", "try", "fuzzy", "-q", "x"], taskCount: 5, tasks: [], tryTaskConfig: {}, commits: [], warnings: [] } });
+    sc.add({ type: "user-done", request: ID, key: `approve-push:${push}` });
+    sc.settle();
+    sc.complete(`push:${push}`, { output: { rev: "fed", landoJobId: 1, treeherderUrl: "t" } });
+    sc.settle();
+    sc.add({ type: "try-finished", request: ID, push, result: "failures", summary: "s" });
+    sc.settle();
+    command(sc, { cmd: "follow-up", push, patch: "p-test-a" });
+    sc.complete(`try-table:${push}:final`, { output: table([{ test: "a/test_a.js", config: "linux", result: "fail", failures: ["slow in chaos mode"], taskIds: ["T1"] }]) });
+    assert.ok(!sc.settle().some((k) => k.startsWith("author:i-test-a:try:")));
+  });
+
   it("plans the pushes, then routes matched failures to their author and the rest to triage", () => {
     const sc = stacked();
     assert.equal(sc.state().step, "verify on try");

@@ -2230,14 +2230,21 @@ class Planner {
     if (this.s.pushes[push]?.result === "green" || this.passing.has(push)) return true;
     const blamed = this.blamed.get(push);
     const item = this.s.patches[pid]?.item;
-    return blamed !== undefined && item !== undefined && !blamed.has(item);
+    return blamed !== undefined && item !== undefined && (!blamed.has(item) || (this.s.followUps ?? []).includes(`${push} ${item}`));
   }
 
   // Whether a push had a patch's fix for what try found: one of the commits it has been since, or the one it is (asked
   // after the fact, it has no others).
   private carries(push: PushId, pid: PatchId): boolean {
     const d = this.view.byKey.get(`dry-run:${push}`)?.find(succeeded);
-    const shas = [...(this.s.tryNeeded[pid]?.shas ?? []), this.s.patches[pid].sha];
+    // Every commit it has been from the one its author reported on (rebases and rewrites since keep the fix).
+    const t = this.s.tryNeeded[pid];
+    const job = t && this.view.jobs.find((j) => j.job === t.job);
+    const p = this.s.patches[pid];
+    const reported = job && p.item ? this.rep<{ commits?: string[] }>(job).commits?.find((_, i) => patchId(p.item!, i) === pid) : undefined;
+    const hist = this.s.patchShas[pid] ?? [];
+    const from = reported ? hist.findIndex((sha) => sha.startsWith(reported)) : -1;
+    const shas = [...(from >= 0 ? hist.slice(from) : []), ...(t?.shas ?? []), p.sha];
     return d !== undefined && this.out<DryRunResult>(d).commits.some((c) => shas.some((sha) => sha.startsWith(c) || c.startsWith(sha)));
   }
 
@@ -2359,6 +2366,7 @@ class Planner {
   }
 
   private routeToAuthor(item: ItemId, push: PushId, lines: string[], suffix = ""): void {
+    if (this.s.followUps?.includes(`${push} ${item}`)) return;
     // A push that didn't carry the fix its author already made for failures try found: its failures say nothing about
     // that fix, which goes to try in a push of its own.
     if (Object.values(this.s.patches).some((p) => p.item === item && this.s.tryNeeded[p.id] && !this.s.tryNeeded[p.id].verified && !this.carries(push, p.id))) return;

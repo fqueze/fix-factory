@@ -144,7 +144,8 @@ export type Event =
   | (EventBase & { type: "verify-asked"; text: string })
   | (EventBase & { type: "backout"; patch: PatchId; at: Iso; reason: string; culprit: boolean }) // its landing was backed out; culprit: the failure is its own (or nobody's could be told apart)
   | (EventBase & { type: "try-needed"; patch: PatchId; why: string; ask: string; job: JobId; after?: Iso }) // after: when its author answered // its fix answers failures try found: it lands once a push of it is green
-  | (EventBase & { type: "try-verified"; patch: PatchId }) // that push is green: it may land
+  | (EventBase & { type: "try-verified"; patch: PatchId })
+  | (EventBase & { type: "follow-up"; push: PushId; item: ItemId }) // you leave what that push found broken by its patch as a follow-up // that push is green: it may land
   | (EventBase & { type: "backout-verified"; patch: PatchId }) // a try push showed its fix green: it may land again // you want the stack pushed to try as it stands, whatever the step
   | (EventBase & { type: "comment-sent"; patch: PatchId; text: string; key: string }) // your comment on a patch, and the key of the author run answering it
   | (EventBase & { type: "config-set"; config: Record<string, unknown> })
@@ -238,6 +239,7 @@ export type Command =
   | (CommandBase & { cmd: "stack-comments"; stack: string; comments: { patch: PatchId; text: string }[] })
   | (CommandBase & { cmd: "take-it" | "hand-back"; item: ItemId })
   | (CommandBase & { cmd: "comment-fix"; patch: PatchId; text: string })
+  | (CommandBase & { cmd: "follow-up"; push: PushId; patch: PatchId }) // a failure that push pinned on that patch is left as a follow-up
   | (CommandBase & { cmd: "set-test-plan"; patch: PatchId; text: string }) // on its revision
   | (CommandBase & { cmd: "revise-test-plan"; patch: PatchId; text: string }) // what its agent should change
   | (CommandBase & { cmd: "set-reviewer"; patch: PatchId; reviewer: string }) // its r=, e.g. "#ai-frontend-reviewers-rotation"
@@ -477,6 +479,7 @@ export interface RequestState {
   queuedAuthors?: { item: ItemId; key: string; reason: string; message: string }[]; // your messages waiting for their author's worktree
   verifyAsked?: string[];
   reopened: Record<PatchId, Iso>; // when its revision went from closed (landed) back to open: a backout
+  followUps: string[]; // "<push> <item>": failures you left as follow-ups, which neither go to its author nor hold its patch back
   tryNeeded: Record<PatchId, { why: string; ask: string; job: JobId; at: Iso; after?: Iso; shas: string[]; verified?: boolean }>; // shas: the commits it has been since // fixes for what try found, until a push of them is green
   backouts: Record<PatchId, { at: Iso; reason: string; culprit: boolean; verified?: boolean }>; // patches whose landing was backed out // each time you asked for a try push of the stack as it stands, why
   splitFrom?: RequestId; // made by splitting that one

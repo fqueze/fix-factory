@@ -1380,7 +1380,7 @@ describe("a push's failures as triaged", () => {
     r.pushes.x = { id: "x", purpose: "verify", command: [], rev: "abc", url: "u", result: "failures", summary: "9 failed", analysis: cells };
     const row = rowOf(renderRequest(r, ctx, true).value, "push-x");
     assert.ok(row.indexOf(">broken by patch <") < row.indexOf(">pre-existing <"));
-    assert.match(row, /<li>t\/test_b\.js <span class="sub">on linux, mac, windows<\/span> <span class="sub">· <a href="#patch-p-panel">[^<]*<\/a><\/span><div[^>]*>TypeError again<\/div><div class="next clamp1"[^>]*>→ not sent to its author<\/div><\/li>/);
+    assert.match(row, /<li>t\/test_b\.js <span class="sub">on linux, mac, windows<\/span> <span class="sub">· <a href="#patch-p-panel">[^<]*<\/a><\/span><div[^>]*>TypeError again<\/div><div class="next">→ not sent to its author <form[^]*?>Leave as a follow-up<\/button><\/form><\/div><\/li>/);
     assert.match(row, /broken by patch <span class="count">1 test<\/span>/);
     assert.match(row, /pre-existing <span class="count">7 tests<\/span>/);
     assert.match(row, /<summary>\+2 more<\/summary>/);

@@ -311,6 +311,16 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
       done(true);
       break;
     }
+    case "follow-up": {
+      const item = s.patches[c.patch]?.item;
+      if (!item || !s.pushes[c.push]) {
+        done(false, "no such push or patch");
+        break;
+      }
+      ev({ type: "follow-up", push: c.push, item });
+      done(true);
+      break;
+    }
     case "verify-stack":
       ev({ type: "verify-asked", text: c.reason });
       done(true, c.reason);
