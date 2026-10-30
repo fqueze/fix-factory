@@ -2768,7 +2768,9 @@ class Planner {
       const items = Object.values(this.s.items).filter((i) => this.stackFolder(i) === st.folder);
       for (const i of items) if (i.state === "in stack" && own(i).length && own(i).every((p) => p.revision !== undefined && st.order.includes(p.id))) this.setItem(i.id, "waiting for review");
       if (st.order.every((pid) => this.s.patches[pid].revision !== undefined)) for (const n of this.s.needsUser) if (n.key.startsWith(`submit-new:${st.id}:`)) this.clear(n.key);
-      const fresh = items.filter((i) => i.state === "reviewed").flatMap(own).filter((p) => !stacked.has(p.id) && p.revision === undefined);
+      // A group's own new commit counts too: an answer after submission that adds a commit to its submitted one (its other
+      // patches rewritten, it waits for review again).
+      const fresh = items.filter((i) => i.state === "reviewed" || i.state === "waiting for review").flatMap(own).filter((p) => !stacked.has(p.id) && p.revision === undefined);
       if (!fresh.length) continue;
       const all = [...st.order.map((pid) => this.s.patches[pid]), ...fresh];
       // By their authors' runs, not their shas, which the rewrite changes.

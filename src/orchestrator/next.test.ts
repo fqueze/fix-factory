@@ -2485,6 +2485,36 @@ describe("10. landing with a patch landed", () => {
   });
 });
 
+function backedOutAndAsked(): Scenario {
+  const sc = inReview();
+  sc.complete("poll:0", { output: polled("published") });
+  sc.settle();
+  sc.now += 4 * 3_600_000;
+  sc.settle();
+  const poll = sc.view().jobs.find((j) => !j.end && j.purpose.key.startsWith("poll:"))!.purpose.key;
+  sc.complete(poll, { output: polled("accepted") });
+  sc.settle();
+  const pushes = [{ t: "2026-10-15T10:00:00Z", kind: "landed", by: "me", title: "t" }, { t: "2026-10-15T11:00:00Z", kind: "backed out", by: "sheriff", title: "r" }];
+  const backout = { t: new Date(sc.now).toISOString(), by: "sheriff", text: "Backed out for causing mochitest failures @test_b.js." };
+  for (const [p, bug] of [["p-test-b", 22], ["p-test-a", 999]] as const) sc.complete(sc.view().jobs.find((j) => !j.end && j.purpose.key.startsWith(`backout-reason:${p}:`))!.purpose.key, { output: [{ bug, pushes, backout }] });
+  sc.settle();
+  const told = sc.view().jobs.find((j) => j.purpose.key.startsWith("author:i-test-b:backout:"))!.purpose.key;
+  const job = sc.complete(told, { report: fixed([sha("5"), sha("7")]) });
+  sc.settle();
+  sc.complete(`import:${job}`, { output: [...imported(sha("5"), "Bug 22 - Fix test_b, r=smaug.", ["a/test_b.js"], 22).map((c) => ({ ...c, revision: 100 })), ...imported(sha("7"), "Bug 23 - Fix the product race, r=smaug.", ["a/b.mjs"], 23)] });
+  for (let i = 0; i < 6; i++) {
+    for (const k of sc.settle()) {
+      if (k.startsWith("msg:")) sc.complete(k, { output: "m" });
+      else if (k.startsWith("lint:")) sc.complete(k, { output: lintOk });
+      else if (k.startsWith("review:")) sc.complete(k, { report: ok });
+      else if (k.startsWith("rewrite-review:")) sc.complete(k, { output: { mapping: { [sha("5")]: sha("6") } } });
+      else if (k.startsWith("interdiff:")) sc.complete(k, { output: { diff: "-a\n+b\n", method: "same-parent" } });
+      else if (k.startsWith("append:")) sc.complete(k, { output: { mapping: { [sha("7")]: sha("8") } } });
+    }
+  }
+  return sc;
+}
+
 describe("10. backouts", () => {
   it("a backout no poll saw land is found from Phabricator's reopen", () => {
     const sc = inReview();
@@ -2587,6 +2617,14 @@ describe("10. backouts", () => {
     sc.settle();
     assert.equal(sc.state().backouts["p-test-b"].verified, true);
     assert.equal(landingState(sc.state(), sc.state().patches["p-test-b"]).accepted, true, "it may land again");
+  });
+});
+
+describe("10. an answer after submission adding a commit", () => {
+  it("puts the new commit on top of the stack, for you to submit", () => {
+    const sc = backedOutAndAsked();
+    assert.ok(sc.state().stacks.root.order.includes("p-test-b-2"), String(sc.state().stacks.root.order));
+    assert.ok(sc.state().needsUser.some((n) => n.key.startsWith("submit-new:root:")));
   });
 });
 
