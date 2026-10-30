@@ -328,6 +328,9 @@ export function foldEvents(events: readonly Event[]): RequestState {
       }
       case "review-status":
         if (reviews.get(e.patch)?.status === "published" && e.status !== "published") s.reopened[e.patch] = e.t;
+        // A reopen no poll saw coming (it landed and was backed out between two polls): Phabricator's own time for it.
+        // One already recorded at the poll that saw it is later than Phabricator's.
+        if (e.reopenedAt && e.status !== "published" && !(s.reopened[e.patch] && s.reopened[e.patch] >= e.reopenedAt)) s.reopened[e.patch] = e.reopenedAt;
         reviews.set(e.patch, { revision: e.revision, status: e.status, reviewers: e.reviewers, comments: e.comments, ...(e.diff ? { diff: e.diff } : {}), ...(e.author ? { author: e.author } : {}) });
         if (e.diff?.commit && s.patchSent[e.patch]?.at(-1)?.sha !== e.diff.commit) s.patchSent[e.patch] = [...(s.patchSent[e.patch] ?? []), { sha: e.diff.commit, t: e.diff.created }];
         break;

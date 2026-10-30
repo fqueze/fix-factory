@@ -2486,6 +2486,20 @@ describe("10. landing with a patch landed", () => {
 });
 
 describe("10. backouts", () => {
+  it("a backout no poll saw land is found from Phabricator's reopen", () => {
+    const sc = inReview();
+    sc.complete("poll:0", { output: polled("accepted") });
+    sc.settle();
+    sc.now += 4 * 3_600_000;
+    sc.settle();
+    const poll = sc.view().jobs.find((j) => !j.end && j.purpose.key.startsWith("poll:"))!.purpose.key;
+    const reopenedAt = new Date(sc.now - 3_600_000).toISOString();
+    sc.complete(poll, { output: polled("accepted").map((x) => ({ ...x, reopenedAt })) });
+    sc.settle();
+    assert.equal(sc.state().reopened["p-test-a"], reopenedAt);
+    assert.ok(sc.view().jobs.some((j) => j.purpose.key.startsWith("backout-reason:p-test-a:")));
+  });
+
   // Both patches landed, then a sheriff backed both out for test_b's failure: their revisions reopen.
   function backedOut(): Scenario {
     const sc = inReview();

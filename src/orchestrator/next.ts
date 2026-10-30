@@ -2663,7 +2663,9 @@ class Planner {
     // submitted, any change its author made goes to Phabricator: an answer to review comments, or what you told it,
     // or what it made of a try push it asked for.
     const answer = this.authorJobs(item.id).findLast((j) => j.purpose.reason !== undefined && CHANGES_AFTER_SUBMIT.includes(j.purpose.reason) || j.purpose.reason === "initial" || j.purpose.reason === "start" || j.name === "address-review");
-    if (!author || !answer || answer.purpose.reason === "initial" || answer.purpose.reason === "start" || item.state !== "reviewed") return;
+    // A session started anew after submission (a recovery's start-agent) changes a submitted patch like an answer.
+    const fresh = (j: JobRecord) => (j.purpose.reason === "initial" || j.purpose.reason === "start") && !(p.submittedAt && j.startedAt > Date.parse(p.submittedAt));
+    if (!author || !answer || fresh(answer) || item.state !== "reviewed") return;
     if (answer.name !== "address-review" && !(p.submittedAt && answer.startedAt > Date.parse(p.submittedAt))) return;
     const st = Object.values(this.s.stacks).find((x) => x.order.includes(p.id));
     if (!st) return;

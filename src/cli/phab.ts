@@ -113,6 +113,7 @@ export interface PollResult {
   reviewers: ReviewerStatus[];
   comments: PolledComment[];
   diff?: { id: number; commit?: string; created: string }; // its latest diff, and the local commit moz-phab sent it from
+  reopenedAt?: string; // its latest reopen after a close (a backout), even one no poll saw it closed before
 }
 
 async function names(conduit: Conduit, phids: string[]): Promise<Map<string, string>> {
@@ -215,6 +216,10 @@ export async function poll(revisions: number[], conduit: Conduit = makeConduit()
       }
     }
     comments.sort((a, b) => (a.file ?? "").localeCompare(b.file ?? "") || (a.line ?? 0) - (b.line ?? 0) || a.id - b.id);
+    // Landed then backed out while nobody polled: Phabricator still has the close and the reopen.
+    const latestOf = (type: string) => Math.max(0, ...(txnsByRev.get(id) ?? []).filter((t) => t.type === type).map((t) => t.dateCreated as number));
+    const closed = latestOf("close");
+    const reopened = latestOf("reopen");
     return {
       revision: id,
       phid: r.phid,
@@ -235,6 +240,7 @@ export async function poll(revisions: number[], conduit: Conduit = makeConduit()
             },
           }
         : {}),
+      ...(closed && reopened > closed ? { reopenedAt: new Date(reopened * 1000).toISOString() } : {}),
     };
   });
 }
