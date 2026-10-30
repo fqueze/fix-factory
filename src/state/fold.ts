@@ -87,7 +87,7 @@ export function foldEvents(events: readonly Event[]): RequestState {
         s.backouts[e.patch] = { at: e.at, reason: e.reason, culprit: e.culprit };
         break;
       case "try-needed":
-        s.tryNeeded[e.patch] = { why: e.why, ask: e.ask, job: e.job, at: e.t };
+        s.tryNeeded[e.patch] = { why: e.why, ask: e.ask, job: e.job, at: e.t, shas: [] };
         break;
       case "try-verified":
         if (s.tryNeeded[e.patch]) s.tryNeeded[e.patch].verified = true;
@@ -208,6 +208,8 @@ export function foldEvents(events: readonly Event[]): RequestState {
         // When its revision first showed up: what its author changes after that has to be resubmitted.
         const before = s.patches[e.patch];
         if (!(s.patchShas[e.patch] ?? []).includes(e.sha)) s.patchShas[e.patch] = [...(s.patchShas[e.patch] ?? []), e.sha];
+        // A push carrying one of these has the fix.
+        if (s.tryNeeded[e.patch] && !s.tryNeeded[e.patch].verified && !s.tryNeeded[e.patch].shas.includes(e.sha)) s.tryNeeded[e.patch].shas.push(e.sha);
         const submittedAt = e.revision === undefined ? undefined : before?.revision !== undefined ? before.submittedAt : e.t;
         // The commit Phabricator has: the one its revision showed up on, then what you copied the moz-phab command for.
         const sentSha = e.revision === undefined ? undefined : before?.revision !== undefined ? before.sentSha : e.sha;

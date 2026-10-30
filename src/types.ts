@@ -476,7 +476,7 @@ export interface RequestState {
   queuedAuthors?: { item: ItemId; key: string; reason: string; message: string }[]; // your messages waiting for their author's worktree
   verifyAsked?: string[];
   reopened: Record<PatchId, Iso>; // when its revision went from closed (landed) back to open: a backout
-  tryNeeded: Record<PatchId, { why: string; ask: string; job: JobId; at: Iso; verified?: boolean }>; // fixes for what try found, until a push of them is green
+  tryNeeded: Record<PatchId, { why: string; ask: string; job: JobId; at: Iso; shas: string[]; verified?: boolean }>; // shas: the commits it has been since // fixes for what try found, until a push of them is green
   backouts: Record<PatchId, { at: Iso; reason: string; culprit: boolean; verified?: boolean }>; // patches whose landing was backed out // each time you asked for a try push of the stack as it stands, why
   splitFrom?: RequestId; // made by splitting that one
   createdAt: Iso;

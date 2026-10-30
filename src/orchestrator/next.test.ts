@@ -2710,6 +2710,9 @@ describe("9. a try push of a submitted stack", () => {
     assert.equal(sc.state().items["i-test-a"].state, "waiting for review");
     assert.match(sc.state().verifyAsked?.at(-1) ?? "", /^Verify the fix of D101 for what try push fed found broken by it/);
     for (const j of sc.view().jobs.filter((j) => !j.end && j.purpose.key.startsWith("test-plan:"))) sc.complete(j.purpose.key, { report: { testPlan: "- Ran it.", feedback: [] } });
+    // A new failure that push found, being investigated, doesn't hold the push up.
+    sc.add({ type: "item-created", request: ID, item: "i-test-c", folder: "a", group: { message: "crash", tests: ["a/test_c.js"], configs: [] } });
+    sc.add({ type: "item-state", request: ID, item: "i-test-c", state: "investigating" });
     sc.settle();
     const since = sc.view().jobs.find((j) => !j.end && j.purpose.key.startsWith("since:root:"));
     if (since) sc.complete(since.purpose.key, { output: { changes: [], removed: [] } });
@@ -2720,7 +2723,8 @@ describe("9. a try push of a submitted stack", () => {
     sc.complete(planKey, { report: { pushes: [{ purpose: "the failing jobs", tryArgs: ["fuzzy", "-q", "x"], rebuild: 5 }], feedback: [] } });
     const dry = sc.settle().find((k) => k.startsWith("dry-run:"))!;
     const push = sc.purpose(dry).push!;
-    sc.complete(dry, { output: { command: ["./mach", "try", "fuzzy"], taskCount: 5, tasks: [], tryTaskConfig: {}, commits: [], warnings: [] } });
+    // It carries the fix as the stack has it now.
+    sc.complete(dry, { output: { command: ["./mach", "try", "fuzzy"], taskCount: 5, tasks: [], tryTaskConfig: {}, commits: [sc.state().patches["p-test-a"].sha], warnings: [] } });
     sc.add({ type: "user-done", request: ID, key: `approve-push:${push}` });
     sc.now += 60_000;
     sc.add({ type: "try-pushed", request: ID, push, rev: "abc", url: "u" });

@@ -1503,7 +1503,11 @@ class Planner {
       if (ids.has(id)) id = `${id.slice(0, 33)}-${shortHash([folder]).slice(0, 6)}`;
       ids.set(id, folder);
       const items = Object.values(this.s.items).filter((i) => this.stackFolder(i) === folder);
-      if (items.some((i) => !SETTLED.includes(i.state))) continue;
+      // Once submitted, a group being worked on that has no patch in the stack (a failure a push found, being
+      // investigated) doesn't hold the stack's pushes up: its fix goes on top later.
+      const existing = Object.values(this.s.stacks).find((st) => st.folder === folder);
+      const outside = (i: ItemView) => existing !== undefined && existing.order.some((pid) => this.s.patches[pid]?.revision !== undefined) && !existing.order.some((pid) => this.s.patches[pid]?.item === i.id);
+      if (items.some((i) => !SETTLED.includes(i.state) && !outside(i))) continue;
       const patches: StackInfo["patches"] = [];
       for (const item of items) {
         if (!WITH_PATCHES.includes(item.state)) continue;
@@ -2199,9 +2203,14 @@ class Planner {
         const k = Number(/-ask(\d+)-/.exec(p.id)?.[1] ?? 0);
         return k >= n && p.rev && (this.view.pushedAt.get(p.id) ?? 0) > Date.parse(t.at);
       });
-      const k = Math.max(0, ...answering.map((p) => Number(/-ask(\d+)-/.exec(p.id)![1])));
+      // Only pushes carrying the fix: one planned before it was in the stack doesn't.
+      const carries = (id: PushId) => {
+        const d = this.view.byKey.get(`dry-run:${id}`)?.find(succeeded);
+        return d !== undefined && this.out<DryRunResult>(d).commits.some((c) => t.shas.some((sha) => sha.startsWith(c) || c.startsWith(sha)));
+      };
+      const k = Math.max(0, ...answering.filter((p) => carries(p.id)).map((p) => Number(/-ask(\d+)-/.exec(p.id)![1])));
       const latest = answering.filter((p) => p.id.includes(`-ask${k}-`));
-      if (latest.length && latest.every((p) => p.result === "green" || this.passing.has(p.id))) this.event(this.ev("try-verified", { patch: pid }));
+      if (k && latest.some((p) => carries(p.id)) && latest.every((p) => p.result === "green" || this.passing.has(p.id))) this.event(this.ev("try-verified", { patch: pid }));
     }
     return asks;
   }
