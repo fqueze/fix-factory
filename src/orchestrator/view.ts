@@ -34,10 +34,12 @@ export interface View {
   tryFailures: TryFailure[];
   pushedAt: Map<PushId, number>;
   executed: Set<string>; // command ids with a command-executed event: commands run at least once
+  dismissed: Map<string, number>; // needs-user keys you dismissed → when (ms)
+  flagPatch: Map<string, string>; // needs-user key → the patch it's about
 }
 
 export function buildView(events: readonly Event[]): View {
-  const v: View = { jobs: [], byKey: new Map(), raised: new Map(), done: new Set(), stepCount: new Map(), itemResets: new Map(), tryFailures: [], pushedAt: new Map(), executed: new Set() };
+  const v: View = { jobs: [], byKey: new Map(), raised: new Map(), done: new Set(), stepCount: new Map(), itemResets: new Map(), tryFailures: [], pushedAt: new Map(), executed: new Set(), dismissed: new Map(), flagPatch: new Map() };
   const byJob = new Map<JobId, JobRecord>();
   for (const e of events) {
     switch (e.type) {
@@ -65,9 +67,11 @@ export function buildView(events: readonly Event[]): View {
       }
       case "needs-user":
         if (!v.raised.has(e.key)) v.raised.set(e.key, Date.parse(e.t));
+        if (e.patch !== undefined) v.flagPatch.set(e.key, e.patch);
         break;
       case "user-done":
         v.done.add(e.key);
+        if (!e.byFactory) v.dismissed.set(e.key, Date.parse(e.t));
         break;
       case "step":
         v.stepCount.set(e.step, (v.stepCount.get(e.step) ?? 0) + 1);

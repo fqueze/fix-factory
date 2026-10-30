@@ -2628,6 +2628,10 @@ class Planner {
       const inter = this.want(`interdiff:${p.id}:phab-${base.slice(0, 12)}:${p.sha.slice(0, 12)}`, () =>
         this.cli("interdiff", "stack.ts", ["interdiff", "--cwd", st.worktree, base, p.sha], { cwd: st.worktree, priority: REVIEW_PRIORITY, purpose: { patch: p.id, stack: st.id } }),
       );
+      // You dismissed asking to resubmit that same change: not asked again until it changes (a rebase doesn't).
+      const dismissed = Math.max(0, ...[...this.view.dismissed].filter(([k]) => k.startsWith("resubmit:") && this.view.flagPatch.get(k) === p.id).map(([, t]) => t));
+      const seen = this.view.jobs.filter((j) => j.purpose.what === "interdiff" && j.purpose.patch === p.id && succeeded(j) && j.end!.at <= dismissed).at(-1);
+      if (inter && seen && this.out<{ diff: string }>(seen).diff === this.out<{ diff: string }>(inter).diff) continue;
       if (inter && this.out<{ diff: string }>(inter).diff.trim()) {
         this.raise(`resubmit:${st.id}:phab-${p.review!.diff!.id}:${p.sha.slice(0, 12)}`, { action: `Resubmit D${p.revision}`, detail: "it differs from what Phabricator has · interdiff below", stack: st.id, patch: p.id });
       }

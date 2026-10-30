@@ -2725,7 +2725,15 @@ describe("9. a try push of a submitted stack", () => {
     const inter = sc.settle().find((k) => k.startsWith("interdiff:p-test-a:phab-"))!;
     sc.complete(inter, { output: { diff: "-a\n+b\n", method: "same-parent" } });
     sc.settle();
-    assert.equal(sc.state().needsUser.find((n) => n.patch === "p-test-a" && n.key.startsWith("resubmit:"))?.action, "Resubmit D101");
+    const flag = sc.state().needsUser.find((n) => n.patch === "p-test-a" && n.key.startsWith("resubmit:"))!;
+    assert.equal(flag.action, "Resubmit D101");
+    // Dismissed: a later diff on Phabricator (another patch resubmitted) doesn't bring the same change back.
+    sc.now += 60_000;
+    sc.add({ type: "user-done", request: ID, key: flag.key });
+    const p = sc.state().patches["p-test-a"];
+    sc.add({ type: "review-status", request: ID, patch: "p-test-a", ...p.review!, diff: { id: 10, commit: past, created: "2026-01-01T00:00:00.000Z" } });
+    sc.settle();
+    assert.ok(!sc.state().needsUser.some((n) => n.patch === "p-test-a" && n.key.startsWith("resubmit:")), "not asked again");
   });
 
   it("a diff submitted from a commit this repository doesn't have is compared with what the factory sent", () => {
