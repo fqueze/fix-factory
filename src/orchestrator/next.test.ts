@@ -2720,16 +2720,26 @@ describe("9. a try push of a submitted stack", () => {
     const planKey = started.find((k) => k.startsWith("plan:verify:root:"))!;
     assert.ok(planKey, `${String(started)} | open: ${sc.view().jobs.filter((j) => !j.end).map((j) => j.purpose.key)}`);
     assert.match(String(sc.plan(planKey).agent?.vars?.goal), /Verify the fix of D101/);
-    sc.complete(planKey, { report: { pushes: [{ purpose: "the failing jobs", tryArgs: ["fuzzy", "-q", "x"], rebuild: 5 }], feedback: [] } });
-    const dry = sc.settle().find((k) => k.startsWith("dry-run:"))!;
-    const push = sc.purpose(dry).push!;
+    const pushOf = (key: string, commits: string[], rev: string) => {
+      sc.complete(key, { report: { pushes: [{ purpose: "the failing jobs", tryArgs: ["fuzzy", "-q", "x"], rebuild: 5 }], feedback: [] } });
+      const dry = sc.settle().find((k) => k.startsWith("dry-run:"))!;
+      const push = sc.purpose(dry).push!;
+      sc.complete(dry, { output: { command: ["./mach", "try", "fuzzy"], taskCount: 5, tasks: [], tryTaskConfig: {}, commits, warnings: [] } });
+      sc.add({ type: "user-done", request: ID, key: `approve-push:${push}` });
+      sc.now += 60_000;
+      sc.add({ type: "try-pushed", request: ID, push, rev, url: "u" });
+      sc.add({ type: "try-finished", request: ID, push, result: "green", summary: "green" });
+      return sc.settle();
+    };
+    // Green, but without the fix (planned before it was in the stack): asked again.
+    const next = pushOf(planKey, [], "abc");
+    assert.ok(!sc.state().tryNeeded["p-test-a"].verified);
+    assert.match(sc.state().verifyAsked?.at(-1) ?? "", /didn't carry the fix: this one must\.$/);
+    for (const k of next.filter((k) => k.startsWith("since:"))) sc.complete(k, { output: { changes: [], removed: [] } });
+    const again = [...next, ...sc.settle()].find((k) => k.startsWith("plan:verify:root:") && k !== planKey)!;
+    assert.ok(again, String(next));
     // It carries the fix as the stack has it now.
-    sc.complete(dry, { output: { command: ["./mach", "try", "fuzzy"], taskCount: 5, tasks: [], tryTaskConfig: {}, commits: [sc.state().patches["p-test-a"].sha], warnings: [] } });
-    sc.add({ type: "user-done", request: ID, key: `approve-push:${push}` });
-    sc.now += 60_000;
-    sc.add({ type: "try-pushed", request: ID, push, rev: "abc", url: "u" });
-    sc.add({ type: "try-finished", request: ID, push, result: "green", summary: "green" });
-    sc.settle();
+    pushOf(again, [sc.state().patches["p-test-a"].sha], "abd");
     assert.equal(sc.state().tryNeeded["p-test-a"].verified, true);
     assert.equal(landingState(sc.state(), sc.state().patches["p-test-a"]).accepted, sc.state().patches["p-test-a"].review!.reviewers.every((r) => r.status === "accepted"));
   });

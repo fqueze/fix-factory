@@ -2211,6 +2211,14 @@ class Planner {
       const k = Math.max(0, ...answering.filter((p) => carries(p.id)).map((p) => Number(/-ask(\d+)-/.exec(p.id)![1])));
       const latest = answering.filter((p) => p.id.includes(`-ask${k}-`));
       if (k && latest.some((p) => carries(p.id)) && latest.every((p) => p.result === "green" || this.passing.has(p.id))) this.event(this.ev("try-verified", { patch: pid }));
+      // Its ask was answered by pushes made before the fix was in the stack: asked again, now that it is.
+      const again = `${t.ask} The push made for it before didn't carry the fix: this one must.`;
+      const p = this.s.patches[pid];
+      if (!k && answering.length && answering.every((x) => x.result !== undefined) && p?.item && this.s.items[p.item]?.state === "waiting for review") {
+        asks.add(again);
+        if (!(this.s.verifyAsked ?? []).includes(again)) this.event(this.ev("verify-asked", { text: again }));
+      }
+      if ((this.s.verifyAsked ?? []).includes(again)) asks.add(again);
     }
     return asks;
   }
