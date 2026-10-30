@@ -2618,6 +2618,25 @@ describe("9. a try push of a submitted stack", () => {
     assert.equal(sc.view().jobs.filter((j) => j.purpose.what === "plan-pushes" && j.purpose.key.includes(":ask")).length, 2, "that ask is answered: its plan and its revision");
   });
 
+  it("an author's fix for what a push past verification found broken by it goes to try again once back for review", () => {
+    const sc = inReview();
+    sc.complete("poll:0", { output: polled("needs-review", [], "pending") });
+    sc.settle();
+    sc.add({ type: "try-planned", request: ID, push: "root-ask1-abcd-1", purpose: "p", command: ["./mach", "try"], taskCount: 1 });
+    sc.add({ type: "try-pushed", request: ID, push: "root-ask1-abcd-1", rev: "fed", url: "u" });
+    sc.add({ type: "try-finished", request: ID, push: "root-ask1-abcd-1", result: "failures", summary: "1 failure" });
+    const plan = resumeAuthorPlan(ID, sc.view(), "i-test-a", "try", { message: "fix it" }, "investigating");
+    assert.ok(plan && plan !== "busy");
+    plan.purpose.key = "author:i-test-a:try:root-ask1-abcd-1";
+    sc.startJob(plan);
+    sc.complete(plan.purpose.key, { report: fixed([sha("9")]) });
+    sc.settle();
+    assert.deepEqual(sc.state().verifyAsked ?? [], [], "not before it's reviewed and back for review");
+    sc.add({ type: "item-state", request: ID, item: "i-test-a", state: "waiting for review" });
+    sc.settle();
+    assert.match(sc.state().verifyAsked?.[0] ?? "", /^Verify the fix of D101 for what try push fed found broken by it/);
+  });
+
   it("a fix made after submission goes on top of the stack once reviewed, for you to submit, without the step going back", () => {
     const sc = inReview();
     sc.complete("poll:0", { output: polled("needs-review", [], "pending") });

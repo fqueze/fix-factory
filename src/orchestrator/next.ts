@@ -2139,6 +2139,7 @@ class Planner {
       if (stack && this.s.stacks[stack] && push.rev) this.routeTryFailures(push.id, this.s.stacks[stack].order.map((pid) => this.s.patches[pid]));
     }
     if (this.s.step !== "verify on try") {
+      this.fixesToVerify();
       this.askedVerify();
       return;
     }
@@ -2166,13 +2167,33 @@ class Planner {
     }
   }
 
+  // Past verification, an author's fix for failures a push of the stack found goes to try again, once reviewed and back
+  // on its way to Phabricator: those jobs must be green before it lands.
+  private fixesToVerify(): void {
+    for (const j of this.view.jobs) {
+      if (j.purpose.reason !== "try" || !j.item || !succeeded(j)) continue;
+      const push = /:try:([^:]+)/.exec(j.purpose.key)?.[1];
+      const r = this.rep<{ state?: string; commits?: string[] }>(j);
+      if (!push || !this.s.pushes[push] || r.state !== "fix verified locally" || !r.commits?.length) continue;
+      if (this.s.items[j.item].state !== "waiting for review") continue;
+      const ds = Object.values(this.s.patches).filter((p) => p.item === j.item && p.revision !== undefined).map((p) => `D${p.revision}`);
+      const text = `Verify the fix of ${ds.join(", ") || j.item} for what try push ${this.s.pushes[push].rev ?? push} found broken by it (${shortHash([j.job]).slice(0, 4)}): those jobs must be green.`;
+      if (!(this.s.verifyAsked ?? []).includes(text)) this.event(this.ev("verify-asked", { text }));
+    }
+  }
+
   // You asked for a try push of the stack as it stands (verify-stack): planned at whatever step it's at, once per ask,
   // when its authors are done. Its failures are routed like any verification push's; the step stays.
   private askedVerify(): void {
     const n = this.s.verifyAsked?.length ?? 0;
     if (!n || at(this.s.step) <= at("verify on try")) return;
-    const ask = { n, text: this.s.verifyAsked![n - 1] };
     for (const info of this.stackInfos.values()) {
+      const answeredBy = (k: number) => Object.values(this.s.pushes).some((p) => p.id.startsWith(`${info.id}-ask${k}-`) && (p.rev || (p.declined !== undefined && !p.withdrawn && !p.replan)));
+      // An ask is answered by its push or a later ask's.
+      const answered = (k: number) => Array.from({ length: n - k + 1 }, (_, i) => k + i).some(answeredBy);
+      // The latest ask's push carries the earlier ones no push answered (several fixes asking at once).
+      const texts = this.s.verifyAsked!.filter((_, i) => i === n - 1 || !answered(i + 1));
+      const ask = { n, text: texts.join("\n") };
       const all = `${info.id}-ask${n}-`;
       // Made, or declined by you: that ask is answered, and a later change to the stack waits for your next one. One you
       // asked to revise isn't declined: its planner revises it.
