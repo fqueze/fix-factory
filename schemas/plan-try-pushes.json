@@ -6,6 +6,10 @@
       "items": {
         "type": "object",
         "properties": {
+          "title": {
+            "type": "string",
+            "description": "What it's for, in a few plain words a person reads at a glance, e.g. \"Verify the browser_tab_groups.js fix\" or \"Re-check the backed-out tab notes patch\": no job names, counts or reasons (those go in purpose)."
+          },
           "purpose": {
             "type": "string",
             "description": "One line: what this push answers."
@@ -31,6 +35,7 @@
           }
         },
         "required": [
+          "title",
           "purpose",
           "tryArgs",
           "rebuild"

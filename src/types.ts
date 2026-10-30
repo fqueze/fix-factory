@@ -197,7 +197,7 @@ export type Event =
   | (EventBase & { type: "stack-dropped"; stack: string }) // made by an earlier rule (one per test folder), never submitted
   | (EventBase & { type: "stack"; stack: string; folder: string; branch: string; worktree: string; base?: string; order: PatchId[]; summary?: string })
   | (EventBase & { type: "meta-bug"; bug: number | null; draft?: BugDraft })
-  | (EventBase & { type: "try-planned"; push: PushId; purpose: string; command: string[]; taskCount?: number })
+  | (EventBase & { type: "try-planned"; push: PushId; purpose: string; title?: string; command: string[]; taskCount?: number })
   | (EventBase & { type: "try-declined"; push: PushId; text: string; by?: "factory"; replan?: true }) // you said no, or the factory withdrew it
   | (EventBase & { type: "submit-copied"; stack: string })
   | (EventBase & { type: "try-pushed"; push: PushId; rev: string; url: string })
@@ -425,6 +425,7 @@ export interface PushView {
   since?: PushId; // the stack's push it follows: its changes since then are in RequestState.pushChanges
   regressions?: Regression[];
   purpose: string;
+  title?: string; // what it's for, in a few words
   command: string[];
   taskCount?: number;
   declined?: string; // why you said no, or why the factory withdrew it
@@ -531,6 +532,7 @@ export interface JobPurpose {
   args?: string[]; // mach try arguments of a dry-run, reused by the push
   cwd?: string; // the worktree a dry-run ran in, reused by the push
   purpose?: string; // a planned push's one-line purpose
+  title?: string; // and what it's for, in a few words
   edits?: Record<PatchId, number>; // bug numbers a rewrite puts in commit messages
   titles?: Record<PatchId, string>; // first lines a rewrite gives commit messages (reviewers)
   patches?: Record<string, PatchId>; // 12-character sha prefix → patch, for the shas a stack.ts job gets
@@ -583,7 +585,7 @@ export interface WriteAnnotationPatchesReport {
 }
 
 export interface PlanTryPushesReport {
-  pushes: { purpose: string; tryArgs: string[]; rebuild: number; scope?: PushScope }[];
+  pushes: { title?: string; purpose: string; tryArgs: string[]; rebuild: number; scope?: PushScope }[];
   regressions?: Regression[]; // when the stack had an earlier push: each of its regressions, and what fixes it
   answer?: string; // revising: what it changed and why, or why it couldn't
   feedback: Feedback[];

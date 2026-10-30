@@ -20,7 +20,7 @@ const samples: Record<string, unknown[]> = {
   ],
   "classify-annotation": [{ kind: "scoping", reason: "no GPU on that config", feedback } satisfies R.ClassifyAnnotationReport],
   "write-annotation-patches": [{ runIf: "abc", debug: "def", summary: "two commits", feedback } satisfies R.WriteAnnotationPatchesReport, { summary: "nothing to change", feedback: [] } satisfies R.WriteAnnotationPatchesReport],
-  "plan-try-pushes": [{ pushes: [{ purpose: "un-skip", tryArgs: ["fuzzy", "-q", "xpcshell"], rebuild: 10 }], feedback } satisfies R.PlanTryPushesReport],
+  "plan-try-pushes": [{ pushes: [{ title: "Un-skip the folder", purpose: "un-skip", tryArgs: ["fuzzy", "-q", "xpcshell"], rebuild: 10 }], feedback } satisfies R.PlanTryPushesReport],
   "triage-try": [{ cells: [{ test: "a.js", config: "linux", verdict: "broken by patch", patch: "abc", evidence: "TEST-UNEXPECTED-FAIL" }, { taskId: "T", verdict: "infra", evidence: "worker lost" }], feedback } satisfies R.TriageTryReport],
   "merge-clusters": [{ groups: [{ message: "m", tests: ["a.js"], configs: ["c"], from: ["k1", "k2"], reason: "same crash" }], feedback } satisfies R.MergeClustersReport],
   "prior-art-verdict": [{ verdict: "reuse", bug: 123, quote: "open, no assignee", feedback } satisfies R.PriorArtVerdictReport],

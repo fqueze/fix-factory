@@ -169,10 +169,10 @@ export function handleFinished(input: HandlerInput): HandlerResult {
         ev("note", { text: `Push ${purpose.push} is the same as pending push ${d.duplicateOf}: not planned again.` });
         break;
       }
-      ev("try-planned", { push: purpose.push!, purpose: purpose.purpose ?? "", command: d.command, taskCount: d.taskCount });
+      ev("try-planned", { push: purpose.push!, purpose: purpose.purpose ?? "", ...(purpose.title ? { title: purpose.title } : {}), command: d.command, taskCount: d.taskCount });
       ev("needs-user", {
         key: `approve-push:${purpose.push}`,
-        action: `Approve try push ${purpose.push}`,
+        action: `Approve try push ${purpose.push}${purpose.title ? `: ${purpose.title}` : ""}`,
         detail: [`${d.taskCount} tasks`, purpose.purpose, ...d.warnings].filter(Boolean).join(" · ").slice(0, 1000),
         push: purpose.push,
         // A push its author asked for: its group waits for it.

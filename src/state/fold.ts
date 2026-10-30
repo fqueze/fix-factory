@@ -306,6 +306,7 @@ export function foldEvents(events: readonly Event[]): RequestState {
       case "try-planned": {
         const p = push(e.push);
         p.purpose = e.purpose;
+        if (e.title) p.title = e.title;
         p.command = e.command;
         p.taskCount = e.taskCount;
         break;

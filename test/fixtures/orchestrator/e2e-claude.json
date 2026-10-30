@@ -85,6 +85,6 @@
   },
   {
     "match": "^Plan the try pushes for: verify",
-    "report": { "pushes": [{ "purpose": "the two fixed tests on linux, comparable with the initial push", "tryArgs": ["fuzzy", "-q", "'mochitest-plain 'linux", "--rebuild", "5"], "rebuild": 5 }], "feedback": [] }
+    "report": { "pushes": [{ "title": "Verify the two fixed tests", "purpose": "the two fixed tests on linux, comparable with the initial push", "tryArgs": ["fuzzy", "-q", "'mochitest-plain 'linux", "--rebuild", "5"], "rebuild": 5 }], "feedback": [] }
   }
 ]

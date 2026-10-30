@@ -704,7 +704,7 @@ class Planner {
   }
 
   // item: the group whose author asked for it, which waits for your approval.
-  private dryRun(push: PushId, args: string[], purpose: string, cwd: string, stack?: string, item?: ItemId): DryRunResult | undefined {
+  private dryRun(push: PushId, args: string[], purpose: string, cwd: string, stack?: string, item?: ItemId, title?: string): DryRunResult | undefined {
     const r = this.want(`dry-run:${push}`, () => {
       // try.ts refuses a duplicate of a push still pending.
       const pending = Object.values(this.s.pushes)
@@ -718,7 +718,7 @@ class Planner {
       return this.cli("dry-run", "try.ts", ["dry-run", "--cwd", cwd, "--pending", file, "--", ...args], {
         cwd,
         files: [{ path: file, content: JSON.stringify(pending) + "\n" }],
-        purpose: { push, args, cwd, purpose, ...(stack ? { stack } : {}), ...(item ? { item } : {}) },
+        purpose: { push, args, cwd, purpose, ...(title ? { title } : {}), ...(stack ? { stack } : {}), ...(item ? { item } : {}) },
         ...(item ? { item } : {}),
       });
     });
@@ -753,7 +753,7 @@ class Planner {
       const these = planned.map((_, i) => (r === 0 ? idOf(i, planned.length) : `${idOf(0, 1)}-v${r}${planned.length === 1 ? "" : `-${i + 1}`}`));
       // Its rebuild count, when its arguments don't say it.
       const args = (push: PlanTryPushesReport["pushes"][number]) => (push.rebuild > 1 && !push.tryArgs.includes("--rebuild") ? [...push.tryArgs, "--rebuild", String(push.rebuild)] : push.tryArgs);
-      const d = planned.map((push, i) => this.dryRun(these[i], args(push), push.purpose, cwd, stack, opts?.item));
+      const d = planned.map((push, i) => this.dryRun(these[i], args(push), push.purpose, cwd, stack, opts?.item, push.title));
       if (d.some((x) => !x)) return undefined;
       // What you judge it by: the previous push's regressions, and what claims to fix each.
       const regressions = this.rep<PlanTryPushesReport>(plan).regressions;

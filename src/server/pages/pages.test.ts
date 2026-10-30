@@ -621,6 +621,12 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.match(h, new RegExp(`<details class="fold pushes" data-fold="finished-pushes"><summary>${n} try push`));
   });
 
+  it("6. verify on try: a push's row names it by its few-word title, its full purpose in its tooltip", () => {
+    const r = structuredClone(get("r-20261010-xpcshell-cwd"));
+    r.pushes.A.title = "Verify the browser_tab_groups.js fix";
+    assert.match(rowOf(renderRequest(r, ctx, true).value, "push-A"), /<span class="name" title="Same configs[^"]*">push [^:]+: Verify the browser_tab_groups\.js fix<\/span>/);
+  });
+
   it("6. verify on try: a revised push says what you asked and what its planner answered", () => {
     const r = structuredClone(get("r-20261010-xpcshell-cwd"));
     r.pushes.old = { id: "old", purpose: "p", command: [], declined: "add the other patch", replan: true };
