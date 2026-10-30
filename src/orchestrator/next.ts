@@ -2190,7 +2190,7 @@ class Planner {
       asks.add(text);
       for (const p of own) {
         const t = this.s.tryNeeded[p.id];
-        if (!t || (t.job !== j.job && Date.parse(t.at) < j.end!.at)) this.event(this.ev("try-needed", { patch: p.id, why: `its fix for what try push ${rev.slice(0, 12)} found`, ask: text, job: j.job }));
+        if (!t || (t.job !== j.job && Date.parse(t.at) < j.end!.at)) this.event(this.ev("try-needed", { patch: p.id, why: `its fix for what try push ${rev.slice(0, 12)} found`, ask: text, job: j.job, after: new Date(j.end!.at).toISOString() }));
       }
       if (this.s.items[j.item].state === "waiting for review" && !(this.s.verifyAsked ?? []).includes(text)) this.event(this.ev("verify-asked", { text }));
     }
@@ -2199,15 +2199,14 @@ class Planner {
       if (t.verified) continue;
       const n = (this.s.verifyAsked ?? []).indexOf(t.ask) + 1;
       if (!n) continue;
+      // Pushes since its author answered (asks raised before "after" was recorded: its job's end).
+      const answered = t.after ? Date.parse(t.after) : (this.view.jobs.find((j) => j.job === t.job)?.end?.at ?? Date.parse(t.at));
       const answering = Object.values(this.s.pushes).filter((p) => {
         const k = Number(/-ask(\d+)-/.exec(p.id)?.[1] ?? 0);
-        return k >= n && p.rev && (this.view.pushedAt.get(p.id) ?? 0) > Date.parse(t.at);
+        return k >= n && p.rev && (this.view.pushedAt.get(p.id) ?? 0) > answered;
       });
       // Only pushes carrying the fix: one planned before it was in the stack doesn't.
-      const carries = (id: PushId) => {
-        const d = this.view.byKey.get(`dry-run:${id}`)?.find(succeeded);
-        return d !== undefined && this.out<DryRunResult>(d).commits.some((c) => t.shas.some((sha) => sha.startsWith(c) || c.startsWith(sha)));
-      };
+      const carries = (id: PushId) => this.carries(id, pid);
       const k = Math.max(0, ...answering.filter((p) => carries(p.id)).map((p) => Number(/-ask(\d+)-/.exec(p.id)![1])));
       const latest = answering.filter((p) => p.id.includes(`-ask${k}-`));
       if (k && latest.some((p) => carries(p.id)) && latest.every((p) => p.result === "green" || this.passing.has(p.id))) this.event(this.ev("try-verified", { patch: pid }));
@@ -2215,12 +2214,20 @@ class Planner {
       const again = `${t.ask} The push made for it before didn't carry the fix: this one must.`;
       const p = this.s.patches[pid];
       if (!k && answering.length && p?.item && this.s.items[p.item]?.state === "waiting for review") {
+        if (!asks.has(again) && !(this.s.verifyAsked ?? []).includes(again)) this.event(this.ev("verify-asked", { text: again }));
         asks.add(again);
-        if (!(this.s.verifyAsked ?? []).includes(again)) this.event(this.ev("verify-asked", { text: again }));
       }
       if ((this.s.verifyAsked ?? []).includes(again)) asks.add(again);
     }
     return asks;
+  }
+
+  // Whether a push had a patch's fix for what try found: one of the commits it has been since, or the one it is (asked
+  // after the fact, it has no others).
+  private carries(push: PushId, pid: PatchId): boolean {
+    const d = this.view.byKey.get(`dry-run:${push}`)?.find(succeeded);
+    const shas = [...(this.s.tryNeeded[pid]?.shas ?? []), this.s.patches[pid].sha];
+    return d !== undefined && this.out<DryRunResult>(d).commits.some((c) => shas.some((sha) => sha.startsWith(c) || c.startsWith(sha)));
   }
 
   // You asked for a try push of the stack as it stands (verify-stack): planned at whatever step it's at, once per ask,
@@ -2338,6 +2345,9 @@ class Planner {
   }
 
   private routeToAuthor(item: ItemId, push: PushId, lines: string[], suffix = ""): void {
+    // A push that didn't carry the fix its author already made for failures try found: its failures say nothing about
+    // that fix, which goes to try in a push of its own.
+    if (Object.values(this.s.patches).some((p) => p.item === item && this.s.tryNeeded[p.id] && !this.s.tryNeeded[p.id].verified && !this.carries(push, p.id))) return;
     this.resumeAuthor(item, `author:${item}${this.itemEpoch(item)}:try:${push}${suffix}`, "try", `Try push ${this.s.pushes[push].rev} found these failures, which point at your patch:\n${lines.join("\n")}\n\nThe logs are under ${artifactsDir(this.config)}/<task id>. Fix them by amending your commit, then end with the JSON report again.`);
   }
 

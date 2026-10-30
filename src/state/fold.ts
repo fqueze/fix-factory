@@ -87,7 +87,7 @@ export function foldEvents(events: readonly Event[]): RequestState {
         s.backouts[e.patch] = { at: e.at, reason: e.reason, culprit: e.culprit };
         break;
       case "try-needed":
-        s.tryNeeded[e.patch] = { why: e.why, ask: e.ask, job: e.job, at: e.t, shas: [] };
+        s.tryNeeded[e.patch] = { why: e.why, ask: e.ask, job: e.job, at: e.t, ...(e.after ? { after: e.after } : {}), shas: [] };
         break;
       case "try-verified":
         if (s.tryNeeded[e.patch]) s.tryNeeded[e.patch].verified = true;
