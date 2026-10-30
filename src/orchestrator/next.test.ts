@@ -1440,6 +1440,37 @@ describe("4b. try repro", () => {
 });
 
 describe("4. author reports", () => {
+  it("a patch whose code a critical review accepted isn't reviewed again when its author changes another one", () => {
+    const sc = workList([group("ka", "a/test_a.js", "boom")]);
+    investigating(sc, "i-test-a");
+    const two = (a: string, b: string, pa: string, pb: string) => [
+      { ...imported(a, "Bug 9 - Fix a, r=smaug.", ["a/test_a.js"], 9)[0], patchId: pa },
+      { ...imported(b, "Bug 9 - Fix the race, r=smaug.", ["a/b.mjs"], 9)[0], patchId: pb },
+    ];
+    const drive = (job: string, out: unknown) => {
+      sc.complete(`import:${job}`, { output: out });
+      for (let i = 0; i < 5; i++) {
+        for (const k of sc.settle()) {
+          if (k.startsWith("msg:")) sc.complete(k, { output: "m" });
+          else if (k.startsWith("lint")) sc.complete(k, { output: lintOk });
+          else if (k.startsWith("review:")) sc.complete(k, { report: ok });
+        }
+      }
+    };
+    const first = sc.complete("author:i-test-a:initial", { report: fixed([sha("1"), sha("2")]) });
+    sc.settle();
+    drive(first, two(sha("1"), sha("2"), "pa", "pb"));
+    const plan = resumeAuthorPlan(ID, sc.view(), "i-test-a", "continue", { message: "longer timeout" }, "investigating");
+    assert.ok(plan && plan !== "busy");
+    plan.purpose.key = "author:i-test-a:continue:c-3";
+    sc.startJob(plan);
+    const second = sc.complete("author:i-test-a:continue:c-3", { report: fixed([sha("3"), sha("4")]) });
+    sc.settle();
+    drive(second, two(sha("3"), sha("4"), "pa", "pb2"));
+    const reviews = sc.view().jobs.filter((j) => j.purpose.what === "review" && j.purpose.key.endsWith(`:${second}`)).map((j) => j.purpose.patch);
+    assert.deepEqual(reviews, ["p-test-a-2"]);
+  });
+
   it("a reported commit its worktree doesn't have (a sha half made up) is an invalid report", () => {
     const sc = workList([group("ka", "a/test_a.js", "boom")]);
     investigating(sc, "i-test-a");

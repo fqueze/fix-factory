@@ -1413,7 +1413,8 @@ class Planner {
     }
     // An answer to review comments is reviewed against them: a change claimed but not made is caught here.
     const answered = author.name === "address-review" ? (author.purpose.comments ?? []) : [];
-    const reviews = patches.map((p) => {
+    // A patch whose code an earlier critical review accepted (its author changed another one) isn't reviewed again.
+    const reviews = patches.filter((p) => !this.acceptedPatch(item.id, author, p.id)).map((p) => {
       const comments = (this.s.patches[p.id]?.review?.comments ?? []).filter((c) => answered.includes(c.id));
       const file = dataPath(this.config, this.s.id, `review-comments-${p.id}-${author.job}.json`);
       const vars = { sha: p.sha, worktree: cwd, report: reportPath(this.config, this.s.id, author.job), comments: comments.length ? ` It answers the review comments in ${file}: check each one is really dealt with as its reviewer asked, in the code or in a reply in the report; a change the report claims but the diff doesn't make is a must-fix.` : "" };
@@ -1836,6 +1837,24 @@ class Planner {
 
   // Whether an earlier run of this item's authors had the same code (git patch-id) as this one, and its code was
   // accepted: its critical reviews passed, or only nits were left, which its nits pass addressed.
+  // The same code as a version of that patch a critical review accepted, the author's runs between not changing it.
+  private acceptedPatch(item: ItemId, author: JobRecord, pid: PatchId): boolean {
+    const index = Number(/-(\d+)$/.exec(pid.slice(patchId(item, 0).length))?.[1] ?? 1) - 1;
+    const code = (j: JobRecord) => {
+      const imp = this.view.byKey.get(`import:${j.job}`)?.find(succeeded);
+      return imp ? this.out<ImportedCommit[]>(imp)[index]?.patchId : undefined;
+    };
+    const mine = code(author);
+    if (!mine) return false;
+    const jobs = this.authorJobs(item).filter(succeeded);
+    for (const prev of jobs.slice(0, jobs.indexOf(author)).reverse()) {
+      if (code(prev) !== mine) return false;
+      const review = this.view.byKey.get(`review:${pid}:${prev.job}`)?.find(succeeded);
+      if (review) return this.rep<ReviewPatchReport>(review).verdict === "ok";
+    }
+    return false;
+  }
+
   private acceptedCode(item: ItemId, author: JobRecord): boolean {
     const codes = (j: JobRecord) => {
       const imp = this.view.byKey.get(`import:${j.job}`)?.find(succeeded);
