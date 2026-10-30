@@ -257,6 +257,8 @@ class Planner {
   private readonly startedKeys = new Set<string>();
   // Pushes whose failures are all pre-existing or infra (routeTryFailures, before stackGreen reads it).
   private readonly passing = new Set<PushId>();
+  // Pushes whose final results were read, with the groups their failures point at (routeTryFailures).
+  private readonly blamed = new Map<PushId, Set<ItemId>>();
   private readonly raisedKeys = new Set<string>();
   private readonly itemStates = new Map<ItemId, ItemState>();
   private readonly newItems = new Map<ItemId, FailureGroup>();
@@ -2209,7 +2211,7 @@ class Planner {
       const carries = (id: PushId) => this.carries(id, pid);
       const k = Math.max(0, ...answering.filter((p) => carries(p.id)).map((p) => Number(/-ask(\d+)-/.exec(p.id)![1])));
       const latest = answering.filter((p) => p.id.includes(`-ask${k}-`));
-      if (k && latest.some((p) => carries(p.id)) && latest.every((p) => p.result === "green" || this.passing.has(p.id))) this.event(this.ev("try-verified", { patch: pid }));
+      if (k && latest.some((p) => carries(p.id)) && latest.every((p) => this.clearOf(p.id, pid))) this.event(this.ev("try-verified", { patch: pid }));
       // Its ask was answered by pushes made before the fix was in the stack: asked again, now that it is.
       const again = `${t.ask} The push made for it before didn't carry the fix: this one must.`;
       const p = this.s.patches[pid];
@@ -2220,6 +2222,15 @@ class Planner {
       if ((this.s.verifyAsked ?? []).includes(again)) asks.add(again);
     }
     return asks;
+  }
+
+  // A push clears a patch when none of its failures point at the patch's group: green, or its failures read and
+  // pointing elsewhere (another group's, pre-existing, infra).
+  private clearOf(push: PushId, pid: PatchId): boolean {
+    if (this.s.pushes[push]?.result === "green" || this.passing.has(push)) return true;
+    const blamed = this.blamed.get(push);
+    const item = this.s.patches[pid]?.item;
+    return blamed !== undefined && item !== undefined && !blamed.has(item);
   }
 
   // Whether a push had a patch's fix for what try found: one of the commits it has been since, or the one it is (asked
@@ -2320,8 +2331,10 @@ class Planner {
       }
       // The final run passes when its only failures are pre-existing or infra: no author's to fix.
       const final = run.startsWith("final");
+      const own = new Set([...byItem.keys()].filter((i) => !unmatched.some((r) => byItem.get(i)!.includes(r))));
       if (unmatched.length === 0 && t.unparsed.length === 0) {
         if (final && !authorsOwn) this.passing.add(push);
+        if (final) this.blamed.set(push, own);
         continue;
       }
       const file = dataPath(this.config, this.s.id, `triage-${push}-${run}.json`);
@@ -2335,6 +2348,7 @@ class Planner {
       if (!triage) continue;
       const report = this.rep<TriageTryReport>(triage);
       if (final && !authorsOwn && report.cells.every((c) => BENIGN.has(c.verdict))) this.passing.add(push);
+      if (final) this.blamed.set(push, new Set([...own, ...report.cells.flatMap((c) => (c.verdict === "broken by patch" && c.patch ? [(this.s.patches[c.patch] ?? this.patchBySha(c.patch))?.item] : [])).filter((x) => x !== undefined)]));
       for (const c of report.cells) {
         // By id; earlier reports gave a sha.
         const item = c.verdict === "broken by patch" && c.patch ? (this.s.patches[c.patch] ?? this.patchBySha(c.patch))?.item : undefined;
@@ -2897,7 +2911,7 @@ class Planner {
         continue;
       }
       const pushes = Object.values(this.s.pushes).filter((x) => x.id.startsWith(`${st.id}-ask${n}-`) && x.rev);
-      if (pushes.length && pushes.every((x) => x.result === "green" || this.passing.has(x.id))) this.event(this.ev("backout-verified", { patch: pid }));
+      if (pushes.length && pushes.every((x) => this.clearOf(x.id, pid))) this.event(this.ev("backout-verified", { patch: pid }));
     }
   }
 

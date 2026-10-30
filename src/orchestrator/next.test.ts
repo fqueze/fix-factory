@@ -2618,6 +2618,47 @@ describe("10. backouts", () => {
     assert.equal(sc.state().backouts["p-test-b"].verified, true);
     assert.equal(landingState(sc.state(), sc.state().patches["p-test-b"]).accepted, true, "it may land again");
   });
+
+  it("a push whose only failures are another test's still clears the backout's fix", () => {
+    const sc = backedOut();
+    const told = sc.view().jobs.find((j) => j.purpose.key.startsWith("author:i-test-b:backout:"))!.purpose.key;
+    const job = sc.complete(told, { report: fixed([sha("5")]) });
+    sc.settle();
+    sc.complete(`import:${job}`, { output: imported(sha("5"), "Bug 22 - Fix test_b, r=smaug.", ["a/test_b.js"], 22).map((c) => ({ ...c, revision: 100 })) });
+    sc.settle();
+    sc.complete(`msg:p-test-b:${sha("5")}`, { output: "m" });
+    sc.settle();
+    sc.complete(`lint:p-test-b:${sha("5")}`, { output: lintOk });
+    sc.settle();
+    sc.complete(`review:p-test-b:${job}`, { report: ok });
+    const rw = sc.settle().find((k) => k.startsWith("rewrite-review:"))!;
+    sc.complete(rw, { output: { mapping: { [sha("5")]: sha("6") } } });
+    for (const k of sc.settle().filter((k) => k.startsWith("interdiff:"))) sc.complete(k, { output: { diff: "-a\n+b\n", method: "same-parent" } });
+    sc.settle();
+    assert.equal(sc.state().items["i-test-b"].state, "waiting for review");
+    assert.match(sc.state().verifyAsked?.at(-1) ?? "", /^Verify D100 \(Bug 22 - Fix test_b, r=smaug\.\) after its backout/);
+    sc.settle();
+    const since = sc.view().jobs.find((j) => !j.end && j.purpose.key.startsWith("since:root:"));
+    if (since) sc.complete(since.purpose.key, { output: { changes: [], removed: [] } });
+    sc.settle();
+    const plan = sc.view().jobs.find((j) => !j.end && j.purpose.key.startsWith("plan:verify:root:"))!.purpose.key;
+    assert.match(String(sc.plan(plan).agent?.vars?.goal), /The user asked for this push: “Verify D100/);
+    sc.complete(plan, { report: { pushes: [{ purpose: "rerun the failing job", tryArgs: ["fuzzy", "-q", "x"], rebuild: 5 }], feedback: [] } });
+    const dry = sc.settle().find((k) => k.startsWith("dry-run:"))!;
+    const push = sc.purpose(dry).push!;
+    sc.complete(dry, { output: { command: ["./mach", "try", "fuzzy"], taskCount: 5, tasks: [], tryTaskConfig: {}, commits: [], warnings: [] } });
+    sc.add({ type: "user-done", request: ID, key: `approve-push:${push}` });
+    sc.add({ type: "try-pushed", request: ID, push, rev: "fed", url: "u" });
+    sc.add({ type: "try-finished", request: ID, push, result: "failures", summary: "1 failure" });
+    sc.settle();
+    for (const k of sc.view().jobs.filter((j) => !j.end && j.purpose.key.startsWith("collect:")).map((j) => j.purpose.key)) sc.complete(k, { output: [] });
+    sc.complete(`try-table:${push}:final`, { output: table([{ test: "z/test_z.js", config: "linux", result: "fail", failures: ["zap"], taskIds: ["T2"] }]) });
+    sc.settle();
+    sc.complete(`triage:${push}:final:v2`, { report: { cells: [{ test: "z/test_z.js", config: "linux", verdict: "still failing", evidence: "unrelated" }], feedback: [] } });
+    sc.settle();
+    assert.equal(sc.state().backouts["p-test-b"].verified, true);
+    assert.equal(landingState(sc.state(), sc.state().patches["p-test-b"]).accepted, true, "it may land again");
+  });
 });
 
 describe("10. an answer after submission adding a commit", () => {
