@@ -36,6 +36,7 @@ export function foldEvents(events: readonly Event[]): RequestState {
     patchSent: {},
     reopened: {},
     backouts: {},
+    tryNeeded: {},
     patchShas: {},
     pushChanges: {},
     jobs: {},
@@ -84,6 +85,12 @@ export function foldEvents(events: readonly Event[]): RequestState {
         break;
       case "backout":
         s.backouts[e.patch] = { at: e.at, reason: e.reason, culprit: e.culprit };
+        break;
+      case "try-needed":
+        s.tryNeeded[e.patch] = { why: e.why, ask: e.ask, job: e.job, at: e.t };
+        break;
+      case "try-verified":
+        if (s.tryNeeded[e.patch]) s.tryNeeded[e.patch].verified = true;
         break;
       case "backout-verified":
         if (s.backouts[e.patch]) s.backouts[e.patch].verified = true;

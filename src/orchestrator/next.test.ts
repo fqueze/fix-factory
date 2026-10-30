@@ -2684,19 +2684,50 @@ describe("9. a try push of a submitted stack", () => {
     const sc = inReview();
     sc.complete("poll:0", { output: polled("needs-review", [], "pending") });
     sc.settle();
-    sc.add({ type: "try-planned", request: ID, push: "root-ask1-abcd-1", purpose: "p", command: ["./mach", "try"], taskCount: 1 });
-    sc.add({ type: "try-pushed", request: ID, push: "root-ask1-abcd-1", rev: "fed", url: "u" });
-    sc.add({ type: "try-finished", request: ID, push: "root-ask1-abcd-1", result: "failures", summary: "1 failure" });
+    sc.add({ type: "try-planned", request: ID, push: "root-abcd-1", purpose: "p", command: ["./mach", "try"], taskCount: 1 });
+    sc.add({ type: "try-pushed", request: ID, push: "root-abcd-1", rev: "fed", url: "u" });
+    sc.add({ type: "try-finished", request: ID, push: "root-abcd-1", result: "failures", summary: "1 failure" });
     const plan = resumeAuthorPlan(ID, sc.view(), "i-test-a", "try", { message: "fix it" }, "investigating");
     assert.ok(plan && plan !== "busy");
-    plan.purpose.key = "author:i-test-a:try:root-ask1-abcd-1";
+    plan.purpose.key = "author:i-test-a:try:root-abcd-1";
     sc.startJob(plan);
     sc.complete(plan.purpose.key, { report: fixed([sha("9")]) });
     sc.settle();
     assert.deepEqual(sc.state().verifyAsked ?? [], [], "not before it's reviewed and back for review");
-    sc.add({ type: "item-state", request: ID, item: "i-test-a", state: "waiting for review" });
+    assert.equal(landingState(sc.state(), sc.state().patches["p-test-a"]).accepted, false, "it lands once green on try");
+    const job = sc.view().byKey.get(plan.purpose.key)![0].job;
+    sc.complete(`import:${job}`, { output: imported(sha("9"), "Bug 999 - Fix a, r=smaug.", ["a/test_a.js"], 999).map((c) => ({ ...c, revision: 101 })) });
+    for (let i = 0; i < 6; i++) {
+      for (const k of sc.settle()) {
+        if (k.startsWith("msg:")) sc.complete(k, { output: "m" });
+        else if (k.startsWith("lint:")) sc.complete(k, { output: lintOk });
+        else if (k.startsWith("review:")) sc.complete(k, { report: ok });
+        else if (k.startsWith("rewrite-review:")) sc.complete(k, { output: { mapping: { [sha("9")]: sha("8") } } });
+        else if (k.startsWith("interdiff:")) sc.complete(k, { output: { diff: "-a\n+b\n", method: "same-parent" } });
+        else if (k.startsWith("test-plan:")) sc.complete(k, { report: { testPlan: "- Ran it.", feedback: [] } });
+      }
+    }
+    assert.equal(sc.state().items["i-test-a"].state, "waiting for review");
+    assert.match(sc.state().verifyAsked?.at(-1) ?? "", /^Verify the fix of D101 for what try push fed found broken by it/);
+    for (const j of sc.view().jobs.filter((j) => !j.end && j.purpose.key.startsWith("test-plan:"))) sc.complete(j.purpose.key, { report: { testPlan: "- Ran it.", feedback: [] } });
     sc.settle();
-    assert.match(sc.state().verifyAsked?.[0] ?? "", /^Verify the fix of D101 for what try push fed found broken by it/);
+    const since = sc.view().jobs.find((j) => !j.end && j.purpose.key.startsWith("since:root:"));
+    if (since) sc.complete(since.purpose.key, { output: { changes: [], removed: [] } });
+    const started = sc.settle();
+    const planKey = started.find((k) => k.startsWith("plan:verify:root:"))!;
+    assert.ok(planKey, `${String(started)} | open: ${sc.view().jobs.filter((j) => !j.end).map((j) => j.purpose.key)}`);
+    assert.match(String(sc.plan(planKey).agent?.vars?.goal), /Verify the fix of D101/);
+    sc.complete(planKey, { report: { pushes: [{ purpose: "the failing jobs", tryArgs: ["fuzzy", "-q", "x"], rebuild: 5 }], feedback: [] } });
+    const dry = sc.settle().find((k) => k.startsWith("dry-run:"))!;
+    const push = sc.purpose(dry).push!;
+    sc.complete(dry, { output: { command: ["./mach", "try", "fuzzy"], taskCount: 5, tasks: [], tryTaskConfig: {}, commits: [], warnings: [] } });
+    sc.add({ type: "user-done", request: ID, key: `approve-push:${push}` });
+    sc.now += 60_000;
+    sc.add({ type: "try-pushed", request: ID, push, rev: "abc", url: "u" });
+    sc.add({ type: "try-finished", request: ID, push, result: "green", summary: "green" });
+    sc.settle();
+    assert.equal(sc.state().tryNeeded["p-test-a"].verified, true);
+    assert.equal(landingState(sc.state(), sc.state().patches["p-test-a"]).accepted, sc.state().patches["p-test-a"].review!.reviewers.every((r) => r.status === "accepted"));
   });
 
   it("a fix made after submission goes on top of the stack once reviewed, for you to submit, without the step going back", () => {

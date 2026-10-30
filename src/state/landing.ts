@@ -10,13 +10,13 @@ export function isReviewComment(p: PatchView, c: InlineComment): boolean {
   return p.review?.author !== undefined ? c.author !== p.review.author : (p.review?.reviewers ?? []).some((r) => r.name === c.author);
 }
 
-// accepted: by its reviewers, and not a backout's cause still waiting for a green try run of its fix. landed: closed on
+// accepted: by its reviewers, and neither a backout's cause nor a fix for what try found still waiting for a green try run. landed: closed on
 // Phabricator (a backout reopens it).
 export function landingState(s: RequestState, p: PatchView): { accepted: boolean; commentsAddressed: boolean; landed: boolean } {
   const active = p.review?.reviewers.filter((r) => r.status !== "resigned") ?? [];
   const addressed = new Set(Object.values(s.jobs).filter((j) => j.purpose?.patch === p.id && j.exitCode === 0).flatMap((j) => j.purpose?.comments ?? []));
   return {
-    accepted: active.length > 0 && active.every((r) => r.status === "accepted") && !(s.backouts[p.id]?.culprit && !s.backouts[p.id].verified),
+    accepted: active.length > 0 && active.every((r) => r.status === "accepted") && !(s.backouts[p.id]?.culprit && !s.backouts[p.id].verified) && !(s.tryNeeded?.[p.id] && !s.tryNeeded[p.id].verified),
     commentsAddressed: (p.review?.comments ?? []).filter((c) => isReviewComment(p, c)).every((c) => c.done || addressed.has(c.id)),
     landed: p.review?.status === "published",
   };

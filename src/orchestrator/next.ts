@@ -2166,10 +2166,10 @@ class Planner {
     }
   }
 
-  // Past verification, an author's fix for failures a push of the stack found goes to try again, once reviewed and back
-  // on its way to Phabricator: those jobs must be green before it lands.
-  // Only for pushes made once its patches were on Phabricator: before, the stack's own verification covers them.
-  // Returns the asks that stand (earlier versions of the factory raised some for older pushes).
+  // Past verification, an author's fix for failures a push of the stack found must be green on try before it lands
+  // (resubmitting it is your call, before or after). Its patches, the new ones too, wait for that push from its report
+  // on; the push is asked for once it's reviewed and back for review. Rebases and edits answering review comments
+  // don't. Returns the asks that stand (earlier versions of the factory raised some for older pushes).
   private fixesToVerify(): Set<string> {
     const asks = new Set<string>();
     for (const j of this.view.jobs) {
@@ -2177,12 +2177,31 @@ class Planner {
       const push = /:try:([^:]+)/.exec(j.purpose.key)?.[1];
       const r = this.rep<{ state?: string; commits?: string[] }>(j);
       if (!push || !this.s.pushes[push] || r.state !== "fix verified locally" || !r.commits?.length) continue;
-      const patches = Object.values(this.s.patches).filter((p) => p.item === j.item && p.revision !== undefined);
-      const submitted = Math.min(...patches.map((p) => (p.submittedAt ? Date.parse(p.submittedAt) : Infinity)));
+      const own = r.commits.map((_, n) => this.s.patches[patchId(j.item!, n)]).filter((p) => p !== undefined);
+      const submitted = Math.min(...own.map((p) => (p.submittedAt ? Date.parse(p.submittedAt) : Infinity)));
       if (!((this.view.pushedAt.get(push) ?? 0) > submitted)) continue;
-      const text = `Verify the fix of ${patches.map((p) => `D${p.revision}`).join(", ")} for what try push ${this.s.pushes[push].rev ?? push} found broken by it (${shortHash([j.job]).slice(0, 4)}): those jobs must be green.`;
+      const rev = this.s.pushes[push].rev ?? push;
+      const named = own.filter((p) => p.revision !== undefined).map((p) => `D${p.revision}`);
+      const text = `Verify the fix of ${named.join(", ") || j.item} for what try push ${rev} found broken by it (${shortHash([j.job]).slice(0, 4)}): those jobs must be green.`;
       asks.add(text);
+      for (const p of own) {
+        const t = this.s.tryNeeded[p.id];
+        if (!t || (t.job !== j.job && Date.parse(t.at) < j.end!.at)) this.event(this.ev("try-needed", { patch: p.id, why: `its fix for what try push ${rev.slice(0, 12)} found`, ask: text, job: j.job }));
+      }
       if (this.s.items[j.item].state === "waiting for review" && !(this.s.verifyAsked ?? []).includes(text)) this.event(this.ev("verify-asked", { text }));
+    }
+    // Answered by the push of its ask, or of a later ask carrying it: green (or failing only where it's not to blame).
+    for (const [pid, t] of Object.entries(this.s.tryNeeded)) {
+      if (t.verified) continue;
+      const n = (this.s.verifyAsked ?? []).indexOf(t.ask) + 1;
+      if (!n) continue;
+      const answering = Object.values(this.s.pushes).filter((p) => {
+        const k = Number(/-ask(\d+)-/.exec(p.id)?.[1] ?? 0);
+        return k >= n && p.rev && (this.view.pushedAt.get(p.id) ?? 0) > Date.parse(t.at);
+      });
+      const k = Math.max(0, ...answering.map((p) => Number(/-ask(\d+)-/.exec(p.id)![1])));
+      const latest = answering.filter((p) => p.id.includes(`-ask${k}-`));
+      if (latest.length && latest.every((p) => p.result === "green" || this.passing.has(p.id))) this.event(this.ev("try-verified", { patch: pid }));
     }
     return asks;
   }

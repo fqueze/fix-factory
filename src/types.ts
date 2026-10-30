@@ -143,6 +143,8 @@ export type Event =
   | (EventBase & { type: "author-queued"; item: ItemId; key: string; reason: string; message: string }) // your message to an author whose worktree is restored first
   | (EventBase & { type: "verify-asked"; text: string })
   | (EventBase & { type: "backout"; patch: PatchId; at: Iso; reason: string; culprit: boolean }) // its landing was backed out; culprit: the failure is its own (or nobody's could be told apart)
+  | (EventBase & { type: "try-needed"; patch: PatchId; why: string; ask: string; job: JobId }) // its fix answers failures try found: it lands once a push of it is green
+  | (EventBase & { type: "try-verified"; patch: PatchId }) // that push is green: it may land
   | (EventBase & { type: "backout-verified"; patch: PatchId }) // a try push showed its fix green: it may land again // you want the stack pushed to try as it stands, whatever the step
   | (EventBase & { type: "comment-sent"; patch: PatchId; text: string; key: string }) // your comment on a patch, and the key of the author run answering it
   | (EventBase & { type: "config-set"; config: Record<string, unknown> })
@@ -474,6 +476,7 @@ export interface RequestState {
   queuedAuthors?: { item: ItemId; key: string; reason: string; message: string }[]; // your messages waiting for their author's worktree
   verifyAsked?: string[];
   reopened: Record<PatchId, Iso>; // when its revision went from closed (landed) back to open: a backout
+  tryNeeded: Record<PatchId, { why: string; ask: string; job: JobId; at: Iso; verified?: boolean }>; // fixes for what try found, until a push of them is green
   backouts: Record<PatchId, { at: Iso; reason: string; culprit: boolean; verified?: boolean }>; // patches whose landing was backed out // each time you asked for a try push of the stack as it stands, why
   splitFrom?: RequestId; // made by splitting that one
   createdAt: Iso;
