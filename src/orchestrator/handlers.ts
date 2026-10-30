@@ -391,6 +391,11 @@ function authorReport(input: HandlerInput, ev: <T extends EventInput["type"]>(ty
   switch (job.name) {
     case "investigate-and-fix": {
       const r = input.report as InvestigateReport;
+      // One failure's fix is on one bug: a commit added after its first one had a bug doesn't get a bug of its own.
+      const first = input.state.patches[patchId(item, 0)];
+      if (first?.bug && r.bugDrafts?.length) {
+        throw new InvalidReport(`Your first commit is on Bug ${first.bug}: the commits of this fix share it. Put \`Bug ${first.bug}\` in the message of every commit of yours that says Bug XXXXXXX, drop their bugDrafts, and end with the JSON report again.`);
+      }
       if (r.state === "blocked") {
         blocked(r.summary);
         return;

@@ -552,7 +552,7 @@ function patchRow(r: RequestState, p: PatchView, ctx: RenderContext): Html {
     // "in the stack" says nothing a patch row in its stack's section doesn't.
     // What matters most first (where its review stands, landable, what you need to do): a long list of tests is cut off.
     state: html`${[
-      item ? (item.state === "in stack" ? null : item.state === "waiting for review" && p.review ? html`${reviewText(p)}` : html`${stateText(r, item, ctx)}`) : p.review ? html`${reviewText(p)}` : null,
+      item ? (item.state === "in stack" ? null : item.state === "waiting for review" && p.review ? html`${reviewText(p)}` : item.state === "waiting for review" && p.revision === undefined ? html`reviewed, not submitted yet` : html`${stateText(r, item, ctx)}`) : p.review ? html`${reviewText(p)}` : null,
       landable ? html`<span class="landable">landable</span>` : null,
       backoutText(r, p),
       ...yours.map((n) => html`<b class="you">${n.action}</b>`),

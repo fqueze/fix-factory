@@ -2621,6 +2621,18 @@ describe("10. backouts", () => {
 });
 
 describe("10. an answer after submission adding a commit", () => {
+  it("doesn't put the new commit on a bug of its own when the first is on one", () => {
+    const sc = inReview();
+    sc.complete("poll:0", { output: polled("needs-review", [], "pending") });
+    sc.settle();
+    const plan = resumeAuthorPlan(ID, sc.view(), "i-test-a", "continue", { message: "fix the race too" }, "investigating");
+    assert.ok(plan && plan !== "busy");
+    plan.purpose.key = "author:i-test-a:continue:c-7";
+    sc.startJob(plan);
+    const draft = { product: "Firefox", component: "General", bugType: "defect", summary: "s", description: "d" };
+    assert.throws(() => sc.complete("author:i-test-a:continue:c-7", { report: fixed([sha("f"), sha("7")], { bugDrafts: [{ commits: [sha("7")], draft }] }) }), (e: Error) => e instanceof InvalidReport && /first commit is on Bug 999/.test(e.message));
+  });
+
   it("puts the new commit on top of the stack, for you to submit", () => {
     const sc = backedOutAndAsked();
     assert.ok(sc.state().stacks.root.order.includes("p-test-b-2"), String(sc.state().stacks.root.order));
