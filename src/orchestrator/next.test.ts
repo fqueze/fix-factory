@@ -2501,7 +2501,7 @@ describe("10. backouts", () => {
   });
 
   // Both patches landed, then a sheriff backed both out for test_b's failure: their revisions reopen.
-  function backedOut(): Scenario {
+  function backedOut(text = "Backed out for causing mochitest failures @test_b.js.\n* [Failure Log](https://treeherder.mozilla.org/logviewer?job_id=1)"): Scenario {
     const sc = inReview();
     sc.complete("poll:0", { output: polled("published") });
     sc.settle();
@@ -2519,7 +2519,7 @@ describe("10. backouts", () => {
       { t: "2026-10-15T10:00:00Z", kind: "landed", by: "me", title: "t" },
       { t: "2026-10-15T11:00:00Z", kind: "backed out", by: "sheriff", title: 'Revert "Bug 22, Bug 999 - …"' },
     ];
-    const backout = { t: new Date(sc.now).toISOString(), by: "sheriff", text: "Backed out for causing mochitest failures @test_b.js.\n* [Failure Log](https://treeherder.mozilla.org/logviewer?job_id=1)" };
+    const backout = { t: new Date(sc.now).toISOString(), by: "sheriff", text };
     sc.complete(key, { output: [{ bug: 22, pushes, backout }] });
     sc.complete(sc.view().jobs.find((j) => !j.end && j.purpose.key.startsWith("backout-reason:p-test-a:"))!.purpose.key, { output: [{ bug: 999, pushes, backout }] });
     sc.settle();
@@ -2539,6 +2539,18 @@ describe("10. backouts", () => {
     const s = sc.state();
     assert.deepEqual(landingState(s, s.patches["p-test-a"]), { accepted: true, commentsAddressed: true, landed: false });
     assert.equal(landingState(s, s.patches["p-test-b"]).accepted, false, "not before a green try run of its fix");
+  });
+
+  it("a backout naming neither patch asks both authors; one finding it isn't its patch's may land again", () => {
+    const sc = backedOut("Backed out for causing failures at test_other.html.");
+    assert.equal(sc.state().backouts["p-test-a"].culprit, true);
+    assert.equal(sc.state().backouts["p-test-b"].culprit, true);
+    const told = sc.view().jobs.find((j) => j.purpose.key.startsWith("author:i-test-a:backout:"))!.purpose.key;
+    sc.complete(told, { report: fixed([], { state: "left as-is", summary: "the log shows another test, which my patch doesn't touch" }) });
+    sc.settle();
+    assert.equal(sc.state().backouts["p-test-a"].culprit, false);
+    assert.equal(landingState(sc.state(), sc.state().patches["p-test-a"]).accepted, true);
+    assert.equal(sc.state().backouts["p-test-b"].culprit, true);
   });
 
   it("its fix, once reviewed, gets a try push of the failing jobs; green, it may land again", () => {

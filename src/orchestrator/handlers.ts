@@ -380,6 +380,14 @@ function authorReport(input: HandlerInput, ev: <T extends EventInput["type"]>(ty
   const commits = (input.report as { commits?: string[] }).commits ?? [];
   const missing = input.commitExists ? commits.filter((c) => !input.commitExists!(job.cwd, c)) : [];
   if (missing.length) throw new InvalidReport(`${missing.join(", ")} ${missing.length === 1 ? "isn't a commit" : "aren't commits"} in ${job.cwd}: report each commit's sha exactly as \`git log --format=%H\` prints it.`);
+  // Asked about a backout of several patches that couldn't be told apart, its author found the failure isn't its patch's:
+  // it can land again with no try run of its own.
+  if (job.purpose.reason === "backout" && (input.report as { state?: string }).state === "left as-is") {
+    for (const p of Object.values(input.state.patches)) {
+      const b = input.state.backouts[p.id];
+      if (p.item === item && b?.culprit) ev("backout", { patch: p.id, at: b.at, reason: b.reason, culprit: false });
+    }
+  }
   switch (job.name) {
     case "investigate-and-fix": {
       const r = input.report as InvestigateReport;
