@@ -1,6 +1,6 @@
-import type { RequestState } from "../../types.ts";
+import type { JobView, RequestState } from "../../types.ts";
 import { html, type Html } from "../html.ts";
-import { commandFields, formatCost, formatDate, isDraft, isDropped, plural, profileUrl, pushResultClass, pushStatus, pushUrl, requestCost, requestName, requestUrl, routeOutcome, sectionOf, shortName, type RenderContext } from "./common.ts";
+import { commandFields, elapsed, formatCost, formatDate, jobLabel, isDraft, isDropped, plural, profileUrl, pushResultClass, pushStatus, pushUrl, requestCost, requestName, requestUrl, routeOutcome, sectionOf, shortName, type RenderContext } from "./common.ts";
 import { progressLine, requestProgress, sumProgress } from "./progress.ts";
 import { renderRequest } from "./request.ts";
 
@@ -32,17 +32,31 @@ ${renderMain(requests, ctx)}
 }
 
 export function renderStrip(requests: RequestState[], ctx: RenderContext): Html {
-  const jobs = requests.flatMap((r) => Object.values(r.jobs)).filter((j) => j.endedAt === undefined);
-  const agents = jobs.filter((j) => j.kind === "agent").length;
-  const builds = jobs.filter((j) => j.kind === "build").length;
+  const jobs = requests.flatMap((r) => Object.values(r.jobs).filter((j) => j.endedAt === undefined).map((j) => ({ r, j })));
+  const agents = jobs.filter(({ j }) => j.kind === "agent");
+  const builds = jobs.filter(({ j }) => j.kind === "build");
   const progress = sumProgress(requests.filter((r) => sectionOf(r) !== "finished").map((r) => requestProgress(r, ctx)));
   return html`<div class="strip" id="strip">
-    <span>agents <b>${agents}${ctx.maxAgents ? `/${ctx.maxAgents}` : ""}</b></span>
-    <span>builds <b>${builds}${ctx.maxBuilds ? `/${ctx.maxBuilds}` : ""}</b></span>
+    ${running("agents", agents, ctx.maxAgents, ctx)}
+    ${running("builds", builds, ctx.maxBuilds, ctx)}
     ${ctx.freeDiskGB === undefined ? null : html`<span class="${ctx.freeDiskGB < 100 ? "disk-low" : ""}" title="Free space for worktrees; none is created below 20 GB">disk <b>${diskSize(ctx.freeDiskGB)}</b> free</span>`}
     <a href="/feedback" target="_blank">agents' feedback</a>
     <span class="progress">${progressLine(progress)}</span>
   </div>`;
+}
+
+// The count, and on hover what runs: each job with its group and request, linked to its row.
+function running(what: string, jobs: { r: RequestState; j: JobView }[], max: number | undefined, ctx: RenderContext): Html {
+  const count = html`${what} <b>${jobs.length}${max ? `/${max}` : ""}</b>`;
+  if (jobs.length === 0) return html`<span>${count}</span>`;
+  const line = ({ r, j }: { r: RequestState; j: JobView }) => {
+    const item = j.item ? r.items[j.item] : undefined;
+    const patch = j.purpose?.patch ?? Object.values(r.patches).find((p) => p.item === j.item)?.id;
+    const target = patch ? `patch-${patch}` : item ? `item-${item.id}` : `req-${r.id}`;
+    const subject = item ? (item.group.tests[0]?.split("/").pop() ?? item.id) : requestName(r);
+    return html`<a href="#${target}"><b>${jobLabel(j.name)}</b> ${subject}${item ? html` <span class="sub">· ${requestName(r)}</span>` : null} <span class="sub">· ${elapsed(j.startedAt, ctx)}</span></a>`;
+  };
+  return html`<span class="running" tabindex="0">${count}<span class="running-list">${jobs.sort((a, b) => a.j.startedAt.localeCompare(b.j.startedAt)).map(line)}</span></span>`;
 }
 
 function diskSize(gb: number): string {
