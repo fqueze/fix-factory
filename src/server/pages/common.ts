@@ -1,5 +1,5 @@
 import { basename } from "node:path";
-import type { BugDraft, Command, ItemState, ItemView, NeedsUser, PatchView, PushView, RefusedCommand, Regression, RequestState, StackView } from "../../types.ts";
+import type { BugDraft, Command, ItemState, ItemView, JobView, NeedsUser, PatchView, PushView, RefusedCommand, Regression, RequestState, StackView } from "../../types.ts";
 import { REQUEST_STEPS } from "../commands.ts";
 import { html, join, type Html } from "../html.ts";
 import { needsMetaBug as stackNeedsMetaBug } from "../../state/meta-bug.ts";
@@ -20,6 +20,7 @@ export interface RenderContext {
   interdiff?: (p: PatchView) => string | undefined;
   // The lines its commit adds and removes, read with git.
   diffStat?: (p: PatchView) => { added: number; removed: number } | undefined;
+  landoUrl?: (job: JobView) => string | undefined; // Treeherder by landoCommitID, once Lando took a push
   // A file the factory wrote, by its path relative to stateDir (an interdiff since a push).
   readData?: (rel: string) => string | undefined;
   freeDiskGB?: number; // where the worktrees go

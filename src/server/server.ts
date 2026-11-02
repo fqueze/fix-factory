@@ -145,6 +145,19 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
     return diffStats.get(p.sha);
   }
 
+  // The Treeherder link mach try prints once Lando took the push (its landoCommitID), from the push job's logs.
+  function landoUrl(job: JobView): string | undefined {
+    for (const log of ["err.log", "out.log"]) {
+      try {
+        const m = /https:\/\/treeherder\.mozilla\.org\/jobs\?repo=try&landoInstance=[\w-]+&landoCommitID=\d+/.exec(readFileSync(join(jobDir(opts.config.stateDir, job.job), log), "utf8"));
+        if (m) return m[0];
+      } catch {
+        // not written yet
+      }
+    }
+    return undefined;
+  }
+
   function readInterdiff(p: PatchView): string | undefined {
     return p.interdiffFile === undefined ? undefined : readData(p.interdiffFile);
   }
@@ -239,6 +252,7 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
       bugzillaEmail: opts.config.bugzillaEmail,
       interdiff: readInterdiff,
       diffStat,
+      landoUrl,
       readData,
       freeDiskGB: freeDiskGB(),
     };

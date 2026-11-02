@@ -827,6 +827,12 @@ export function diff(text: string): Html {
 }
 
 
+// Once Lando took the push: what it waits for, with its Treeherder link.
+function landoState(job: JobView, ctx: RenderContext, submitted: Html | string, before: Html | string): Html | string {
+  const url = ctx.landoUrl?.(job);
+  return url ? html`${submitted} · <a href="${url}" target="_blank" rel="noopener">Treeherder ↗</a>` : before;
+}
+
 // The patch in stack-viewer, where comments go back to its author.
 function viewLink(r: RequestState, p: PatchView, label = "view"): Html {
   return html`<a href="/requests/${encodeURIComponent(r.id)}/patches/${encodeURIComponent(p.id)}/view" target="_blank" rel="noopener" title="Opens the patch in stack-viewer; your comments there go to its author">${label}</a>`;
@@ -867,9 +873,9 @@ function pushRowOf(r: RequestState, p: PushView, ctx: RenderContext): Html {
             : !job
               ? "approved"
               : job.endedAt === undefined
-                ? html`approved, pushing for ${elapsed(job.startedAt, ctx)}`
+                ? landoState(job, ctx, html`submitted, waiting for Lando to land it (${elapsed(job.startedAt, ctx)})`, html`approved, pushing for ${elapsed(job.startedAt, ctx)}`)
                 : job.exitCode === 0
-                  ? "pushed, waiting for its revision"
+                  ? landoState(job, ctx, "submitted, waiting for Lando to land it", "pushed, waiting for its revision")
                   : "approved, not pushed: see its ⚑ above"
     }`,
     trust: revisedText(r, p),

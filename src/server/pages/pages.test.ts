@@ -206,6 +206,10 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.match(row, /<span class="state">approved, pushing for <span data-since/);
     assert.doesNotMatch(row, /approve-push|Revise…|Discard/);
     assert.doesNotMatch(h.slice(0, h.indexOf("Try pushes")), /push to try/, "its job is on its row");
+    // Once Lando took it: what it waits for, and where to follow it.
+    const url = "https://treeherder.mozilla.org/jobs?repo=try&landoInstance=lando-prod-2025&landoCommitID=113484";
+    const lando = rowOf(renderRequest(r, { ...ctx, landoUrl: () => url }, true).value, "push-unskip");
+    assert.match(lando, /<span class="state">submitted, waiting for Lando to land it \(<span data-since[^]*?\) · <a href="https:\/\/treeherder\.mozilla\.org\/jobs\?repo=try&amp;landoInstance=lando-prod-2025&amp;landoCommitID=113484" target="_blank" rel="noopener">Treeherder ↗<\/a>/);
   });
 
   it("3. work list: take it or hand it back", () => {
