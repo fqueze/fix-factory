@@ -1403,7 +1403,13 @@ class Planner {
     }
     // The same commits a critical review already found problems in: another review would say the same. You decide.
     const prior = patches.map((p) => this.view.jobs.filter((j) => j.purpose.what === "review" && j.purpose.patch === p.id && j.purpose.sha === p.sha && j.purpose.key !== `review:${p.id}:${author.job}` && succeeded(j)).at(-1));
-    if (!this.view.byKey.has(`review:${patches[0].id}:${author.job}`) && prior.every((j) => j && this.rep<ReviewPatchReport>(j).verdict === "findings")) {
+    // Once submitted, nits don't count: only must-fix findings make it a question for you.
+    const submitted = patches.some((p) => this.s.patches[p.id]?.revision !== undefined);
+    const blocking = (j: JobRecord) => {
+      const rep = this.rep<ReviewPatchReport>(j);
+      return rep.verdict === "findings" && (!submitted || rep.findings.some((f) => f.severity === "must-fix"));
+    };
+    if (!this.view.byKey.has(`review:${patches[0].id}:${author.job}`) && prior.every((j) => j && blocking(j))) {
       const last = prior.at(-1)!.job;
       if (this.view.done.has(`failed:${last}`)) return;
       // Into the stack all the same: the question waits for you on its row without holding the stack back.
@@ -2309,6 +2315,9 @@ class Planner {
       // Made, or declined by you: that ask is answered, and a later change to the stack waits for your next one. One you
       // asked to revise isn't declined: its planner revises it.
       if (Object.values(this.s.pushes).some((p) => p.id.startsWith(all) && (p.rev || (p.declined !== undefined && !p.withdrawn && !p.replan)))) continue;
+      // Its authors still at work (on more of what the last push found, or for you), or a failure no author owns waiting
+      // for you: one push carries all their fixes.
+      if (info.patches.some((x) => this.authorJobs(x.item).some((j) => !j.end) || this.s.needsUser.some((n) => n.key.startsWith("disowned:") && n.item === x.item))) continue;
       const plan = this.verifyPushes(info, ask);
       for (const push of Object.values(this.s.pushes)) {
         if (push.id.startsWith(all) && plan && !plan.ids.includes(push.id) && this.s.needsUser.some((x) => x.key === `approve-push:${push.id}`)) {
