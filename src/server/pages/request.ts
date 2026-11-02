@@ -556,7 +556,7 @@ function patchRow(r: RequestState, p: PatchView, ctx: RenderContext): Html {
       item ? (item.state === "in stack" ? null : item.state === "waiting for review" && p.review ? html`${reviewText(p)}` : item.state === "waiting for review" && p.revision === undefined ? html`reviewed, not submitted yet` : html`${stateText(r, item, ctx)}`) : p.review ? html`${reviewText(p)}` : null,
       landable ? html`<span class="landable">landable</span>` : null,
       backoutText(r, p),
-      r.tryNeeded?.[p.id] && !r.tryNeeded[p.id].verified ? html`<span class="bad" title="${r.tryNeeded[p.id].why}">lands once green on try</span>` : null,
+      r.tryNeeded?.[p.id] && !r.tryNeeded[p.id].verified ? html`<span class="bad" title="Not landable yet: it was changed for ${r.tryNeeded[p.id].why}, and no green try push has carried that change since">needs a green try push</span>` : null,
       ...yours.map((n) => html`<b class="you">${n.action}</b>`),
       item ? html`fixes <b>${groupLinks(r, item)}</b>${covered.length ? html` and <b>${join(covered.map((i) => groupLinks(r, i)), ", ")}</b>` : null}` : null,
     ]
