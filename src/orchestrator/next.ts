@@ -1857,10 +1857,18 @@ class Planner {
     const mine = code(author);
     if (!mine) return false;
     const jobs = this.authorJobs(item).filter(succeeded);
-    for (const prev of jobs.slice(0, jobs.indexOf(author)).reverse()) {
+    const earlier = jobs.slice(0, jobs.indexOf(author));
+    // The code Phabricator has (the author run's current when you last submitted it) is its reviewers' to review.
+    const sent = this.s.patchSent[pid]?.at(-1);
+    const then = sent && earlier.filter((j) => j.startedAt < Date.parse(sent.t)).at(-1);
+    if (then && code(then) === mine) return true;
+    for (const prev of earlier.reverse()) {
       if (code(prev) !== mine) return false;
       const review = this.view.byKey.get(`review:${pid}:${prev.job}`)?.find(succeeded);
-      if (review) return this.rep<ReviewPatchReport>(review).verdict === "ok";
+      if (!review) continue;
+      const rep = this.rep<ReviewPatchReport>(review);
+      // Once submitted, nits don't count against it.
+      return rep.verdict === "ok" || (sent !== undefined && !rep.findings.some((f) => f.severity === "must-fix"));
     }
     return false;
   }

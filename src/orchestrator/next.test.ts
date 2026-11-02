@@ -3330,6 +3330,40 @@ describe("9. changes after submission", () => {
     return { sc, job };
   }
 
+  it("an author run putting a submitted patch's code back to what Phabricator has gets no critical review", () => {
+    const sc = inReview();
+    // The code of the author run you submitted.
+    const first = sc.view().byKey.get("author:i-test-a:initial")![0].job;
+    const imp = sc.view().byKey.get(`import:${first}`)![0].job;
+    sc.outputs.set(imp, JSON.stringify(JSON.parse(sc.outputs.get(imp)!).map((c: object) => ({ ...c, patchId: "sent" }))));
+    sc.complete("poll:0", { output: polled("needs-review", [], "pending") });
+    const run = (n: number, code: string, review?: object, key = `author:i-test-a:continue:c-${n}`) => {
+      sc.now += 60_000;
+      if (!sc.view().byKey.has(key)) {
+        const plan = resumeAuthorPlan(ID, sc.view(), "i-test-a", "continue", { message: "m" }, "investigating");
+        assert.ok(plan && plan !== "busy");
+        plan.purpose.key = key;
+        sc.startJob(plan);
+      }
+      const job = sc.complete(key, { report: fixed([sha(String(n))]) });
+      sc.settle();
+      sc.complete(`import:${job}`, { output: imported(sha(String(n)), "Bug 999 - Fix a, r=smaug.", ["a/test_a.js"], 999).map((c) => ({ ...c, revision: 101, patchId: code })) });
+      sc.settle();
+      sc.complete(`msg:p-test-a:${sha(String(n))}`, { output: "m" });
+      sc.settle();
+      sc.complete(`lint:p-test-a:${sha(String(n))}`, { output: lintOk });
+      const started = sc.settle();
+      if (review) sc.complete(`review:p-test-a:${job}`, { report: review });
+      return { job, started };
+    };
+    // A change a critical review found a must-fix in, then its author puts it back.
+    const changed = run(7, "changed", { verdict: "findings", findings: [{ severity: "must-fix", text: "wrong" }], feedback: [] });
+    assert.deepEqual(changed.started, [`review:p-test-a:${changed.job}`]);
+    assert.deepEqual(sc.settle(), [`author:i-test-a:review:${changed.job}`]);
+    const { job, started } = run(8, "sent", undefined, `author:i-test-a:review:${changed.job}`);
+    assert.deepEqual(started, [`rewrite-review:root:${job}:v2`]);
+  });
+
   for (const reason of ["continue", "comment", "stack comments", "asked push", "try"]) {
     it(`an author run for ${reason} after the submission is put in the stack, and asks you to resubmit`, () => {
       const { sc, job } = changed(reason);
