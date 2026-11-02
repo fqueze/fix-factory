@@ -47,6 +47,7 @@ export function foldEvents(events: readonly Event[]): RequestState {
     notes: [],
   };
   const deps = new Map<string, Dep[]>();
+  const dropped = new Set<string>(); // "<patch> <needs>" of deps removed for good
   const reviews = new Map<string, Review>();
   const replies = new Map<string, Map<number, string>>();
   let refused: RefusedCommand[] = [];
@@ -267,12 +268,14 @@ export function foldEvents(events: readonly Event[]): RequestState {
         if (s.patches[e.patch]) s.patches[e.patch].testPlanSent = { revision: e.revision, text: e.text, t: e.t };
         break;
       case "dep": {
+        if (e.dep.source === "agent" && dropped.has(`${e.dep.patch} ${e.dep.needs}`)) break;
         const list = (deps.get(e.dep.patch) ?? []).filter((d) => d.needs !== e.dep.needs);
         list.push(e.dep);
         deps.set(e.dep.patch, list);
         break;
       }
       case "dep-removed": {
+        if (e.final) dropped.add(`${e.patch} ${e.needs}`);
         const list = deps.get(e.patch);
         if (!list) continue;
         deps.set(

@@ -195,7 +195,7 @@ export type Event =
   | (EventBase & { type: "reviewer-set"; patch: PatchId; reviewer: string }) // the r= you gave, when Phabricator knew none of mach's suggestions
   | (EventBase & { type: "hand-off"; job: JobId; items: ItemId[]; text: string }) // the prompt for your session taking them over
   | (EventBase & { type: "dep"; dep: Dep })
-  | (EventBase & { type: "dep-removed"; patch: PatchId; needs: PatchId | string })
+  | (EventBase & { type: "dep-removed"; patch: PatchId; needs: PatchId | string; final?: boolean }) // final: its agent reporting it again doesn't bring it back
   | (EventBase & { type: "stack-dropped"; stack: string }) // made by an earlier rule (one per test folder), never submitted
   | (EventBase & { type: "stack"; stack: string; folder: string; branch: string; worktree: string; base?: string; order: PatchId[]; summary?: string })
   | (EventBase & { type: "meta-bug"; bug: number | null; draft?: BugDraft })

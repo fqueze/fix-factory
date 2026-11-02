@@ -445,3 +445,14 @@ test("deps naming a patch by any sha it has had, or by its title, are on that pa
     ["p1"],
   );
 });
+
+test("a dep removed for good stays removed when its agent reports it again", () => {
+  const dep = { patch: "p1", needs: "a stale fix", kind: "hard", reason: "r", source: "agent" } as const;
+  const s = fold(
+    ev({ type: "patch", patch: "p1", sha: "a", worktree: "/wt", title: "Bug 1 - x", bug: 1 }),
+    ev({ type: "dep", dep }),
+    ev({ type: "dep-removed", patch: "p1", needs: "a stale fix", final: true }),
+    ev({ type: "dep", dep }),
+  );
+  assert.deepEqual(s.patches.p1.deps, []);
+});

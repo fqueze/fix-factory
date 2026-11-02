@@ -241,7 +241,7 @@ export function handleFinished(input: HandlerInput): HandlerResult {
       }
       for (const d of r.removeDeps) {
         const patch = bySha(d.patch);
-        if (patch) ev("dep-removed", { patch: patch.id, needs: bySha(d.needs)?.id ?? d.needs });
+        if (patch) ev("dep-removed", { patch: patch.id, needs: bySha(d.needs)?.id ?? d.needs, final: true });
       }
       break;
     }
