@@ -5,7 +5,7 @@ import { InvalidReport } from "./handlers.ts";
 import { commandEffects } from "./commands.ts";
 import { landingState } from "../state/landing.ts";
 import type { Command } from "../types.ts";
-import { resumeAuthorPlan, similarMessages, stackId } from "./next.ts";
+import { commitsOf, resumeAuthorPlan, similarMessages, stackId } from "./next.ts";
 import { config, HOUR, ID, Scenario, sha } from "./testkit.ts";
 import { shortHash } from "./plan.ts";
 import { needsMetaBug } from "../state/meta-bug.ts";
@@ -2784,6 +2784,24 @@ describe("9. a try push of a submitted stack", () => {
     sc.settle();
     assert.equal(sc.state().step, "review comments");
     assert.equal(sc.view().jobs.filter((j) => j.purpose.what === "plan-pushes" && j.purpose.key.includes(":ask")).length, 2, "that ask is answered: its plan and its revision");
+  });
+
+  it("an author answering a push's failure with its commits unchanged asks for no new push", () => {
+    const sc = inReview();
+    sc.complete("poll:0", { output: polled("needs-review", [], "pending") });
+    sc.settle();
+    const initial = sc.view().jobs.findLast((j) => j.purpose.key.startsWith("author:i-test-a:") && j.end)!;
+    const commits = commitsOf(initial.name, sc.reports.get(initial.job));
+    sc.add({ type: "try-planned", request: ID, push: "root-abcd-1", purpose: "p", command: ["./mach", "try"], taskCount: 1 });
+    sc.add({ type: "try-pushed", request: ID, push: "root-abcd-1", rev: "fed", url: "u" });
+    sc.add({ type: "try-finished", request: ID, push: "root-abcd-1", result: "failures", summary: "1 failure" });
+    const plan = resumeAuthorPlan(ID, sc.view(), "i-test-a", "try", { message: "fix it" }, "investigating");
+    assert.ok(plan && plan !== "busy");
+    plan.purpose.key = "author:i-test-a:try:root-abcd-1";
+    sc.startJob(plan);
+    sc.complete(plan.purpose.key, { report: fixed(commits) });
+    sc.settle();
+    assert.equal(sc.state().tryNeeded["p-test-a"], undefined);
   });
 
   it("an author's fix for what a push past verification found broken by it goes to try again once back for review", () => {

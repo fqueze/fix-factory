@@ -2222,6 +2222,10 @@ class Planner {
       const push = /:try:([^:]+)/.exec(j.purpose.key)?.[1];
       const r = this.rep<{ state?: string; commits?: string[] }>(j);
       if (!push || !this.s.pushes[push] || r.state !== "fix verified locally" || !r.commits?.length) continue;
+      // Its commits as they were ("no change: not mine"): nothing new to verify.
+      const jobs = this.authorJobs(j.item).filter(succeeded);
+      const before = jobs.slice(0, jobs.findIndex((x) => x.job === j.job)).findLast((x) => commitsOf(x.name, this.rep(x)).length > 0);
+      if (before && commitsOf(before.name, this.rep(before)).join() === r.commits.join()) continue;
       const own = r.commits.map((_, n) => this.s.patches[patchId(j.item!, n)]).filter((p) => p !== undefined);
       const submitted = Math.min(...own.map((p) => (p.submittedAt ? Date.parse(p.submittedAt) : Infinity)));
       if (!((this.view.pushedAt.get(push) ?? 0) > submitted)) continue;
