@@ -1811,7 +1811,7 @@ describe("6. verify on try", () => {
     sc.complete(planKey, { report: { pushes: [{ purpose: "verify", tryArgs: ["fuzzy", "-q", "x"], rebuild: 5 }], feedback: [] } });
     const [dry] = sc.settle();
     const push = sc.purpose(dry).push!;
-    sc.complete(dry, { output: { command: ["./mach", "try", "fuzzy", "-q", "x"], taskCount: 5, tasks: [], tryTaskConfig: {}, commits: [], warnings: [] } });
+    sc.complete(dry, { output: { command: ["./mach", "try", "fuzzy", "-q", "x"], taskCount: 5, tasks: [], tryTaskConfig: {}, commits: [sha("c"), sha("d")], warnings: [] } });
     sc.add({ type: "user-done", request: ID, key: `approve-push:${push}` });
     assert.deepEqual(sc.settle(), [`push:${push}`]);
     sc.complete(`push:${push}`, { output: { rev: "fed", landoJobId: 1, treeherderUrl: "t" } });
@@ -1838,6 +1838,41 @@ describe("6. verify on try", () => {
     sc.complete(`triage:${push}:final:v2`, { report: { cells: [{ test: "z/test_z.js", verdict: "broken by patch", patch: sha("c"), evidence: "TypeError" }], feedback: [] } });
     assert.deepEqual(sc.settle(), [`author:i-test-b:try:${push}`]);
     assert.equal(sc.state().step, "verify on try");
+  });
+
+  it("a test a patch fixes, still failing on its push, goes to its author; one an author disowns without a change is yours", () => {
+    const sc = stacked();
+    const planKey = sc.view().jobs.find((j) => j.purpose.what === "plan-pushes")!.purpose.key;
+    sc.complete(planKey, { report: { pushes: [{ purpose: "verify", tryArgs: ["fuzzy", "-q", "x"], rebuild: 5 }], feedback: [] } });
+    const [dry] = sc.settle();
+    const push = sc.purpose(dry).push!;
+    sc.complete(dry, { output: { command: ["./mach", "try", "fuzzy", "-q", "x"], taskCount: 5, tasks: [], tryTaskConfig: {}, commits: [sha("c"), sha("d")], warnings: [] } });
+    sc.add({ type: "user-done", request: ID, key: `approve-push:${push}` });
+    sc.settle();
+    sc.complete(`push:${push}`, { output: { rev: "fed", landoJobId: 1, treeherderUrl: "t" } });
+    sc.settle();
+    sc.add({ type: "try-finished", request: ID, push, result: "failures", summary: "s" });
+    sc.settle();
+    // Nothing parsed: triage reads the logs.
+    sc.complete(`try-table:${push}:final`, { output: table([], [{ taskId: "T1", jobName: "mac", reason: "no profile" }]) });
+    sc.settle();
+    sc.complete(`triage:${push}:final:v2`, {
+      report: {
+        cells: [
+          { test: "a/test_a.js", config: "mac", verdict: "still failing", evidence: "menu not scrolled" },
+          { test: "z/test_z.js", config: "linux", verdict: "broken by patch", patch: "p-test-b", evidence: "submenu closed" },
+        ],
+        feedback: [],
+      },
+    });
+    assert.deepEqual(sc.settle().sort(), [`author:i-test-a:try:${push}`, `author:i-test-b:try:${push}`]);
+    assert.match(sc.plan(`author:i-test-a:try:${push}`).agent?.message ?? "", /a\/test_a.js on mac \(still failing with your fix\): menu not scrolled/);
+    const b = sc.view().jobs.findLast((j) => j.purpose.key.startsWith("author:i-test-b:") && j.end)!;
+    sc.complete(`author:i-test-b:try:${push}`, { report: fixed(commitsOf(b.name, sc.reports.get(b.job)), { summary: "Not mine: test_a's harness change moves the frame." }) });
+    sc.settle();
+    const n = sc.state().needsUser.find((x) => x.key === `disowned:${push}:i-test-b`)!;
+    assert.equal(n.action, "Its author says these try failures aren't its patch's");
+    assert.match(n.detail ?? "", /z\/test_z.js on linux: submenu closed .* its author: Not mine/);
   });
 
   it("a push whose only failures are pre-existing or infra passes, and the request moves on", () => {

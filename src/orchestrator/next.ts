@@ -2223,9 +2223,7 @@ class Planner {
       const r = this.rep<{ state?: string; commits?: string[] }>(j);
       if (!push || !this.s.pushes[push] || r.state !== "fix verified locally" || !r.commits?.length) continue;
       // Its commits as they were ("no change: not mine"): nothing new to verify.
-      const jobs = this.authorJobs(j.item).filter(succeeded);
-      const before = jobs.slice(0, jobs.findIndex((x) => x.job === j.job)).findLast((x) => commitsOf(x.name, this.rep(x)).length > 0);
-      if (before && commitsOf(before.name, this.rep(before)).join() === r.commits.join()) continue;
+      if (this.unchangedBy(j.item, j)) continue;
       const own = r.commits.map((_, n) => this.s.patches[patchId(j.item!, n)]).filter((p) => p !== undefined);
       const submitted = Math.min(...own.map((p) => (p.submittedAt ? Date.parse(p.submittedAt) : Infinity)));
       if (!((this.view.pushedAt.get(push) ?? 0) > submitted)) continue;
@@ -2399,13 +2397,40 @@ class Planner {
       const report = this.rep<TriageTryReport>(triage);
       if (final && !authorsOwn && report.cells.every((c) => BENIGN.has(c.verdict))) this.passing.add(push);
       if (final) this.blamed.set(push, new Set([...own, ...report.cells.flatMap((c) => (c.verdict === "broken by patch" && c.patch ? [(this.s.patches[c.patch] ?? this.patchBySha(c.patch))?.item] : [])).filter((x) => x !== undefined)]));
+      // Each author gets the cells pinned on its patch (by id; earlier reports gave a sha), and those "still failing" in
+      // a test its patch fixes: its fix doesn't work there. The final run's, under a key of their own, minus what the
+      // early run's triage already told.
+      const earlyTriage = final ? this.view.byKey.get(`triage:${push}:${run.replace(/^final/, "early")}:v2`)?.find(succeeded) : undefined;
+      const toldCells = new Set(earlyTriage ? this.rep<TriageTryReport>(earlyTriage).cells.map((c) => `${c.test} ${c.config}`) : []);
+      const cellsOf = new Map<ItemId, TriageTryReport["cells"]>();
       for (const c of report.cells) {
-        // By id; earlier reports gave a sha.
-        const item = c.verdict === "broken by patch" && c.patch ? (this.s.patches[c.patch] ?? this.patchBySha(c.patch))?.item : undefined;
-        if (item) this.routeToAuthor(item, push, [`- ${c.test ?? c.taskId ?? "a job"}${c.config ? ` on ${c.config}` : ""}: ${c.evidence}`]);
+        const item =
+          c.verdict === "broken by patch" && c.patch ? (this.s.patches[c.patch] ?? this.patchBySha(c.patch))?.item : c.verdict === "still failing" && c.test ? this.matchPatch(c.test, patches)?.item : undefined;
+        if (item) cellsOf.set(item, [...(cellsOf.get(item) ?? []), c]);
+      }
+      for (const [item, cells] of cellsOf) {
+        // A push of an older version of its patches: their author changed them since.
+        if (Object.values(this.s.patches).some((x) => x.item === item && !this.carries(push, x.id))) continue;
+        const lines = (list: typeof cells) => list.map((c) => `- ${c.test ?? c.taskId ?? "a job"}${c.config ? ` on ${c.config}` : ""}${c.verdict === "still failing" ? " (still failing with your fix)" : ""}: ${c.evidence}`);
+        const fresh = cells.filter((c) => !toldCells.has(`${c.test} ${c.config}`));
+        if (fresh.length) this.routeToAuthor(item, push, lines(fresh), earlyTriage ? ":final" : "");
+        // Pinned on it again after its author answered this push leaving its commits as they were: yours to settle.
+        const answers = ["", ":final"].flatMap((x) => this.view.byKey.get(`author:${item}${this.itemEpoch(item)}:try:${push}${x}`)?.filter(succeeded) ?? []);
+        const disowned = answers.find((a) => this.unchangedBy(item, a) || this.rep<{ disagreement?: string }>(a).disagreement);
+        if (final && disowned && !this.view.done.has(`disowned:${push}:${item}`)) {
+          const rep = this.rep<{ summary?: string; disagreement?: string }>(disowned);
+          this.raise(`disowned:${push}:${item}`, { action: "Its author says these try failures aren't its patch's", detail: `${lines(cells).join(" ").slice(0, 400)} · its author: ${(rep.disagreement ?? rep.summary ?? "").slice(0, 500)}`, job: disowned.job, item });
+        }
       }
       this.itemsFromTriage(report);
     }
+  }
+
+  // Whether an author run left its commits as its previous run had them.
+  private unchangedBy(item: ItemId, j: JobRecord): boolean {
+    const jobs = this.authorJobs(item).filter(succeeded);
+    const before = jobs.slice(0, jobs.findIndex((x) => x.job === j.job)).findLast((x) => commitsOf(x.name, this.rep(x)).length > 0);
+    return before !== undefined && commitsOf(before.name, this.rep(before)).join() === commitsOf(j.name, this.rep(j)).join();
   }
 
   private routeToAuthor(item: ItemId, push: PushId, lines: string[], suffix = ""): void {
