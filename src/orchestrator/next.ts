@@ -1864,6 +1864,8 @@ class Planner {
     if (then && code(then) === mine) return true;
     for (const prev of earlier.reverse()) {
       if (code(prev) !== mine) return false;
+      // A nits pass follows a review that found nothing worse, and gets none itself.
+      if (prev.purpose.reason === "nits") return true;
       const review = this.view.byKey.get(`review:${pid}:${prev.job}`)?.find(succeeded);
       if (!review) continue;
       const rep = this.rep<ReviewPatchReport>(review);
