@@ -670,15 +670,30 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.doesNotMatch(h, /run-moz-phab/);
   });
 
-  it("9. review comments: each comment says whether its author answered it, and what it said", () => {
+  it("9. review comments: each comment says where its answer stands; one answered on Phabricator isn't shown", () => {
     const r = structuredClone(get("r-20261007-focus"));
     r.patches["p-focus"].revision = 5;
     r.step = "review comments";
-    r.patches["p-focus"].review = { revision: 5, status: "needs-revision", reviewers: [{ name: "emilio", status: "blocking" }], comments: [{ id: 7, author: "emilio", text: "Why not CheckForAnchorChange?", done: false }, { id: 8, author: "emilio", text: "And this?", done: false }], author: "florian" };
-    r.jobs["j-ans"] = { job: "j-ans", kind: "agent", name: "address-review", item: r.patches["p-focus"].item, cwd: "/wt", cmd: [], startedAt: "2026-10-07T10:00:00.000Z", endedAt: "2026-10-07T10:05:00.000Z", exitCode: 0, purpose: { key: "k", what: "author", patch: "p-focus", comments: [7] }, said: "Answered without changing code: menus don't follow their anchor." } as never;
+    r.patches["p-focus"].review = {
+      revision: 5,
+      status: "needs-revision",
+      reviewers: [{ name: "emilio", status: "blocking" }],
+      comments: [
+        { id: 7, author: "emilio", file: "a.cpp", line: 3, text: "Why not CheckForAnchorChange?", done: false },
+        { id: 8, author: "emilio", text: "And this?", done: false },
+        { id: 9, author: "emilio", file: "b.cpp", line: 1, text: "Rename it", done: false },
+        { id: 10, author: "emilio", file: "c.cpp", line: 2, text: "Why here?", done: false },
+        { id: 11, author: "florian", file: "c.cpp", line: 2, text: "[Claude's reply]\nMoved it.", done: false },
+      ],
+      author: "florian",
+    };
+    r.patches["p-focus"].replyDrafts = [{ commentId: 7, text: "Menus don't follow their anchor." }, { commentId: 10, text: "Moved it." }];
+    r.jobs["j-ans"] = { job: "j-ans", kind: "agent", name: "address-review", item: r.patches["p-focus"].item, cwd: "/wt", cmd: [], startedAt: "2026-10-07T10:00:00.000Z", endedAt: "2026-10-07T10:05:00.000Z", exitCode: 0, purpose: { key: "k", what: "author", patch: "p-focus", comments: [7, 9, 10] }, said: "Renamed it, answered the rest." } as never;
     const row = rowOf(renderRequest(r, ctx, true).value, "patch-p-focus");
-    assert.match(row, /Why not CheckForAnchorChange\?<\/div><div class="answer"><b>Its author's answer<\/b>[^]*?menus don&#39;t follow their anchor/);
+    assert.match(row, /Why not CheckForAnchorChange\?<\/div><div class="draftreply">/, "its draft reply is its answer");
     assert.match(row, /And this\?<\/div><div class="answer sub">not answered yet<\/div>/);
+    assert.match(row, /Rename it<\/div><div class="answer sub" title="Renamed it, answered the rest.">handled in the code, no reply<\/div>/);
+    assert.doesNotMatch(row, /Why here\?|Moved it/, "its reply is on Phabricator already");
   });
 
   it("9. review comments: a patch waiting for you (resubmit after review fixes) stands out, saying what to do", () => {

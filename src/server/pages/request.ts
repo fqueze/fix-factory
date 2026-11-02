@@ -1,7 +1,7 @@
 import { ANNOTATIONS_ITEM, needsMetaBug as stackNeedsMetaBug, sameBugDraft } from "../../state/meta-bug.ts";
 import { md } from "./md.ts";
 import { REQUEST_STEPS } from "../commands.ts";
-import type { BugDraft, ItemView, JobView, PatchView, PushView, Regression, RequestState, StackView } from "../../types.ts";
+import type { BugDraft, InlineComment, ItemView, JobView, PatchView, PushView, Regression, RequestState, StackView } from "../../types.ts";
 import { html, join, type Html } from "../html.ts";
 import { actionsSummary, flagPlaceOf, renderAction, recoveryAnswers, pollPhabButton, verifyStackButton, redoAnnotationsButton, approvePushControls, bugBox, continueBox, copyButton, handBackButton, flagControls, flagItemOf, flagText, plannedLabel, recoveryPlanFor, hasAuthorSession, stackViewerLink, submitControls, summaryId } from "./actions.ts";
 import { groupJobs, jobLine } from "./activity.ts";
@@ -770,20 +770,29 @@ function hoverInfo(r: RequestState, p: PatchView, item: ItemView | undefined, ct
 function reviewBox(r: RequestState, p: PatchView, interdiff: string | undefined): Html | null {
   const comments = p.review?.comments ?? [];
   const drafts = new Map(p.replyDrafts.map((d) => [d.commentId, d.text]));
-  const shown = comments.filter((c) => !c.done || drafts.has(c.id));
+  // Answered on Phabricator: a reply of yours on its line after it, the draft (if any) being one you posted.
+  const bare = (t: string) => t.replace(/^\[[^\]\n]*\]\s*/, "").trim();
+  const posted = (c: InlineComment) => {
+    const replies = comments.filter((x) => x.author === p.review?.author && x.id > c.id && x.file === c.file && x.line === c.line).map((x) => bare(x.text));
+    const draft = drafts.get(c.id);
+    return replies.length > 0 && (draft === undefined || replies.includes(bare(draft)));
+  };
+  const shown = comments.filter((c) => c.author !== p.review?.author && (!c.done || drafts.has(c.id)) && !posted(c));
   // An empty interdiff (from before they stopped being recorded): nothing changed.
   const changed = p.interdiffFile !== undefined && interdiff?.trim() !== "";
   if (!changed && !shown.length) {
     return null;
   }
   const revision = p.review?.revision ?? p.revision;
-  // Who answered each comment, and what it said: the latest of its author's runs given it.
-  const answer = (id: number): Html => {
+  // Where each comment's answer stands: its draft reply is the answer; without one, the code is (its run's summary,
+  // about all the comments it was given, on hover).
+  const answer = (id: number): Html | null => {
     const job = Object.values(r.jobs).findLast((j) => j.purpose?.patch === p.id && j.purpose.comments?.includes(id));
     if (!job) return html`<div class="answer sub">not answered yet</div>`;
     if (job.endedAt === undefined) return html`<div class="answer"><span class="working">being answered by its author</span></div>`;
-    const text = job.said ?? job.outcome;
-    return html`<div class="answer"><b>Its author's answer</b>${text ? md(text) : html`<span class="sub">${job.error ?? "no answer"}</span>`}</div>`;
+    if (drafts.has(id)) return null;
+    if (job.exitCode !== 0) return html`<div class="answer sub">${job.error ?? "its author's run failed"}</div>`;
+    return html`<div class="answer sub" title="${job.said ?? job.outcome ?? ""}">handled in the code, no reply</div>`;
   };
   // Each comment a thread under one bar: the comment, its author's answer, the reply to post.
   return html`${!changed ? null : html`<h4 class="part">Interdiff</h4>${interdiff === undefined ? html`<div class="sub">${p.interdiffFile} can't be read</div>` : diff(interdiff)}`}${
