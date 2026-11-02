@@ -81,8 +81,6 @@ export interface Ctx {
   output: (job: JobId) => string; // out.log of a finished job
   report: (job: JobId) => unknown; // the validated report of a finished agent job
   activeRequests: () => { id: RequestId; summary: string }[]; // routed and not done, for route-request
-  // A patch of another active request fixing that test, not landed yet ("D338027 in r-…"). Absent offline.
-  fixedElsewhere?: (test: string) => string | undefined;
 }
 
 // One line for route-request's list of active requests.
@@ -2365,9 +2363,7 @@ class Planner {
       const pushedAt = this.view.pushedAt.get(push) ?? Infinity;
       const resumed = (i: ItemView) => this.authorJobs(i.id).some((j) => j.purpose.reason === "repro" && j.purpose.key.includes(":repro:") && j.startedAt >= pushedAt);
       const repro = new Set(Object.values(this.s.items).filter((i) => i.state === "waiting for a try repro" || resumed(i)).flatMap((i) => i.group.tests));
-      // A test another request's stack fixes (a known intermittent) is that patch's, not this stack's.
-      const elsewhere = (test: string | undefined) => test !== undefined && this.ctx.fixedElsewhere?.(test) !== undefined;
-      for (const row of t.rows.filter((r) => r.result === "fail" && !repro.has(r.test) && !elsewhere(r.test))) {
+      for (const row of t.rows.filter((r) => r.result === "fail" && !repro.has(r.test))) {
         const item = this.matchPatch(row.test, patches)?.item;
         if (item) byItem.set(item, [...(byItem.get(item) ?? []), row]);
         else unmatched.push(row);
@@ -2409,8 +2405,7 @@ class Planner {
         files: [{ path: file, content: JSON.stringify({ rev: p.rev, patches: patches.map((x) => ({ id: x.id, sha: x.sha, title: x.title, files: this.patchFiles(x) })), rows: unmatched, unparsed: t.unparsed }, null, 2) + "\n" }],
       });
       if (!triage) continue;
-      const triaged = this.rep<TriageTryReport>(triage);
-      const report = { ...triaged, cells: triaged.cells.filter((c) => !elsewhere(c.test)) };
+      const report = this.rep<TriageTryReport>(triage);
       if (final && !authorsOwn && report.cells.every((c) => BENIGN.has(c.verdict))) this.passing.add(push);
       if (final) this.blamed.set(push, new Set([...own, ...report.cells.flatMap((c) => (c.verdict === "broken by patch" && c.patch ? [(this.s.patches[c.patch] ?? this.patchBySha(c.patch))?.item] : [])).filter((x) => x !== undefined)]));
       // Each author gets the cells pinned on its patch (by id; earlier reports gave a sha), and those "still failing" in

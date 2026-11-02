@@ -112,16 +112,6 @@ export class Orchestrator {
           .map((id) => this.load(id).s)
           .filter((r) => r.step !== "done" && r.kind !== "unrouted")
           .map((r) => ({ id: r.id, summary: requestSummary(r) })),
-      fixedElsewhere: (test) => {
-        for (const id of this.requests()) {
-          const r = this.load(id).s;
-          if (id === s.id || r.step === "done") continue;
-          const items = Object.values(r.items).filter((i) => i.group.tests.includes(test)).map((i) => i.id);
-          const p = Object.values(r.patches).find((x) => x.item !== undefined && items.includes(x.item) && x.review?.status !== "published");
-          if (p) return `${p.revision ? `D${p.revision}` : p.title} in ${id}`;
-        }
-        return undefined;
-      },
     };
   }
 

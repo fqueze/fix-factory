@@ -39,7 +39,6 @@ export class Scenario {
   presentSince: number | undefined = T0;
   readonly outputs = new Map<JobId, string>();
   readonly reports = new Map<JobId, unknown>();
-  readonly fixedElsewhere = new Map<string, string>(); // test → another request's patch fixing it
   private n = 0;
   lastActions: Action[] = [];
   activeRequests: { id: RequestId; summary: string }[] = []; // the other requests, for route-request
@@ -75,7 +74,6 @@ export class Scenario {
       output: (job) => this.outputs.get(job) ?? "",
       report: (job) => this.reports.get(job),
       activeRequests: () => this.activeRequests,
-      fixedElsewhere: (test) => this.fixedElsewhere.get(test),
     });
   }
 
