@@ -2222,9 +2222,11 @@ class Planner {
       const push = /:try:([^:]+)/.exec(j.purpose.key)?.[1];
       const r = this.rep<{ state?: string; commits?: string[] }>(j);
       if (!push || !this.s.pushes[push] || r.state !== "fix verified locally" || !r.commits?.length) continue;
-      // Its commits as they were ("no change: not mine"): nothing new to verify.
-      if (this.unchangedBy(j.item, j)) continue;
       const own = r.commits.map((_, n) => this.s.patches[patchId(j.item!, n)]).filter((p) => p !== undefined);
+      // No run of its author since the push changed its commits ("no change: not mine"): nothing new to verify. A change
+      // made since (by an earlier run, for your message) is, even when this answer only points at it.
+      const pushed = this.view.pushedAt.get(push) ?? 0;
+      if (!this.authorJobs(j.item).some((x) => succeeded(x) && x.startedAt > pushed && x.startedAt <= j.startedAt && commitsOf(x.name, this.rep(x)).length > 0 && !this.unchangedBy(j.item!, x))) continue;
       const submitted = Math.min(...own.map((p) => (p.submittedAt ? Date.parse(p.submittedAt) : Infinity)));
       if (!((this.view.pushedAt.get(push) ?? 0) > submitted)) continue;
       const rev = this.s.pushes[push].rev ?? push;

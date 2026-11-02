@@ -2821,6 +2821,30 @@ describe("9. a try push of a submitted stack", () => {
     assert.equal(sc.view().jobs.filter((j) => j.purpose.what === "plan-pushes" && j.purpose.key.includes(":ask")).length, 2, "that ask is answered: its plan and its revision");
   });
 
+  it("an author pointing a push's failure at a change it made since for your message makes that change wait for try", () => {
+    const sc = inReview();
+    sc.complete("poll:0", { output: polled("needs-review", [], "pending") });
+    sc.settle();
+    sc.add({ type: "try-planned", request: ID, push: "root-abcd-1", purpose: "p", command: ["./mach", "try"], taskCount: 1 });
+    sc.add({ type: "try-pushed", request: ID, push: "root-abcd-1", rev: "fed", url: "u" });
+    sc.add({ type: "try-finished", request: ID, push: "root-abcd-1", result: "failures", summary: "1 failure" });
+    sc.now += 60_000;
+    const run = (reason: string, key: string, commits: string[]) => {
+      const plan = resumeAuthorPlan(ID, sc.view(), "i-test-a", reason, { message: "m" }, "investigating");
+      assert.ok(plan && plan !== "busy");
+      plan.purpose.key = key;
+      sc.startJob(plan);
+      sc.complete(key, { report: fixed(commits) });
+      sc.settle();
+      sc.now += 60_000;
+    };
+    run("continue", "author:i-test-a:continue:c-1", [sha("9")]);
+    assert.equal(sc.state().tryNeeded["p-test-a"], undefined, "your message isn't a try failure");
+    run("try", "author:i-test-a:try:root-abcd-1", [sha("9")]);
+    assert.equal(sc.state().tryNeeded["p-test-a"]?.verified, undefined);
+    assert.ok(sc.state().tryNeeded["p-test-a"]);
+  });
+
   it("an author answering a push's failure with its commits unchanged asks for no new push", () => {
     const sc = inReview();
     sc.complete("poll:0", { output: polled("needs-review", [], "pending") });
