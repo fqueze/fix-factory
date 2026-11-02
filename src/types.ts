@@ -110,6 +110,7 @@ export interface Dep {
   kind: "hard" | "soft";
   reason: string;
   source: "agent" | "textual" | "reviewer" | "user";
+  reported?: string; // needs as its event said it, before fold resolved it to a patch
 }
 
 export interface ReviewerStatus {

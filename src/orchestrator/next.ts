@@ -1436,11 +1436,21 @@ class Planner {
       reviewed();
       return;
     }
-    const list = findings.map((f) => `- [${f.severity}]${f.file ? ` ${f.file}${f.line ? `:${f.line}` : ""}` : ""} ${f.text}`).join("\n");
+    // Each finding names its commit when there are several, so the author changes that one only.
+    const titleOf = (j: JobRecord) => (patches.length > 1 ? ` (on “${this.s.patches[j.purpose.patch!]?.title ?? j.purpose.sha?.slice(0, 12)}”)` : "");
+    const list = findings.map((f) => `- [${f.severity}]${titleOf(f.job)}${f.file ? ` ${f.file}${f.line ? `:${f.line}` : ""}` : ""} ${f.text}`).join("\n");
+    // A new commit has no patch yet.
+    const accepted = patches.flatMap((p) => (this.s.patches[p.id]?.review?.status === "accepted" ? [this.s.patches[p.id]] : []));
+    const keep = accepted.length ? `\n\nA reviewer accepted ${accepted.map((p) => `“${p.title}”`).join(", ")} on Phabricator: leave that commit exactly as it is unless a must-fix above is about it.` : "";
     // Nits alone get one author pass that isn't a round: counting them used up REVIEW_ROUNDS.
     const mustFix = findings.filter((f) => f.severity === "must-fix");
+    // Once submitted, nits aren't worth moving away from what reviewers have: they stay on the review's row.
+    if (mustFix.length === 0 && patches.some((p) => this.s.patches[p.id]?.revision !== undefined)) {
+      reviewed();
+      return;
+    }
     if (mustFix.length === 0) {
-      this.resumeAuthor(item.id, `author:${item.id}${e}:nits:${author.job}`, "nits", `A critical reviewer left these nits on your patch:\n${list}\n\nThey're nits: address each one by amending your commit, or say in one line in the report's summary why not. Then end with the JSON report again.`, "review findings");
+      this.resumeAuthor(item.id, `author:${item.id}${e}:nits:${author.job}`, "nits", `A critical reviewer left these nits on your patch:\n${list}\n\nThey're nits: address each one by amending your commit, or say in one line in the report's summary why not.${keep} Then end with the JSON report again.`, "review findings");
       return;
     }
     const key = `author:${item.id}${e}:review:${author.job}`;
@@ -1457,7 +1467,7 @@ class Planner {
       reviewed();
       return;
     }
-    this.resumeAuthor(item.id, key, "review", `A critical reviewer found these problems in your patch:\n${list}\n\nAddress them by amending your commit, then end with the JSON report again. Must-fix findings have to be fixed; where you disagree with one, say why in the report's summary. For nits, address them or say in one line why not.`, "review findings");
+    this.resumeAuthor(item.id, key, "review", `A critical reviewer found these problems in your patch:\n${list}\n\nAddress them by amending your commit, then end with the JSON report again. Must-fix findings have to be fixed; where you disagree with one, say why in the report's summary. For nits, address them or say in one line why not.${keep}`, "review findings");
   }
 
   // -------------------------------------------------------------------------

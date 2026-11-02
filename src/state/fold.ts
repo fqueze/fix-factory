@@ -422,7 +422,7 @@ export function foldEvents(events: readonly Event[]): RequestState {
     const resolved = new Map<string, Dep>();
     for (const d of deps.get(p.id) ?? []) {
       const needs = targetOf(d.needs);
-      if (needs !== p.id) resolved.set(needs, { ...d, needs });
+      if (needs !== p.id) resolved.set(needs, { ...d, needs, reported: d.needs });
     }
     p.deps = [...resolved.values()];
     const review = reviews.get(p.id);

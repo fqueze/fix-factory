@@ -442,6 +442,10 @@ function authorReport(input: HandlerInput, ev: <T extends EventInput["type"]>(ty
       }
       if (r.state !== "fix verified locally") return;
       const patch = patchId(item, Math.max(0, r.commits.length - 1));
+      // Each report says what its commits need now: what an earlier one said and this one doesn't is gone.
+      for (const p of Object.values(input.state.patches).filter((x) => x.item === item)) {
+        for (const d of p.deps.filter((d) => d.source === "agent" && !(p.id === patch && r.landsAfter.some((l) => l.what === d.reported)))) ev("dep-removed", { patch: p.id, needs: d.reported! });
+      }
       for (const l of r.landsAfter) ev("dep", { dep: { patch, needs: l.what, kind: "hard", reason: l.reason, source: "agent" } });
       return;
     }

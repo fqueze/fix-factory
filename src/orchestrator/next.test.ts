@@ -952,6 +952,22 @@ describe("4. investigate and fix", () => {
     assert.deepEqual(started, [`author:i-test-a:review:${job}`]);
   });
 
+  it("an author's report replaces what its earlier ones said the patch lands after", () => {
+    const sc = workList([group("ka", "a/test_a.js", "boom")]);
+    investigating(sc, "i-test-a");
+    sc.complete("author:i-test-a:initial", { report: fixed([sha("1")], { landsAfter: [{ what: "D123", reason: "uses its helper" }, { what: "D456", reason: "stale" }] }) });
+    const job = sc.view().byKey.get("author:i-test-a:initial")![0].job;
+    sc.settle();
+    sc.complete(`import:${job}`, { output: imported(sha("1"), "Bug XXXXXXX - Fix test_a, r=smaug.", ["a/test_a.js"]) });
+    assert.deepEqual(sc.state().patches["p-test-a"].deps.map((d) => d.needs), ["D123", "D456"]);
+    const plan = resumeAuthorPlan(ID, sc.view(), "i-test-a", "continue", { message: "m" }, "investigating");
+    assert.ok(plan && plan !== "busy");
+    plan.purpose.key = "author:i-test-a:continue:c-1";
+    sc.startJob(plan);
+    sc.complete("author:i-test-a:continue:c-1", { report: fixed([sha("1")], { landsAfter: [{ what: "D123", reason: "uses its helper" }] }) });
+    assert.deepEqual(sc.state().patches["p-test-a"].deps.map((d) => d.needs), ["D123"]);
+  });
+
   it("an author that disagrees with your message waits for you, its answer on its job's line", () => {
     const sc = workList([group("ka", "a/test_a.js", "boom")]);
     investigating(sc, "i-test-a");
@@ -3250,7 +3266,7 @@ it("an addressed commit that conflicts on today's central goes to resolve-confli
     assert.deepEqual(Object.keys(JSON.parse(sc.plan(again).files![0].content)), [sha("e"), sha("c")]);
   });
 
-  it("a nits pass after the answer still leads to the resubmit, with the answer's replies", () => {
+  it("nits on an answer to review comments go straight to the resubmit, with no author pass", () => {
     const sc = inReview();
     sc.complete("poll:0", { output: polled("needs-revision", [{ id: 7, author: "smaug", text: "Use waitForCondition", done: false, length: 1 }], "blocking") });
     const [classify] = sc.settle();
@@ -3266,20 +3282,7 @@ it("an addressed commit that conflicts on today's central goes to resolve-confli
     sc.complete(`lint:p-test-a:${sha("7")}`, { output: lintOk });
     sc.settle();
     sc.complete(`review:p-test-a:${job}`, { report: { verdict: "findings", findings: [{ severity: "nit", text: "wordy" }], feedback: [] } });
-    const nits = `author:i-test-a:nits:${job}`;
-    assert.deepEqual(sc.settle(), [nits]);
-    assert.ok(
-      sc.plan(nits).agent?.message?.startsWith("Your patch is on Phabricator as D101 (https://phabricator.services.mozilla.com/D101): read its reviews with the read-phabricator-comments skill."),
-      "its own D number, not its stack neighbor's",
-    );
-    const pass = sc.complete(nits, { report: fixed([sha("9")]) });
-    sc.settle();
-    sc.complete(`import:${pass}`, { output: imported(sha("9"), "Bug 999 - Fix a, r=smaug.", ["a/test_a.js"], 999).map((c) => ({ ...c, revision: 101 })) });
-    sc.settle();
-    sc.complete(`msg:p-test-a:${sha("9")}`, { output: "m" });
-    sc.settle();
-    sc.complete(`lint:p-test-a:${sha("9")}`, { output: lintOk });
-    assert.deepEqual(sc.settle(), [`rewrite-review:root:${pass}:v2`]);
+    assert.deepEqual(sc.settle(), [`rewrite-review:root:${job}:v2`]);
   });
 });
 

@@ -138,7 +138,7 @@ test("patches: the latest event per id wins, deps and review survive rewrites", 
     submittedAt: submitted.t,
     sentSha: "b",
     pastShas: ["a"],
-    deps: [{ patch: "p1", needs: "p0", kind: "hard", reason: "r", source: "agent" }],
+    deps: [{ patch: "p1", needs: "p0", kind: "hard", reason: "r", source: "agent", reported: "p0" }],
     review: { revision: 5, status: "needs-review", reviewers: [{ name: "a", status: "pending" }], comments: [] },
     replyDrafts: [],
   });
