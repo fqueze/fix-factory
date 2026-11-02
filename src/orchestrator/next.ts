@@ -81,6 +81,8 @@ export interface Ctx {
   output: (job: JobId) => string; // out.log of a finished job
   report: (job: JobId) => unknown; // the validated report of a finished agent job
   activeRequests: () => { id: RequestId; summary: string }[]; // routed and not done, for route-request
+  // A patch of another active request fixing that test, not landed yet ("D338027 in r-…"). Absent offline.
+  fixedElsewhere?: (test: string) => string | undefined;
 }
 
 // One line for route-request's list of active requests.
@@ -2363,7 +2365,9 @@ class Planner {
       const pushedAt = this.view.pushedAt.get(push) ?? Infinity;
       const resumed = (i: ItemView) => this.authorJobs(i.id).some((j) => j.purpose.reason === "repro" && j.purpose.key.includes(":repro:") && j.startedAt >= pushedAt);
       const repro = new Set(Object.values(this.s.items).filter((i) => i.state === "waiting for a try repro" || resumed(i)).flatMap((i) => i.group.tests));
-      for (const row of t.rows.filter((r) => r.result === "fail" && !repro.has(r.test))) {
+      // A test another request's stack fixes (a known intermittent) is that patch's, not this stack's.
+      const elsewhere = (test: string | undefined) => test !== undefined && this.ctx.fixedElsewhere?.(test) !== undefined;
+      for (const row of t.rows.filter((r) => r.result === "fail" && !repro.has(r.test) && !elsewhere(r.test))) {
         const item = this.matchPatch(row.test, patches)?.item;
         if (item) byItem.set(item, [...(byItem.get(item) ?? []), row]);
         else unmatched.push(row);
@@ -2405,7 +2409,8 @@ class Planner {
         files: [{ path: file, content: JSON.stringify({ rev: p.rev, patches: patches.map((x) => ({ id: x.id, sha: x.sha, title: x.title, files: this.patchFiles(x) })), rows: unmatched, unparsed: t.unparsed }, null, 2) + "\n" }],
       });
       if (!triage) continue;
-      const report = this.rep<TriageTryReport>(triage);
+      const triaged = this.rep<TriageTryReport>(triage);
+      const report = { ...triaged, cells: triaged.cells.filter((c) => !elsewhere(c.test)) };
       if (final && !authorsOwn && report.cells.every((c) => BENIGN.has(c.verdict))) this.passing.add(push);
       if (final) this.blamed.set(push, new Set([...own, ...report.cells.flatMap((c) => (c.verdict === "broken by patch" && c.patch ? [(this.s.patches[c.patch] ?? this.patchBySha(c.patch))?.item] : [])).filter((x) => x !== undefined)]));
       // Each author gets the cells pinned on its patch (by id; earlier reports gave a sha), and those "still failing" in
@@ -2425,12 +2430,15 @@ class Planner {
         const lines = (list: typeof cells) => list.map((c) => `- ${c.test ?? c.taskId ?? "a job"}${c.config ? ` on ${c.config}` : ""}${c.verdict === "still failing" ? " (still failing with your fix)" : ""}: ${c.evidence}`);
         const fresh = cells.filter((c) => !toldCells.has(`${c.test} ${c.config}`));
         if (fresh.length) this.routeToAuthor(item, push, lines(fresh), earlyTriage ? ":final" : "");
-        // Pinned on it again after its author answered this push leaving its commits as they were: yours to settle.
-        const answers = ["", ":final"].flatMap((x) => this.view.byKey.get(`author:${item}${this.itemEpoch(item)}:try:${push}${x}`)?.filter(succeeded) ?? []);
-        const disowned = answers.find((a) => this.unchangedBy(item, a) || this.rep<{ disagreement?: string }>(a).disagreement);
-        if (final && disowned && !this.view.done.has(`disowned:${push}:${item}`)) {
+        // Pinned on it again after its author answered them leaving its commits as they were: yours to settle. Each
+        // answer covers what it was told: the early run's cells, or (with no early run, or in the final one) all.
+        const answer = (x: string) => this.view.byKey.get(`author:${item}${this.itemEpoch(item)}:try:${push}${x}`)?.find(succeeded);
+        const disowns = (a: JobRecord | undefined) => a !== undefined && (this.unchangedBy(item, a) || this.rep<{ disagreement?: string }>(a).disagreement !== undefined);
+        const early = answer(""), late = answer(":final");
+        const [disowned, theirs] = disowns(late) ? [late, cells] : disowns(early) ? [early, earlyTriage ? cells.filter((c) => toldCells.has(`${c.test} ${c.config}`)) : cells] : [undefined, []];
+        if (final && disowned && theirs.length && !this.view.done.has(`disowned:${push}:${item}`)) {
           const rep = this.rep<{ summary?: string; disagreement?: string }>(disowned);
-          this.raise(`disowned:${push}:${item}`, { action: "Its author says these try failures aren't its patch's", detail: `${lines(cells).join(" ").slice(0, 400)} · its author: ${(rep.disagreement ?? rep.summary ?? "").slice(0, 500)}`, job: disowned.job, item });
+          this.raise(`disowned:${push}:${item}`, { action: "Its author says these try failures aren't its patch's", detail: `${lines(theirs).join(" ").slice(0, 400)} · its author: ${(rep.disagreement ?? rep.summary ?? "").slice(0, 500)}`, job: disowned.job, item });
         }
       }
       this.itemsFromTriage(report);

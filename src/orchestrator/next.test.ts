@@ -1875,6 +1875,26 @@ describe("6. verify on try", () => {
     assert.match(n.detail ?? "", /z\/test_z.js on linux: submenu closed .* its author: Not mine/);
   });
 
+  it("a failure in a test another request's stack fixes goes to no author here", () => {
+    const sc = stacked();
+    sc.fixedElsewhere.set("z/test_z.js", "D338027 in r-other");
+    const planKey = sc.view().jobs.find((j) => j.purpose.what === "plan-pushes")!.purpose.key;
+    sc.complete(planKey, { report: { pushes: [{ purpose: "verify", tryArgs: ["fuzzy", "-q", "x"], rebuild: 5 }], feedback: [] } });
+    const [dry] = sc.settle();
+    const push = sc.purpose(dry).push!;
+    sc.complete(dry, { output: { command: ["./mach", "try", "fuzzy", "-q", "x"], taskCount: 5, tasks: [], tryTaskConfig: {}, commits: [sha("c"), sha("d")], warnings: [] } });
+    sc.add({ type: "user-done", request: ID, key: `approve-push:${push}` });
+    sc.settle();
+    sc.complete(`push:${push}`, { output: { rev: "fed", landoJobId: 1, treeherderUrl: "t" } });
+    sc.settle();
+    sc.add({ type: "try-finished", request: ID, push, result: "failures", summary: "s" });
+    sc.settle();
+    sc.complete(`try-table:${push}:final`, { output: table([], [{ taskId: "T1", jobName: "linux", reason: "no profile" }]) });
+    sc.settle();
+    sc.complete(`triage:${push}:final:v2`, { report: { cells: [{ test: "z/test_z.js", config: "linux", verdict: "broken by patch", patch: "p-test-b", evidence: "submenu starts closed" }], feedback: [] } });
+    assert.deepEqual(sc.settle().filter((k) => k.startsWith("author:")), []);
+  });
+
   it("a push whose only failures are pre-existing or infra passes, and the request moves on", () => {
     const sc = stacked();
     const planKey = sc.view().jobs.find((j) => j.purpose.what === "plan-pushes")!.purpose.key;
