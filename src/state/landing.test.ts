@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { PatchView, RequestState } from "../types.ts";
-import { isReviewComment, landingState } from "./landing.ts";
+import { isReviewComment, landingState, unpostedReplies } from "./landing.ts";
 
 test("an accepted patch's comments count as addressed once its author's run handling them succeeded, before you resubmit", () => {
   const p = { id: "p", review: { status: "accepted", reviewers: [{ name: "smaug", status: "accepted" }], comments: [{ id: 1, author: "smaug", done: false }, { id: 2, author: "smaug", done: true }, { id: 3, author: "phab-bot", done: false }] } } as unknown as PatchView;
@@ -19,4 +19,22 @@ test("Phabricator's own applications (Herald) aren't reviewers", () => {
 test("a revision back in needs-review isn't accepted, though its reviewers' accepts of an earlier diff remain", () => {
   const p = { id: "p", review: { status: "needs-review", reviewers: [{ name: "#tabbrowser-reviewers", status: "accepted" }, { name: "sthompson", status: "accepted" }], comments: [] } } as unknown as PatchView;
   assert.equal(landingState({ jobs: {}, backouts: {} } as unknown as RequestState, p).accepted, false);
+});
+
+test("the draft replies to post leave out those already on Phabricator, whichever run wrote them", () => {
+  const p = {
+    id: "p",
+    review: {
+      status: "needs-revision",
+      author: "florian",
+      reviewers: [],
+      comments: [
+        { id: 1, author: "emilio", file: "a", line: 1, text: "why?", done: false },
+        { id: 2, author: "emilio", file: "a", line: 2, text: "how?", done: false },
+        { id: 3, author: "florian", file: "a", line: 2, text: "[Claude's reply]\nLike this.", done: false },
+      ],
+    },
+    replyDrafts: [{ commentId: 1, text: "Because." }, { commentId: 2, text: "Like this." }],
+  } as unknown as PatchView;
+  assert.equal(unpostedReplies(p), 1);
 });

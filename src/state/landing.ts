@@ -22,3 +22,18 @@ export function landingState(s: RequestState, p: PatchView): { accepted: boolean
     landed: p.review?.status === "published",
   };
 }
+
+// Answered on Phabricator: a reply of yours on its line after it, the comment marked done there or the draft (if
+// any) being one you posted.
+export function isAnswered(p: PatchView, c: InlineComment): boolean {
+  const bare = (t: string) => t.replace(/^\[[^\]\n]*\]\s*/, "").trim();
+  const comments = p.review?.comments ?? [];
+  const replies = comments.filter((x) => x.author === p.review?.author && x.id > c.id && x.file === c.file && x.line === c.line).map((x) => bare(x.text));
+  const draft = p.replyDrafts.find((d) => d.commentId === c.id)?.text;
+  return replies.length > 0 && (c.done || draft === undefined || replies.includes(bare(draft)));
+}
+
+// The draft replies still to post.
+export function unpostedReplies(p: PatchView): number {
+  return (p.review?.comments ?? []).filter((c) => c.author !== p.review?.author && p.replyDrafts.some((d) => d.commentId === c.id) && !isAnswered(p, c)).length;
+}
