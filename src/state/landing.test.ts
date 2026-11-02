@@ -15,3 +15,8 @@ test("Phabricator's own applications (Herald) aren't reviewers", () => {
   assert.equal(isReviewComment(p, { id: 1, author: "PHID-APPS-PhabricatorHeraldApplication", text: "set a testing tag", done: false }), false);
   assert.equal(isReviewComment(p, { id: 2, author: "emilio", text: "why?", done: false }), true);
 });
+
+test("a revision back in needs-review isn't accepted, though its reviewers' accepts of an earlier diff remain", () => {
+  const p = { id: "p", review: { status: "needs-review", reviewers: [{ name: "#tabbrowser-reviewers", status: "accepted" }, { name: "sthompson", status: "accepted" }], comments: [] } } as unknown as PatchView;
+  assert.equal(landingState({ jobs: {}, backouts: {} } as unknown as RequestState, p).accepted, false);
+});
