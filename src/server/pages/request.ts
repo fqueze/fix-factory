@@ -770,12 +770,13 @@ function hoverInfo(r: RequestState, p: PatchView, item: ItemView | undefined, ct
 function reviewBox(r: RequestState, p: PatchView, interdiff: string | undefined): Html | null {
   const comments = p.review?.comments ?? [];
   const drafts = new Map(p.replyDrafts.map((d) => [d.commentId, d.text]));
-  // Answered on Phabricator: a reply of yours on its line after it, the draft (if any) being one you posted.
+  // Answered on Phabricator: a reply of yours on its line after it, the comment marked done there or the draft (if
+  // any) being one you posted.
   const bare = (t: string) => t.replace(/^\[[^\]\n]*\]\s*/, "").trim();
   const posted = (c: InlineComment) => {
     const replies = comments.filter((x) => x.author === p.review?.author && x.id > c.id && x.file === c.file && x.line === c.line).map((x) => bare(x.text));
     const draft = drafts.get(c.id);
-    return replies.length > 0 && (draft === undefined || replies.includes(bare(draft)));
+    return replies.length > 0 && (c.done || draft === undefined || replies.includes(bare(draft)));
   };
   const shown = comments.filter((c) => c.author !== p.review?.author && (!c.done || drafts.has(c.id)) && !posted(c));
   // An empty interdiff (from before they stopped being recorded): nothing changed.

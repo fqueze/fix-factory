@@ -684,16 +684,19 @@ describe("one fixture per step of docs/MVP.md", () => {
         { id: 9, author: "emilio", file: "b.cpp", line: 1, text: "Rename it", done: false },
         { id: 10, author: "emilio", file: "c.cpp", line: 2, text: "Why here?", done: false },
         { id: 11, author: "florian", file: "c.cpp", line: 2, text: "[Claude's reply]\nMoved it.", done: false },
+        { id: 12, author: "emilio", file: "d.cpp", line: 4, text: "Why new code?", done: true },
+        { id: 13, author: "florian", file: "d.cpp", line: 4, text: "[Claude's first reply]\nIt returns early.", done: true },
       ],
       author: "florian",
     };
-    r.patches["p-focus"].replyDrafts = [{ commentId: 7, text: "Menus don't follow their anchor." }, { commentId: 10, text: "Moved it." }];
+    r.patches["p-focus"].replyDrafts = [{ commentId: 7, text: "Menus don't follow their anchor." }, { commentId: 10, text: "Moved it." }, { commentId: 12, text: "Its tail is now shared." }];
     r.jobs["j-ans"] = { job: "j-ans", kind: "agent", name: "address-review", item: r.patches["p-focus"].item, cwd: "/wt", cmd: [], startedAt: "2026-10-07T10:00:00.000Z", endedAt: "2026-10-07T10:05:00.000Z", exitCode: 0, purpose: { key: "k", what: "author", patch: "p-focus", comments: [7, 9, 10] }, said: "Renamed it, answered the rest." } as never;
     const row = rowOf(renderRequest(r, ctx, true).value, "patch-p-focus");
     assert.match(row, /Why not CheckForAnchorChange\?<\/div><div class="draftreply">/, "its draft reply is its answer");
     assert.match(row, /And this\?<\/div><div class="answer sub">not answered yet<\/div>/);
     assert.match(row, /Rename it<\/div><div class="answer sub" title="Renamed it, answered the rest.">handled in the code, no reply<\/div>/);
     assert.doesNotMatch(row, /Why here\?|Moved it/, "its reply is on Phabricator already");
+    assert.doesNotMatch(row, /Why new code\?|tail is now shared/, "replied to and marked done there: a later draft is moot");
   });
 
   it("9. review comments: a patch waiting for you (resubmit after review fixes) stands out, saying what to do", () => {
