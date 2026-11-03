@@ -1003,7 +1003,7 @@ describe("a burndown with closed groups, running agents and a dropped patch", ()
     const r = structuredClone(get(ID));
     r.items["i-annotations"].state = "taken over";
     const head = renderRequest(r, ctx, false).value;
-    assert.match(head.slice(0, head.indexOf("</summary>")), /<span class="handed-over">1 handed over<\/span>/);
+    assert.match(head.slice(0, head.indexOf("</summary>")), /<span class="handed-over" style="flex-grow:1"><\/span><\/span>[^]*<span class="handed-over">1 handed over<\/span>/, "grey, last in its bar");
     assert.doesNotMatch(String(renderStrip([r], ctx)), /handed over/);
     assert.doesNotMatch(h, /<h3>Patches<\/h3>/, "no heading over dropped patches alone");
   });

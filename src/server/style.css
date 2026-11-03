@@ -204,6 +204,7 @@ details.reopen[open] > summary { display: none; }
 .pbar { display: inline-flex; width: 120px; height: 8px; border-radius: 4px; overflow: hidden; background: var(--track); vertical-align: middle; margin-right: 8px; }
 .pbar > span { min-width: 3px; }
 .pbar .landed { background: var(--good); } .pbar .ready, .pbar .submitted { background: var(--accent); } .pbar .waiting-for-try { background: color-mix(in srgb, var(--accent) 40%, var(--track)); }
+.pbar .handed-over { background: color-mix(in srgb, var(--text-muted) 45%, var(--track)); }
 .pbar .needs-you { background: var(--serious); } .pbar .working { background: var(--text-muted); } .pbar .pending { background: var(--border); }
 .rprog > .needs-you, .progress > .needs-you { color: var(--serious); font-weight: 600; }
 .rprog > .landed, .progress > .landed { color: var(--good); }

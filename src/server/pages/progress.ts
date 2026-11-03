@@ -262,9 +262,9 @@ export function workLabel(j: JobView): Html {
   return said ? html`working on <span class="said" title="${said}">“${said.split("\n")[0]}”</span>` : html`${jobLabel(j.name)}`;
 }
 
-// The bar fills from the left with what's done, then what's ready, what waits on try, needs you, runs and waits; the
-// closed groups aren't progress: they're only counted, last.
-const BAR: Bucket[] = ["landed", "landable", "submitted", "ready", "waiting for try", "needs you", "working", "pending"];
+// The bar fills from the left with what's done, then what's ready, what waits on try, needs you, runs and waits, and
+// last, grey, what was handed over; closed groups aren't progress.
+const BAR: Bucket[] = ["landed", "landable", "submitted", "ready", "waiting for try", "needs you", "working", "pending", "handed over"];
 
 // A bar with one segment per bucket, then "2 need you · 1 working · 3 ready · 4 pending · 5 closed".
 // Closed groups aren't progress: never counted. Handed over ones only on a request's line (withHandedOver).
@@ -274,7 +274,7 @@ export function progressLine(p: Progress, submitted = "", withHandedOver = true)
     return html`<span class="sub">nothing to work on yet</span>`;
   }
   const cls = (b: Bucket) => b.replaceAll(" ", "-");
-  return html`<span class="pbar">${BAR.filter((b) => p[b] > 0).map((b) => html`<span class="${cls(b)}" style="flex-grow:${p[b]}"></span>`)}</span>${join(
+  return html`<span class="pbar">${BAR.filter((b) => p[b] > 0 && (withHandedOver || b !== "handed over")).map((b) => html`<span class="${cls(b)}" style="flex-grow:${p[b]}"></span>`)}</span>${join(
     shown.map((b) => html`<span class="${cls(b)}">${p[b]} ${b === "needs you" && p[b] === 1 ? "needs you" : b === "needs you" ? "need you" : b}${b === "submitted" && submitted ? `: ${submitted}` : ""}</span>`),
     " · ",
   )}`;
