@@ -315,7 +315,7 @@ interface Row {
 // from its label; its state and trust lines then move under the box.
 function row(x: Row): Html {
   const lines = html`<span class="state">${x.state}</span>${x.trust ? html`<span class="trust">${x.trust}</span>` : null}`;
-  const d = html`<details class="row${x.you ? " you" : null}${x.bucket && x.bucket !== "closed" ? ` b-${x.bucket.replaceAll(" ", "-")}` : null}" ${x.anchor} data-fold="${x.fold}"><summary><span class="st ${x.cls}"></span><span class="name" title="${x.title}">${x.name}</span><span class="end">${x.end}</span>${lines}${
+  const d = html`<details class="row${x.you ? " you" : null}${x.bucket && x.bucket !== "closed" ? ` b-${x.bucket.replaceAll(" ", "-")}` : null}" ${x.anchor} data-fold="${x.fold}"><summary><span class="st ${x.cls}"${PHAB_STATUS[x.cls] ? html` title="${PHAB_STATUS[x.cls]}"` : null}></span><span class="name" title="${x.title}">${x.name}</span><span class="end">${x.end}</span>${lines}${
     x.warn ? html`<span class="warn">${x.warn}</span>` : null
   }</summary>${x.under ? html`<div class="under">${x.under}<div class="lines">${lines}</div></div>` : null}<div class="rowbody">${x.body}</div></details>`;
   return x.ask ? html`<div class="asks">${d}<div class="ask-you">${x.ask}</div></div>` : d;
@@ -389,6 +389,8 @@ function stateText(r: RequestState, i: ItemView, ctx: RenderContext): Html {
 }
 
 // A ready group or patch gets the ✓, even while it waits for the rest of its stack.
+const PHAB_STATUS: Partial<Record<StateClass, string>> = { accepted: "Accepted on Phabricator", review: "Needs review on Phabricator", landed: "Landed (closed on Phabricator)" };
+
 // A ready patch on Phabricator gets its icon there: accepted (✓), waiting for review (</>), landed (☑).
 function phabClass(p: PatchView, cls: StateClass): StateClass {
   if (cls !== "ok") return cls;

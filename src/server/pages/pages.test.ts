@@ -676,9 +676,10 @@ describe("one fixture per step of docs/MVP.md", () => {
     const icon = (status: string) => {
       r.patches["p-focus"].review = { revision: 5, status, reviewers: [{ name: "smaug", status: status === "needs-review" ? "pending" : "accepted" }], comments: [] };
       r.needsUser = [];
-      return /<span class="st ([a-z]+)"><\/span>/.exec(rowOf(renderRequest(r, ctx, true).value, "patch-p-focus")!)?.[1];
+      const m = /<span class="st ([a-z]+)" title="([^"]+)"><\/span>/.exec(rowOf(renderRequest(r, ctx, true).value, "patch-p-focus")!);
+      return m && `${m[1]}: ${m[2]}`;
     };
-    assert.deepEqual([icon("needs-review"), icon("accepted"), icon("published")], ["review", "accepted", "landed"]);
+    assert.deepEqual([icon("needs-review"), icon("accepted"), icon("published")], ["review: Needs review on Phabricator", "accepted: Accepted on Phabricator", "landed: Landed (closed on Phabricator)"]);
   });
 
   it("8. submit: checks pass, stack-viewer link, moz-phab command to copy", () => {
