@@ -3006,6 +3006,36 @@ class Planner {
       const causes = taken.filter(named);
       this.event(this.ev("backout", { patch: pid, at, reason: said.text, culprit: causes.length ? causes.includes(p) : true }));
     }
+    // Its patches go back to the bottom of their stack, in Phabricator's order, to land again from there.
+    const stacked = new Set(Object.values(this.s.stacks).flatMap((st) => st.order));
+    for (const st of this.liveStacks()) {
+      const depth = (p: PatchView): number => {
+        const parent = Object.values(this.s.patches).find((x) => x.revision !== undefined && x.revision === p.review?.parent);
+        return parent ? 1 + depth(parent) : 0;
+      };
+      const back = Object.keys(this.s.backouts)
+        .map((id) => this.s.patches[id])
+        .filter((p) => p?.item !== undefined && !stacked.has(p.id) && !landingState(this.s, p).landed && this.stackFolder(this.s.items[p.item]) === st.folder)
+        .sort((a, b) => depth(a) - depth(b));
+      if (!back.length) continue;
+      const all = [...back, ...st.order.map((pid) => this.s.patches[pid])];
+      const h = shortHash(all.map((p) => p.id)).slice(0, 10);
+      const e = this.rewriteEdits(`backout-${st.id}-${h}`, all);
+      const rw = this.want(`backout-stack:${st.id}:${h}`, () =>
+        this.cli("rewrite", "stack.ts", ["rewrite", "--cwd", st.worktree, "--base", st.base ?? this.config.baseRef, "--branch", st.branch, "--order", all.map((p) => p.sha).join(","), ...e.args], {
+          cwd: st.worktree,
+          files: e.files,
+          purpose: { stack: st.id, reason: "backed out", patches: Object.fromEntries(all.map((p) => [p.sha.slice(0, 12), p.id])) },
+        }),
+      );
+      if (!rw) continue;
+      if (this.out<{ conflict?: unknown }>(rw).conflict) {
+        this.raise(`failed:${rw.job}`, { action: "Conflict while putting backed out patches back in the stack", detail: "stack.ts rewrite stopped on a conflict", job: rw.job, stack: st.id });
+        continue;
+      }
+      const { id, ...rest } = st;
+      this.event(this.ev("stack", { stack: id, ...rest, order: all.map((p) => p.id) }));
+    }
     for (const [pid, b] of Object.entries(this.s.backouts)) {
       const p = this.s.patches[pid];
       if (!b.culprit || b.verified || !p?.item) continue;

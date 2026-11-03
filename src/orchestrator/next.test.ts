@@ -2656,6 +2656,27 @@ describe("10. backouts", () => {
     return sc;
   }
 
+  it("puts a backed out patch that had left the stack back at its bottom", () => {
+    const sc = inReview();
+    const { id, ...st } = sc.state().stacks.root;
+    // Landed first, it left the stack.
+    sc.add({ type: "stack", request: ID, stack: id, ...st, order: st.order.filter((p) => p !== "p-test-b") });
+    sc.complete("poll:0", { output: polled("published") });
+    sc.settle();
+    sc.now += 4 * 3_600_000;
+    sc.settle();
+    sc.complete(sc.view().jobs.find((j) => !j.end && j.purpose.key.startsWith("poll:"))!.purpose.key, { output: polled("accepted") });
+    sc.settle();
+    const pushes = [{ t: "2026-10-15T10:00:00Z", kind: "landed", by: "me", title: "t" }, { t: "2026-10-15T11:00:00Z", kind: "backed out", by: "sheriff", title: "r" }];
+    const backout = { t: new Date(sc.now).toISOString(), by: "sheriff", text: "Backed out for causing mochitest failures @test_b.js." };
+    for (const [p, bug] of [["p-test-b", 22], ["p-test-a", 999]] as const) sc.complete(sc.view().jobs.find((j) => !j.end && j.purpose.key.startsWith(`backout-reason:${p}:`))!.purpose.key, { output: [{ bug, pushes, backout }] });
+    const rw = sc.settle().find((k) => k.startsWith("backout-stack:root:"))!;
+    assert.deepEqual(sc.plan(rw).cli!.args.at(sc.plan(rw).cli!.args.indexOf("--order") + 1)?.split(",").length, 2);
+    sc.complete(rw, { output: { mapping: {} } });
+    sc.settle();
+    assert.deepEqual(sc.state().stacks.root.order, ["p-test-b", "p-test-a"]);
+  });
+
   it("takes the request back to landing: the patch the failure names goes to its author, the other may land again", () => {
     const sc = backedOut();
     assert.equal(sc.state().step, "landing");
