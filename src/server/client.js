@@ -260,6 +260,25 @@
     "toggle",
     function (event) {
       var d = event.target;
+      // A fold's contents, rendered by the server only once it's open: fetched when it opens.
+      if (d.matches && d.matches("details") && d.open) {
+        Array.prototype.forEach.call(d.querySelectorAll(".lazy[data-src]"), function (box) {
+          if (box.closest("details") !== d || box.dataset.loading) return;
+          box.dataset.loading = "1";
+          fetchText(box.dataset.src).then(
+            function (text) {
+              if (!box.isConnected) return;
+              var fresh = parse(text);
+              var parent = box.parentNode;
+              box.replaceWith(fresh);
+              reopenFolds(parent);
+            },
+            function () {
+              delete box.dataset.loading;
+            }
+          );
+        });
+      }
       if (d.matches && d.matches("details[data-watch]") && d.open) loadActivity(d);
       // A try push's jobs, once: its dry run doesn't change.
       if (d.matches && d.matches("details[data-tasks]") && d.open) {

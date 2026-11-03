@@ -127,9 +127,10 @@ describe("overview", () => {
     assert.match(h, /<h2>On try now<\/h2>/);
   });
 
-  it("renders collapsed requests without their body", () => {
-    assert.doesNotMatch(page, /class="rbody">/);
-    assert.match(page, /data-lazy/);
+  it("renders collapsed active requests with their rows, queued and finished ones without", () => {
+    const active = page.slice(page.indexOf("<h2>Active"), page.indexOf("<h2>", page.indexOf("<h2>Active") + 1));
+    assert.match(active, /<details class="req[^"]*"[^>]*data-section="active">[^]*?class="rbody">/);
+    assert.match(page, /data-section="(finished|queued)"[^>]*>[^]*?<div class="rbody" data-lazy>/);
   });
 });
 
@@ -667,7 +668,8 @@ describe("one fixture per step of docs/MVP.md", () => {
     two.patches["p-focus"].review = { revision: 5, status: "needs-review", reviewers: [], comments: [] };
     two.patches["p-focus-2"] = { ...structuredClone(two.patches["p-focus"]), id: "p-focus-2", revision: 6, review: { revision: 6, status: "accepted", reviewers: [{ name: "smaug", status: "blocking" }], comments: [] } };
     assert.match(renderRequest(two, ctx, false).value, /<span class="submitted">2 submitted: 1 waiting for review, 1 accepted<\/span>/);
-    assert.doesNotMatch(renderRequest(two, ctx, false).value, /on Phabricator/);
+    const head = renderRequest(two, ctx, false).value;
+    assert.doesNotMatch(head.slice(0, head.indexOf("</summary>")), /on Phabricator/);
   });
 
   it("a ready patch's icon is its status's on Phabricator: waiting for review, accepted, landed", () => {

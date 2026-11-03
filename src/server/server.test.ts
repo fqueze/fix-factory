@@ -54,6 +54,13 @@ function post(body: string, type: string, headers: Record<string, string> = {}) 
   return fetch(`${base}/api/commands`, { method: "POST", body, headers: { "Content-Type": type, ...headers }, redirect: "manual" });
 }
 
+// A page with its folds' contents, fetched as client.js does when they open.
+async function withFolds(base: string, page: string): Promise<string> {
+  const srcs = [...page.matchAll(/<div class="lazy" data-src="([^"]+)"><\/div>/g)].map((m) => m[1].replaceAll("&amp;", "&"));
+  const parts = await Promise.all(srcs.map(async (src) => (await fetch(`${base}${src}`)).text()));
+  return page + parts.join("");
+}
+
 describe("pages", () => {
   it("serves the overview, the client script and the style sheet", async () => {
     const r = await fetch(`${base}/`);
@@ -70,7 +77,8 @@ describe("pages", () => {
   it("expands the request named in the URL", async () => {
     const page = await (await fetch(`${base}/requests/r-20261005-newtab`)).text();
     assert.match(page, /id="req-r-20261005-newtab" data-request="r-20261005-newtab" data-section="active" open>/);
-    assert.match(page, /Draft reply/);
+    assert.doesNotMatch(page, /Draft reply/, "its rows' contents come when they open");
+    assert.match(await withFolds(base, page), /Draft reply/);
     assert.equal((await fetch(`${base}/requests/r-nope`)).status, 404);
   });
 
@@ -89,7 +97,14 @@ describe("pages", () => {
     assert.match(closed, /^<details class="req needs"/);
     assert.doesNotMatch(closed, /Draft reply/);
     const open = await (await fetch(`${base}/fragments/requests/r-20261005-newtab?open=1`)).text();
-    assert.match(open, /Draft reply/);
+    assert.match(await withFolds(base, open), /Draft reply/);
+    // A fold's contents alone; one open in the page's cookie comes with the request.
+    const src = /<div class="lazy" data-src="(\/fragments\/requests\/r-20261005-newtab\/folds\/([^"]+))"><\/div>/.exec(open)!;
+    const alone = await (await fetch(`${base}${src[1]}`)).text();
+    assert.doesNotMatch(alone, /<!--fold-->|data-request=/);
+    const cookie = `opened=${encodeURIComponent(encodeURIComponent(`r-20261005-newtab ${decodeURIComponent(src[2])}`))}`;
+    assert.ok((await (await fetch(`${base}/fragments/requests/r-20261005-newtab?open=1`, { headers: { cookie } })).text()).includes(alone));
+    assert.equal((await fetch(`${base}/fragments/requests/r-20261005-newtab/folds/nope`)).status, 404);
     assert.match(await (await fetch(`${base}/fragments/strip`)).text(), /id="strip"[^]*disk <b>[\d.]+ [GT]B<\/b> free/);
     assert.match(await (await fetch(`${base}/fragments/main`)).text(), /<h2>Active/);
   });
@@ -257,7 +272,7 @@ describe("interdiffs", () => {
     r.patches["p-glean"].interdiffFile = relative(stateDir, join(outside, "secret.diff"));
     r.patches["p-nimbus"].interdiffFile = join(outside, "secret.diff");
     state.set(r);
-    const page = await (await fetch(`${base}/fragments/requests/r-20261005-newtab?open=1`)).text();
+    const page = await withFolds(base, await (await fetch(`${base}/fragments/requests/r-20261005-newtab?open=1`)).text());
     rmSync(outside, { recursive: true, force: true });
     assert.match(page, /<span class="a">\+inside the state dir<\/span>/);
     assert.doesNotMatch(page, /\+secret/);

@@ -22,6 +22,10 @@ export interface RenderContext {
   diffStat?: (p: PatchView) => { added: number; removed: number } | undefined;
   landoUrl?: (job: JobView) => string | undefined; // Treeherder by landoCommitID, once Lando took a push
   openFolds?: Map<string, Set<string>>; // per request, the folds you had open (from the page's cookie), rendered open
+  // Absent (tests, the whole page for a script): every fold's contents are rendered. With openFolds, only the open
+  // ones' and onlyFold's (marked), the others a placeholder client.js fills when opened.
+  onlyFold?: string;
+  insideFold?: boolean; // while onlyFold's contents render
   // A file the factory wrote, by its path relative to stateDir (an interdiff since a push).
   readData?: (rel: string) => string | undefined;
   freeDiskGB?: number; // where the worktrees go
@@ -533,6 +537,23 @@ export function plural(n: number, one: string, many = `${one}s`): string {
 
 // Hidden fields of a command form: the command's JSON, and where to come back to
 // when the page is used without its script.
+// A fold's contents: rendered when it's open, or asked for alone (marked, for the server to cut out); otherwise a
+// placeholder client.js fills when it opens. A closed fold's contents are most of a request's page.
+export function foldContent(r: RequestState, ctx: RenderContext, fold: string, content: () => Html): Html {
+  // Asked for alone: the folds on the way to it are rendered, the ones inside it follow the rules below.
+  if (ctx.onlyFold !== undefined && !ctx.insideFold) {
+    if (fold !== ctx.onlyFold) return content();
+    ctx.insideFold = true;
+    try {
+      return html`<!--fold-->${content()}<!--/fold-->`;
+    } finally {
+      ctx.insideFold = false;
+    }
+  }
+  if (!ctx.openFolds || ctx.openFolds.get(r.id)?.has(fold)) return content();
+  return html`<div class="lazy" data-src="/fragments/requests/${encodeURIComponent(r.id)}/folds/${encodeURIComponent(fold)}"></div>`;
+}
+
 export function commandFields(commands: object[], back: string): Html {
   return html`${commands.map((c) => html`<input type="hidden" name="command" value="${JSON.stringify(c)}">`)}<input type="hidden" name="back" value="${back}">`;
 }

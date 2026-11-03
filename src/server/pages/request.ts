@@ -14,6 +14,7 @@ import {
   elapsed,
   enterBugUrl,
   metaBugUrl,
+  foldContent,
   formatCost,
   formatDate,
   groupLabel,
@@ -65,7 +66,10 @@ export function renderRequest(r: RequestState, ctx: RenderContext, open = ctx.op
       }</span>
       ${actionsSummary(r, ctx)}
     </summary>
-    ${open ? reopen(renderRequestBody(r, ctx), ctx.openFolds?.get(r.id)) : html`<div class="rbody" data-lazy><a href="${requestUrl(r.id)}">Open this request</a></div>`}
+    ${
+      // Active ones come with their rows (what they hold is fetched as it opens); queued and finished ones when opened.
+      open || sectionOf(r) === "active" ? reopen(renderRequestBody(r, ctx), ctx.openFolds?.get(r.id)) : html`<div class="rbody" data-lazy><a href="${requestUrl(r.id)}">Open this request</a></div>`
+    }
   </details>`;
 }
 
@@ -146,9 +150,15 @@ export function renderRequestBody(r: RequestState, ctx: RenderContext): Html {
     ${splitLine(r)}
     ${pushes.length ? html`${active.length ? html`<h3>Try pushes${planned.length > 1 ? html` ${approvePushControls(r, planned, back)}` : null}</h3><div class="rows">${active.map((p) => pushRowOf(r, p, ctx))}</div>` : null}${
       finished.length || declined.length
-        ? html`<details class="fold pushes" data-fold="finished-pushes"><summary>${plural(finished.length, active.length ? "finished try push" : "try push")}${declined.length ? `, ${declined.length} declined or withdrawn` : ""}</summary><div class="rows">${finished.map((p) => pushRowOf(r, p, ctx))}${
-            declined.length ? html`<details class="fold" data-fold="declined-pushes"><summary>${declined.length} declined or withdrawn</summary><div class="rows">${declined.map((p) => pushRowOf(r, p, ctx))}</div></details>` : null
-          }</div></details>`
+        ? html`<details class="fold pushes" data-fold="finished-pushes"><summary>${plural(finished.length, active.length ? "finished try push" : "try push")}${declined.length ? `, ${declined.length} declined or withdrawn` : ""}</summary>${foldContent(
+            r,
+            ctx,
+            "finished-pushes",
+            () =>
+              html`<div class="rows">${finished.map((p) => pushRowOf(r, p, ctx))}${
+                declined.length ? html`<details class="fold" data-fold="declined-pushes"><summary>${declined.length} declined or withdrawn</summary>${foldContent(r, ctx, "declined-pushes", () => html`<div class="rows">${declined.map((p) => pushRowOf(r, p, ctx))}</div>`)}</details>` : null
+              }</div>`,
+          )}</details>`
         : null
     }` : null}${stacks.length === 1 ? stackSubmit(r, stacks[0]) : null}${pushes.length || stacks.length === 1 ? html`<hr class="part">` : null}
     ${r.metaBug && !(hasBug(r.metaBug) && (stacks.length || landed.length)) ? metaBugLine(r, back, ctx) : null}
@@ -318,7 +328,8 @@ interface Row {
   warn?: Html | null; // what you should know before answering, under its state
   ask?: Html; // what a group needing you asks, with its buttons: in sight without opening the row
   under?: Html | null; // opened, right under its name: a patch's bug to file
-  body: Html;
+  body: Html | (() => Html); // a function: rendered once opened (see foldContent)
+  lazy?: { r: RequestState; ctx: RenderContext };
   you?: boolean; // waiting for you: the whole row stands out
   bucket?: Bucket; // its color on its left edge, as in the progress bar
 }
@@ -329,7 +340,9 @@ function row(x: Row): Html {
   const lines = html`<span class="state">${x.state}</span>${x.flag ? html`<span class="rowflag">${x.flag}</span>` : null}${x.trust ? html`<span class="trust">${x.trust}</span>` : null}`;
   const d = html`<details class="row${x.you ? " you" : null}${x.bucket ? ` b-${x.bucket.replaceAll(" ", "-")}` : null}" ${x.anchor} data-fold="${x.fold}"><summary><span class="st ${x.cls}" title="${x.tip ?? ICON_TIPS[x.cls]}"></span><span class="name" title="${x.title}">${x.name}</span><span class="end">${x.end}</span>${lines}${
     x.warn ? html`<span class="warn">${x.warn}</span>` : null
-  }</summary>${x.under ? html`<div class="under">${x.under}<div class="lines">${lines}</div></div>` : null}<div class="rowbody">${x.body}</div></details>`;
+  }</summary>${x.under ? html`<div class="under">${x.under}<div class="lines">${lines}</div></div>` : null}<div class="rowbody">${
+    typeof x.body === "function" ? (x.lazy ? foldContent(x.lazy.r, x.lazy.ctx, x.fold, x.body) : x.body()) : x.body
+  }</div></details>`;
   return x.ask ? html`<div class="asks">${d}<div class="ask-you">${x.ask}</div></div>` : d;
 }
 
@@ -378,7 +391,7 @@ function closedSection(...parts: (Html | null)[]): Html | null {
 }
 
 function closedFold(r: RequestState, closed: ItemView[], ctx: RenderContext): Html | null {
-  return closed.length ? html`<details class="fold" data-fold="closed-groups"><summary>${closed.length} closed</summary><div class="rows compact-rows">${closed.map((i) => itemRows(r, i, ctx))}</div></details>` : null;
+  return closed.length ? html`<details class="fold" data-fold="closed-groups"><summary>${closed.length} closed</summary>${foldContent(r, ctx, "closed-groups", () => html`<div class="rows compact-rows">${closed.map((i) => itemRows(r, i, ctx))}</div>`)}</details>` : null;
 }
 
 // Once a group has a reviewed patch, the patch's row replaces the group's.
@@ -471,7 +484,8 @@ function groupRow(r: RequestState, i: ItemView, ctx: RenderContext): Html {
     state: stateText(r, i, ctx),
     trust: trustLine(r, i, ctx),
     ask: askBlock(r, i, ctx, patches.filter((p) => isDraft(r, p))),
-    body: html`${failure(r, i)}${investigationHtml(i) ? html`<h4 class="part">The fix</h4>${investigationHtml(i)}` : null}${debugCommitsHtml(r, i)}${talkBox(r, i, ctx)}${sentence.ask ? null : sentence.controls ? html`<div class="jobctl">${sentence.controls}</div>` : null}${patches
+    lazy: { r, ctx },
+    body: () => html`${failure(r, i)}${investigationHtml(i) ? html`<h4 class="part">The fix</h4>${investigationHtml(i)}` : null}${debugCommitsHtml(r, i)}${talkBox(r, i, ctx)}${sentence.ask ? null : sentence.controls ? html`<div class="jobctl">${sentence.controls}</div>` : null}${patches
       .filter((p) => isDraft(r, p))
       .map((p) => html`<div>Draft patch, its critical review hasn't passed yet: “${patchTitle(p)}” ${viewLink(r, p)}</div>`)}${patches
       .filter((p) => isDropped(r, p))
@@ -623,7 +637,8 @@ function patchRow(r: RequestState, p: PatchView, ctx: RenderContext): Html {
       return group || rest.length ? html`${group}${rest.map((n) => renderAction(r, n, ctx))}` : undefined;
     })(),
     under: bugBoxShown ? bugDraftBox(r, p, back) : null,
-    body: html`${item ? whyFold(r, item) : null}${testPlanSection(r, p, back)}${yourComments(r, p)}${p.deps.map((d) => depLine(r, d))}${controls && !sentence?.ask ? html`<div class="jobctl">${controls}</div>` : null}${reviewBox(r, p, p.interdiffFile === undefined ? undefined : ctx.interdiff?.(p))}${leftFindings(r, p, ctx)}${
+    lazy: { r, ctx },
+    body: () => html`${item ? whyFold(r, item) : null}${testPlanSection(r, p, back)}${yourComments(r, p)}${p.deps.map((d) => depLine(r, d))}${controls && !sentence?.ask ? html`<div class="jobctl">${controls}</div>` : null}${reviewBox(r, p, p.interdiffFile === undefined ? undefined : ctx.interdiff?.(p))}${leftFindings(r, p, ctx)}${
       item ? html`<h4 class="part">What the factory did</h4>${itemJobs(r, item, ctx)}${talkBox(r, item, ctx, p)}` : null
     }`,
   });
@@ -768,7 +783,7 @@ function requestJobs(r: RequestState, ctx: RenderContext): Html | null {
   const jobs = Object.values(r.jobs)
     .filter((j) => j.item === undefined && j.endedAt !== undefined)
     .sort((a, b) => b.startedAt.localeCompare(a.startedAt));
-  return jobs.length ? html`<details class="fold" data-fold="jobs"><summary>${plural(jobs.length, "task")}</summary><div class="jobs">${jobs.map((j) => jobLine(r, j, ctx))}</div></details>` : null;
+  return jobs.length ? html`<details class="fold" data-fold="jobs"><summary>${plural(jobs.length, "task")}</summary>${foldContent(r, ctx, "jobs", () => html`<div class="jobs">${jobs.map((j) => jobLine(r, j, ctx))}</div>`)}</details>` : null;
 }
 
 function bugDraftBox(r: RequestState, p: PatchView, back: string): Html {
@@ -984,7 +999,9 @@ function pushRowOf(r: RequestState, p: PushView, ctx: RenderContext): Html {
     trust: revisedText(r, p),
     warn: waiting ? dryRunWarnings(r, p) : null,
     // While it waits for you, what it would run; once made, what came of it, its jobs and command folded under it.
-    body: html`${sinceSection(r, p, ctx)}${waiting ? null : pushAnalysis(r, p)}${
+    // While it waits for you, what it would run is in sight once opened, without a fetch.
+    ...(waiting ? {} : { lazy: { r, ctx } }),
+    body: () => html`${sinceSection(r, p, ctx)}${waiting ? null : pushAnalysis(r, p)}${
       waiting ? pushJobs(p) : html`<details class="fold" data-fold="pushjobs-${p.id}"><summary>Its jobs, commits and command</summary>${pushJobs(p)}</details>`
     }${revisable(r, p) ? reviseBox(r, p) : null}`,
   });
