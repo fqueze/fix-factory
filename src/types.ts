@@ -210,7 +210,7 @@ export type Event =
   | (EventBase & { type: "try-progress"; push: PushId; done: number; total: number; failures: number; tests?: { done: number; total: number } })
   | (EventBase & { type: "try-job-failed"; push: PushId; taskId: string; retryId?: number; jobName: string; platform: string; tier?: number; result: string })
   | (EventBase & { type: "try-finished"; push: PushId; result: "green" | "failures"; summary: string })
-  | (EventBase & { type: "review-status"; patch: PatchId; revision: number; status: string; reviewers: ReviewerStatus[]; comments: InlineComment[]; diff?: PhabDiff; author?: string; reopenedAt?: Iso })
+  | (EventBase & { type: "review-status"; patch: PatchId; revision: number; status: string; reviewers: ReviewerStatus[]; comments: InlineComment[]; diff?: PhabDiff; author?: string; reopenedAt?: Iso; parent?: number })
   | (EventBase & { type: "reply-draft"; patch: PatchId; commentId: number; text: string })
   | (EventBase & { type: "needs-user"; key: string; action: string; detail: string; item?: ItemId; patch?: PatchId; push?: PushId; stack?: string; job?: JobId })
   | (EventBase & { type: "user-done"; key: string; byFactory?: true; reorg?: true }) // clears a needs-user with the same key; byFactory: the factory found it moot, not your answer; reorg: you copied the moz-phab reorg command
@@ -378,7 +378,7 @@ export interface PatchView {
   pastShas?: string[]; // its commit's earlier shas, oldest first
   interdiffFile?: string;
   deps: Dep[]; // deps where this patch is the dependent one
-  review?: { revision: number; status: string; reviewers: ReviewerStatus[]; comments: InlineComment[]; diff?: PhabDiff; author?: string };
+  review?: { revision: number; status: string; reviewers: ReviewerStatus[]; comments: InlineComment[]; diff?: PhabDiff; author?: string; parent?: number }; // parent: the revision under it on Phabricator
   replyDrafts: { commentId: number; text: string }[];
   testPlan?: string; // for its revision's Test Plan field: how the fix was shown to work, a few lines
   testPlanSent?: { revision: number; text: string; t: Iso }; // what you set on its revision

@@ -590,7 +590,8 @@ describe("one fixture per step of docs/MVP.md", () => {
   });
   it("5. stack: patches in stack order, deps, effort and value", () => {
     const h = expanded("r-20261010-xpcshell-cwd");
-    const order = ["p-prefs", "p-storage", "p-copydir", "p-fixture"].map((p) => h.indexOf(`data-patch="${p}"`));
+    // Its top first, as on Phabricator.
+    const order = ["p-fixture", "p-copydir", "p-storage", "p-prefs"].map((p) => h.indexOf(`data-patch="${p}"`));
     assert.deepEqual([...order].sort((a, b) => a - b), order);
     assert.ok(order[0] > 0);
     assert.match(h, /<span class="bug missing" title="[^"]*">no bug yet<\/span> Save the prefs file of test_libPrefs\.js in the temp dir, r=gstoll\./, "only annotation patches go under the meta bug");
@@ -947,10 +948,28 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.ok(landed >= 0 && landed < h.indexOf('id="patch-p-m1"') && landed < h.indexOf('id="patch-p-m2"'));
   });
 
+  it("landed patches are listed as Phabricator lists their stack: by their place in it, its top first", () => {
+    const r = structuredClone(get("r-20261005-newtab"));
+    const ids = Object.values(r.patches).filter((p) => p.item).map((p) => p.id).slice(0, 3);
+    assert.equal(ids.length, 3);
+    // On Phabricator: ids[1] at the bottom, then ids[2], then ids[0] on top.
+    const revs = [101, 102, 103];
+    ids.forEach((id, n) => {
+      const p = r.patches[id];
+      p.revision = revs[n];
+      r.items[p.item!].state = "landed";
+      p.review = { revision: revs[n], status: "published", reviewers: [], comments: [], ...(n === 0 ? { parent: 103 } : n === 2 ? { parent: 102 } : {}) };
+    });
+    for (const st of Object.values(r.stacks)) st.order = st.order.filter((x) => !ids.includes(x));
+    const h = renderRequest(r, ctx, true).value;
+    const at = ids.map((id) => h.indexOf(`data-patch="${id}"`));
+    assert.ok(at.every((x) => x > 0) && at[0] < at[2] && at[2] < at[1], String(at));
+  });
+
   it("landable needs every hard dep landed or landable", () => {
     const h = expanded("r-20261005-newtab");
     const nimbus = h.slice(h.indexOf('data-patch="p-nimbus"'));
-    assert.doesNotMatch(nimbus.slice(0, nimbus.indexOf("</tr>")), /landable/);
+    assert.doesNotMatch(nimbus.slice(0, nimbus.indexOf("</summary>")), /landable/);
   });
 
   it("every request has a Tell the factory box", () => {

@@ -20,6 +20,9 @@ function recordedConduit(): Conduit {
 test("poll: reviewers, inline comments, suggested edits, replies", async () => {
   const [d333041, d329684] = await poll([333041, 329684], recordedConduit());
   assert.equal(d333041.status, "published");
+  // Under it in its stack on Phabricator.
+  assert.equal(d333041.parent, 329684);
+  assert.equal(d329684.parent, undefined);
   assert.deepEqual(d333041.reviewers, [
     { name: "ahal", status: "pending" },
     { name: "jcristau", status: "accepted" },

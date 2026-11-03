@@ -124,7 +124,15 @@ export function renderRequestBody(r: RequestState, ctx: RenderContext): Html {
   // The abandoned groups come last, after what landed.
   const own = (i: ItemView) => Object.values(r.patches).filter((p) => p.item === i.id && !isDropped(r, p));
   // Groups whose patches landed have left their stack.
-  const landed = unstacked.filter((i) => i.state === "landed" || (own(i).length > 0 && own(i).every((p) => isLanded(r, p))));
+  // As Phabricator lists them: by their place in its stack (how many revisions are under them there), its top first.
+  const byRevision = new Map(Object.values(r.patches).filter((p) => p.revision !== undefined).map((p) => [p.revision!, p]));
+  const depth = (p: PatchView, seen = new Set<number>()): number => {
+    const parent = p.review?.parent;
+    if (parent === undefined || seen.has(parent) || !byRevision.has(parent)) return 0;
+    return 1 + depth(byRevision.get(parent)!, seen.add(parent));
+  };
+  const rank = (i: ItemView) => Math.max(-1, ...own(i).map((p) => depth(p)));
+  const landed = unstacked.filter((i) => i.state === "landed" || (own(i).length > 0 && own(i).every((p) => isLanded(r, p)))).sort((a, b) => rank(b) - rank(a));
   const items = unstacked.filter((i) => !landed.includes(i));
   // Newest first, as on Treeherder; those waiting for you are the newest anyway.
   const pushes = Object.values(r.pushes).reverse();
@@ -262,10 +270,14 @@ function stackSection(r: RequestState, s: StackView, ctx: RenderContext, header:
   const meta = r.metaBug && hasBug(r.metaBug) ? r.metaBug : undefined;
   const title = meta ? html`<a class="bug" href="${bugUrl(meta.bug!)}" target="_blank" rel="noopener">Bug ${meta.bug}</a> ${r.metaBug?.draft?.summary ?? s.folder}` : html`${s.folder}`;
   const submitted = patches.some((p) => p.revision !== undefined) && r.step !== "done";
-  return html`${header ? html`<h3 class="stackhead"><span title="Branch ${s.branch}; patches in review order: easy and valuable first, each after its hard deps">${title}</span>${stackViewerLink(r, s)}${stackMenu(r, s, ctx)}</h3>` : null}
+  return html`${header ? html`<h3 class="stackhead"><span title="Branch ${s.branch}; as on Phabricator, its top first: in review order from the bottom up, easy and valuable first, each after its hard deps">${title}</span>${stackViewerLink(r, s)}${stackMenu(r, s, ctx)}</h3>` : null}
     ${r.needsUser.filter((n) => flagItemOf(r, n) === undefined && n.patch === undefined && n.stack === s.id && flagPlaceOf(r, n) !== undefined).map((n) => renderAction(r, n, ctx))}
     ${optionalMetaBug(r, s, ctx)}
-    <div class="rows">${patches.filter((p) => !isDropped(r, p)).map((p) => patchRow(r, p, ctx))}${
+    <div class="rows">${patches
+      .filter((p) => !isDropped(r, p))
+      // As Phabricator lists a stack: its top (last commit) first.
+      .reverse()
+      .map((p) => patchRow(r, p, ctx))}${
       dropped.length ? html`<details class="fold" data-fold="dropped-${s.id}"><summary>${dropped.length} dropped</summary><div class="rows">${dropped.map((p) => patchRow(r, p, ctx))}</div></details>` : null
     }</div>
     ${header ? stackSubmit(r, s, submitted) : null}`;

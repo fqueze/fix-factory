@@ -1633,5 +1633,29 @@
     "after": null
    }
   }
+ },
+ {
+  "method": "edge.search",
+  "params": {
+   "sourcePHIDs": [
+    "PHID-DREV-42hmfhtmjpmmdmxn73ou",
+    "PHID-DREV-5jo35geyazizlxzexbwi"
+   ],
+   "types": [
+    "revision.parent"
+   ]
+  },
+  "result": {
+   "data": [
+    {
+     "sourcePHID": "PHID-DREV-42hmfhtmjpmmdmxn73ou",
+     "edgeType": "revision.parent",
+     "destinationPHID": "PHID-DREV-5jo35geyazizlxzexbwi"
+    }
+   ],
+   "cursor": {
+    "after": null
+   }
+  }
  }
 ]

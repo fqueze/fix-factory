@@ -117,6 +117,7 @@ export interface PollResult {
   comments: PolledComment[];
   diff?: { id: number; commit?: string; created: string }; // its latest diff, and the local commit moz-phab sent it from
   reopenedAt?: string; // its latest reopen after a close (a backout), even one no poll saw it closed before
+  parent?: number; // the revision under it in its stack on Phabricator (how Phabricator lists the stack)
 }
 
 async function names(conduit: Conduit, phids: string[]): Promise<Map<string, string>> {
@@ -164,6 +165,11 @@ export async function poll(revisions: number[], conduit: Conduit = makeConduit()
   if (missing.length) {
     throw new Error(`not found: ${missing.map((id) => "D" + id).join(", ")}`);
   }
+
+  // Its place in its stack, as Phabricator has it.
+  const parentOf = new Map<string, string>();
+  for (const e of await searchAll(conduit, "edge.search", { sourcePHIDs: revs.map((r) => r.phid), types: ["revision.parent"] })) parentOf.set(e.sourcePHID, e.destinationPHID);
+  const idOfRev = new Map<string, number>(revs.map((r) => [r.phid as string, r.id as number]));
 
   const txnsByRev = new Map<number, any[]>();
   for (const id of revisions) {
@@ -250,6 +256,7 @@ export async function poll(revisions: number[], conduit: Conduit = makeConduit()
           }
         : {}),
       ...(closed && reopened > closed ? { reopenedAt: new Date(reopened * 1000).toISOString() } : {}),
+      ...(idOfRev.has(parentOf.get(r.phid) ?? "") ? { parent: idOfRev.get(parentOf.get(r.phid)!) } : {}),
     };
   });
 }

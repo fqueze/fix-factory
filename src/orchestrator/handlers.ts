@@ -288,6 +288,7 @@ export function handleFinished(input: HandlerInput): HandlerResult {
           ...(r.diff ? { diff: r.diff } : {}),
           ...(r.author ? { author: r.author } : {}),
           ...(r.reopenedAt ? { reopenedAt: r.reopenedAt } : {}),
+          ...(r.parent ? { parent: r.parent } : {}),
         });
       }
       break;
