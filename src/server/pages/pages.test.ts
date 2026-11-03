@@ -203,6 +203,7 @@ describe("one fixture per step of docs/MVP.md", () => {
     const h = renderRequest(r, ctx, true).value;
     const row = rowOf(h, "push-unskip");
     assert.match(row, /<span class="state">approved, pushing for <span data-since/);
+    assert.match(row, /<span class="st run" title="Being pushed"><\/span>/, "a push's icon says what it means for a push");
     assert.doesNotMatch(row, /approve-push|Revise…|Discard/);
     assert.doesNotMatch(h.slice(0, h.indexOf("Try pushes")), /push to try/, "its job is on its row");
     // Once Lando took it: what it waits for, and where to follow it.
@@ -222,9 +223,9 @@ describe("one fixture per step of docs/MVP.md", () => {
 
   it("4. investigate and fix: item states, running agent, recovery plan with a checkbox per command", () => {
     const h = expanded("r-20261013-tab-failures");
-    assert.match(rowOf(h, "item-i-spinner"), /<span class="st run"><\/span>[^]*<span class="state"><span class="working">investigating · <span data-since="[^"]+">6 h<\/span><\/span><\/span>/);
-    assert.match(rowOf(h, "item-i-drag"), /<span class="st find"><\/span>[^]*<span class="state">stalled: nothing running: the drag session is still left open on failure<\/span>/);
-    assert.match(rowOf(h, "item-i-mute"), /<span class="st closed"><\/span>[^]*<span class="state">closed by you: bug 2081413, dao active<\/span>/);
+    assert.match(rowOf(h, "item-i-spinner"), /<span class="st run" title="The factory is working on it"><\/span>[^]*<span class="state"><span class="working">investigating · <span data-since="[^"]+">6 h<\/span><\/span><\/span>/);
+    assert.match(rowOf(h, "item-i-drag"), /<span class="st find" title="Needs you"><\/span>[^]*<span class="state">stalled: nothing running: the drag session is still left open on failure<\/span>/);
+    assert.match(rowOf(h, "item-i-mute"), /<span class="st closed" title="Closed: dropped, left as-is or handed back"><\/span>[^]*<span class="state">closed by you: bug 2081413, dao active<\/span>/);
     assert.match(rowOf(h, "item-i-pin"), /<span class="state">waiting for a build slot \(0 builds running\)<\/span>/);
     assert.doesNotMatch(h, /<span class="state">(review findings|handed back|investigating)</, "no state names");
     const boxes = h.match(/<input type="checkbox" name="command"[^>]*>/g) ?? [];
@@ -383,7 +384,7 @@ describe("one fixture per step of docs/MVP.md", () => {
     const state = (item: string, html = h) => /<span class="state">(.*?)<\/span><\/summary>/.exec(rowOf(html, `item-${item}`))?.[1];
     assert.equal(state("i-race"), "needs you: critical reviews didn&#39;t pass");
     assert.match(rowOf(h, "item-i-race"), /<\/details><div class="ask-you"><p>Its critical reviews still find problems[^<]*<\/p><ul class="findings"><li>[^<]+<\/li>/, "the question in sight, without opening the row");
-    assert.match(rowOf(h, "item-i-race"), /<span class="st find"><\/span>/);
+    assert.match(rowOf(h, "item-i-race"), /<span class="st find" title="Needs you"><\/span>/);
     assert.match(rowOf(h, "item-i-race"), />Accept the patch as it is</);
     assert.equal(state("i-idle"), "stalled: nothing running");
     assert.match(rowOf(h, "item-i-idle"), /title="Resumes its author's session with your message; its patch then goes through lint and critical review again">Send</);
