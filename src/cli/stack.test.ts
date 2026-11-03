@@ -278,7 +278,9 @@ test("interdiff of a rebase over a conflicting upstream change shows how the con
   const neu = await repo.commit({ "a.txt": lines(20, { 2: "resolved", 18: "elsewhere" }) }, "new");
   const r = await interdiff(repo.dir, old, neu);
   assert.equal(r.method, "conflicts-resolved");
-  assert.match(r.diff, /^-<<<<<<< [^]*^-upstream$[^]*^-=======$[^]*^-old$[^]*^->>>>>>> [^]*^\+resolved$/m);
+  assert.match(r.diff, /^# a\.txt conflicted with the new base/);
+  assert.match(r.diff, /^-old$\n^\+resolved$/m);
+  assert.doesNotMatch(r.diff, /<<<<<<<|=======|>>>>>>>/);
   assert.doesNotMatch(r.diff, /elsewhere/);
 });
 
