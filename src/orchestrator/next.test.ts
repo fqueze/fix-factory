@@ -2698,7 +2698,7 @@ describe("10. backouts", () => {
   it("its fix shown by a local reproduction of the failure needs no try push", () => {
     const sc = backedOut();
     const told = sc.view().jobs.find((j) => j.purpose.key.startsWith("author:i-test-b:backout:"))!.purpose.key;
-    sc.complete(told, { report: fixed([sha("5")], { reproduction: { reproduced: true, where: "locally", before: "2 of 2 at 1600x1200", after: "0 of 6" } }) });
+    sc.complete(told, { report: fixed([sha("5")], { disagreement: null, reproduction: { reproduced: true, where: "locally", before: "2 of 2 at 1600x1200", after: "0 of 6" } }) });
     sc.settle();
     assert.equal(sc.state().backouts["p-test-b"].verified, true);
     assert.ok(!sc.state().verifyAsked?.some((t) => t.includes("after its backout")));

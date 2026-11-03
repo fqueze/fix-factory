@@ -3021,7 +3021,7 @@ class Planner {
       // reproduction of this failure (not the one it had) needs no try push.
       if (run && succeeded(run)) {
         const r = this.rep<InvestigateReport>(run);
-        if (r.disagreement !== undefined || this.unchangedBy(item, run)) {
+        if (r.disagreement || this.unchangedBy(item, run)) {
           this.event(this.ev("backout", { patch: pid, at: b.at, reason: b.reason, culprit: false }));
           continue;
         }
