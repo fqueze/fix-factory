@@ -208,7 +208,7 @@ details.reopen[open] > summary { display: none; }
 .rprog > .needs-you, .progress > .needs-you { color: var(--serious); font-weight: 600; }
 .rprog > .landed, .progress > .landed { color: var(--good); }
 .rprog > .ready, .progress > .ready, .rprog > .submitted, .progress > .submitted { color: var(--accent); }
-.rprog > .closed, .progress > .closed { color: var(--text-muted); }
+.rprog > .closed, .progress > .closed, .rprog > .handed-over { color: var(--text-muted); }
 /* One row per group or patch: its name and cost on the first line, where it stands under it, the rest when opened. */
 .rows { margin: 8px -12px 0; }
 .rows .rows { margin: 0; }

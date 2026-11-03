@@ -5,7 +5,7 @@ import { describe, it } from "node:test";
 import { FixtureStateSource } from "../state-source.ts";
 import type { RequestState } from "../../types.ts";
 import { jobLabel, linkify, pushStatus, type RenderContext } from "./common.ts";
-import { renderOverview, renderRecentPushes } from "./overview.ts";
+import { renderOverview, renderRecentPushes, renderStrip } from "./overview.ts";
 import { IDLE, itemBucket, progressLine, requestProgress, runningSentence } from "./progress.ts";
 import { configTable, parseConfig, renderRequest, requestSummary } from "./request.ts";
 import { flagText } from "./actions.ts";
@@ -87,7 +87,7 @@ describe("overview", () => {
     assert.match(page, /agents <b>10\/10<\/b>/);
     // Hovering the count lists what runs, each linked to its row.
     assert.match(page, /<span class="running" tabindex="0">agents <b>10\/10<\/b><span class="running-list"><a href="#(patch|item|req)-[^"]+"><b>[^<]+<\/b> /);
-    assert.match(page, /<span class="progress"><span class="pbar">(<span class="[a-z-]+" style="flex-grow:\d+"><\/span>){7}<\/span><span class="needs-you">19 need you<\/span> · <span class="working">8 working<\/span> · <span class="landable">2 landable<\/span> · <span class="submitted">2 submitted<\/span> · <span class="ready">8 ready<\/span> · <span class="pending">3 pending<\/span> · <span class="landed">3 landed<\/span> · <span class="closed">6 closed<\/span><\/span>/, "landed: the finished requests' too");
+    assert.match(page, /<span class="progress"><span class="pbar">(<span class="[a-z-]+" style="flex-grow:\d+"><\/span>){7}<\/span><span class="needs-you">19 need you<\/span> · <span class="working">8 working<\/span> · <span class="landable">2 landable<\/span> · <span class="submitted">2 submitted<\/span> · <span class="ready">8 ready<\/span> · <span class="pending">3 pending<\/span> · <span class="landed">3 landed<\/span><\/span>/, "landed: the finished requests' too; closed ones aren't progress");
     assert.ok(page.includes(cmd({ cmd: "tell-factory" })));
     assert.doesNotMatch(page, /New request|new-request/);
     assert.match(page, /<link rel="icon" href="data:image\/svg\+xml,[^"]*🏭/);
@@ -298,7 +298,7 @@ describe("one fixture per step of docs/MVP.md", () => {
     const h = expanded("r-20261013-tab-failures");
     const said = "restart the browser_pinnedTabs.js item, it has been waiting for a build slot since this morning";
     const summary = h.slice(0, h.indexOf("</summary>"));
-    assert.match(summary, /<span class="needs-you">2 need you<\/span> · <span class="working">1 working<\/span> · <span class="ready">1 ready<\/span> · <span class="pending">1 pending<\/span> · <span class="closed">1 closed<\/span><\/span> · answering you<\/span>/);
+    assert.match(summary, /<span class="needs-you">2 need you<\/span> · <span class="working">1 working<\/span> · <span class="ready">1 ready<\/span> · <span class="pending">1 pending<\/span><\/span> · answering you<\/span>/);
     assert.ok(!summary.includes('data-key="recovery:j-recover"'), "its answer isn't in the summary");
     const body = h.slice(h.indexOf('<div class="rbody">'));
     const answer = body.indexOf('<div class="action reply" data-key="recovery:j-recover">');
@@ -997,7 +997,13 @@ describe("a burndown with closed groups, running agents and a dropped patch", ()
     assert.doesNotMatch(h, /data-patch=/);
     assert.match(rowOf(h, "item-i-annotations"), /<div>Dropped patch: “Convert scoping skip-if[^”]*” <a href="\/requests\/[^"]+\/patches\/p-runif\/view"/);
     assert.match(rowOf(h, "item-i-annotations"), /<span class="state">closed: Dropped the run-if commit/, "the reason is the group's own line");
-    assert.match(h, /<span class="closed">4 closed<\/span>/);
+    assert.doesNotMatch(h, /<span class="closed">/, "closed groups aren't counted in its progress");
+    // Handed over (taken over, moved): counted on its line, not the factory's.
+    const r = structuredClone(get(ID));
+    r.items["i-annotations"].state = "taken over";
+    const head = renderRequest(r, ctx, false).value;
+    assert.match(head.slice(0, head.indexOf("</summary>")), /<span class="handed-over">1 handed over<\/span>/);
+    assert.doesNotMatch(String(renderStrip([r], ctx)), /handed over/);
     assert.doesNotMatch(h, /<h3>Patches<\/h3>/, "no heading over dropped patches alone");
   });
   it("names tests relative to the request's folder, with the full path in its tooltip and the message under it", () => {

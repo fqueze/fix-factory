@@ -190,8 +190,8 @@ function stalledControls(r: RequestState, i: ItemView): Html {
 // Where each group stands, counted per request (and for the whole factory) and drawn as a bar.
 // "landable" and "submitted" (ready, all its patches on Phabricator) are only counted in a request's progress: their
 // rows are ready ones.
-export type Bucket = "working" | "needs you" | "waiting for try" | "landable" | "submitted" | "ready" | "pending" | "landed" | "closed";
-export const BUCKETS: Bucket[] = ["needs you", "working", "waiting for try", "landable", "submitted", "ready", "pending", "landed", "closed"];
+export type Bucket = "working" | "needs you" | "waiting for try" | "landable" | "submitted" | "ready" | "pending" | "landed" | "handed over" | "closed";
+export const BUCKETS: Bucket[] = ["needs you", "working", "waiting for try", "landable", "submitted", "ready", "pending", "landed", "handed over", "closed"];
 
 const READY: ItemState[] = ["reviewed", "in stack", "waiting for review", "fixed", "landed"];
 
@@ -222,10 +222,15 @@ export type Progress = Record<Bucket, number>;
 // ⚑s (recovery plans, refused commands…) need you too. Its own jobs aren't groups: the summary next to it says what
 // they do.
 export function requestProgress(r: RequestState, ctx: RenderContext): Progress {
-  const p: Progress = { "needs you": 0, working: 0, "waiting for try": 0, landable: 0, submitted: 0, ready: 0, pending: 0, landed: 0, closed: 0 };
+  const p: Progress = { "needs you": 0, working: 0, "waiting for try": 0, landable: 0, submitted: 0, ready: 0, pending: 0, landed: 0, "handed over": 0, closed: 0 };
   for (const i of Object.values(r.items)) {
     const b = itemBucket(r, i, ctx);
     const patches = Object.values(r.patches).filter((x) => x.item === i.id && !isDropped(r, x));
+    // Closed by moving it to another request or your taking it over: handed over, which a request's line says.
+    if (b === "closed" && (i.state === "taken over" || r.movedTo?.[i.id])) {
+      p["handed over"]++;
+      continue;
+    }
     if (!patches.length || b !== "ready") {
       p[b] += Math.max(1, patches.length);
       continue;
@@ -262,8 +267,9 @@ export function workLabel(j: JobView): Html {
 const BAR: Bucket[] = ["landed", "landable", "submitted", "ready", "waiting for try", "needs you", "working", "pending"];
 
 // A bar with one segment per bucket, then "2 need you · 1 working · 3 ready · 4 pending · 5 closed".
-export function progressLine(p: Progress, submitted = ""): Html {
-  const shown = BUCKETS.filter((b) => p[b] > 0);
+// Closed groups aren't progress: never counted. Handed over ones only on a request's line (withHandedOver).
+export function progressLine(p: Progress, submitted = "", withHandedOver = true): Html {
+  const shown = BUCKETS.filter((b) => p[b] > 0 && b !== "closed" && (withHandedOver || b !== "handed over"));
   if (!shown.length) {
     return html`<span class="sub">nothing to work on yet</span>`;
   }
@@ -275,7 +281,7 @@ export function progressLine(p: Progress, submitted = ""): Html {
 }
 
 export function sumProgress(list: Progress[]): Progress {
-  const sum: Progress = { "needs you": 0, working: 0, "waiting for try": 0, landable: 0, "submitted": 0, ready: 0, pending: 0, landed: 0, closed: 0 };
+  const sum: Progress = { "needs you": 0, working: 0, "waiting for try": 0, landable: 0, "submitted": 0, ready: 0, pending: 0, landed: 0, "handed over": 0, closed: 0 };
   for (const p of list) {
     for (const b of BUCKETS) {
       sum[b] += p[b];

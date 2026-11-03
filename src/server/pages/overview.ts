@@ -43,7 +43,7 @@ export function renderStrip(requests: RequestState[], ctx: RenderContext): Html 
     ${running("builds", builds, ctx.maxBuilds, ctx)}
     ${ctx.freeDiskGB === undefined ? null : html`<span class="${ctx.freeDiskGB < 100 ? "disk-low" : ""}" title="Free space for worktrees; none is created below 20 GB">disk <b>${diskSize(ctx.freeDiskGB)}</b> free</span>`}
     <a href="/feedback" target="_blank">agents' feedback</a>
-    <span class="progress">${progressLine(progress)}</span>
+    <span class="progress">${progressLine(progress, "", false)}</span>
   </div>`;
 }
 
