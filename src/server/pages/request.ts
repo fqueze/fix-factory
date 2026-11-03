@@ -852,12 +852,18 @@ export function diff(text: string): Html {
 // The latest critical review's findings when no run of its author took them up (nits once it's submitted): yours to
 // take or leave, rather than gone unseen.
 function leftFindings(r: RequestState, p: PatchView, ctx: RenderContext): Html | null {
+  // Landed or abandoned: too late for them.
+  if (p.review?.status === "published" || p.review?.status === "abandoned") return null;
   const review = Object.values(r.jobs).findLast((j) => j.name === "review-patch" && j.purpose?.patch === p.id && j.exitCode === 0);
   if (!review || Object.values(r.jobs).some((j) => j.item === p.item && j.purpose?.key.startsWith("author:") && j.startedAt > review.startedAt)) return null;
   const text = ctx.readData?.(`requests/${r.id}/reports/${review.job}.json`);
   const report = text === undefined ? undefined : (JSON.parse(text) as ReviewPatchReport);
   if (report?.verdict !== "findings") return null;
-  return html`<h4 class="part">Critical review (Opus): not sent to its author</h4><ul class="findings">${report.findings.map(
+  const line = (f: ReviewPatchReport["findings"][number]) => `${f.severity}${f.file ? ` (${f.file}${f.line ? `:${f.line}` : ""})` : ""}: ${f.text}`;
+  const message = `A critical reviewer left these on your patch; address them by amending your commit, or say in one line why not:\n${report.findings.map((f) => `- ${line(f)}`).join("\n")}`;
+  const item = p.item ? r.items[p.item] : undefined;
+  const send = item && talkBox(r, item, ctx, p) ? html`<form class="inline cmd" method="post" action="/api/commands">${commandFields([{ cmd: "comment-fix", request: r.id, patch: p.id, text: message }], requestUrl(r.id))}<button class="btn small" title="Resumes its author's session with these findings; its patch then goes through lint and critical review again">Send to its author</button></form>` : null;
+  return html`<h4 class="part">Critical review (Opus): not sent to its author${send}</h4><ul class="findings">${report.findings.map(
     (f) => html`<li><span class="sub">${f.severity}${f.file ? html` · <span class="mono">${f.file}${f.line ? `:${f.line}` : ""}</span>` : null}</span> ${f.text}</li>`,
   )}</ul>`;
 }

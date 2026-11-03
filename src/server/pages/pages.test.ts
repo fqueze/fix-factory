@@ -727,9 +727,19 @@ describe("one fixture per step of docs/MVP.md", () => {
     const r = structuredClone(get("r-20261007-focus"));
     const item = r.patches["p-focus"].item;
     r.jobs["j-rev"] = { job: "j-rev", kind: "agent", name: "review-patch", item, cwd: "/wt", cmd: [], startedAt: "2026-10-07T10:00:00.000Z", endedAt: "2026-10-07T10:05:00.000Z", exitCode: 0, purpose: { key: "review:p-focus:j-a", what: "review", patch: "p-focus" } } as never;
+    // An earlier author run: a session to send them to.
+    r.jobs["j-a"] = { job: "j-a", kind: "agent", name: "investigate-and-fix", item, cwd: "/wt", cmd: [], startedAt: "2026-10-07T09:00:00.000Z", endedAt: "2026-10-07T09:30:00.000Z", exitCode: 0, sessionId: "s", purpose: { key: `author:${item}:initial`, what: "author" } } as never;
+    r.items[item!].jobs.push("j-a");
+    r.needsUser = [];
     const report = JSON.stringify({ verdict: "findings", findings: [{ severity: "nit", file: "a.js", line: 3, text: "Name it better." }], feedback: [] });
     const c = { ...ctx, readData: (rel: string) => (rel === "requests/r-20261007-focus/reports/j-rev.json" ? report : undefined) };
-    assert.match(rowOf(renderRequest(r, c, true).value, "patch-p-focus"), /Critical review \(Opus\): not sent to its author<\/h4><ul class="findings"><li><span class="sub">nit · <span class="mono">a.js:3<\/span><\/span> Name it better.<\/li>/);
+    assert.match(rowOf(renderRequest(r, c, true).value, "patch-p-focus"), /Critical review \(Opus\): not sent to its author(<form[^]*?Send to its author<\/button><\/form>)?<\/h4><ul class="findings"><li><span class="sub">nit · <span class="mono">a.js:3<\/span><\/span> Name it better.<\/li>/);
+    const row = rowOf(renderRequest(r, c, true).value, "patch-p-focus")!;
+    assert.match(row, /&quot;cmd&quot;:&quot;comment-fix&quot;[^"]*Name it better\.[^]*?Send to its author<\/button>/);
+    // Landed: too late for them.
+    const landed = structuredClone(r);
+    landed.patches["p-focus"].review = { revision: 5, status: "published", reviewers: [], comments: [] };
+    assert.doesNotMatch(rowOf(renderRequest(landed, c, true).value, "patch-p-focus")!, /not sent to its author/);
     // Its author ran after it: the findings went to it.
     r.jobs["j-auth"] = { job: "j-auth", kind: "agent", name: "investigate-and-fix", item, cwd: "/wt", cmd: [], startedAt: "2026-10-07T10:06:00.000Z", purpose: { key: `author:${item}:nits:j-a`, what: "author" } } as never;
     assert.doesNotMatch(rowOf(renderRequest(r, c, true).value, "patch-p-focus"), /not sent to its author/);
