@@ -91,6 +91,10 @@ details.row[open]:has(> .under) .bug.tofile { background: var(--tofile-bg); bord
 .st.wait::before { content: "⧗"; color: var(--text-muted); }
 .st.find::before { content: "↺"; color: var(--serious); }
 .st.ok::before { content: "✓"; color: var(--good); font-weight: 700; }
+/* As Phabricator shows its revisions. */
+.st.accepted::before { content: "✓"; color: var(--good); font-weight: 700; }
+.st.review::before { content: "</>"; color: var(--text-muted); font-family: monospace; font-size: 10px; letter-spacing: -1px; }
+.st.landed::before { content: "☑"; color: var(--text-muted); }
 .st.closed { color: var(--text-muted); }
 .st.closed::before { content: "–"; }
 .rv { display: inline-block; font-size: 12px; white-space: nowrap; margin: 0 6px 2px 0; }

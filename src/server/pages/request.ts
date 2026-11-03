@@ -389,6 +389,12 @@ function stateText(r: RequestState, i: ItemView, ctx: RenderContext): Html {
 }
 
 // A ready group or patch gets the ✓, even while it waits for the rest of its stack.
+// A ready patch on Phabricator gets its icon there: accepted (✓), waiting for review (</>), landed (☑).
+function phabClass(p: PatchView, cls: StateClass): StateClass {
+  if (cls !== "ok") return cls;
+  return ({ published: "landed", accepted: "accepted", "needs-review": "review" } as const)[p.review?.status as "published" | "accepted" | "needs-review"] ?? cls;
+}
+
 function rowClass(r: RequestState, i: ItemView, ctx: RenderContext): StateClass {
   return itemBucket(r, i, ctx) === "ready" ? "ok" : itemSentence(r, i, ctx).cls;
 }
@@ -536,7 +542,7 @@ function patchRow(r: RequestState, p: PatchView, ctx: RenderContext): Html {
     anchor: html`id="patch-${p.id}" data-patch="${p.id}"`,
     fold: `patch-${p.id}`,
     bucket: item ? (landable && itemBucket(r, item, ctx) === "ready" ? "landable" : itemBucket(r, item, ctx)) : landable ? "landable" : undefined,
-    cls: item ? rowClass(r, item, ctx) : landable ? "ok" : "wait",
+    cls: phabClass(p, item ? rowClass(r, item, ctx) : landable ? "ok" : "wait"),
     name: html`${p.revision ? html`<a class="phab" href="${phabUrl(p.revision)}" title="D${p.revision}" target="_blank" rel="noopener">${PHAB_ICON}</a>` : null}${
       first.id === p.id ? bugLabel(p, ctx) : html`<a class="bug tofile" href="#patch-${first.id}" title="Filed from ${first.title}">same bug</a>`
     } ${patchTitle(p)}`,

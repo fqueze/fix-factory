@@ -669,6 +669,18 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.doesNotMatch(renderRequest(two, ctx, false).value, /on Phabricator/);
   });
 
+  it("a ready patch's icon is its status's on Phabricator: waiting for review, accepted, landed", () => {
+    const r = structuredClone(get("r-20261007-focus"));
+    r.step = "review comments";
+    r.patches["p-focus"].revision = 5;
+    const icon = (status: string) => {
+      r.patches["p-focus"].review = { revision: 5, status, reviewers: [{ name: "smaug", status: status === "needs-review" ? "pending" : "accepted" }], comments: [] };
+      r.needsUser = [];
+      return /<span class="st ([a-z]+)"><\/span>/.exec(rowOf(renderRequest(r, ctx, true).value, "patch-p-focus")!)?.[1];
+    };
+    assert.deepEqual([icon("needs-review"), icon("accepted"), icon("published")], ["review", "accepted", "landed"]);
+  });
+
   it("8. submit: checks pass, stack-viewer link, moz-phab command to copy", () => {
     const h = expanded("r-20261007-focus");
     assert.doesNotMatch(h, /class="bad"/);
