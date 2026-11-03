@@ -160,8 +160,7 @@ export function renderRequestBody(r: RequestState, ctx: RenderContext): Html {
     }
     ${toStack.some((i) => itemBucket(r, i, ctx) !== "closed") ? html`${stacks.length || loose.length ? html`<h3>Not in a stack yet</h3>` : null}${groupRows(r, toStack, ctx, false)}` : null}
     ${landed.length ? html`<div class="landed-section"><h3 class="landed-head">Landed</h3><div class="landed-rows compact-rows">${groupRows(r, landed, ctx)}</div></div>` : null}
-    ${handOffs(r, ctx)}
-    ${closedFold(r, items.filter((i) => itemBucket(r, i, ctx) === "closed" && i.state !== "taken over"), ctx)}
+    ${closedSection(handOffs(r, ctx), closedFold(r, items.filter((i) => itemBucket(r, i, ctx) === "closed" && i.state !== "taken over"), ctx))}
     ${stacks.length || loose.length || items.length || landed.length ? html`<hr class="part">` : null}
     ${requestJobs(r, ctx)}
     ${notesFold(r, plans)}
@@ -373,6 +372,11 @@ function handOffs(r: RequestState, ctx: RenderContext): Html | null {
   })}<div class="rows">${taken.map((i) => itemRows(r, i, ctx))}</div>`;
 }
 
+// What the factory no longer works on, taken over or closed: one grey edge down its headers and rows, as Landed's.
+function closedSection(...parts: (Html | null)[]): Html | null {
+  return parts.some((x) => x !== null) ? html`<div class="closed-section">${parts}</div>` : null;
+}
+
 function closedFold(r: RequestState, closed: ItemView[], ctx: RenderContext): Html | null {
   return closed.length ? html`<details class="fold" data-fold="closed-groups"><summary>${closed.length} closed</summary><div class="rows compact-rows">${closed.map((i) => itemRows(r, i, ctx))}</div></details>` : null;
 }
@@ -422,6 +426,7 @@ const ICON_TIPS: Record<StateClass, string> = {
   review: "Needs review on Phabricator",
   landed: "Landed (closed on Phabricator)",
   abandoned: "Abandoned on Phabricator",
+  handedover: "Handed over to someone else",
   draft: "Ready to submit: nothing left for the factory to do",
   resubmit: "To resubmit: it changed since Phabricator got it",
   dropped: "Dropped by you: the factory stopped working on it",
@@ -438,8 +443,9 @@ function phabClass(p: PatchView, cls: StateClass): StateClass {
 }
 
 function rowClass(r: RequestState, i: ItemView, ctx: RenderContext): StateClass {
-  // Closed, with Phabricator's icons: the factory resigned (moved, taken over, dropped by you), or abandoned it.
-  if (i.state === "handed back" || i.state === "taken over" || r.movedTo?.[i.id]) return "dropped";
+  // Closed: ✈ handed over to someone else (moved, taken over by you), ✕ dropped by you or closed.
+  if (i.state === "taken over" || r.movedTo?.[i.id]) return "handedover";
+  if (i.state === "handed back") return "dropped";
   if (itemSentence(r, i, ctx).cls === "closed") return "abandoned";
   return itemBucket(r, i, ctx) === "ready" ? "ok" : itemSentence(r, i, ctx).cls;
 }
@@ -600,7 +606,7 @@ function patchRow(r: RequestState, p: PatchView, ctx: RenderContext): Html {
     // "in the stack" says nothing a patch row in its stack's section doesn't.
     // What matters most first (where its review stands, landable, what you need to do): a long list of tests is cut off.
     state: html`${[
-      item ? (item.state === "in stack" ? null : item.state === "waiting for review" && p.review ? html`${reviewText(p)}` : item.state === "waiting for review" && p.revision === undefined ? html`reviewed, not submitted yet` : html`${stateText(r, item, ctx)}`) : p.review ? html`${reviewText(p)}` : null,
+      item ? (item.state === "in stack" || item.state === "landed" ? null : item.state === "waiting for review" && p.review ? html`${reviewText(p)}` : item.state === "waiting for review" && p.revision === undefined ? html`reviewed, not submitted yet` : html`${stateText(r, item, ctx)}`) : p.review ? html`${reviewText(p)}` : null,
       landable ? html`<span class="landable">landable</span>` : null,
       backoutText(r, p),
       r.tryNeeded?.[p.id] && !r.tryNeeded[p.id].verified ? html`<span class="bad" title="Not landable yet: it was changed for ${r.tryNeeded[p.id].why}, and no green try push has carried that change since">needs a green try push</span>` : null,
@@ -610,7 +616,7 @@ function patchRow(r: RequestState, p: PatchView, ctx: RenderContext): Html {
       .filter((x) => x !== null)
       .map((x, i) => (i ? html` · ${x}` : x))}`,
     trust: item ? trustLine(r, item, ctx) : null,
-    flag: own.some(onLine) ? html`${own.filter(onLine).map((n) => html`<span class="flagitem" data-key="${n.key}"><b>⚑ ${n.action}</b>${n.detail ? html` <span class="sub">${n.detail}</span>` : null}${flagControls(r, n, ctx)}</span>`)}` : null,
+    flag: own.some(onLine) ? html`${own.filter(onLine).map((n) => html`<span class="flagitem" data-key="${n.key}"><b>${n.action}</b>${n.detail ? html` <span class="sub">${n.detail}</span>` : null}${flagControls(r, n, ctx)}</span>`)}` : null,
     ask: (() => {
       const group = item && asks ? askBlock(r, item, ctx, [], controls !== null) : undefined;
       const rest = own.filter((n) => !onLine(n));

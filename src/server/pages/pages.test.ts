@@ -693,6 +693,7 @@ describe("one fixture per step of docs/MVP.md", () => {
 
   it("closed groups: Phabricator's abandoned icon, saying why, on one line until hovered, with a grey edge", () => {
     const h = expanded("r-20261015-enterprisepolicies");
+    assert.match(h, /<div class="closed-section"><details class="fold" data-fold="closed-groups">/, "one grey edge down the section, its header included");
     const fold = h.slice(h.indexOf('data-fold="closed-groups"'));
     assert.match(fold, /^data-fold="closed-groups"><summary>\d+ closed<\/summary><div class="rows compact-rows">/);
     assert.match(fold, /<details class="row b-closed"[^>]*><summary><span class="st abandoned" title="Left as-is[^"]*">/);
@@ -768,7 +769,7 @@ describe("one fixture per step of docs/MVP.md", () => {
     const h = renderRequest(r, ctx, true).value;
     assert.match(h, /<details class="row you[^"]*" id="patch-p-focus"/);
     // On a line of the row, not also on its state line.
-    assert.match(rowOf(h, "patch-p-focus")!, /<span class="rowflag"><span class="flagitem" data-key="resubmit:focus:j1"><b>⚑ Post 1 reply, then resubmit D5<\/b> <span class="sub">comments addressed<\/span>/);
+    assert.match(rowOf(h, "patch-p-focus")!, /<span class="rowflag"><span class="flagitem" data-key="resubmit:focus:j1"><b>Post 1 reply, then resubmit D5<\/b> <span class="sub">comments addressed<\/span>/);
     assert.doesNotMatch(rowOf(h, "patch-p-focus")!, /<b class="you">Post 1 reply/);
     assert.match(rowOf(h, "patch-p-focus")!, /<span class="st resubmit"/);
     assert.match(rowOf(h, "patch-p-focus")!, /moz-phab submit --single p-focus00000<\/textarea>/, "only that patch, by its commit");
