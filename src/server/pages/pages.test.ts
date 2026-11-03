@@ -85,6 +85,7 @@ describe("overview", () => {
 
   it("has the header strip and the global Tell the factory box", () => {
     assert.match(page, /agents <b>10\/10<\/b>/);
+    assert.match(page, /<span title="What the agents of every request cost; \$[\d.]+ of it for those not finished">spent <b>\$[\d.]+<\/b><\/span>/);
     // Hovering the count lists what runs, each linked to its row.
     assert.match(page, /<span class="running" tabindex="0">agents <b>10\/10<\/b><span class="running-list"><a href="#(patch|item|req)-[^"]+"><b>[^<]+<\/b> /);
     assert.match(page, /<span class="progress"><span class="pbar">(<span class="[a-z-]+" style="flex-grow:\d+"><\/span>){7}<\/span><span class="needs-you">19 need you<\/span> · <span class="working">8 working<\/span> · <span class="landable">2 landable<\/span> · <span class="submitted">2 submitted<\/span> · <span class="ready">8 ready<\/span> · <span class="pending">3 pending<\/span> · <span class="landed">3 landed<\/span><\/span>/, "landed: the finished requests' too; closed ones aren't progress");

@@ -41,6 +41,7 @@ export function renderStrip(requests: RequestState[], ctx: RenderContext): Html 
   return html`<div class="strip" id="strip">
     ${running("agents", agents, ctx.maxAgents, ctx)}
     ${running("builds", builds, ctx.maxBuilds, ctx)}
+    ${totalCost(requests)}
     ${ctx.freeDiskGB === undefined ? null : html`<span class="${ctx.freeDiskGB < 100 ? "disk-low" : ""}" title="Free space for worktrees; none is created below 20 GB">disk <b>${diskSize(ctx.freeDiskGB)}</b> free</span>`}
     <a href="/feedback" target="_blank">agents' feedback</a>
     <span class="progress">${progressLine(progress, "", false)}</span>
@@ -59,6 +60,13 @@ function running(what: string, jobs: { r: RequestState; j: JobView }[], max: num
     return html`<a href="#${target}"><b>${jobLabel(j.name)}</b> ${subject}${item ? html` <span class="sub">· ${requestName(r)}</span>` : null} <span class="sub">· ${elapsed(j.startedAt, ctx)}</span></a>`;
   };
   return html`<span class="running" tabindex="0">${count}<span class="running-list">${jobs.sort((a, b) => a.j.startedAt.localeCompare(b.j.startedAt)).map(line)}</span></span>`;
+}
+
+// What all its agents cost, the active requests' share in the title.
+function totalCost(requests: RequestState[]): Html | null {
+  const all = requests.reduce((n, r) => n + requestCost(r), 0);
+  const active = requests.filter((r) => sectionOf(r) !== "finished").reduce((n, r) => n + requestCost(r), 0);
+  return all > 0 ? html`<span title="What the agents of every request cost; ${formatCost(active)} of it for those not finished">spent <b>${formatCost(all)}</b></span>` : null;
 }
 
 function diskSize(gb: number): string {
