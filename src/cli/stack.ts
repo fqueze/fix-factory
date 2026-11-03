@@ -25,7 +25,7 @@
 //      conflictLeft?, remaining?}. Changes already there (landed, or in the stack under another sha)
 //      make no commit and are listed in `empty`.
 // interdiff <old-sha> <new-sha>
-//   → {diff, method: "same-parent" | "old-rebased" | "new-rebased" | "diff-of-diffs"}
+//   → {diff, method: "same-parent" | "old-rebased" | "new-rebased" | "conflicts-resolved"}
 // since <input.json>
 //   input: {old: [sha...] (an earlier push's commits), patches: [{id, title, shas: [current, earlier...]}]}
 //   → {changes: [{patch, status: "same" | "changed" | "new", old?, new, interdiff?}], removed: [{sha, title}]}:

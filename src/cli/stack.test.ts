@@ -268,6 +268,20 @@ test("interdiff ignores what the base contributed", async (t) => {
   assert.doesNotMatch(r.diff, /^\+upstream$/m);
 });
 
+test("interdiff of a rebase over a conflicting upstream change shows how the conflict was resolved, not upstream's other changes", async (t) => {
+  const repo = await makeRepo();
+  t.after(() => repo.cleanup());
+  const base = await repo.commit({ "a.txt": lines(20) }, "base");
+  const old = await repo.commit({ "a.txt": lines(20, { 2: "old" }) }, "old");
+  await repo.git(["checkout", "-q", "--detach", base]);
+  await repo.commit({ "a.txt": lines(20, { 2: "upstream", 18: "elsewhere" }) }, "upstream");
+  const neu = await repo.commit({ "a.txt": lines(20, { 2: "resolved", 18: "elsewhere" }) }, "new");
+  const r = await interdiff(repo.dir, old, neu);
+  assert.equal(r.method, "conflicts-resolved");
+  assert.match(r.diff, /^-<<<<<<< [^]*^-upstream$[^]*^-=======$[^]*^-old$[^]*^->>>>>>> [^]*^\+resolved$/m);
+  assert.doesNotMatch(r.diff, /elsewhere/);
+});
+
 test("since matches an earlier push's commits with the patches: same, changed (with its interdiff), new, removed", async (t) => {
   const repo = await makeRepo();
   t.after(() => repo.cleanup());
