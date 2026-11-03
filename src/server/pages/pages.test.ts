@@ -887,6 +887,8 @@ describe("one fixture per step of docs/MVP.md", () => {
     p.interdiffFile = "empty.diff";
     const row = rowOf(renderRequest(r, { ...ctx, interdiff: () => "" }, true).value, `patch-${p.id}`);
     assert.match(row, /waiting for review on Phabricator: <span class="rv pending" title="#dom-core-reviewers hasn&#39;t reviewed it yet">#dom-core-reviewers<\/span>/);
+    p.review.reviewers = [{ name: "#dom-core-reviewers", status: "required" }];
+    assert.match(rowOf(renderRequest(r, { ...ctx, interdiff: () => "" }, true).value, `patch-${p.id}`), /<span class="rv required" title="#dom-core-reviewers is a blocking reviewer and hasn&#39;t reviewed it yet">/);
     assert.doesNotMatch(row, /Interdiff/);
   });
   it("10. landing: landable patches and the moz-phab command", () => {

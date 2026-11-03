@@ -88,8 +88,11 @@ export function reviewerStatus(phabStatus: string, revisionStatus: string): Revi
       return revisionStatus === "needs-revision" ? "blocking" : "pending";
     case "resigned":
       return "resigned";
+    case "blocking":
+      // A blocking reviewer who hasn't acted yet: the revision can't be accepted without them.
+      return "required";
     default:
-      // "added", and "blocking" (a blocking reviewer who hasn't acted yet).
+      // "added".
       return "pending";
   }
 }

@@ -115,7 +115,8 @@ export interface Dep {
 
 export interface ReviewerStatus {
   name: string; // "mconley", "#home-newtab-reviewers"
-  status: "accepted" | "blocking" | "pending" | "resigned";
+  // blocking: requested changes; required: a blocking reviewer who hasn't acted yet; pending: any other who hasn't.
+  status: "accepted" | "blocking" | "required" | "pending" | "resigned";
 }
 
 export interface InlineComment {

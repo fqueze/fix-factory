@@ -101,6 +101,7 @@ details.row[open]:has(> .under) .bug.tofile { background: var(--tofile-bg); bord
 .rv::before { display: inline-block; box-sizing: border-box; width: 11px; height: 11px; border-radius: 50%; margin-right: 3px; vertical-align: -1px; font-size: 8px; line-height: 11px; text-align: center; font-weight: 700; color: #fff; content: ""; }
 .rv.accepted::before { content: "✓"; background: var(--good); }
 .rv.pending::before { border: 1.5px solid var(--text-muted); }
+.rv.required::before { content: "–"; background: var(--critical); font-size: 10px; }
 .rv.blocking::before { content: "✕"; background: var(--critical); }
 .rv.resigned::before { content: "✕"; color: var(--text-muted); font-size: 10px; }
 .rv.resigned { color: var(--text-muted); }

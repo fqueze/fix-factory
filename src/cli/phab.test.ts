@@ -42,7 +42,7 @@ test("poll: reviewers, inline comments, suggested edits, replies", async () => {
   assert.equal(d329684.status, "needs-revision");
   assert.deepEqual(d329684.reviewers, [
     { name: "#layout-reviewers", status: "blocking" },
-    { name: "#firefox-animation-reviewers", status: "pending" },
+    { name: "#firefox-animation-reviewers", status: "required" },
     { name: "emilio", status: "blocking" },
   ]);
   const reply = d329684.comments.find((c) => c.id === 1763636);
@@ -89,7 +89,7 @@ test("reviewerStatus", () => {
   assert.equal(reviewerStatus("rejected", "needs-revision"), "blocking");
   // Requested changes on an older diff: the author updated it, the revision is back in review.
   assert.equal(reviewerStatus("rejected", "needs-review"), "pending");
-  assert.equal(reviewerStatus("blocking", "needs-review"), "pending");
+  assert.equal(reviewerStatus("blocking", "needs-review"), "required");
   assert.equal(reviewerStatus("added", "needs-review"), "pending");
   assert.equal(reviewerStatus("resigned", "needs-review"), "resigned");
 });
