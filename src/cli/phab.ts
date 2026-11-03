@@ -78,14 +78,14 @@ async function searchAll(conduit: Conduit, method: string, params: Record<string
   return out;
 }
 
-// Conduit keeps reporting "rejected" after the author updates the diff and the revision goes back to
-// needs-review, so it only blocks while the revision still needs revision.
-export function reviewerStatus(phabStatus: string, revisionStatus: string): ReviewerStatus["status"] {
+// Conduit keeps reporting "accepted" and "rejected" after the author updates the diff: prior says the reviewer acted
+// on an older one, as Phabricator shows it ("requested changes on prior diff").
+export function reviewerStatus(phabStatus: string, prior = false): ReviewerStatus["status"] {
   switch (phabStatus) {
     case "accepted":
-      return "accepted";
+      return prior ? "accepted-prior" : "accepted";
     case "rejected":
-      return revisionStatus === "needs-revision" ? "blocking" : "pending";
+      return prior ? "rejected-prior" : "blocking";
     case "resigned":
       return "resigned";
     case "blocking":
@@ -229,10 +229,16 @@ export async function poll(revisions: number[], conduit: Conduit = makeConduit()
       title: r.fields.title,
       author: nameOf.get(r.fields.authorPHID) ?? r.fields.authorPHID,
       status: r.fields.status.value,
-      reviewers: r.attachments.reviewers.reviewers.map((rv: any) => ({
-        name: nameOf.get(rv.reviewerPHID) ?? rv.reviewerPHID,
-        status: reviewerStatus(rv.status, r.fields.status.value),
-      })),
+      reviewers: r.attachments.reviewers.reviewers.map((rv: any) => {
+        // On a prior diff: a person's latest accept or request for changes is older than the latest diff; a group's,
+        // when nobody acted that way since (Conduit doesn't say which members act for it).
+        const type = rv.status === "accepted" ? "accept" : "request-changes";
+        const acts = (txnsByRev.get(id) ?? []).filter((t) => t.type === type && (!String(rv.reviewerPHID).startsWith("PHID-USER-") || t.authorPHID === rv.reviewerPHID));
+        // Diffs its author uploaded: landing adds one too, which doesn't make the accepts prior.
+        const updated = Math.max(0, ...(txnsByRev.get(id) ?? []).filter((t) => t.type === "update" && t.authorPHID === r.fields.authorPHID).map((t) => t.dateCreated as number));
+        const prior = (rv.status === "accepted" || rv.status === "rejected") && updated > 0 && !acts.some((t) => t.dateCreated > updated);
+        return { name: nameOf.get(rv.reviewerPHID) ?? rv.reviewerPHID, status: reviewerStatus(rv.status, prior) };
+      }),
       comments,
       ...(latest.has(r.phid)
         ? {

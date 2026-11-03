@@ -104,6 +104,8 @@ details.row[open]:has(> .under) .bug.tofile { background: var(--tofile-bg); bord
 .rv.pending::before { border: 1.5px solid var(--text-muted); }
 .rv.required::before { content: "–"; background: var(--critical); font-size: 10px; }
 .rv.blocking::before { content: "✕"; background: var(--critical); }
+.rv.accepted-prior::before { content: "✓"; color: var(--good); border: 1.5px solid var(--good); line-height: 8px; }
+.rv.rejected-prior::before { content: "✕"; color: var(--critical); border: 1.5px solid var(--critical); line-height: 8px; }
 .rv.resigned::before { content: "✕"; color: var(--text-muted); font-size: 10px; }
 .rv.resigned { color: var(--text-muted); }
 .st.closed { color: var(--text-muted); }

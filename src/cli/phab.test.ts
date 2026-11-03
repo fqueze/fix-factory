@@ -85,13 +85,14 @@ test("arcToken: clear error without a token for the host", () => {
 });
 
 test("reviewerStatus", () => {
-  assert.equal(reviewerStatus("accepted", "accepted"), "accepted");
-  assert.equal(reviewerStatus("rejected", "needs-revision"), "blocking");
-  // Requested changes on an older diff: the author updated it, the revision is back in review.
-  assert.equal(reviewerStatus("rejected", "needs-review"), "pending");
-  assert.equal(reviewerStatus("blocking", "needs-review"), "required");
-  assert.equal(reviewerStatus("added", "needs-review"), "pending");
-  assert.equal(reviewerStatus("resigned", "needs-review"), "resigned");
+  assert.equal(reviewerStatus("accepted"), "accepted");
+  assert.equal(reviewerStatus("accepted", true), "accepted-prior");
+  assert.equal(reviewerStatus("rejected"), "blocking");
+  // Requested changes on an older diff: the author updated it since.
+  assert.equal(reviewerStatus("rejected", true), "rejected-prior");
+  assert.equal(reviewerStatus("blocking"), "required");
+  assert.equal(reviewerStatus("added"), "pending");
+  assert.equal(reviewerStatus("resigned"), "resigned");
 });
 
 test("stripBadge", () => {

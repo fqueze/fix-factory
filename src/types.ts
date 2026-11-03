@@ -115,8 +115,9 @@ export interface Dep {
 
 export interface ReviewerStatus {
   name: string; // "mconley", "#home-newtab-reviewers"
-  // blocking: requested changes; required: a blocking reviewer who hasn't acted yet; pending: any other who hasn't.
-  status: "accepted" | "blocking" | "required" | "pending" | "resigned";
+  // blocking: requested changes; required: a blocking reviewer who hasn't acted yet; pending: any other who hasn't;
+  // -prior: on a diff older than the latest.
+  status: "accepted" | "accepted-prior" | "blocking" | "rejected-prior" | "required" | "pending" | "resigned";
 }
 
 export interface InlineComment {

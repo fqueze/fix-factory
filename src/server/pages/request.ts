@@ -771,7 +771,15 @@ function depLine(r: RequestState, d: PatchView["deps"][number]): Html {
 
 // Who it waits for on Phabricator, or who accepted it or asked for changes.
 // Where its revision stands, then each reviewer with its icon as on Phabricator.
-const REVIEWER_TIPS: Record<ReviewerStatus["status"], string> = { accepted: "accepted", pending: "hasn't reviewed it yet", required: "is a blocking reviewer and hasn't reviewed it yet", blocking: "requested changes", resigned: "resigned" };
+const REVIEWER_TIPS: Record<ReviewerStatus["status"], string> = {
+  accepted: "accepted",
+  "accepted-prior": "accepted a prior diff",
+  pending: "hasn't reviewed it yet",
+  required: "is a blocking reviewer and hasn't reviewed it yet",
+  blocking: "requested changes",
+  "rejected-prior": "requested changes on a prior diff",
+  resigned: "resigned",
+};
 function reviewText(p: PatchView): Html {
   const rv = p.review!;
   const what =
