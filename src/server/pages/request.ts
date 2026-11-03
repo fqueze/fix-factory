@@ -771,7 +771,8 @@ function hoverInfo(r: RequestState, p: PatchView, item: ItemView | undefined, ct
 function reviewBox(r: RequestState, p: PatchView, interdiff: string | undefined): Html | null {
   const comments = p.review?.comments ?? [];
   const drafts = new Map(p.replyDrafts.map((d) => [d.commentId, d.text]));
-  const shown = comments.filter((c) => c.author !== p.review?.author && (!c.done || drafts.has(c.id)) && !isAnswered(p, c));
+  // Thanks, apologies: nothing to answer.
+  const shown = comments.filter((c) => c.author !== p.review?.author && c.kind !== "none" && (!c.done || drafts.has(c.id)) && !isAnswered(p, c));
   // An empty interdiff (from before they stopped being recorded): nothing changed.
   const changed = p.interdiffFile !== undefined && interdiff?.trim() !== "";
   if (!changed && !shown.length) {

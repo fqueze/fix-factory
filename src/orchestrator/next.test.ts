@@ -3343,6 +3343,17 @@ it("an addressed commit that conflicts on today's central goes to resolve-confli
     assert.deepEqual(Object.keys(JSON.parse(sc.plan(again).files![0].content)), [sha("e"), sha("c")]);
   });
 
+  it("comments that need nothing (thanks, an apology) don't wake the author, nor keep the patch from landing", () => {
+    const sc = inReview();
+    sc.complete("poll:0", { output: polled("accepted", [{ id: 7, author: "smaug", text: "Sorry for the delay, TPAC etc.", done: false, length: 1 }]) });
+    const [classify] = sc.settle();
+    assert.match(String(sc.plan(classify).agent?.vars?.commentsFile), /comments-p-test-a-.*-new\.json$/);
+    assert.match(sc.plan(classify).files![0].content, /Sorry for the delay/);
+    sc.complete(classify, { report: { comments: [{ id: 7, kind: "none", impliesChange: false }], feedback: [] } });
+    assert.deepEqual(sc.settle().filter((k) => k.startsWith("author:")), []);
+    assert.equal(landingState(sc.state(), sc.state().patches["p-test-a"]).commentsAddressed, true);
+  });
+
   it("nits on an answer to review comments go straight to the resubmit, with no author pass", () => {
     const sc = inReview();
     sc.complete("poll:0", { output: polled("needs-revision", [{ id: 7, author: "smaug", text: "Use waitForCondition", done: false, length: 1 }], "blocking") });

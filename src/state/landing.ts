@@ -18,7 +18,7 @@ export function landingState(s: RequestState, p: PatchView): { accepted: boolean
   return {
     // The revision's own status too: a reviewer's accept of an earlier diff stays in its list after an update.
     accepted: p.review?.status === "accepted" && active.length > 0 && active.every((r) => r.status === "accepted") && !(s.backouts[p.id]?.culprit && !s.backouts[p.id].verified) && !(s.tryNeeded?.[p.id] && !s.tryNeeded[p.id].verified),
-    commentsAddressed: (p.review?.comments ?? []).filter((c) => isReviewComment(p, c)).every((c) => c.done || addressed.has(c.id)),
+    commentsAddressed: (p.review?.comments ?? []).filter((c) => isReviewComment(p, c) && c.kind !== "none").every((c) => c.done || addressed.has(c.id)),
     landed: p.review?.status === "published",
   };
 }

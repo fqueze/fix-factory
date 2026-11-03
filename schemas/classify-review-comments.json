@@ -15,7 +15,8 @@
               "suggested edit",
               "nit",
               "question",
-              "change request"
+              "change request",
+              "none"
             ]
           },
           "impliesChange": {

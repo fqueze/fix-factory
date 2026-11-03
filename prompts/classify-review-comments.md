@@ -1,1 +1,1 @@
-Classify each inline comment on {revision} as suggested edit, nit, question, or change request. For a question, say whether it implies a code change.
+Classify each review comment in {commentsFile}, left on {revision}, inline or not: suggested edit, nit, question, change request, or none when there's nothing to act on or answer (thanks, an apology, plain approval). For a question, say whether it implies a code change.

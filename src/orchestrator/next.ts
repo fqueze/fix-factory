@@ -2827,10 +2827,22 @@ class Planner {
       const fresh = p.review.comments.filter((c) => !c.done && isReviewComment(p, c) && !handled.has(c.id));
       if (fresh.length > 0) {
         const h = shortHash(fresh.map((c) => String(c.id))) + this.stepEpoch("review comments");
-        const cls = this.wantAgent(`classify-comments:${p.id}:${h}`, "classify-comments", "classify-review-comments", { revision: `D${p.revision}` }, { priority: REVIEW_PRIORITY, item, purpose: { patch: p.id } });
+        const file = dataPath(this.config, this.s.id, `comments-${p.id}-${h}.json`);
+        const toClassify = dataPath(this.config, this.s.id, `comments-${p.id}-${h}-new.json`);
+        const cls = this.wantAgent(`classify-comments:${p.id}:${h}`, "classify-comments", "classify-review-comments", { revision: `D${p.revision}`, commentsFile: toClassify }, {
+          priority: REVIEW_PRIORITY,
+          item,
+          purpose: { patch: p.id },
+          files: [{ path: toClassify, content: JSON.stringify(fresh, null, 2) + "\n" }],
+        });
         if (!cls) continue;
         const kinds = new Map(this.rep<ClassifyReviewCommentsReport>(cls).comments.map((c) => [c.id, c]));
-        const file = dataPath(this.config, this.s.id, `comments-${p.id}-${h}.json`);
+        // Thanks, apologies, plain approval: nothing for its author to do.
+        const act = fresh.filter((c) => (kinds.get(c.id)?.kind ?? c.kind) !== "none");
+        if (!act.length) {
+          this.afterAddress(p);
+          continue;
+        }
         const key = `author:${item}${this.itemEpoch(item)}:address:${p.id}:${h}`;
         if (this.view.byKey.has(key)) {
           this.want(key);
@@ -2839,9 +2851,9 @@ class Planner {
         const plan = resumeAuthorPlan(this.s.id, this.view, item, "review comments", { prompt: "address-review", vars: { revision: `D${p.revision}`, commentsFile: file } }, "addressing review comments");
         if (plan === undefined || plan === "busy") continue;
         plan.purpose.patch = p.id;
-        plan.purpose.comments = fresh.map((c) => c.id);
+        plan.purpose.comments = act.map((c) => c.id);
         plan.priority = REVIEW_PRIORITY;
-        plan.files = [{ path: file, content: JSON.stringify(fresh.map((c) => ({ ...c, kind: kinds.get(c.id)?.kind ?? c.kind, impliesChange: kinds.get(c.id)?.impliesChange })), null, 2) + "\n" }];
+        plan.files = [{ path: file, content: JSON.stringify(act.map((c) => ({ ...c, kind: kinds.get(c.id)?.kind ?? c.kind, impliesChange: kinds.get(c.id)?.impliesChange })), null, 2) + "\n" }];
         this.want(key, () => plan);
         continue;
       }

@@ -126,7 +126,7 @@ export interface InlineComment {
   text: string;
   suggestion?: string; // "suggest edit" replacement text
   done: boolean;
-  kind?: "suggested edit" | "nit" | "question" | "change request";
+  kind?: "suggested edit" | "nit" | "question" | "change request" | "none"; // none: nothing to act on or answer (thanks, an apology)
 }
 
 export type JobKind = "script" | "agent" | "build" | "try-watch";
