@@ -970,6 +970,20 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.ok(at.every((x) => x > 0) && at[0] < at[2] && at[2] < at[1], String(at));
   });
 
+  it("a group's landed patch is listed with what landed while its other patch is still in review", () => {
+    const r = structuredClone(get("r-20261005-newtab"));
+    const first = r.patches["p-nimbus"];
+    const st = Object.values(r.stacks).find((x) => x.order.includes(first.id))!;
+    // A second patch of its group, landed; the first still in review.
+    const second = { ...structuredClone(first), id: `${first.id}-2`, revision: 202, review: { revision: 202, status: "published", reviewers: [], comments: [] } };
+    r.patches[second.id] = second;
+    st.order = [...st.order, second.id];
+    const h = renderRequest(r, ctx, true).value;
+    const landed = h.slice(h.indexOf('<div class="landed-section">'));
+    assert.ok(h.indexOf('<div class="landed-section">') > 0 && landed.includes(`data-patch="${second.id}"`), "in the Landed section");
+    assert.ok(!landed.includes(`data-patch="${first.id}"`) && h.includes(`data-patch="${first.id}"`), "the other one still in the stack");
+  });
+
   it("landable needs every hard dep landed or landable", () => {
     const h = expanded("r-20261005-newtab");
     const nimbus = h.slice(h.indexOf('data-patch="p-nimbus"'));

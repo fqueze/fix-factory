@@ -135,6 +135,9 @@ export function renderRequestBody(r: RequestState, ctx: RenderContext): Html {
   const rank = (i: ItemView) => Math.max(-1, ...own(i).map((p) => depth(p)));
   const landed = unstacked.filter((i) => i.state === "landed" || (own(i).length > 0 && own(i).every((p) => isLanded(r, p)))).sort((a, b) => rank(b) - rank(a));
   const items = unstacked.filter((i) => !landed.includes(i));
+  // A group's landed patch while another of its patches is still in review: listed with what landed, in its place.
+  const partly = Object.values(r.patches).filter((p) => p.item !== undefined && !landed.some((i) => i.id === p.item) && !isDropped(r, p) && isLanded(r, p));
+  const landedRows = [...landed.map((i) => ({ at: rank(i), row: itemRows(r, i, ctx) })), ...partly.map((p) => ({ at: depth(p), row: patchRow(r, p, ctx) }))].sort((a, b) => b.at - a.at);
   // Newest first, as on Treeherder; those waiting for you are the newest anyway.
   const pushes = Object.values(r.pushes).reverse();
   const planned = pushes.filter((p) => isWaiting(r, p));
@@ -178,7 +181,7 @@ export function renderRequestBody(r: RequestState, ctx: RenderContext): Html {
       repro.length ? html`<h3>DEBUG commits for the stack's next try push</h3>${groupRows(r, repro, ctx, false)}` : null
     }
     ${toStack.some((i) => itemBucket(r, i, ctx) !== "closed") ? html`${stacks.length || loose.length ? html`<h3>Not in a stack yet</h3>` : null}${groupRows(r, toStack, ctx, false)}` : null}
-    ${landed.length ? html`<div class="landed-section"><h3 class="landed-head">Landed</h3><div class="landed-rows compact-rows">${groupRows(r, landed, ctx)}</div></div>` : null}
+    ${landedRows.length ? html`<div class="landed-section"><h3 class="landed-head">Landed</h3><div class="landed-rows compact-rows"><div class="rows">${landedRows.map((x) => x.row)}</div></div></div>` : null}
     ${closedSection(handOffs(r, ctx), closedFold(r, items.filter((i) => itemBucket(r, i, ctx) === "closed" && i.state !== "taken over"), ctx))}
     ${stacks.length || loose.length || items.length || landed.length ? html`<hr class="part">` : null}
     ${requestJobs(r, ctx)}
