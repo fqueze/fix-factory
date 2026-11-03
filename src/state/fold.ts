@@ -203,7 +203,10 @@ export function foldEvents(events: readonly Event[]): RequestState {
           break;
         }
         item.lastReport = { prompt: e.prompt, report: e.report, job: e.job };
-        if (e.prompt === "investigate-and-fix") item.investigation = e.report as InvestigateReport;
+        // How its fix was found and shown: a later answer that leaves the fix as it is (about another failure a push
+        // sent it) doesn't replace that.
+        const inv = e.report as InvestigateReport;
+        if (e.prompt === "investigate-and-fix" && (inv.state === "fix verified locally" || item.investigation?.state !== "fix verified locally")) item.investigation = inv;
         // Its fix's commits: a patch beyond them is one its author dropped (or squashed away).
         const fix = e.report as { state?: string; commits?: string[] };
         if ((e.prompt === "investigate-and-fix" && fix.state === "fix verified locally") || e.prompt === "address-review") item.commitCount = fix.commits?.length;

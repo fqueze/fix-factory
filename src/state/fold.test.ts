@@ -456,3 +456,13 @@ test("a dep removed for good stays removed when its agent reports it again", () 
   );
   assert.deepEqual(s.patches.p1.deps, []);
 });
+
+test("a later answer leaving the fix as it is doesn't replace how the fix was found and shown", () => {
+  const fixRepro = { reproduced: true, where: "locally", widened: false, before: "6 of 6", after: "0 of 6" };
+  const s = fold(
+    ev({ type: "item-created", item: "i1", folder: "a", group: { message: "m", tests: ["a/t.js"], configs: [] } }),
+    ev({ type: "agent-report", item: "i1", job: "j1", prompt: "investigate-and-fix", report: { state: "fix verified locally", commits: ["c"], reproduction: fixRepro } }),
+    ev({ type: "agent-report", item: "i1", job: "j2", prompt: "investigate-and-fix", report: { state: "left as-is", commits: ["c"], reproduction: { reproduced: false, where: "locally", widened: false, before: "0", after: "n/a" } } }),
+  );
+  assert.deepEqual(s.items.i1.investigation?.reproduction, fixRepro);
+});
