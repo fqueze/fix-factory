@@ -21,6 +21,7 @@ export interface RenderContext {
   // The lines its commit adds and removes, read with git.
   diffStat?: (p: PatchView) => { added: number; removed: number } | undefined;
   landoUrl?: (job: JobView) => string | undefined; // Treeherder by landoCommitID, once Lando took a push
+  openFolds?: Map<string, Set<string>>; // per request, the folds you had open (from the page's cookie), rendered open
   // A file the factory wrote, by its path relative to stateDir (an interdiff since a push).
   readData?: (rel: string) => string | undefined;
   freeDiskGB?: number; // where the worktrees go

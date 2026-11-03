@@ -75,7 +75,11 @@
     pruneOpened(document);
     // Only on a change: re-rendered parts call this on every update, and browsers throttle history calls.
     var hash = opened.size ? "#" + Array.from(opened).map(encodeURIComponent).join(",") : "";
-    if (hash !== location.hash) history.replaceState(null, "", location.pathname + location.search + hash);
+    if (hash !== location.hash) {
+      history.replaceState(null, "", location.pathname + location.search + hash);
+      // And for the server: a reload then comes with them open, rather than collapsed until this script reopens them.
+      document.cookie = "opened=" + encodeURIComponent(hash.slice(1)) + "; path=/; SameSite=Lax";
+    }
   }
   function reopenFolds(root) {
     root.querySelectorAll("details.req, details[data-fold]").forEach(function (d) {

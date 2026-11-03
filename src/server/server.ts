@@ -237,6 +237,18 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
   }
   const allowedOrigin = profilerOrigin;
 
+  // What the page had open, from the cookie client.js keeps ("r <request>" and "<request> <fold>", comma-separated).
+  function openedOf(req: IncomingMessage): { requests: string[]; folds: Map<string, Set<string>> } {
+    const cookie = /(?:^|;\s*)opened=([^;]*)/.exec(req.headers.cookie ?? "")?.[1];
+    const keys = cookie ? decodeURIComponent(cookie).split(",").filter(Boolean).map(decodeURIComponent) : [];
+    const folds = new Map<string, Set<string>>();
+    for (const k of keys.filter((x) => !x.startsWith("r "))) {
+      const [request, ...fold] = k.split(" ");
+      folds.set(request, (folds.get(request) ?? new Set()).add(fold.join(" ")));
+    }
+    return { requests: keys.filter((x) => x.startsWith("r ")).map((x) => x.slice(2)), folds };
+  }
+
   function ctx(req: IncomingMessage, open?: string[]): RenderContext {
     return {
       profilerOrigin: profilerOrigin(req),
@@ -298,12 +310,14 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
     }
 
     if (path === "/") {
-      return send(res, 200, "text/html; charset=utf-8", page(renderOverview(opts.state.listRequests(), ctx(req))));
+      const opened = openedOf(req);
+      return send(res, 200, "text/html; charset=utf-8", page(renderOverview(opts.state.listRequests(), { ...ctx(req, opened.requests), openFolds: opened.folds })));
     }
     if ((m = path.match(/^\/requests\/([^/]+)$/))) {
       const id = decodeURIComponent(m[1]);
       getRequest(id);
-      return send(res, 200, "text/html; charset=utf-8", page(renderOverview(opts.state.listRequests(), ctx(req, [id]))));
+      const opened = openedOf(req);
+      return send(res, 200, "text/html; charset=utf-8", page(renderOverview(opts.state.listRequests(), { ...ctx(req, [id, ...opened.requests]), openFolds: opened.folds })));
     }
     if ((m = path.match(/^\/fragments\/requests\/([^/]+)$/))) {
       const id = decodeURIComponent(m[1]);

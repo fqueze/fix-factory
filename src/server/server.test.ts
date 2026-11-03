@@ -74,6 +74,16 @@ describe("pages", () => {
     assert.equal((await fetch(`${base}/requests/r-nope`)).status, 404);
   });
 
+  it("renders open what the page's cookie says was open, so a reload doesn't flash it collapsed", async () => {
+    const plain = await (await fetch(`${base}/`)).text();
+    const fold = /<details class="[^"]*" id="[^"]*" data-request="r-20261005-newtab"[^]*?<details\b[^>]*\bdata-fold="([^"]+)"/.exec(await (await fetch(`${base}/requests/r-20261005-newtab`)).text())![1];
+    assert.doesNotMatch(plain, /data-request="r-20261005-newtab" data-section="active" open>/);
+    const keys = ["r r-20261005-newtab", `r-20261005-newtab ${fold}`].map(encodeURIComponent).join(",");
+    const page = await (await fetch(`${base}/`, { headers: { cookie: `opened=${encodeURIComponent(keys)}` } })).text();
+    assert.match(page, /data-request="r-20261005-newtab" data-section="active" open>/);
+    assert.match(page, new RegExp(`data-fold="${fold}"[^>]*open>`));
+  });
+
   it("serves a request's fragment, collapsed or open", async () => {
     const closed = await (await fetch(`${base}/fragments/requests/r-20261005-newtab`)).text();
     assert.match(closed, /^<details class="req needs"/);

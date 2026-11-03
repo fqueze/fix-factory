@@ -3,7 +3,7 @@ import { md } from "./md.ts";
 import { REQUEST_STEPS } from "../commands.ts";
 import type { BugDraft, ItemView, JobView, PatchView, PushView, Regression, RequestState, ReviewPatchReport, ReviewerStatus, StackView } from "../../types.ts";
 import { isAnswered } from "../../state/landing.ts";
-import { html, join, type Html } from "../html.ts";
+import { escapeHtml, html, join, raw, type Html } from "../html.ts";
 import { actionsSummary, flagPlaceOf, renderAction, recoveryAnswers, pollPhabButton, verifyStackButton, redoAnnotationsButton, approvePushControls, bugBox, continueBox, copyButton, handBackButton, flagControls, flagItemOf, flagText, plannedLabel, recoveryPlanFor, hasAuthorSession, stackViewerLink, submitControls, summaryId } from "./actions.ts";
 import { groupJobs, jobLine } from "./activity.ts";
 import { flagAsk, itemBucket, itemSentence, progressLine, requestProgress, submittedDetail, type Bucket } from "./progress.ts";
@@ -65,7 +65,7 @@ export function renderRequest(r: RequestState, ctx: RenderContext, open = ctx.op
       }</span>
       ${actionsSummary(r, ctx)}
     </summary>
-    ${open ? renderRequestBody(r, ctx) : html`<div class="rbody" data-lazy><a href="${requestUrl(r.id)}">Open this request</a></div>`}
+    ${open ? reopen(renderRequestBody(r, ctx), ctx.openFolds?.get(r.id)) : html`<div class="rbody" data-lazy><a href="${requestUrl(r.id)}">Open this request</a></div>`}
   </details>`;
 }
 
@@ -100,6 +100,13 @@ export function requestSummary(r: RequestState): string {
 // A landed patch leaves its stack, for the Landed section; a stack with nothing left isn't shown.
 function liveStacks(r: RequestState): StackView[] {
   return Object.values(r.stacks).filter((s) => livePatches(r, s).length > 0);
+}
+
+// The folds you had open come open, as client.js would reopen them: a reload doesn't flash them collapsed.
+function reopen(body: Html, folds: Set<string> | undefined): Html {
+  if (!folds?.size) return body;
+  const escaped = new Set([...folds].map(escapeHtml));
+  return raw(body.value.replace(/<details\b[^>]*\bdata-fold="([^"]*)"[^>]*>/g, (tag, fold: string) => (escaped.has(fold) && !/\sopen[\s>]/.test(tag) ? `${tag.slice(0, -1)} open>` : tag)));
 }
 
 export function renderRequestBody(r: RequestState, ctx: RenderContext): Html {
