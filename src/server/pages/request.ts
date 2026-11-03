@@ -1,7 +1,7 @@
 import { ANNOTATIONS_ITEM, needsMetaBug as stackNeedsMetaBug, sameBugDraft } from "../../state/meta-bug.ts";
 import { md } from "./md.ts";
 import { REQUEST_STEPS } from "../commands.ts";
-import type { BugDraft, ItemView, JobView, PatchView, PushView, Regression, RequestState, ReviewPatchReport, StackView } from "../../types.ts";
+import type { BugDraft, ItemView, JobView, PatchView, PushView, Regression, RequestState, ReviewPatchReport, ReviewerStatus, StackView } from "../../types.ts";
 import { isAnswered } from "../../state/landing.ts";
 import { html, join, type Html } from "../html.ts";
 import { actionsSummary, flagPlaceOf, renderAction, recoveryAnswers, pollPhabButton, verifyStackButton, redoAnnotationsButton, approvePushControls, bugBox, continueBox, copyButton, handBackButton, flagControls, flagItemOf, flagText, plannedLabel, recoveryPlanFor, hasAuthorSession, stackViewerLink, submitControls, summaryId } from "./actions.ts";
@@ -400,15 +400,20 @@ const ICON_TIPS: Record<StateClass, string> = {
   accepted: "Accepted on Phabricator",
   review: "Needs review on Phabricator",
   landed: "Landed (closed on Phabricator)",
+  abandoned: "Abandoned on Phabricator",
+  dropped: "Dropped by you: the factory stopped working on it",
 };
 
-// A ready patch on Phabricator gets its icon there: accepted (✓), waiting for review (</>), landed (☑).
+// A ready patch on Phabricator gets its icon there: accepted (✓), waiting for review (</>), landed (☑); an abandoned
+// one, ✈, whatever its group.
 function phabClass(p: PatchView, cls: StateClass): StateClass {
+  if (p.review?.status === "abandoned") return "abandoned";
   if (cls !== "ok") return cls;
   return ({ published: "landed", accepted: "accepted", "needs-review": "review" } as const)[p.review?.status as "published" | "accepted" | "needs-review"] ?? cls;
 }
 
 function rowClass(r: RequestState, i: ItemView, ctx: RenderContext): StateClass {
+  if (i.state === "handed back") return "dropped";
   return itemBucket(r, i, ctx) === "ready" ? "ok" : itemSentence(r, i, ctx).cls;
 }
 
@@ -758,12 +763,17 @@ function depLine(r: RequestState, d: PatchView["deps"][number]): Html {
 }
 
 // Who it waits for on Phabricator, or who accepted it or asked for changes.
-function reviewText(p: PatchView): string {
+// Where its revision stands, then each reviewer with its icon as on Phabricator.
+const REVIEWER_TIPS: Record<ReviewerStatus["status"], string> = { accepted: "accepted", pending: "hasn't reviewed it yet", blocking: "requested changes", resigned: "resigned" };
+function reviewText(p: PatchView): Html {
   const rv = p.review!;
-  const who = (status: string) => rv.reviewers.filter((x) => x.status === status).map((x) => x.name).join(", ");
-  if (rv.status === "accepted") return `accepted by ${who("accepted") || "a reviewer"} on Phabricator`;
-  if (who("blocking")) return `changes requested by ${who("blocking")} on Phabricator`;
-  return who("pending") ? `waiting for review from ${who("pending")} on Phabricator` : `${rv.status} on Phabricator`;
+  const what =
+    rv.status === "accepted"
+      ? "accepted"
+      : rv.reviewers.some((x) => x.status === "blocking")
+        ? "changes requested"
+        : (({ "needs-review": "waiting for review", published: "landed", abandoned: "abandoned" }) as Record<string, string>)[rv.status] ?? rv.status;
+  return html`${what} on Phabricator${rv.reviewers.length ? html`: ${join(rv.reviewers.map((x) => html`<span class="rv ${x.status}" title="${x.name} ${REVIEWER_TIPS[x.status]}">${x.name}</span>`), " ")}` : null}`;
 }
 
 // On the row's first line, shown on hover: its review effort (why, in its title), its size, and the 🗑 to close it.

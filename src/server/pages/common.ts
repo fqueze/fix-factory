@@ -354,7 +354,8 @@ export function pushUrl(p: PushView): string {
   return url.href;
 }
 
-export type StateClass = "run" | "wait" | "find" | "ok" | "closed" | "accepted" | "review" | "landed"; // the last three: a ready patch, as Phabricator shows it
+// accepted, review, landed, abandoned: a patch as Phabricator shows it; dropped: a group dropped by you.
+export type StateClass = "run" | "wait" | "find" | "ok" | "closed" | "accepted" | "review" | "landed" | "abandoned" | "dropped";
 
 export function stateClass(s: ItemState): StateClass {
   switch (s) {

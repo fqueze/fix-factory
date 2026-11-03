@@ -64,7 +64,7 @@ export const IDLE: Record<ItemState, { text: (i: ItemView, builds: number) => st
   fixed: { text: () => "done: fixed", active: false },
   landed: { text: () => "done: landed", active: false },
   "left as-is": { text: () => "closed", active: false },
-  "handed back": { text: () => "closed by you", active: false },
+  "handed back": { text: () => "dropped by you", active: false },
   "taken over": { text: () => "taken over by you", active: false },
 };
 

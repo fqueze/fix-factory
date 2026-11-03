@@ -225,7 +225,7 @@ describe("one fixture per step of docs/MVP.md", () => {
     const h = expanded("r-20261013-tab-failures");
     assert.match(rowOf(h, "item-i-spinner"), /<span class="st run" title="The factory is working on it"><\/span>[^]*<span class="state"><span class="working">investigating · <span data-since="[^"]+">6 h<\/span><\/span><\/span>/);
     assert.match(rowOf(h, "item-i-drag"), /<span class="st find" title="Needs you"><\/span>[^]*<span class="state">stalled: nothing running: the drag session is still left open on failure<\/span>/);
-    assert.match(rowOf(h, "item-i-mute"), /<span class="st closed" title="Closed: dropped, left as-is or handed back"><\/span>[^]*<span class="state">closed by you: bug 2081413, dao active<\/span>/);
+    assert.match(rowOf(h, "item-i-mute"), /<span class="st dropped" title="Dropped by you: the factory stopped working on it"><\/span>[^]*<span class="state">dropped by you: bug 2081413, dao active<\/span>/);
     assert.match(rowOf(h, "item-i-pin"), /<span class="state">waiting for a build slot \(0 builds running\)<\/span>/);
     assert.doesNotMatch(h, /<span class="state">(review findings|handed back|investigating)</, "no state names");
     const boxes = h.match(/<input type="checkbox" name="command"[^>]*>/g) ?? [];
@@ -681,6 +681,7 @@ describe("one fixture per step of docs/MVP.md", () => {
       return m && `${m[1]}: ${m[2]}`;
     };
     assert.deepEqual([icon("needs-review"), icon("accepted"), icon("published")], ["review: Needs review on Phabricator", "accepted: Accepted on Phabricator", "landed: Landed (closed on Phabricator)"]);
+    assert.equal(icon("abandoned"), "abandoned: Abandoned on Phabricator");
   });
 
   it("8. submit: checks pass, stack-viewer link, moz-phab command to copy", () => {
@@ -865,7 +866,7 @@ describe("one fixture per step of docs/MVP.md", () => {
     const p = Object.values(r.patches).find((x) => x.review?.status === "accepted" && x.item)!;
     r.items[p.item!].state = "waiting for review";
     const row = rowOf(renderRequest(r, ctx, true).value, `patch-${p.id}`);
-    assert.match(row, /accepted by [^<]+ on Phabricator/);
+    assert.match(row, /accepted on Phabricator: <span class="rv accepted" title="[^"]+ accepted">/);
     assert.doesNotMatch(row, /waiting for review on Phabricator/);
   });
   it("10. landing: a patch waiting for review says who it waits for, and an empty interdiff isn't shown", () => {
@@ -875,7 +876,7 @@ describe("one fixture per step of docs/MVP.md", () => {
     p.review = { ...p.review!, status: "needs-review", reviewers: [{ name: "#dom-core-reviewers", status: "pending" }], comments: [] };
     p.interdiffFile = "empty.diff";
     const row = rowOf(renderRequest(r, { ...ctx, interdiff: () => "" }, true).value, `patch-${p.id}`);
-    assert.match(row, /waiting for review from #dom-core-reviewers on Phabricator/);
+    assert.match(row, /waiting for review on Phabricator: <span class="rv pending" title="#dom-core-reviewers hasn&#39;t reviewed it yet">#dom-core-reviewers<\/span>/);
     assert.doesNotMatch(row, /Interdiff/);
   });
   it("10. landing: landable patches and the moz-phab command", () => {
