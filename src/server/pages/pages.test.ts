@@ -793,7 +793,10 @@ describe("one fixture per step of docs/MVP.md", () => {
     r.jobs["j-poll"] = { job: "j-poll", kind: "script", name: "phab.ts poll", cmd: [], cwd: "", pid: 1, pidStartTime: 1, startedAt: "2026-10-16T07:00:00.000Z", endedAt: "2026-10-16T07:30:00.000Z", exitCode: 0 };
     assert.match(renderRequest(r, ctx, true).value, /last checked <span data-since="2026-10-16T07:30:00.000Z">/);
     delete r.jobs["j-poll"].endedAt;
-    assert.match(renderRequest(r, ctx, true).value, /checking Phabricator…/);
+    // Said once, in its menu, which stays in place; not also on the request's line.
+    const checking = renderRequest(r, ctx, true).value;
+    assert.match(checking, /<details class="menu"><summary class="btn small" title="Checking Phabricator…">⋯<\/summary><div class="menu-items"><span class="sub working">checking Phabricator…<\/span>/);
+    assert.doesNotMatch(checking.slice(0, checking.indexOf('<span class="rright">')), /Phabricator/);
     delete r.jobs["j-poll"];
     r.step = "landing";
     assert.ok(renderRequest(r, ctx, true).value.includes(button));

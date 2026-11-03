@@ -83,7 +83,8 @@ export function requestSummary(r: RequestState): string {
     const keys = configEntries(r).map(([k]) => k);
     parts.push(keys.length ? `config: ${keys.join(", ")}` : "turning the request into a config");
   }
-  const own = Object.values(r.jobs).filter((j) => j.item === undefined && j.endedAt === undefined && j.purpose?.push === undefined);
+  // Polling Phabricator is said in its ⋯ menu.
+  const own = Object.values(r.jobs).filter((j) => j.item === undefined && j.endedAt === undefined && j.purpose?.push === undefined && j.name !== "phab.ts poll");
   parts.push(...new Set(own.map((j) => jobLabel(j.name))));
   // Once submitted, its progress says where its revisions stand, not try.
   const submitted = Object.values(r.patches).some((p) => p.revision !== undefined && !isDropped(r, p));
@@ -296,12 +297,12 @@ function stackMenu(r: RequestState, s: StackView, ctx: RenderContext): Html | nu
 // When Phabricator was last read, and the button to read it now; "checking" while it's read.
 function phabCheck(r: RequestState, ctx: RenderContext): Html {
   const polls = Object.values(r.jobs).filter((j) => j.name === "phab.ts poll");
-  if (polls.some((j) => j.endedAt === undefined)) return html`<span class="sub working">checking Phabricator…</span>`;
-  // Rarely needed: in a ⋯ menu.
+  const checking = polls.some((j) => j.endedAt === undefined);
+  // Rarely needed: in a ⋯ menu, which stays where it is while Phabricator is read.
   const last = polls.filter((j) => j.exitCode === 0).map((j) => j.endedAt!).sort().at(-1);
-  return html`<details class="menu"><summary class="btn small" title="More">⋯</summary><div class="menu-items">${pollPhabButton(r.id, requestUrl(r.id))}${
-    last ? html`<span class="sub">last checked ${elapsed(last, ctx)} ago</span>` : null
-  }</div></details>`;
+  return html`<details class="menu"><summary class="btn small" title="${checking ? "Checking Phabricator…" : "More"}">⋯</summary><div class="menu-items">${
+    checking ? html`<span class="sub working">checking Phabricator…</span>` : pollPhabButton(r.id, requestUrl(r.id))
+  }${last ? html`<span class="sub">last checked ${elapsed(last, ctx)} ago</span>` : null}</div></details>`;
 }
 
 // The bugs of the stacks' patches, which a meta bug tracks.
