@@ -26,6 +26,8 @@
 //      make no commit and are listed in `empty`.
 // interdiff <old-sha> <new-sha>
 //   → {diff, method: "same-parent" | "old-rebased" | "new-rebased" | "conflicts-resolved"}
+// patch-id <sha>
+//   → {patchId}: git patch-id --stable of that commit (its code, whatever its message).
 // since <input.json>
 //   input: {old: [sha...] (an earlier push's commits), patches: [{id, title, shas: [current, earlier...]}]}
 //   → {changes: [{patch, status: "same" | "changed" | "new", old?, new, interdiff?}], removed: [{sha, title}]}:
@@ -45,7 +47,7 @@ import { detectDeps } from "./stack/deps.ts";
 import { importStack } from "./stack/import.ts";
 import { interdiff } from "./stack/interdiff.ts";
 import { orderPatches, type OrderInput } from "./stack/order.ts";
-import { since, type SinceInput } from "./stack/since.ts";
+import { patchId, since, type SinceInput } from "./stack/since.ts";
 import { summary, type SummaryInput } from "./stack/summary.ts";
 
 export { assemble, rewrite } from "./stack/build.ts";
@@ -104,6 +106,7 @@ const subcommands: Record<string, Subcommand> = {
     if (pos.length !== 2) throw new UsageError("expected <old-sha> <new-sha>");
     return interdiff(cwdOf(values), pos[0], pos[1]);
   },
+  "patch-id": async (pos, values) => ({ patchId: await patchId(cwdOf(values), onePositional(pos, "a commit")) }),
   since: async (pos, values) => since(cwdOf(values), readJson<SinceInput>(onePositional(pos, "an input file"))),
   check: async (_pos, values) =>
     check(cwdOf(values), str(values, "base"), {

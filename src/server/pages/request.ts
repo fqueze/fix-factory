@@ -1,7 +1,7 @@
 import { ANNOTATIONS_ITEM, needsMetaBug as stackNeedsMetaBug, sameBugDraft } from "../../state/meta-bug.ts";
 import { md } from "./md.ts";
 import { REQUEST_STEPS } from "../commands.ts";
-import type { BugDraft, ItemView, JobView, PatchView, PushView, Regression, RequestState, StackView } from "../../types.ts";
+import type { BugDraft, ItemView, JobView, PatchView, PushView, Regression, RequestState, ReviewPatchReport, StackView } from "../../types.ts";
 import { isAnswered } from "../../state/landing.ts";
 import { html, join, type Html } from "../html.ts";
 import { actionsSummary, flagPlaceOf, renderAction, recoveryAnswers, pollPhabButton, verifyStackButton, redoAnnotationsButton, approvePushControls, bugBox, continueBox, copyButton, handBackButton, flagControls, flagItemOf, flagText, plannedLabel, recoveryPlanFor, hasAuthorSession, stackViewerLink, submitControls, summaryId } from "./actions.ts";
@@ -568,7 +568,7 @@ function patchRow(r: RequestState, p: PatchView, ctx: RenderContext): Html {
       return group || own.length ? html`${group}${own.map((n) => renderAction(r, n, ctx))}` : undefined;
     })(),
     under: bugBoxShown ? bugDraftBox(r, p, back) : null,
-    body: html`${item ? whyFold(r, item) : null}${testPlanSection(r, p, back)}${yourComments(r, p)}${p.deps.map((d) => depLine(r, d))}${controls && !sentence?.ask ? html`<div class="jobctl">${controls}</div>` : null}${reviewBox(r, p, p.interdiffFile === undefined ? undefined : ctx.interdiff?.(p))}${
+    body: html`${item ? whyFold(r, item) : null}${testPlanSection(r, p, back)}${yourComments(r, p)}${p.deps.map((d) => depLine(r, d))}${controls && !sentence?.ask ? html`<div class="jobctl">${controls}</div>` : null}${reviewBox(r, p, p.interdiffFile === undefined ? undefined : ctx.interdiff?.(p))}${leftFindings(r, p, ctx)}${
       item ? html`<h4 class="part">What the factory did</h4>${itemJobs(r, item, ctx)}${talkBox(r, item, ctx, p)}` : null
     }`,
   });
@@ -826,6 +826,19 @@ export function diff(text: string): Html {
   })}</pre>`;
 }
 
+
+// The latest critical review's findings when no run of its author took them up (nits once it's submitted): yours to
+// take or leave, rather than gone unseen.
+function leftFindings(r: RequestState, p: PatchView, ctx: RenderContext): Html | null {
+  const review = Object.values(r.jobs).findLast((j) => j.name === "review-patch" && j.purpose?.patch === p.id && j.exitCode === 0);
+  if (!review || Object.values(r.jobs).some((j) => j.item === p.item && j.purpose?.key.startsWith("author:") && j.startedAt > review.startedAt)) return null;
+  const text = ctx.readData?.(`requests/${r.id}/reports/${review.job}.json`);
+  const report = text === undefined ? undefined : (JSON.parse(text) as ReviewPatchReport);
+  if (report?.verdict !== "findings") return null;
+  return html`<h4 class="part">Critical review (Opus): not sent to its author</h4><ul class="findings">${report.findings.map(
+    (f) => html`<li><span class="sub">${f.severity}${f.file ? html` · <span class="mono">${f.file}${f.line ? `:${f.line}` : ""}</span>` : null}</span> ${f.text}</li>`,
+  )}</ul>`;
+}
 
 // Once Lando took the push: what it waits for, with its Treeherder link.
 function landoState(job: JobView, ctx: RenderContext, submitted: Html | string, before: Html | string): Html | string {

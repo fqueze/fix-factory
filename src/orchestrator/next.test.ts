@@ -3464,6 +3464,34 @@ describe("9. changes after submission", () => {
     });
   }
 
+  it("an answer leaving a patch's code as Phabricator has it, though rebased since its author's last run, gets no critical review", () => {
+    const { sc, job } = changed("continue");
+    sc.settle();
+    sc.complete(`rewrite-review:root:${job}:v2`, { output: { mapping: { [sha("e")]: sha("e"), [sha("7")]: sha("8") } } });
+    sc.settle();
+    sc.complete(`interdiff:p-test-a:${job}:${sha("f").slice(0, 12)}`, { output: { diff: "-a\n+b\n", method: "same-parent" } });
+    sc.settle();
+    sc.add({ type: "submit-copied", request: ID, stack: "root" });
+    const review = sc.state().patches["p-test-a"].review!;
+    sc.add({ type: "review-status", request: ID, patch: "p-test-a", ...review, diff: { id: 2, commit: sha("8"), created: new Date(sc.now).toISOString() } });
+    sc.settle();
+    const plan = resumeAuthorPlan(ID, sc.view(), "i-test-a", "continue", { message: "m" }, "investigating");
+    assert.ok(plan && plan !== "busy");
+    plan.purpose.key = "author:i-test-a:continue:c-2";
+    sc.startJob(plan);
+    const again = sc.complete(plan.purpose.key, { report: fixed([sha("9")]) });
+    sc.settle();
+    // Rebased: its earlier import's patch-id differs, Phabricator's is the same.
+    sc.complete(`import:${again}`, { output: imported(sha("9"), "Bug 999 - Fix a, r=smaug.", ["a/test_a.js"], 999).map((c) => ({ ...c, revision: 101, patchId: "same code" })) });
+    sc.settle();
+    sc.complete(`msg:p-test-a:${sha("9")}`, { output: "m" });
+    sc.settle();
+    sc.complete(`lint:p-test-a:${sha("9")}`, { output: lintOk });
+    sc.settle();
+    sc.complete(`patch-id:${sha("8")}`, { output: { patchId: "same code" } });
+    assert.deepEqual(sc.settle(), [`rewrite-review:root:${again}:v2`]);
+  });
+
   it("once Phabricator has the resubmitted commit, the next change's interdiff is against it", () => {
     const { sc, job } = changed("continue");
     sc.settle();
@@ -3489,6 +3517,8 @@ describe("9. changes after submission", () => {
     sc.complete(`msg:p-test-a:${sha("9")}`, { output: "m" });
     sc.settle();
     sc.complete(`lint:p-test-a:${sha("9")}`, { output: lintOk });
+    sc.settle();
+    sc.complete(`patch-id:${sha("8")}`, { output: { patchId: "sent" } });
     sc.settle();
     sc.complete(`review:p-test-a:${again}`, { report: ok });
     assert.deepEqual(sc.settle(), [`rewrite-review:root:${again}:v2`]);

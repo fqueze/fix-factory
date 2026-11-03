@@ -11,7 +11,7 @@ export interface SinceResult {
   removed: { sha: string; title: string }[]; // in the earlier push, no longer in the stack (DEBUG commits included)
 }
 
-async function patchId(cwd: string, sha: string): Promise<string> {
+export async function patchId(cwd: string, sha: string): Promise<string> {
   const out = await git(cwd, ["patch-id", "--stable"], { input: await git(cwd, ["show", "--no-color", "--no-ext-diff", sha]) });
   return out.split(" ")[0] ?? "";
 }

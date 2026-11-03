@@ -703,6 +703,18 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.doesNotMatch(row, /Why new code\?|tail is now shared/, "replied to and marked done there: a later draft is moot");
   });
 
+  it("9. review comments: a critical review's findings no author run took up are shown on the patch", () => {
+    const r = structuredClone(get("r-20261007-focus"));
+    const item = r.patches["p-focus"].item;
+    r.jobs["j-rev"] = { job: "j-rev", kind: "agent", name: "review-patch", item, cwd: "/wt", cmd: [], startedAt: "2026-10-07T10:00:00.000Z", endedAt: "2026-10-07T10:05:00.000Z", exitCode: 0, purpose: { key: "review:p-focus:j-a", what: "review", patch: "p-focus" } } as never;
+    const report = JSON.stringify({ verdict: "findings", findings: [{ severity: "nit", file: "a.js", line: 3, text: "Name it better." }], feedback: [] });
+    const c = { ...ctx, readData: (rel: string) => (rel === "requests/r-20261007-focus/reports/j-rev.json" ? report : undefined) };
+    assert.match(rowOf(renderRequest(r, c, true).value, "patch-p-focus"), /Critical review \(Opus\): not sent to its author<\/h4><ul class="findings"><li><span class="sub">nit · <span class="mono">a.js:3<\/span><\/span> Name it better.<\/li>/);
+    // Its author ran after it: the findings went to it.
+    r.jobs["j-auth"] = { job: "j-auth", kind: "agent", name: "investigate-and-fix", item, cwd: "/wt", cmd: [], startedAt: "2026-10-07T10:06:00.000Z", purpose: { key: `author:${item}:nits:j-a`, what: "author" } } as never;
+    assert.doesNotMatch(rowOf(renderRequest(r, c, true).value, "patch-p-focus"), /not sent to its author/);
+  });
+
   it("9. review comments: a patch waiting for you (resubmit after review fixes) stands out, saying what to do", () => {
     const r = structuredClone(get("r-20261007-focus"));
     r.patches["p-focus"].revision = 5;

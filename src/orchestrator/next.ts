@@ -1419,8 +1419,19 @@ class Planner {
     }
     // An answer to review comments is reviewed against them: a change claimed but not made is caught here.
     const answered = author.name === "address-review" ? (author.purpose.comments ?? []) : [];
-    // A patch whose code an earlier critical review accepted (its author changed another one) isn't reviewed again.
-    const reviews = patches.filter((p) => !this.acceptedPatch(item.id, author, p.id)).map((p) => {
+    // The code Phabricator has, by patch-id (an older import's says nothing once the base changed around it).
+    const phabCode = new Map<PatchId, string>();
+    for (const p of patches) {
+      const pv = this.s.patches[p.id];
+      const base = pv && this.phabBase(pv);
+      if (!base) continue;
+      const job = this.want(`patch-id:${base}`, () => this.cli("patch-id", "stack.ts", ["patch-id", "--cwd", cwd, base], { cwd, priority, item: item.id, purpose: { item: item.id, patch: p.id } }));
+      if (!job) return;
+      phabCode.set(p.id, this.out<{ patchId: string }>(job).patchId);
+    }
+    // A patch whose code an earlier critical review accepted (its author changed another one), or whose code is what
+    // Phabricator has, isn't reviewed again.
+    const reviews = patches.filter((p) => !this.acceptedPatch(item.id, author, p.id, phabCode.get(p.id))).map((p) => {
       const comments = (this.s.patches[p.id]?.review?.comments ?? []).filter((c) => answered.includes(c.id));
       const file = dataPath(this.config, this.s.id, `review-comments-${p.id}-${author.job}.json`);
       const vars = { sha: p.sha, worktree: cwd, report: reportPath(this.config, this.s.id, author.job), comments: comments.length ? ` It answers the review comments in ${file}: check each one is really dealt with as its reviewer asked, in the code or in a reply in the report; a change the report claims but the diff doesn't make is a must-fix.` : "" };
@@ -1854,7 +1865,7 @@ class Planner {
   // Whether an earlier run of this item's authors had the same code (git patch-id) as this one, and its code was
   // accepted: its critical reviews passed, or only nits were left, which its nits pass addressed.
   // The same code as a version of that patch a critical review accepted, the author's runs between not changing it.
-  private acceptedPatch(item: ItemId, author: JobRecord, pid: PatchId): boolean {
+  private acceptedPatch(item: ItemId, author: JobRecord, pid: PatchId, phab?: string): boolean {
     const index = Number(/-(\d+)$/.exec(pid.slice(patchId(item, 0).length))?.[1] ?? 1) - 1;
     const code = (j: JobRecord) => {
       const imp = this.view.byKey.get(`import:${j.job}`)?.find(succeeded);
@@ -1862,6 +1873,7 @@ class Planner {
     };
     const mine = code(author);
     if (!mine) return false;
+    if (mine === phab) return true;
     const jobs = this.authorJobs(item).filter(succeeded);
     const earlier = jobs.slice(0, jobs.indexOf(author));
     // The code Phabricator has (the author run's current when you last submitted it) is its reviewers' to review.
