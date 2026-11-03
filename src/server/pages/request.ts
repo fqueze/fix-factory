@@ -6,7 +6,7 @@ import { isAnswered } from "../../state/landing.ts";
 import { html, join, type Html } from "../html.ts";
 import { actionsSummary, flagPlaceOf, renderAction, recoveryAnswers, pollPhabButton, verifyStackButton, redoAnnotationsButton, approvePushControls, bugBox, continueBox, copyButton, handBackButton, flagControls, flagItemOf, flagText, plannedLabel, recoveryPlanFor, hasAuthorSession, stackViewerLink, submitControls, summaryId } from "./actions.ts";
 import { groupJobs, jobLine } from "./activity.ts";
-import { flagAsk, itemBucket, itemSentence, progressLine, requestProgress, type Bucket } from "./progress.ts";
+import { flagAsk, itemBucket, itemSentence, progressLine, requestProgress, submittedDetail, type Bucket } from "./progress.ts";
 import {
   actionKind,
   bugUrl,
@@ -59,7 +59,7 @@ export function renderRequest(r: RequestState, ctx: RenderContext, open = ctx.op
   return html`<details class="req${needs ? " needs" : ""}" id="req-${r.id}" data-request="${r.id}" data-section="${sectionOf(r)}"${open ? html` open` : null}>
     <summary>
       <span class="rname">${meta ? html`<a class="bug" href="${bugUrl(meta.bug!)}" target="_blank" rel="noopener">Bug ${meta.bug}</a> ${r.metaBug!.draft?.summary ?? requestName(r)}` : requestName(r)}</span>
-      <span class="rsum"><span class="rprog">${progressLine(requestProgress(r, ctx))}</span>${summary ? ` · ${summary}` : null}</span>
+      <span class="rsum"><span class="rprog">${progressLine(requestProgress(r, ctx), submittedDetail(r, ctx))}</span>${summary ? ` · ${summary}` : null}</span>
       <span class="rright">${cost > 0 ? html`<a class="cost hide-sm" href="${profileUrl(ctx, r.id)}" target="_blank" rel="noopener" title="What the agents of this request cost so far: its profile">${formatCost(cost)}</a>` : null}${
         one ? html`${stackViewerLink(r, one)}${stackMenu(r, one, ctx)}` : null
       }</span>
@@ -81,19 +81,9 @@ export function requestSummary(r: RequestState): string {
   }
   const own = Object.values(r.jobs).filter((j) => j.item === undefined && j.endedAt === undefined && j.purpose?.push === undefined);
   parts.push(...new Set(own.map((j) => jobLabel(j.name))));
-  // Once submitted, where its revisions stand says more than try.
-  const submitted = Object.values(r.patches).filter((p) => p.revision !== undefined && !isDropped(r, p));
-  // Done, everything landed: its groups' count says it.
-  if (submitted.length && r.step !== "done" && REQUEST_STEPS.indexOf(r.step) >= REQUEST_STEPS.indexOf("review comments")) {
-    // Its patches still open there (landed ones are in the groups' count), by status.
-    const label = (status: string) => ({ "needs-review": "waiting for review", accepted: "accepted", "needs-revision": "changes requested" })[status] ?? status;
-    const open = submitted.filter((p) => p.review?.status !== "published");
-    const counts = new Map<string, number>();
-    for (const p of open) counts.set(label(p.review?.status ?? "needs-review"), (counts.get(label(p.review?.status ?? "needs-review")) ?? 0) + 1);
-    if (open.length) parts.push(`${plural(open.length, "patch", "patches")} on Phabricator: ${[...counts].map(([l, n]) => (counts.size === 1 ? l : `${n} ${l}`)).join(", ")}`);
-    return parts.join(" · ");
-  }
-  if (r.step === "done") return parts.join(" · ");
+  // Once submitted, its progress says where its revisions stand, not try.
+  const submitted = Object.values(r.patches).some((p) => p.revision !== undefined && !isDropped(r, p));
+  if (r.step === "done" || (submitted && REQUEST_STEPS.indexOf(r.step) >= REQUEST_STEPS.indexOf("review comments"))) return parts.join(" · ");
   // Declined pushes say nothing about try; the last one made does, or one waiting for you.
   const pushes = Object.values(r.pushes).filter((p) => p.declined === undefined);
   const running = pushes.filter((p) => p.rev && p.result === undefined);

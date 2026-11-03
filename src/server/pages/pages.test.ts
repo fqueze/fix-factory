@@ -115,7 +115,6 @@ describe("overview", () => {
     assert.equal(requestSummary(r), "");
     const head = page.slice(page.indexOf('id="req-r-20260930-errorsummary"'));
     assert.match(head.slice(0, head.indexOf("</summary>")), /<span class="rsum"><span class="rprog"><span class="pbar"><span class="landed" style="flex-grow:1"><\/span><\/span><span class="landed">1 landed<\/span><\/span><\/span>/);
-    assert.match(requestSummary({ ...r, step: "landing" }), /on Phabricator/, "before done, it does");
   });
 
   it("lists the try pushes still running across requests, each linked to its row in its request", () => {
@@ -661,11 +660,13 @@ describe("one fixture per step of docs/MVP.md", () => {
     // Submitted: where its revisions stand, not try.
     r.step = "review comments";
     r.patches["p-focus"].revision = 5;
-    assert.match(renderRequest(r, ctx, false).value, /<span class="submitted">1 submitted<\/span><\/span> · 1 patch on Phabricator: waiting for review<\/span>/);
-    // Landed ones are in the groups' count, not repeated there.
-    const landed = structuredClone(r);
-    landed.patches["p-focus"].review = { revision: 5, status: "published", reviewers: [], comments: [] };
-    assert.doesNotMatch(requestSummary(landed), /on Phabricator/);
+    assert.match(renderRequest(r, ctx, false).value, /<span class="submitted">1 submitted: waiting for review<\/span><\/span><\/span>/);
+    // Counted per patch: a second one, accepted.
+    const two = structuredClone(r);
+    two.patches["p-focus"].review = { revision: 5, status: "needs-review", reviewers: [], comments: [] };
+    two.patches["p-focus-2"] = { ...structuredClone(two.patches["p-focus"]), id: "p-focus-2", revision: 6, review: { revision: 6, status: "accepted", reviewers: [{ name: "smaug", status: "blocking" }], comments: [] } };
+    assert.match(renderRequest(two, ctx, false).value, /<span class="submitted">2 submitted: 1 waiting for review, 1 accepted<\/span>/);
+    assert.doesNotMatch(renderRequest(two, ctx, false).value, /on Phabricator/);
   });
 
   it("8. submit: checks pass, stack-viewer link, moz-phab command to copy", () => {

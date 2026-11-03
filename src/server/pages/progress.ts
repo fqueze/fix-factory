@@ -218,19 +218,37 @@ export function itemBucket(r: RequestState, i: ItemView, ctx: RenderContext): Bu
 
 export type Progress = Record<Bucket, number>;
 
-// Its groups; and the request's own ⚑s (recovery plans, refused commands…) need you too. Its own jobs aren't groups:
-// the summary next to it says what they do.
+// Its groups, one per patch once a group has some (what Phabricator shows), else one per group; and the request's own
+// ⚑s (recovery plans, refused commands…) need you too. Its own jobs aren't groups: the summary next to it says what
+// they do.
 export function requestProgress(r: RequestState, ctx: RenderContext): Progress {
-  const p: Progress = { "needs you": 0, working: 0, "waiting for try": 0, landable: 0, "submitted": 0, ready: 0, pending: 0, landed: 0, closed: 0 };
+  const p: Progress = { "needs you": 0, working: 0, "waiting for try": 0, landable: 0, submitted: 0, ready: 0, pending: 0, landed: 0, closed: 0 };
   for (const i of Object.values(r.items)) {
     const b = itemBucket(r, i, ctx);
-    const all = Object.values(r.patches).filter((x) => x.item === i.id && !isDropped(r, x));
-    const patches = all.filter((x) => x.revision !== undefined);
-    const submitted = patches.length > 0 && patches.length === all.length;
-    p[b === "ready" && patches.length && patches.every((x) => isLandable(r, x)) ? "landable" : b === "ready" && submitted ? "submitted" : b]++;
+    const patches = Object.values(r.patches).filter((x) => x.item === i.id && !isDropped(r, x));
+    if (!patches.length || b !== "ready") {
+      p[b] += Math.max(1, patches.length);
+      continue;
+    }
+    for (const x of patches) p[x.review?.status === "published" ? "landed" : isLandable(r, x) ? "landable" : x.revision !== undefined ? "submitted" : "ready"]++;
   }
   p["needs you"] += r.needsUser.filter((n) => flagItemOf(r, n) === undefined).length + refusedOf(r).length;
   return p;
+}
+
+// Where the submitted (not landable) patches stand on Phabricator: "4 waiting for review, 1 accepted".
+export function submittedDetail(r: RequestState, ctx: RenderContext): string {
+  const label = (status: string) => ({ "needs-review": "waiting for review", accepted: "accepted", "needs-revision": "changes requested" })[status] ?? status;
+  const counts = new Map<string, number>();
+  for (const i of Object.values(r.items)) {
+    if (itemBucket(r, i, ctx) !== "ready") continue;
+    for (const x of Object.values(r.patches)) {
+      if (x.item !== i.id || isDropped(r, x) || x.revision === undefined || x.review?.status === "published" || isLandable(r, x)) continue;
+      const l = label(x.review?.status ?? "needs-review");
+      counts.set(l, (counts.get(l) ?? 0) + 1);
+    }
+  }
+  return [...counts].map(([l, n]) => (counts.size === 1 ? l : `${n} ${l}`)).join(", ");
 }
 
 // A recover run started by what you typed says so; its purpose keeps the text.
@@ -244,14 +262,14 @@ export function workLabel(j: JobView): Html {
 const BAR: Bucket[] = ["landed", "landable", "submitted", "ready", "waiting for try", "needs you", "working", "pending"];
 
 // A bar with one segment per bucket, then "2 need you · 1 working · 3 ready · 4 pending · 5 closed".
-export function progressLine(p: Progress): Html {
+export function progressLine(p: Progress, submitted = ""): Html {
   const shown = BUCKETS.filter((b) => p[b] > 0);
   if (!shown.length) {
     return html`<span class="sub">nothing to work on yet</span>`;
   }
   const cls = (b: Bucket) => b.replaceAll(" ", "-");
   return html`<span class="pbar">${BAR.filter((b) => p[b] > 0).map((b) => html`<span class="${cls(b)}" style="flex-grow:${p[b]}"></span>`)}</span>${join(
-    shown.map((b) => html`<span class="${cls(b)}">${p[b]} ${b === "needs you" && p[b] === 1 ? "needs you" : b === "needs you" ? "need you" : b}</span>`),
+    shown.map((b) => html`<span class="${cls(b)}">${p[b]} ${b === "needs you" && p[b] === 1 ? "needs you" : b === "needs you" ? "need you" : b}${b === "submitted" && submitted ? `: ${submitted}` : ""}</span>`),
     " · ",
   )}`;
 }
