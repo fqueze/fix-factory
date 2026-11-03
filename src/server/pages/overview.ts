@@ -36,6 +36,8 @@ export function renderStrip(requests: RequestState[], ctx: RenderContext): Html 
   const agents = jobs.filter(({ j }) => j.kind === "agent");
   const builds = jobs.filter(({ j }) => j.kind === "build");
   const progress = sumProgress(requests.filter((r) => sectionOf(r) !== "finished").map((r) => requestProgress(r, ctx)));
+  // What landed counts whole: finished requests' too (the rest of theirs isn't work left).
+  progress.landed += requests.filter((r) => sectionOf(r) === "finished").reduce((n, r) => n + requestProgress(r, ctx).landed, 0);
   return html`<div class="strip" id="strip">
     ${running("agents", agents, ctx.maxAgents, ctx)}
     ${running("builds", builds, ctx.maxBuilds, ctx)}
