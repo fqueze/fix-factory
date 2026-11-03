@@ -339,6 +339,8 @@ class Planner {
       const item = p.item === undefined ? undefined : this.s.items[p.item];
       // A plan already written (shown on its row) is kept up to date whatever the step.
       if (!item || !TEST_PLAN_STATES.has(item.state) || (!verified && p.revision === undefined && p.testPlan === undefined)) continue;
+      // A patch beyond its author's commits is one it dropped.
+      if (item.commitCount !== undefined && Number(/-(\d+)$/.exec(p.id.slice(patchId(item.id, 0).length))?.[1] ?? 1) > item.commitCount) continue;
       const author = item.jobs.map((j) => this.s.jobs[j]).findLast((j) => j?.name === "investigate-and-fix");
       const inv = item.investigation ?? null;
       // Only the pushes that had this patch: a plan may cite no other.
@@ -3013,8 +3015,21 @@ class Planner {
         item,
         key,
         "backout",
-        `D${p.revision} landed, then was backed out:\n${b.reason}\n\nRead the failure (the log linked above, and the test's runs with fx-tests) and find whether your patch causes it. If it does, fix it by amending your commit. Either way, end with the JSON report again, saying what caused the failure. It won't land again before a try push shows those jobs green with your fix.`,
+        `D${p.revision} landed, then was backed out:\n${b.reason}\n\nRead the failure (the log linked above, and the test's runs with fx-tests) and find whether your patch causes it. If it doesn't, leave your commit as it is and say what causes it in \`disagreement\`. If it does, fix it by amending your commit, and put how you reproduced this failure locally, without and with your fix, in \`reproduction\`: without a local reproduction, it won't land again before a try push shows those jobs green with your fix. Then end with the JSON report again.`,
       );
+      // Its answer: its patch left as it is, or why the failure isn't its patch's, clears it; a fix shown by a local
+      // reproduction of this failure (not the one it had) needs no try push.
+      if (run && succeeded(run)) {
+        const r = this.rep<InvestigateReport>(run);
+        if (r.disagreement !== undefined || this.unchangedBy(item, run)) {
+          this.event(this.ev("backout", { patch: pid, at: b.at, reason: b.reason, culprit: false }));
+          continue;
+        }
+        if (r.reproduction?.reproduced && r.reproduction.where === "locally" && JSON.stringify(r.reproduction) !== JSON.stringify(this.s.items[item].investigation?.reproduction)) {
+          this.event(this.ev("backout-verified", { patch: pid }));
+          continue;
+        }
+      }
       // Its answer reviewed and back on its way to Phabricator: then the push.
       if (!run || this.s.items[item].state !== "waiting for review") continue;
       const st = Object.values(this.s.stacks).find((x) => x.order.includes(pid));

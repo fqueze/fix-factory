@@ -2683,6 +2683,27 @@ describe("10. backouts", () => {
     assert.equal(sc.state().backouts["p-test-b"].culprit, true);
   });
 
+  it("an author leaving its patch as it is, or saying why the failure isn't its patch's, clears it", () => {
+    const sc = backedOut("Backed out for causing failures at test_other.html.");
+    for (const [item, report] of [["i-test-a", (c: string[]) => fixed(c)], ["i-test-b", (c: string[]) => fixed([sha("9")], { disagreement: "test_other.html fails from another patch: " + c.join() })]] as const) {
+      const told = sc.view().jobs.find((j) => j.purpose.key.startsWith(`author:${item}:backout:`))!.purpose.key;
+      sc.complete(told, { report: report(sc.state().items[item].investigation!.commits) });
+      sc.settle();
+    }
+    assert.equal(sc.state().backouts["p-test-a"].culprit, false);
+    assert.equal(sc.state().backouts["p-test-b"].culprit, false);
+    assert.ok(!sc.state().verifyAsked?.some((t) => t.includes("after its backout")));
+  });
+
+  it("its fix shown by a local reproduction of the failure needs no try push", () => {
+    const sc = backedOut();
+    const told = sc.view().jobs.find((j) => j.purpose.key.startsWith("author:i-test-b:backout:"))!.purpose.key;
+    sc.complete(told, { report: fixed([sha("5")], { reproduction: { reproduced: true, where: "locally", before: "2 of 2 at 1600x1200", after: "0 of 6" } }) });
+    sc.settle();
+    assert.equal(sc.state().backouts["p-test-b"].verified, true);
+    assert.ok(!sc.state().verifyAsked?.some((t) => t.includes("after its backout")));
+  });
+
   it("its fix, once reviewed, gets a try push of the failing jobs; green, it may land again", () => {
     const sc = backedOut();
     const told = sc.view().jobs.find((j) => j.purpose.key.startsWith("author:i-test-b:backout:"))!.purpose.key;
@@ -3107,6 +3128,17 @@ describe("9. review comments", () => {
     sc.add({ type: "test-plan", request: ID, patch: "p-test-a", text: "- an old plan" });
     sc.showTestPlans = true;
     assert.ok(sc.settle().some((k) => k.startsWith("test-plan:p-test-a:")));
+  });
+
+  it("writes no test plan for a patch its author dropped", () => {
+    const sc = stacked();
+    const { deps: _d, review: _r, replyDrafts: _rd, id: _id, ...a } = sc.state().patches["p-test-a"];
+    sc.add({ type: "patch", request: ID, ...a, patch: "p-test-a-2", sha: sha("e") });
+    for (const patch of ["p-test-a", "p-test-a-2"]) sc.add({ type: "test-plan", request: ID, patch, text: "- an old plan" });
+    sc.showTestPlans = true;
+    const started = sc.settle();
+    assert.ok(started.some((k) => k.startsWith("test-plan:p-test-a:")));
+    assert.ok(!started.some((k) => k.startsWith("test-plan:p-test-a-2:")));
   });
 
   it("gives a test plan only the pushes that had its patch, saying whether they had this version of it", () => {
