@@ -370,7 +370,7 @@
 
   // The landed list eases a row's lines open or closed only as the pointer enters or leaves it.
   function easeLanded(event) {
-    var list = event.target.closest && event.target.closest(".landed-rows");
+    var list = event.target.closest && event.target.closest(".compact-rows");
     if (!list || list.contains(event.relatedTarget)) return;
     list.classList.add("easing");
     clearTimeout(list.easingTimer);

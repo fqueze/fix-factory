@@ -150,7 +150,7 @@ export function renderRequestBody(r: RequestState, ctx: RenderContext): Html {
             declined.length ? html`<details class="fold" data-fold="declined-pushes"><summary>${declined.length} declined or withdrawn</summary><div class="rows">${declined.map((p) => pushRowOf(r, p, ctx))}</div></details>` : null
           }</div></details>`
         : null
-    }<hr class="part">` : null}
+    }` : null}${stacks.length === 1 ? stackSubmit(r, stacks[0]) : null}${pushes.length || stacks.length === 1 ? html`<hr class="part">` : null}
     ${r.metaBug && !(hasBug(r.metaBug) && (stacks.length || landed.length)) ? metaBugLine(r, back, ctx) : null}
     ${stacks.map((s) => stackSection(r, s, ctx, stacks.length > 1))}
     ${loose.length ? html`<h3>Patches</h3><div class="rows">${loose.map((p) => patchRow(r, p, ctx))}</div>` : null}
@@ -159,7 +159,7 @@ export function renderRequestBody(r: RequestState, ctx: RenderContext): Html {
       repro.length ? html`<h3>DEBUG commits for the stack's next try push</h3>${groupRows(r, repro, ctx, false)}` : null
     }
     ${toStack.some((i) => itemBucket(r, i, ctx) !== "closed") ? html`${stacks.length || loose.length ? html`<h3>Not in a stack yet</h3>` : null}${groupRows(r, toStack, ctx, false)}` : null}
-    ${landed.length ? html`<div class="landed-section"><h3 class="landed-head">Landed</h3><div class="landed-rows">${groupRows(r, landed, ctx)}</div></div>` : null}
+    ${landed.length ? html`<div class="landed-section"><h3 class="landed-head">Landed</h3><div class="landed-rows compact-rows">${groupRows(r, landed, ctx)}</div></div>` : null}
     ${handOffs(r, ctx)}
     ${closedFold(r, items.filter((i) => itemBucket(r, i, ctx) === "closed" && i.state !== "taken over"), ctx)}
     ${stacks.length || loose.length || items.length || landed.length ? html`<hr class="part">` : null}
@@ -259,9 +259,13 @@ function stackSection(r: RequestState, s: StackView, ctx: RenderContext, header:
     <div class="rows">${patches.filter((p) => !isDropped(r, p)).map((p) => patchRow(r, p, ctx))}${
       dropped.length ? html`<details class="fold" data-fold="dropped-${s.id}"><summary>${dropped.length} dropped</summary><div class="rows">${dropped.map((p) => patchRow(r, p, ctx))}</div></details>` : null
     }</div>
-    <div class="stack-submit">${
-submitted ? verifyStackButton(r.id, requestUrl(r.id)) : null
-    }${submitControls(r, s, requestUrl(r.id))}</div>`;
+    ${header ? stackSubmit(r, s, submitted) : null}`;
+}
+
+// Verifying and submitting the stack: with one stack, right under the try pushes (so its rows meet what landed below
+// them); with several, under each.
+function stackSubmit(r: RequestState, s: StackView, submitted = livePatches(r, s).some((p) => p.revision !== undefined) && r.step !== "done"): Html {
+  return html`<div class="stack-submit">${submitted ? verifyStackButton(r.id, requestUrl(r.id)) : null}${submitControls(r, s, requestUrl(r.id))}</div>`;
 }
 
 function stackMenu(r: RequestState, s: StackView, ctx: RenderContext): Html | null {
@@ -324,7 +328,7 @@ interface Row {
 // from its label; its state and trust lines then move under the box.
 function row(x: Row): Html {
   const lines = html`<span class="state">${x.state}</span>${x.flag ? html`<span class="rowflag">${x.flag}</span>` : null}${x.trust ? html`<span class="trust">${x.trust}</span>` : null}`;
-  const d = html`<details class="row${x.you ? " you" : null}${x.bucket && x.bucket !== "closed" ? ` b-${x.bucket.replaceAll(" ", "-")}` : null}" ${x.anchor} data-fold="${x.fold}"><summary><span class="st ${x.cls}" title="${x.tip ?? ICON_TIPS[x.cls]}"></span><span class="name" title="${x.title}">${x.name}</span><span class="end">${x.end}</span>${lines}${
+  const d = html`<details class="row${x.you ? " you" : null}${x.bucket ? ` b-${x.bucket.replaceAll(" ", "-")}` : null}" ${x.anchor} data-fold="${x.fold}"><summary><span class="st ${x.cls}" title="${x.tip ?? ICON_TIPS[x.cls]}"></span><span class="name" title="${x.title}">${x.name}</span><span class="end">${x.end}</span>${lines}${
     x.warn ? html`<span class="warn">${x.warn}</span>` : null
   }</summary>${x.under ? html`<div class="under">${x.under}<div class="lines">${lines}</div></div>` : null}<div class="rowbody">${x.body}</div></details>`;
   return x.ask ? html`<div class="asks">${d}<div class="ask-you">${x.ask}</div></div>` : d;
@@ -370,7 +374,7 @@ function handOffs(r: RequestState, ctx: RenderContext): Html | null {
 }
 
 function closedFold(r: RequestState, closed: ItemView[], ctx: RenderContext): Html | null {
-  return closed.length ? html`<details class="fold" data-fold="closed-groups"><summary>${closed.length} closed</summary><div class="rows">${closed.map((i) => itemRows(r, i, ctx))}</div></details>` : null;
+  return closed.length ? html`<details class="fold" data-fold="closed-groups"><summary>${closed.length} closed</summary><div class="rows compact-rows">${closed.map((i) => itemRows(r, i, ctx))}</div></details>` : null;
 }
 
 // Once a group has a reviewed patch, the patch's row replaces the group's.
@@ -398,6 +402,15 @@ function stateText(r: RequestState, i: ItemView, ctx: RenderContext): Html {
 }
 
 // A ready group or patch gets the ✓, even while it waits for the rest of its stack.
+// A closed group's icon, in words: what closed it.
+function closedTip(r: RequestState, i: ItemView): string | undefined {
+  if (r.movedTo?.[i.id]) return `Moved to ${r.movedTo[i.id]}`;
+  if (i.state === "taken over") return "Taken over by you";
+  if (i.state === "handed back") return "Dropped by you: the factory stopped working on it";
+  if (i.state === "left as-is") return `Left as-is${i.detail ? `: ${i.detail}` : ""}`;
+  return undefined;
+}
+
 // What a group's or patch's icon means.
 const ICON_TIPS: Record<StateClass, string> = {
   run: "The factory is working on it",
@@ -425,7 +438,9 @@ function phabClass(p: PatchView, cls: StateClass): StateClass {
 }
 
 function rowClass(r: RequestState, i: ItemView, ctx: RenderContext): StateClass {
-  if (i.state === "handed back") return "dropped";
+  // Closed, with Phabricator's icons: the factory resigned (moved, taken over, dropped by you), or abandoned it.
+  if (i.state === "handed back" || i.state === "taken over" || r.movedTo?.[i.id]) return "dropped";
+  if (itemSentence(r, i, ctx).cls === "closed") return "abandoned";
   return itemBucket(r, i, ctx) === "ready" ? "ok" : itemSentence(r, i, ctx).cls;
 }
 
@@ -440,6 +455,7 @@ function groupRow(r: RequestState, i: ItemView, ctx: RenderContext): Html {
     fold: `item-${i.id}`,
     bucket: itemBucket(r, i, ctx),
     cls: rowClass(r, i, ctx),
+    tip: closedTip(r, i) ?? (rowClass(r, i, ctx) === "abandoned" ? "Closed without a fix" : undefined),
     name: html`${groupLabel(r, i)}`,
     title: [...i.group.tests, i.group.configs.join(", ")].join("\n"),
     // Redo is on the top line: the group's patches are in its folded body, and it's what you'd want of it.
@@ -575,6 +591,7 @@ function patchRow(r: RequestState, p: PatchView, ctx: RenderContext): Html {
     fold: `patch-${p.id}`,
     bucket: item ? (landable && itemBucket(r, item, ctx) === "ready" ? "landable" : itemBucket(r, item, ctx)) : landable ? "landable" : undefined,
     cls: own.some((n) => actionKind(n, r) === "resubmit") ? "resubmit" : phabClass(p, item ? rowClass(r, item, ctx) : landable ? "ok" : "wait"),
+    tip: item && p.review?.status !== "abandoned" ? closedTip(r, item) : undefined,
     name: html`${p.revision ? html`<a class="phab" href="${phabUrl(p.revision)}" title="D${p.revision}" target="_blank" rel="noopener">${PHAB_ICON}</a>` : null}${
       first.id === p.id ? bugLabel(p, ctx) : html`<a class="bug tofile" href="#patch-${first.id}" title="Filed from ${first.title}">same bug</a>`
     } ${patchTitle(p)}`,

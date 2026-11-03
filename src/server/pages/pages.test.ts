@@ -684,6 +684,20 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.equal(icon("abandoned"), "abandoned: Abandoned on Phabricator");
   });
 
+  it("one stack: its submit controls come right after the try pushes, so its rows meet what landed below them", () => {
+    const h = expanded("r-20261010-xpcshell-cwd");
+    const submit = h.indexOf('<div class="stack-submit">');
+    assert.ok(submit > h.indexOf('id="push-') && submit < h.indexOf('id="patch-'), "after the pushes, before the patch rows");
+    assert.equal(h.split('<div class="stack-submit">').length, 2, "once");
+  });
+
+  it("closed groups: Phabricator's abandoned icon, saying why, on one line until hovered, with a grey edge", () => {
+    const h = expanded("r-20261015-enterprisepolicies");
+    const fold = h.slice(h.indexOf('data-fold="closed-groups"'));
+    assert.match(fold, /^data-fold="closed-groups"><summary>\d+ closed<\/summary><div class="rows compact-rows">/);
+    assert.match(fold, /<details class="row b-closed"[^>]*><summary><span class="st abandoned" title="Left as-is[^"]*">/);
+  });
+
   it("8. submit: checks pass, stack-viewer link, moz-phab command to copy", () => {
     const h = expanded("r-20261007-focus");
     assert.doesNotMatch(h, /class="bad"/);
