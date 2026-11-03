@@ -788,7 +788,7 @@ function reviewText(p: PatchView): Html {
       : rv.reviewers.some((x) => x.status === "blocking")
         ? "changes requested"
         : (({ "needs-review": "waiting for review", published: "landed", abandoned: "abandoned" }) as Record<string, string>)[rv.status] ?? rv.status;
-  return html`${what} on Phabricator${rv.reviewers.length ? html`: ${join(rv.reviewers.map((x) => html`<span class="rv ${x.status}" title="${x.name} ${REVIEWER_TIPS[x.status]}">${x.name}</span>`), " ")}` : null}`;
+  return html`${what}${rv.reviewers.length ? html`: ${join(rv.reviewers.map((x) => html`<span class="rv ${x.status}" title="${x.name} ${REVIEWER_TIPS[x.status]}">${x.name}</span>`), " ")}` : null}`;
 }
 
 // On the row's first line, shown on hover: its review effort (why, in its title), its size, and the 🗑 to close it.

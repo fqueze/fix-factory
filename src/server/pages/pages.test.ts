@@ -863,7 +863,7 @@ describe("one fixture per step of docs/MVP.md", () => {
     const h = expanded("r-20261005-newtab");
     assert.match(h, /<a class="phab" href="https:\/\/phabricator\.services\.mozilla\.com\/D327101" title="D327101"/);
     assert.match(h, /<a class="bug" href="https:\/\/bugzilla\.mozilla\.org\/show_bug\.cgi\?id=2011958"[^>]*>Bug 2011958<\/a> Count the sponsored tiles/);
-    assert.match(h, /accepted with comments on Phabricator/);
+    assert.match(h, /accepted with comments/);
     assert.match(h, /<span class="r">-  let tiles = row\.querySelectorAll\(&quot;\.top-site-outer&quot;\);<\/span>/);
     assert.match(h, /<textarea rows="1" id="reply-p-sponsored-1873402">Done\.<\/textarea>/);
     assert.match(h, /data-copy="reply-p-sponsored-1873402">Copy reply</);
@@ -876,8 +876,8 @@ describe("one fixture per step of docs/MVP.md", () => {
     const p = Object.values(r.patches).find((x) => x.review?.status === "accepted" && x.item)!;
     r.items[p.item!].state = "waiting for review";
     const row = rowOf(renderRequest(r, ctx, true).value, `patch-${p.id}`);
-    assert.match(row, /accepted on Phabricator: <span class="rv accepted" title="[^"]+ accepted">/);
-    assert.doesNotMatch(row, /waiting for review on Phabricator/);
+    assert.match(row, /accepted: <span class="rv accepted" title="[^"]+ accepted">/);
+    assert.doesNotMatch(row, /waiting for review/);
   });
   it("10. landing: a patch waiting for review says who it waits for, and an empty interdiff isn't shown", () => {
     const r = structuredClone(get("r-20261001-mouse-button"));
@@ -886,7 +886,7 @@ describe("one fixture per step of docs/MVP.md", () => {
     p.review = { ...p.review!, status: "needs-review", reviewers: [{ name: "#dom-core-reviewers", status: "pending" }], comments: [] };
     p.interdiffFile = "empty.diff";
     const row = rowOf(renderRequest(r, { ...ctx, interdiff: () => "" }, true).value, `patch-${p.id}`);
-    assert.match(row, /waiting for review on Phabricator: <span class="rv pending" title="#dom-core-reviewers hasn&#39;t reviewed it yet">#dom-core-reviewers<\/span>/);
+    assert.match(row, /waiting for review: <span class="rv pending" title="#dom-core-reviewers hasn&#39;t reviewed it yet">#dom-core-reviewers<\/span>/);
     p.review.reviewers = [{ name: "#dom-core-reviewers", status: "required" }];
     assert.match(rowOf(renderRequest(r, { ...ctx, interdiff: () => "" }, true).value, `patch-${p.id}`), /<span class="rv required" title="#dom-core-reviewers is a blocking reviewer and hasn&#39;t reviewed it yet">/);
     assert.doesNotMatch(row, /Interdiff/);
