@@ -85,10 +85,12 @@ export function requestSummary(r: RequestState): string {
   const submitted = Object.values(r.patches).filter((p) => p.revision !== undefined && !isDropped(r, p));
   // Done, everything landed: its groups' count says it.
   if (submitted.length && r.step !== "done" && REQUEST_STEPS.indexOf(r.step) >= REQUEST_STEPS.indexOf("review comments")) {
-    const label = (status: string) => ({ "needs-review": "waiting for review", accepted: "accepted", "needs-revision": "changes requested", published: "landed" })[status] ?? status;
+    // Its patches still open there (landed ones are in the groups' count), by status.
+    const label = (status: string) => ({ "needs-review": "waiting for review", accepted: "accepted", "needs-revision": "changes requested" })[status] ?? status;
+    const open = submitted.filter((p) => p.review?.status !== "published");
     const counts = new Map<string, number>();
-    for (const p of submitted) counts.set(label(p.review?.status ?? "needs-review"), (counts.get(label(p.review?.status ?? "needs-review")) ?? 0) + 1);
-    parts.push(`on Phabricator: ${[...counts].map(([l, n]) => (counts.size === 1 && n === submitted.length ? l : `${n} ${l}`)).join(", ")}`);
+    for (const p of open) counts.set(label(p.review?.status ?? "needs-review"), (counts.get(label(p.review?.status ?? "needs-review")) ?? 0) + 1);
+    if (open.length) parts.push(`${plural(open.length, "patch", "patches")} on Phabricator: ${[...counts].map(([l, n]) => (counts.size === 1 ? l : `${n} ${l}`)).join(", ")}`);
     return parts.join(" · ");
   }
   if (r.step === "done") return parts.join(" · ");
