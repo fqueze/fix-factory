@@ -1,7 +1,7 @@
 import { ANNOTATIONS_ITEM, needsMetaBug as stackNeedsMetaBug, sameBugDraft } from "../../state/meta-bug.ts";
 import { md } from "./md.ts";
 import { REQUEST_STEPS } from "../commands.ts";
-import type { BugDraft, ItemView, JobView, PatchView, PushView, Regression, RequestState, ReviewPatchReport, ReviewerStatus, StackView } from "../../types.ts";
+import type { BugDraft, ItemView, JobView, NeedsUser, PatchView, PushView, Regression, RequestState, ReviewPatchReport, ReviewerStatus, StackView } from "../../types.ts";
 import { isAnswered } from "../../state/landing.ts";
 import { escapeHtml, html, join, raw, type Html } from "../html.ts";
 import { actionsSummary, flagPlaceOf, renderAction, recoveryAnswers, pollPhabButton, verifyStackButton, redoAnnotationsButton, approvePushControls, bugBox, continueBox, copyButton, handBackButton, flagControls, flagItemOf, flagText, plannedLabel, recoveryPlanFor, hasAuthorSession, stackViewerLink, submitControls, summaryId } from "./actions.ts";
@@ -310,7 +310,8 @@ interface Row {
   title: string;
   end: Html | null;
   state: Html;
-  trust?: Html | null; // the evidence and reproduction behind it
+  trust?: Html | null; // the evidence and reproduction behind it, once opened
+  flag?: Html | null; // what it waits for you to do on Phabricator, with its buttons, on a line of its own
   warn?: Html | null; // what you should know before answering, under its state
   ask?: Html; // what a group needing you asks, with its buttons: in sight without opening the row
   under?: Html | null; // opened, right under its name: a patch's bug to file
@@ -322,7 +323,7 @@ interface Row {
 // Opened, the box under its name comes first in the body (clicking in it mustn't fold the row), styled as hanging
 // from its label; its state and trust lines then move under the box.
 function row(x: Row): Html {
-  const lines = html`<span class="state">${x.state}</span>${x.trust ? html`<span class="trust">${x.trust}</span>` : null}`;
+  const lines = html`<span class="state">${x.state}</span>${x.flag ? html`<span class="rowflag">${x.flag}</span>` : null}${x.trust ? html`<span class="trust">${x.trust}</span>` : null}`;
   const d = html`<details class="row${x.you ? " you" : null}${x.bucket && x.bucket !== "closed" ? ` b-${x.bucket.replaceAll(" ", "-")}` : null}" ${x.anchor} data-fold="${x.fold}"><summary><span class="st ${x.cls}" title="${x.tip ?? ICON_TIPS[x.cls]}"></span><span class="name" title="${x.title}">${x.name}</span><span class="end">${x.end}</span>${lines}${
     x.warn ? html`<span class="warn">${x.warn}</span>` : null
   }</summary>${x.under ? html`<div class="under">${x.under}<div class="lines">${lines}</div></div>` : null}<div class="rowbody">${x.body}</div></details>`;
@@ -408,6 +409,8 @@ const ICON_TIPS: Record<StateClass, string> = {
   review: "Needs review on Phabricator",
   landed: "Landed (closed on Phabricator)",
   abandoned: "Abandoned on Phabricator",
+  draft: "Ready to submit: nothing left for the factory to do",
+  resubmit: "To resubmit: it changed since Phabricator got it",
   dropped: "Dropped by you: the factory stopped working on it",
 };
 
@@ -416,6 +419,8 @@ const ICON_TIPS: Record<StateClass, string> = {
 function phabClass(p: PatchView, cls: StateClass): StateClass {
   if (p.review?.status === "abandoned") return "abandoned";
   if (cls !== "ok") return cls;
+  // Not submitted yet: Phabricator's draft.
+  if (p.revision === undefined) return "draft";
   return ({ published: "landed", accepted: "accepted", "needs-review": "review" } as const)[p.review?.status as "published" | "accepted" | "needs-review"] ?? cls;
 }
 
@@ -561,13 +566,15 @@ function patchRow(r: RequestState, p: PatchView, ctx: RenderContext): Html {
   // What it waits for you to do (resubmit after review fixes, file its bug…), said on the row; those about no group are
   // asked right under it.
   const yours = r.needsUser.filter((n) => n.patch === p.id);
+  // Resubmitting or posting replies: a line of the row; anything else it asks, in the box under it.
+  const onLine = (n: NeedsUser) => ["resubmit", "reply"].includes(actionKind(n, r));
   const own = yours.filter((n) => flagItemOf(r, n) === undefined && flagPlaceOf(r, n) !== undefined);
   return row({
     you: yours.length > 0 || (asks && item !== undefined && r.needsUser.some((n) => flagItemOf(r, n) === item.id)),
     anchor: html`id="patch-${p.id}" data-patch="${p.id}"`,
     fold: `patch-${p.id}`,
     bucket: item ? (landable && itemBucket(r, item, ctx) === "ready" ? "landable" : itemBucket(r, item, ctx)) : landable ? "landable" : undefined,
-    cls: phabClass(p, item ? rowClass(r, item, ctx) : landable ? "ok" : "wait"),
+    cls: own.some((n) => actionKind(n, r) === "resubmit") ? "resubmit" : phabClass(p, item ? rowClass(r, item, ctx) : landable ? "ok" : "wait"),
     name: html`${p.revision ? html`<a class="phab" href="${phabUrl(p.revision)}" title="D${p.revision}" target="_blank" rel="noopener">${PHAB_ICON}</a>` : null}${
       first.id === p.id ? bugLabel(p, ctx) : html`<a class="bug tofile" href="#patch-${first.id}" title="Filed from ${first.title}">same bug</a>`
     } ${patchTitle(p)}`,
@@ -580,15 +587,17 @@ function patchRow(r: RequestState, p: PatchView, ctx: RenderContext): Html {
       landable ? html`<span class="landable">landable</span>` : null,
       backoutText(r, p),
       r.tryNeeded?.[p.id] && !r.tryNeeded[p.id].verified ? html`<span class="bad" title="Not landable yet: it was changed for ${r.tryNeeded[p.id].why}, and no green try push has carried that change since">needs a green try push</span>` : null,
-      ...yours.map((n) => html`<b class="you">${n.action}</b>`),
+      ...yours.filter((n) => !own.includes(n) || !onLine(n)).map((n) => html`<b class="you">${n.action}</b>`),
       item ? html`fixes <b>${groupLinks(r, item)}</b>${covered.length ? html` and <b>${join(covered.map((i) => groupLinks(r, i)), ", ")}</b>` : null}` : null,
     ]
       .filter((x) => x !== null)
       .map((x, i) => (i ? html` · ${x}` : x))}`,
     trust: item ? trustLine(r, item, ctx) : null,
+    flag: own.some(onLine) ? html`${own.filter(onLine).map((n) => html`<span class="flagitem" data-key="${n.key}"><b>⚑ ${n.action}</b>${n.detail ? html` <span class="sub">${n.detail}</span>` : null}${flagControls(r, n, ctx)}</span>`)}` : null,
     ask: (() => {
       const group = item && asks ? askBlock(r, item, ctx, [], controls !== null) : undefined;
-      return group || own.length ? html`${group}${own.map((n) => renderAction(r, n, ctx))}` : undefined;
+      const rest = own.filter((n) => !onLine(n));
+      return group || rest.length ? html`${group}${rest.map((n) => renderAction(r, n, ctx))}` : undefined;
     })(),
     under: bugBoxShown ? bugDraftBox(r, p, back) : null,
     body: html`${item ? whyFold(r, item) : null}${testPlanSection(r, p, back)}${yourComments(r, p)}${p.deps.map((d) => depLine(r, d))}${controls && !sentence?.ask ? html`<div class="jobctl">${controls}</div>` : null}${reviewBox(r, p, p.interdiffFile === undefined ? undefined : ctx.interdiff?.(p))}${leftFindings(r, p, ctx)}${
@@ -798,9 +807,15 @@ function hoverInfo(r: RequestState, p: PatchView, item: ItemView | undefined, ct
   const parts = [
     p.effort === undefined ? null : html`<span${why ? html` title="${why}"` : null}>review effort ${p.effort}/5</span>`,
     stat ? html`<span class="stat"><span class="add">+${stat.added}</span> <span class="del">−${stat.removed}</span></span>` : null,
-    item && closable(r, item, ctx) ? closeButton(r, item) : null,
+    rowMenu(r, p, item, ctx),
   ].filter((x) => x !== null);
   return parts.length ? html`<span class="onhover">${parts}</span>` : null;
+}
+
+// What's rarely needed on a patch's row, in a ⋯ menu: checking Phabricator now, dropping its group.
+function rowMenu(r: RequestState, p: PatchView, item: ItemView | undefined, ctx: RenderContext): Html | null {
+  const items = [p.revision !== undefined && r.step !== "done" ? pollPhabButton(r.id, requestUrl(r.id)) : null, item && closable(r, item, ctx) ? handBackButton(r.id, item.id, requestUrl(r.id), "Drop") : null].filter((x) => x !== null);
+  return items.length ? html`<details class="menu"><summary class="btn small" title="More">⋯</summary><div class="menu-items">${items}</div></details>` : null;
 }
 
 // Interdiff, the comments still to answer, and the drafted replies to post.

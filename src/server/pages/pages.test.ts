@@ -753,8 +753,13 @@ describe("one fixture per step of docs/MVP.md", () => {
     r.needsUser.push({ key: "resubmit:focus:j1", action: "Post 1 reply, then resubmit D5", detail: "comments addressed", since: "2026-10-07T10:00:00.000Z", patch: "p-focus" });
     const h = renderRequest(r, ctx, true).value;
     assert.match(h, /<details class="row you[^"]*" id="patch-p-focus"/);
-    assert.match(rowOf(h, "patch-p-focus"), /<b class="you">Post 1 reply, then resubmit D5<\/b>/);
-    assert.ok(rowOf(h, "patch-p-focus").includes('data-key="resubmit:focus:j1"'), "its flag, with its buttons, right under its row");
+    // On a line of the row, not also on its state line.
+    assert.match(rowOf(h, "patch-p-focus")!, /<span class="rowflag"><span class="flagitem" data-key="resubmit:focus:j1"><b>⚑ Post 1 reply, then resubmit D5<\/b> <span class="sub">comments addressed<\/span>/);
+    assert.doesNotMatch(rowOf(h, "patch-p-focus")!, /<b class="you">Post 1 reply/);
+    assert.match(rowOf(h, "patch-p-focus")!, /<span class="st resubmit"/);
+    assert.match(rowOf(h, "patch-p-focus")!, /moz-phab submit --single p-focus00000<\/textarea>/, "only that patch, by its commit");
+    // Checking Phabricator now and dropping it: in its ⋯ menu.
+    assert.match(rowOf(h, "patch-p-focus")!, /<span class="onhover">[^]*?<details class="menu"><summary class="btn small" title="More">⋯<\/summary><div class="menu-items">[^]*?Check Phabricator now/);
     assert.equal(h.split('data-key="resubmit:focus:j1"').length, 2, "and not also at the top");
   });
 

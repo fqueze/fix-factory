@@ -97,6 +97,8 @@ details.row[open]:has(> .under) .bug.tofile { background: var(--tofile-bg); bord
 .st.landed::before { content: "☑"; color: var(--text-muted); }
 .st.abandoned::before { content: "✈"; color: var(--text-muted); }
 .st.dropped::before { content: "✕"; color: var(--text-muted); }
+.st.draft::before { content: ""; display: inline-block; width: 9px; height: 9px; border: 2px dotted #d63aa0; border-radius: 50%; vertical-align: -1px; }
+.st.resubmit::before { content: "⇡"; color: var(--serious); font-weight: 700; }
 /* Reviewers, as Phabricator shows them. */
 /* overflow: hidden puts every icon's baseline at its bottom edge, glyph inside or not. */
 .rv::before { display: inline-block; overflow: hidden; box-sizing: border-box; width: 11px; height: 11px; border-radius: 50%; margin-right: 3px; vertical-align: -1px; font-size: 8px; line-height: 11px; text-align: center; font-weight: 700; color: #fff; content: ""; }
@@ -104,7 +106,7 @@ details.row[open]:has(> .under) .bug.tofile { background: var(--tofile-bg); bord
 .rv.pending::before { border: 1.5px solid var(--text-muted); }
 .rv.required::before { content: "–"; background: var(--critical); font-size: 10px; }
 .rv.blocking::before { content: "✕"; background: var(--critical); }
-.rv.accepted-prior::before { content: "✓"; color: var(--good); border: 1.5px solid var(--good); line-height: 8px; }
+.rv.accepted-prior::before { content: "✓"; color: var(--text-secondary); border: 1.5px solid var(--text-secondary); line-height: 8px; }
 .rv.rejected-prior::before { content: "✕"; color: var(--critical); border: 1.5px solid var(--critical); line-height: 8px; }
 .rv.resigned::before { content: "✕"; color: var(--text-muted); font-size: 10px; }
 .rv.resigned { color: var(--text-muted); }
@@ -226,6 +228,12 @@ form.revise textarea { flex: 1; font: inherit; }
 details.row .state { grid-column: 2 / -1; font-size: 12px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 details.row[open] > summary .state, details.row[open] > summary .name { white-space: normal; overflow-wrap: anywhere; }
 details.row .st.find ~ .state { color: var(--serious); }
+/* Its evidence once opened; what it waits for you to do on Phabricator always, on a line of its own. */
+details.row:not([open]) > summary > .trust { display: none; }
+details.row .rowflag { grid-column: 2 / -1; display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; font-size: 12px; margin-top: 2px; }
+details.row .rowflag b { color: var(--text-primary); }
+details.row .rowflag form { display: inline; }
+details.row .rowflag .flagitem { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; }
 /* An agent working on it right now: what you'd look for. */
 details.row .state .working { color: var(--accent); font-weight: 600; }
 .rowbody { padding: 2px 12px 10px 38px; font-size: 13px; display: flex; flex-direction: column; gap: 4px; }
@@ -357,8 +365,9 @@ form.joined { display: flex; gap: 0; align-items: stretch; }
 .jobctl > form.joined { flex: 1 1 260px; }
 form.joined input[type=text], form.joined textarea { flex: 1; min-width: 0; border-top-right-radius: 0; border-bottom-right-radius: 0; }
 form.joined .btn { border-top-left-radius: 0; border-bottom-left-radius: 0; margin-left: -1px; }
-summary .onhover { visibility: hidden; display: inline-flex; gap: 8px; align-items: center; color: var(--text-secondary); font-size: 12px; }
-summary:hover .onhover, summary:focus-within .onhover { visibility: visible; }
+/* Only on hover or opened (not after a click): the title takes the room meanwhile. */
+summary .onhover { display: none; gap: 8px; align-items: center; color: var(--text-secondary); font-size: 12px; }
+details[open] > summary .onhover, summary:hover .onhover, summary:has(details.menu[open]) .onhover { display: inline-flex; }
 .stat .add { color: var(--good); }
 .stat .del { color: var(--critical); }
 .handoff { font-size: 13px; padding: 0 6px; }

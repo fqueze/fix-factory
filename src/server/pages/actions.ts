@@ -101,8 +101,9 @@ export function flagControls(r: RequestState, n: NeedsUser, ctx: RenderContext):
     }
     case "resubmit": {
       const stack = findStack(r, n);
-      // Or decide against it (the patch lands as it is).
-      controls = stack ? html`${mozPhabButton(r.id, stack, false)}${pollPhabButton(r.id, back)}${dismissButton(r.id, n.key, back)}` : null;
+      const p = n.patch === undefined ? undefined : r.patches[n.patch];
+      // Only its patch: the others stay as their reviewers saw them. Or decide against it (it lands as it is).
+      controls = stack ? html`${mozPhabButton(r.id, stack, false, p?.sha)}${dismissButton(r.id, n.key, back)}` : null;
       break;
     }
     case "reopen-bug": {
@@ -112,7 +113,7 @@ export function flagControls(r: RequestState, n: NeedsUser, ctx: RenderContext):
     }
     case "reply":
       // Posted on Phabricator: the next poll shows them, this says you're done.
-      controls = html`${commandButton(r.id, { cmd: "dismiss", key: n.key }, "Posted", back)}${pollPhabButton(r.id, back)}`;
+      controls = html`${commandButton(r.id, { cmd: "dismiss", key: n.key }, "Posted", back)}`;
       break;
     case "land": {
       const stack = findStack(r, n);
@@ -168,8 +169,8 @@ export function renderRefused(r: RequestState, x: RefusedCommand): Html {
 }
 
 // 🗑: the factory drops the group (its row stays, closed; Reopen brings it back).
-export function handBackButton(request: string, item: string, back: string): Html {
-  return html`<form class="inline cmd" method="post" action="/api/commands">${commandFields([{ cmd: "hand-back", request, item }], back)}<button class="btn small icon" title="Drop: the factory stops working on this group" aria-label="Drop">🗑</button></form>`;
+export function handBackButton(request: string, item: string, back: string, label?: string): Html {
+  return html`<form class="inline cmd" method="post" action="/api/commands">${commandFields([{ cmd: "hand-back", request, item }], back)}<button class="btn small${label ? null : " icon"}" title="Drop: the factory stops working on this group" aria-label="Drop">${label ?? "🗑"}</button></form>`;
 }
 
 // An author with a session is resumed where it stopped; anything else runs again.
@@ -264,8 +265,9 @@ export function stackViewerLink(r: RequestState, stack: StackView): Html {
 
 // The factory never runs moz-phab: you copy the command and run it yourself.
 // On the stack's branch: its worktree may have its try branch checked out.
-export function mozPhabCommand(stack: StackView): string {
-  return `cd ${stack.worktree} && git switch ${stack.branch} && moz-phab submit`;
+// One patch (single): moz-phab submits only that commit, the stack's others stay as they are on Phabricator.
+export function mozPhabCommand(stack: StackView, single?: string): string {
+  return `cd ${stack.worktree} && git switch ${stack.branch} && moz-phab submit${single ? ` --single ${single.slice(0, 12)}` : ""}`;
 }
 
 // Copying it tells the factory to look for the revisions moz-phab creates.
@@ -275,9 +277,9 @@ function reorgButton(request: string, stack: StackView, key: string): Html {
   return html`<form class="inline cmd" method="post" action="/api/commands">${commandFields([{ cmd: "copied-reorg", request, key }], requestUrl(request))}<textarea hidden id="${id}">cd ${stack.worktree} && git switch ${stack.branch} && moz-phab reorg</textarea><button type="button" class="btn small primary" data-copy="${id}">Copy the moz-phab reorg command</button></form>`;
 }
 
-function mozPhabButton(request: string, stack: StackView, disabled: boolean): Html {
-  const id = `mozphab-${request}-${stack.id}`;
-  return html`<form class="inline cmd" method="post" action="/api/commands">${commandFields([{ cmd: "copied-submit", request, stack: stack.id }], requestUrl(request))}<textarea hidden id="${id}">${mozPhabCommand(stack)}</textarea><button type="button" class="btn small primary" data-copy="${id}"${
+function mozPhabButton(request: string, stack: StackView, disabled: boolean, single?: string): Html {
+  const id = `mozphab-${request}-${stack.id}${single ? `-${single.slice(0, 12)}` : ""}`;
+  return html`<form class="inline cmd" method="post" action="/api/commands">${commandFields([{ cmd: "copied-submit", request, stack: stack.id }], requestUrl(request))}<textarea hidden id="${id}">${mozPhabCommand(stack, single)}</textarea><button type="button" class="btn small primary" data-copy="${id}"${
     disabled ? html` disabled` : null
   }>Copy the moz-phab command</button></form>`;
 }
