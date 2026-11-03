@@ -1338,12 +1338,13 @@ class Planner {
       if (!["RESOLVED", "VERIFIED", "CLOSED"].includes(bug.status)) return;
       this.raise(`reopen-bug:${bug.id}`, { action: `Reopen bug ${bug.id}`, detail: `“${bug.summary}” is ${bug.status} ${bug.resolution}, and ${pv.title.replace(/,\s*r=.*$/, "")} lands under it`.slice(0, 500), patch: pv.id, item: item.id });
     });
-    const lints: { job: JobRecord; what: string }[] = [];
+    const lints: { job: JobRecord; what: string; skip?: string }[] = [];
     let pending = false;
     for (const p of patches) {
       const msg = this.want(`msg:${p.id}:${p.sha}`, () => this.cli("msg", "git", ["log", "-1", "--format=%B", p.sha], { cwd, item: item.id, priority, purpose: { item: item.id, patch: p.id } }));
       const lint = msg && this.want(`lint:${p.id}:${p.sha}`, () => this.cli("lint", "lint-text.ts", ["--kind", "commit", outPath(this.config, msg.job)], { item: item.id, priority, purpose: { item: item.id, patch: p.id } }));
-      if (lint) lints.push({ job: lint, what: `the commit message of ${p.sha.slice(0, 12)}` });
+      // Once submitted, its reviewers are the stack's, which replaces the commit's.
+      if (lint) lints.push({ job: lint, what: `the commit message of ${p.sha.slice(0, 12)}`, ...(this.s.patches[p.id]?.revision !== undefined ? { skip: "unknownReviewer" } : {}) });
       else pending = true;
     }
     const report = this.rep<InvestigateReport & AddressReviewReport>(author);
@@ -1370,7 +1371,7 @@ class Planner {
       }
     }
     if (pending) return;
-    const violations = lints.flatMap(({ job, what }) => this.out<{ violations: { rule: string; line?: number; text: string }[] }>(job).violations.map((v) => ({ ...v, what, job })));
+    const violations = lints.flatMap(({ job, what, skip }) => this.out<{ violations: { rule: string; line?: number; text: string }[] }>(job).violations.filter((v) => v.rule !== skip).map((v) => ({ ...v, what, job })));
     if (violations.length > 0) {
       const rounds = this.roundsSinceStart(item.id, "lint");
       if (rounds >= LINT_ROUNDS && !this.view.byKey.has(`author:${item.id}${e}:lint:${author.job}`)) {

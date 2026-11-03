@@ -2774,6 +2774,37 @@ describe("10. an answer after submission adding a commit", () => {
     assert.throws(() => sc.complete("author:i-test-a:continue:c-7", { report: fixed([sha("f"), sha("7")], { bugDrafts: [{ commits: [sha("7")], draft }] }) }), (e: Error) => e instanceof InvalidReport && /first commit is on Bug 999/.test(e.message));
   });
 
+  it("ignores a bug draft its author carried over from an earlier report, naming none of its commits", () => {
+    const sc = inReview();
+    sc.complete("poll:0", { output: polled("needs-review", [], "pending") });
+    sc.settle();
+    const plan = resumeAuthorPlan(ID, sc.view(), "i-test-a", "continue", { message: "is the backout yours?" }, "investigating");
+    assert.ok(plan && plan !== "busy");
+    plan.purpose.key = "author:i-test-a:continue:c-7";
+    sc.startJob(plan);
+    const draft = { product: "Firefox", component: "General", bugType: "defect", summary: "s", description: "d" };
+    sc.complete("author:i-test-a:continue:c-7", { report: fixed([sha("f")], { bugDrafts: [{ commits: [sha("0")], draft }] }) });
+  });
+
+  it("isn't sent back to its author for the commit's reviewer, which the stack's replaces once submitted", () => {
+    const sc = inReview();
+    sc.complete("poll:0", { output: polled("needs-review", [], "pending") });
+    sc.settle();
+    const plan = resumeAuthorPlan(ID, sc.view(), "i-test-a", "backout", { message: "is the backout yours?" }, "investigating");
+    assert.ok(plan && plan !== "busy");
+    plan.purpose.key = "author:i-test-a:backout:c-8";
+    sc.startJob(plan);
+    sc.complete("author:i-test-a:backout:c-8", { report: fixed([sha("8")]) });
+    sc.settle();
+    const job = sc.view().byKey.get("author:i-test-a:backout:c-8")!.at(-1)!.job;
+    sc.complete(`import:${job}`, { output: imported(sha("8"), "Bug 999 - Fix, r=gone.", ["a/test_a.js"], 999) });
+    sc.settle();
+    sc.complete(`msg:p-test-a:${sha("8")}`, { output: "Bug 999 - Fix, r=gone.\n" });
+    sc.settle();
+    sc.complete(`lint:p-test-a:${sha("8")}`, { output: { ok: false, violations: [{ rule: "unknownReviewer", line: 1, text: "Phabricator has no user or group gone" }] } });
+    assert.ok(!sc.settle().some((k) => k.startsWith("author:i-test-a:lint:")));
+  });
+
   it("puts the new commit on top of the stack, for you to submit", () => {
     const sc = backedOutAndAsked();
     assert.ok(sc.state().stacks.root.order.includes("p-test-b-2"), String(sc.state().stacks.root.order));

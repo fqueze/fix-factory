@@ -457,6 +457,17 @@ test("a dep removed for good stays removed when its agent reports it again", () 
   assert.deepEqual(s.patches.p1.deps, []);
 });
 
+test("an answer to a backout doesn't replace how the fix was found, even reported as a verified fix", () => {
+  const fixRepro = { reproduced: true, where: "locally", widened: true, before: "6 of 6", after: "0 of 6" };
+  const s = fold(
+    ev({ type: "item-created", item: "i1", folder: "a", group: { message: "m", tests: ["a/t.js"], configs: [] } }),
+    ev({ type: "agent-report", item: "i1", job: "j1", prompt: "investigate-and-fix", report: { state: "fix verified locally", commits: ["c"], cause: "the fix's cause", reproduction: fixRepro } }),
+    ev({ type: "job-started", job: "j2", item: "i1", kind: "agent", name: "investigate-and-fix", pid: 1, pidStartTime: 1, cmd: ["claude"], cwd: "/", codeVersion: "sha", purpose: { key: "author:i1:backout:p1:t", what: "author", item: "i1", reason: "backout" } }),
+    ev({ type: "agent-report", item: "i1", job: "j2", prompt: "investigate-and-fix", report: { state: "fix verified locally", commits: ["c"], cause: "Not caused by this patch", reproduction: fixRepro } }),
+  );
+  assert.equal(s.items.i1.investigation?.cause, "the fix's cause");
+});
+
 test("a later answer leaving the fix as it is doesn't replace how the fix was found and shown", () => {
   const fixRepro = { reproduced: true, where: "locally", widened: false, before: "6 of 6", after: "0 of 6" };
   const s = fold(
