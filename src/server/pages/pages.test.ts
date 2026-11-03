@@ -87,7 +87,7 @@ describe("overview", () => {
     assert.match(page, /agents <b>10\/10<\/b>/);
     // Hovering the count lists what runs, each linked to its row.
     assert.match(page, /<span class="running" tabindex="0">agents <b>10\/10<\/b><span class="running-list"><a href="#(patch|item|req)-[^"]+"><b>[^<]+<\/b> /);
-    assert.match(page, /<span class="progress"><span class="pbar">(<span class="[a-z-]+" style="flex-grow:\d+"><\/span>){7}<\/span><span class="needs-you">19 need you<\/span> · <span class="working">8 working<\/span> · <span class="landable">2 landable<\/span> · <span class="in-review">2 in review<\/span> · <span class="ready">8 ready<\/span> · <span class="pending">3 pending<\/span> · <span class="landed">2 landed<\/span> · <span class="closed">6 closed<\/span><\/span>/);
+    assert.match(page, /<span class="progress"><span class="pbar">(<span class="[a-z-]+" style="flex-grow:\d+"><\/span>){7}<\/span><span class="needs-you">19 need you<\/span> · <span class="working">8 working<\/span> · <span class="landable">2 landable<\/span> · <span class="submitted">2 submitted<\/span> · <span class="ready">8 ready<\/span> · <span class="pending">3 pending<\/span> · <span class="landed">2 landed<\/span> · <span class="closed">6 closed<\/span><\/span>/);
     assert.ok(page.includes(cmd({ cmd: "tell-factory" })));
     assert.doesNotMatch(page, /New request|new-request/);
     assert.match(page, /<link rel="icon" href="data:image\/svg\+xml,[^"]*🏭/);
@@ -661,7 +661,7 @@ describe("one fixture per step of docs/MVP.md", () => {
     // Submitted: where its revisions stand, not try.
     r.step = "review comments";
     r.patches["p-focus"].revision = 5;
-    assert.match(renderRequest(r, ctx, false).value, /<span class="in-review">1 in review<\/span><\/span> · 1 patch on Phabricator: waiting for review<\/span>/);
+    assert.match(renderRequest(r, ctx, false).value, /<span class="submitted">1 submitted<\/span><\/span> · 1 patch on Phabricator: waiting for review<\/span>/);
     // Landed ones are in the groups' count, not repeated there.
     const landed = structuredClone(r);
     landed.patches["p-focus"].review = { revision: 5, status: "published", reviewers: [], comments: [] };

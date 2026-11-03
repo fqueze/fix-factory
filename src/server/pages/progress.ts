@@ -188,10 +188,10 @@ function stalledControls(r: RequestState, i: ItemView): Html {
 }
 
 // Where each group stands, counted per request (and for the whole factory) and drawn as a bar.
-// "landable" and "in review" (ready, all its patches on Phabricator) are only counted in a request's progress: their
+// "landable" and "submitted" (ready, all its patches on Phabricator) are only counted in a request's progress: their
 // rows are ready ones.
-export type Bucket = "working" | "needs you" | "waiting for try" | "landable" | "in review" | "ready" | "pending" | "landed" | "closed";
-export const BUCKETS: Bucket[] = ["needs you", "working", "waiting for try", "landable", "in review", "ready", "pending", "landed", "closed"];
+export type Bucket = "working" | "needs you" | "waiting for try" | "landable" | "submitted" | "ready" | "pending" | "landed" | "closed";
+export const BUCKETS: Bucket[] = ["needs you", "working", "waiting for try", "landable", "submitted", "ready", "pending", "landed", "closed"];
 
 const READY: ItemState[] = ["reviewed", "in stack", "waiting for review", "fixed", "landed"];
 
@@ -221,13 +221,13 @@ export type Progress = Record<Bucket, number>;
 // Its groups; and the request's own ⚑s (recovery plans, refused commands…) need you too. Its own jobs aren't groups:
 // the summary next to it says what they do.
 export function requestProgress(r: RequestState, ctx: RenderContext): Progress {
-  const p: Progress = { "needs you": 0, working: 0, "waiting for try": 0, landable: 0, "in review": 0, ready: 0, pending: 0, landed: 0, closed: 0 };
+  const p: Progress = { "needs you": 0, working: 0, "waiting for try": 0, landable: 0, "submitted": 0, ready: 0, pending: 0, landed: 0, closed: 0 };
   for (const i of Object.values(r.items)) {
     const b = itemBucket(r, i, ctx);
     const all = Object.values(r.patches).filter((x) => x.item === i.id && !isDropped(r, x));
     const patches = all.filter((x) => x.revision !== undefined);
     const submitted = patches.length > 0 && patches.length === all.length;
-    p[b === "ready" && patches.length && patches.every((x) => isLandable(r, x)) ? "landable" : b === "ready" && submitted ? "in review" : b]++;
+    p[b === "ready" && patches.length && patches.every((x) => isLandable(r, x)) ? "landable" : b === "ready" && submitted ? "submitted" : b]++;
   }
   p["needs you"] += r.needsUser.filter((n) => flagItemOf(r, n) === undefined).length + refusedOf(r).length;
   return p;
@@ -241,7 +241,7 @@ export function workLabel(j: JobView): Html {
 
 // The bar fills from the left with what's done, then what's ready, what waits on try, needs you, runs and waits; the
 // closed groups aren't progress: they're only counted, last.
-const BAR: Bucket[] = ["landed", "landable", "in review", "ready", "waiting for try", "needs you", "working", "pending"];
+const BAR: Bucket[] = ["landed", "landable", "submitted", "ready", "waiting for try", "needs you", "working", "pending"];
 
 // A bar with one segment per bucket, then "2 need you · 1 working · 3 ready · 4 pending · 5 closed".
 export function progressLine(p: Progress): Html {
@@ -257,7 +257,7 @@ export function progressLine(p: Progress): Html {
 }
 
 export function sumProgress(list: Progress[]): Progress {
-  const sum: Progress = { "needs you": 0, working: 0, "waiting for try": 0, landable: 0, "in review": 0, ready: 0, pending: 0, landed: 0, closed: 0 };
+  const sum: Progress = { "needs you": 0, working: 0, "waiting for try": 0, landable: 0, "submitted": 0, ready: 0, pending: 0, landed: 0, closed: 0 };
   for (const p of list) {
     for (const b of BUCKETS) {
       sum[b] += p[b];
