@@ -2,7 +2,7 @@ import type { JobView, NeedsUser, PlannedCommand, PushView, RefusedCommand, Requ
 import { md } from "./md.ts";
 import { canDismiss, canRetry, reviewLimitFlag } from "../../state/flags.ts";
 import { html, join, type Html } from "../html.ts";
-import { actionKind, COMMAND_LABELS, isLanded, linkify, commandFields, enterBugUrl, metaBugUrl, groupLabel, jobLabel, pushName, jobNoun, refusedOf, needsMetaBug, plural, requestUrl, stackOfPatch, submitChecks, regressionStatus, type RenderContext } from "./common.ts";
+import { actionKind, COMMAND_LABELS, isLanded, linkify, commandFields, enterBugUrl, metaBugUrl, groupLabel, jobLabel, pushName, jobNoun, refusedOf, needsMetaBug, plural, requestUrl, elapsed, stackOfPatch, submitChecks, regressionStatus, type RenderContext } from "./common.ts";
 
 // The ⚑ area of one open needs-user entry: what you're asked, why, and the buttons.
 export function renderAction(r: RequestState, n: NeedsUser, ctx: RenderContext): Html {
@@ -399,7 +399,16 @@ function instructions(c: PlannedCommand, r: RequestState): string | undefined {
 // A group's ⚑ is handled on its row, a try push's on its row too; the request's own ⚑s (recovery plans,
 // meta bug, submit…) here, under its name.
 export function actionsSummary(r: RequestState, ctx: RenderContext): Html {
-  return join([...r.needsUser.filter((n) => flagItemOf(r, n) === undefined && flagPlaceOf(r, n) === undefined && !isPushApproval(r, n) && !recoveryPlanFor(r, n)).map((n) => renderAction(r, n, ctx)), ...refusedOf(r).map((x) => renderRefused(r, x))], "");
+  return join([phabRefused(r, ctx), ...r.needsUser.filter((n) => flagItemOf(r, n) === undefined && flagPlaceOf(r, n) === undefined && !isPushApproval(r, n) && !recoveryPlanFor(r, n)).map((n) => renderAction(r, n, ctx)), ...refusedOf(r).map((x) => renderRefused(r, x))].filter((x) => x !== null), "");
+}
+
+// The last check of Phabricator failed: what it shows may be newer than this page.
+function phabRefused(r: RequestState, ctx: RenderContext): Html | null {
+  const polls = Object.values(r.jobs).filter((j) => j.name === "phab.ts poll");
+  if (polls.some((j) => j.endedAt === undefined)) return null;
+  const last = polls.sort((a, b) => a.endedAt!.localeCompare(b.endedAt!)).at(-1);
+  if (!last || last.exitCode === 0 || !last.error) return null;
+  return html`<div class="action warn"><span class="flag">Phabricator refused the last check, ${elapsed(last.endedAt!, ctx)} ago${/\b429\b/.test(last.error) ? ": rate limited" : null}</span>${pollPhabButton(r.id, requestUrl(r.id))}${why(last.error)}</div>`;
 }
 
 // Where a ⚑ about no group is asked instead of at the top: on its patch's row (resubmit, reply), or on its stack (reorg).

@@ -51,6 +51,8 @@ details[open] > summary .rname::before { content: "▾ "; }
 .action .flag { font-weight: 600; }
 .action .flag::before { content: "⚑ "; color: var(--serious); }
 .action .flag { flex: 1 1 auto; }
+.action.warn { background: color-mix(in srgb, var(--critical) 12%, transparent); }
+.action.warn .flag::before { content: "⚠ "; color: var(--critical); }
 .action .why { color: var(--text-secondary); font-size: 12px; flex: 1 0 100%; order: 1; }
 /* Pre-submit checks, and the buttons after them, come under the text. */
 .action .checks, .action .checks ~ * { order: 2; }
