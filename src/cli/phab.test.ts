@@ -74,6 +74,15 @@ test("makeConduit: request shape and errors", async () => {
   assert.deepEqual(JSON.parse(seen!.body.get("params")!), { a: 1, __conduit__: { token: "api-secret" } });
 });
 
+test("makeConduit: a 429 is asked again at once", async () => {
+  const statuses = [429, 200];
+  const fakeFetch = (async () => {
+    const status = statuses.shift()!;
+    return new Response(status === 200 ? JSON.stringify({ result: "ok", error_code: null, error_info: null }) : "", { status });
+  }) as typeof fetch;
+  assert.equal(await makeConduit(fakeFetch, () => "t")("user.whoami", {}), "ok");
+});
+
 test("arcToken: clear error without a token for the host", () => {
   const dir = mkdtempSync(join(tmpdir(), "arcrc-test-"));
   try {

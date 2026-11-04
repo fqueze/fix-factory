@@ -54,7 +54,13 @@ export function makeConduit(fetchFn: typeof fetch = fetch, getToken: () => strin
   return async (method, params) => {
     token ??= getToken();
     const body = new URLSearchParams({ params: JSON.stringify({ ...params, __conduit__: { token } }), output: "json" });
-    const res = await fetchFn(API + method, { method: "POST", body });
+    // Phabricator now answers every other request from Node with a 429, whatever the token (curl passes): asked again at
+    // once, which passes.
+    let res = await fetchFn(API + method, { method: "POST", body });
+    for (let attempt = 1; res.status === 429 && attempt < 4; attempt++) {
+      await res.text();
+      res = await fetchFn(API + method, { method: "POST", body });
+    }
     if (!res.ok) {
       throw new Error(`${method}: HTTP ${res.status}`);
     }
