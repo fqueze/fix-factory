@@ -23,6 +23,7 @@
 // Token: ~/.arcrc. Suggested edits come from transaction.search, which now exposes hasSuggestion and
 // suggestionText, so the changeset AJAX scraping of phab-suggestions.py is no longer needed.
 
+import { request } from "node:https";
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
@@ -49,18 +50,26 @@ export function arcToken(arcrc = join(homedir(), ".arcrc")): string {
   return token;
 }
 
-export function makeConduit(fetchFn: typeof fetch = fetch, getToken: () => string = () => arcToken()): Conduit {
+// Phabricator answers 429 to Node's fetch (its headers or fingerprint), whatever the token, and not to a plain request.
+const httpsFetch = ((url: string, init: RequestInit) =>
+  new Promise<Response>((resolve, reject) => {
+    const body = String(init.body);
+    const req = request(url, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded", "content-length": Buffer.byteLength(body) } }, (res) => {
+      const chunks: Buffer[] = [];
+      res.on("data", (c: Buffer) => chunks.push(c));
+      res.on("end", () => resolve(new Response(Buffer.concat(chunks), { status: res.statusCode })));
+      res.on("error", reject);
+    });
+    req.on("error", reject);
+    req.end(body);
+  })) as typeof fetch;
+
+export function makeConduit(fetchFn: typeof fetch = httpsFetch, getToken: () => string = () => arcToken()): Conduit {
   let token: string | undefined;
   return async (method, params) => {
     token ??= getToken();
     const body = new URLSearchParams({ params: JSON.stringify({ ...params, __conduit__: { token } }), output: "json" });
-    // Phabricator now answers every other request from Node with a 429, whatever the token (curl passes): asked again at
-    // once, which passes.
-    let res = await fetchFn(API + method, { method: "POST", body });
-    for (let attempt = 1; res.status === 429 && attempt < 4; attempt++) {
-      await res.text();
-      res = await fetchFn(API + method, { method: "POST", body });
-    }
+    const res = await fetchFn(API + method, { method: "POST", body });
     if (!res.ok) {
       throw new Error(`${method}: HTTP ${res.status}`);
     }
