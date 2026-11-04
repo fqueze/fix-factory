@@ -3707,6 +3707,40 @@ describe("10. landing: the reorg flag", () => {
     assert.deepEqual(sc.open().filter((k) => k.startsWith("land:")), [], "not raised again");
   });
 
+  const reordered = () => {
+    const { sc, key } = accepted();
+    const order = [...sc.state().stacks.root.order].reverse();
+    sc.complete(key, { output: { order, flippedSoftDeps: [], landable: [order[0]] } });
+    const [rewrite] = sc.settle();
+    sc.complete(rewrite, { output: { mapping: { [sha("f")]: sha("5"), [sha("e")]: sha("6") } } });
+    sc.settle();
+    assert.ok(sc.open().some((k) => k.startsWith("land:root:")));
+    return { sc, order };
+  };
+  const pollAgain = (sc: Scenario, out: unknown) => {
+    sc.now += 3 * HOUR;
+    sc.settle();
+    sc.complete(sc.view().jobs.find((j) => !j.end && j.purpose.key.startsWith("poll:"))!.purpose.key, { output: out });
+    sc.settle();
+  };
+
+  it("is answered by a reorg however you ran it: Phabricator's parents have the new order", () => {
+    const { sc, order } = reordered();
+    const [bottom, top] = order.map((pid) => sc.state().patches[pid].revision);
+    pollAgain(sc, polled("accepted").map((r: { revision: number }) => ({ ...r, ...(r.revision === top ? { parent: bottom } : {}) })));
+    assert.deepEqual(sc.open().filter((k) => k.startsWith("land:")), []);
+  });
+
+  it("goes once its landable patch landed", () => {
+    const { sc, order } = reordered();
+    const landed = sc.state().patches[order[0]].revision;
+    pollAgain(sc, polled("accepted").map((r: { revision: number }) => (r.revision === landed ? { ...r, status: "published" } : { ...r, status: "needs-review", reviewers: [{ name: "smaug", status: "pending" }] })));
+    const ord = sc.view().jobs.find((j) => !j.end && j.purpose.key.startsWith("order-landable:"))!.purpose.key;
+    sc.complete(ord, { output: { order, flippedSoftDeps: [], landable: [] } });
+    sc.settle();
+    assert.deepEqual(sc.open().filter((k) => k.startsWith("land:")), []);
+  });
+
   it("keeps the order you submitted (moz-phab or reorg) across stack events", () => {
     const { sc, key } = accepted();
     assert.deepEqual(sc.state().stacks.root.submittedOrder, ["p-test-b", "p-test-a"]);

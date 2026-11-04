@@ -3121,7 +3121,10 @@ class Planner {
       // One reorg to ask for at a time, for the stack's order: an earlier one's is moot.
       const landKey = `land:${st.id}:${shortHash(st.order).slice(0, 10)}`;
       for (const n of this.s.needsUser) if (n.key.startsWith(`land:${st.id}:`) && n.key !== landKey) this.clear(n.key);
-      if (!o.landable.length) continue;
+      if (!o.landable.length) {
+        this.clear(landKey);
+        continue;
+      }
       // v2: earlier versions gave landed patches an edit, which the rewrite refused.
       if (o.order.join() !== st.order.join() || this.view.byKey.has(`rewrite-land:${st.id}:${h}:v2`)) {
         // Landed patches leave the order, and their edits with them.
@@ -3151,7 +3154,7 @@ class Planner {
       }
       // Whenever the stack's order differs from Phabricator's, whichever reorder made it: landable patches already at the
       // bottom there need nothing.
-      const phab = st.submittedOrder?.filter((pid) => st.order.includes(pid));
+      const phab = this.phabOrder(st) ?? st.submittedOrder?.filter((pid) => st.order.includes(pid));
       if (!phab || phab.join() === st.order.join()) {
         this.clear(landKey);
         continue;
@@ -3161,6 +3164,20 @@ class Planner {
       const adapted = k ? ` (${k} soft ${k === 1 ? "dependency" : "dependencies"} adapted)` : "";
       this.raise(landKey, { action: `Stack reordered: ${n} landable ${n === 1 ? "patch" : "patches"} moved to the bottom`, detail: `Run moz-phab reorg so Phabricator has the new order${adapted}.`, stack: st.id });
     }
+  }
+
+  // The stack's order on Phabricator, bottom first, from the parents its last check read: a reorg however you ran it.
+  // Undefined unless they chain all its patches.
+  private phabOrder(st: StackView): PatchId[] | undefined {
+    const ps = st.order.map((pid) => this.s.patches[pid]);
+    const byRev = new Map(ps.map((p) => [p.revision, p.id]));
+    const order: PatchId[] = [];
+    let next = ps.filter((p) => !byRev.has(p.review?.parent));
+    while (next.length === 1 && order.length < ps.length) {
+      order.push(next[0].id);
+      next = ps.filter((p) => p.review?.parent !== undefined && p.review.parent === next[0].revision);
+    }
+    return order.length === ps.length ? order : undefined;
   }
 
   // A submitted patch's commit in its author's worktree has no Differential Revision line: every rewrite of a stack
