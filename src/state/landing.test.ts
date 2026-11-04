@@ -21,6 +21,11 @@ test("a revision back in needs-review isn't accepted, though its reviewers' acce
   assert.equal(landingState({ jobs: {}, backouts: {} } as unknown as RequestState, p).accepted, false);
 });
 
+test("an accepted revision with a reviewer group still pending, not blocking, is accepted (D337713)", () => {
+  const p = { id: "p", review: { status: "accepted", reviewers: [{ name: "#dom-core-reviewers", status: "accepted-prior" }, { name: "#layout-reviewers", status: "pending" }, { name: "smaug", status: "accepted-prior" }], comments: [] } } as unknown as PatchView;
+  assert.equal(landingState({ jobs: {}, backouts: {} } as unknown as RequestState, p).accepted, true);
+});
+
 test("the draft replies to post leave out those already on Phabricator, whichever run wrote them", () => {
   const p = {
     id: "p",
