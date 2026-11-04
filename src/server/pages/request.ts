@@ -303,7 +303,10 @@ function phabCheck(r: RequestState, ctx: RenderContext): Html {
   const checking = polls.some((j) => j.endedAt === undefined);
   // Rarely needed: in a ⋯ menu, which stays where it is while Phabricator is read.
   const last = polls.filter((j) => j.exitCode === 0).map((j) => j.endedAt!).sort().at(-1);
-  return html`<details class="menu"><summary class="btn small" title="${checking ? "Checking Phabricator…" : "More"}">⋯</summary><div class="menu-items">${
+  // A failed last check is said where it shows, not in the menu: what Phabricator shows may be newer than this page.
+  const failed = checking ? undefined : polls.filter((j) => j.endedAt !== undefined).sort((a, b) => a.endedAt!.localeCompare(b.endedAt!)).at(-1);
+  const error = failed?.exitCode === 0 ? undefined : failed?.error;
+  return html`${error ? html`<span class="error" title="${error}">Phabricator refused the last check, ${elapsed(failed!.endedAt!, ctx)} ago: ${/\b429\b/.test(error) ? "rate limited (HTTP 429)" : error.slice(0, 100)}</span> ` : null}<details class="menu"><summary class="btn small" title="${checking ? "Checking Phabricator…" : "More"}">⋯</summary><div class="menu-items">${
     checking ? html`<span class="sub working">checking Phabricator…</span>` : pollPhabButton(r.id, requestUrl(r.id))
   }${last ? html`<span class="sub">last checked ${elapsed(last, ctx)} ago</span>` : null}</div></details>`;
 }
