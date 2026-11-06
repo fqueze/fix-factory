@@ -2936,7 +2936,8 @@ describe("9. a try push of a submitted stack", () => {
     assert.equal(sc.state().tryNeeded["p-test-a"], undefined);
   });
 
-  it("an author's fix for what a push past verification found broken by it goes to try again once back for review", () => {
+  // A fix for what a push past verification found, reviewed and back for review: its verification push being planned.
+  const verifying = () => {
     const sc = inReview();
     sc.complete("poll:0", { output: polled("needs-review", [], "pending") });
     sc.settle();
@@ -2976,6 +2977,23 @@ describe("9. a try push of a submitted stack", () => {
     const planKey = started.find((k) => k.startsWith("plan:verify:root:"))!;
     assert.ok(planKey, `${String(started)} | open: ${sc.view().jobs.filter((j) => !j.end).map((j) => j.purpose.key)}`);
     assert.match(String(sc.plan(planKey).agent?.vars?.goal), /Verify the fix of D101/);
+    return { sc, planKey };
+  };
+
+  it("a fix no push can verify (nothing in the stack fixes what the push found) comes to you; dismissed, it may land", () => {
+    const { sc, planKey } = verifying();
+    sc.complete(planKey, { report: { pushes: [], regressions: [{ failure: "test_a.js timed out", causedBy: "p-test-a", status: "not fixed", how: "Nothing since fixes the timeout." }], feedback: [] } });
+    sc.settle();
+    const flag = sc.state().needsUser.find((n) => n.key.startsWith("try-waive:p-test-a:"))!;
+    assert.equal(flag.action, "No try push will verify D101: nothing in the stack fixes what try push fed found");
+    assert.match(flag.detail, /Dismiss to let it land without one, or tell its author\. Nothing since fixes the timeout\./);
+    command(sc, { cmd: "dismiss", key: flag.key });
+    sc.settle();
+    assert.equal(sc.state().tryNeeded["p-test-a"].verified, true);
+  });
+
+  it("an author's fix for what a push past verification found broken by it goes to try again once back for review", () => {
+    const { sc, planKey } = verifying();
     const pushOf = (key: string, commits: string[], rev: string) => {
       sc.complete(key, { report: { pushes: [{ purpose: "the failing jobs", tryArgs: ["fuzzy", "-q", "x"], rebuild: 5 }], feedback: [] } });
       const dry = sc.settle().find((k) => k.startsWith("dry-run:"))!;

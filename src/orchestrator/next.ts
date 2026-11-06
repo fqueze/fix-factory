@@ -2334,6 +2334,19 @@ class Planner {
       // for you: one push carries all their fixes.
       if (info.patches.some((x) => this.authorJobs(x.item).some((j) => !j.end) || this.s.needsUser.some((n) => n.key.startsWith("disowned:") && n.item === x.item))) continue;
       const plan = this.verifyPushes(info, ask);
+      // Its planner found nothing in the stack fixes what the last push found: no push will verify those fixes. You
+      // decide whether they land without it (or tell their authors).
+      const none = plan?.ids.length === 0 ? this.view.jobs.findLast((j) => j.purpose.key.startsWith(`plan:verify:${info.id}:`) && j.purpose.key.includes(`:ask${n}`) && succeeded(j)) : undefined;
+      if (none && this.rep<PlanTryPushesReport>(none).pushes.length === 0) {
+        const how = (this.rep<PlanTryPushesReport>(none).regressions ?? []).map((x) => x.how).join(" ");
+        for (const x of info.patches) {
+          const t = this.s.tryNeeded[x.id];
+          if (!t || t.verified || !texts.includes(t.ask)) continue;
+          const key = `try-waive:${x.id}:${t.job}`;
+          if (this.view.dismissed.has(key)) this.event(this.ev("try-verified", { patch: x.id }));
+          else this.raise(key, { action: `No try push will verify D${this.s.patches[x.id].revision}: nothing in the stack fixes what ${t.why.replace(/^its fix for what /, "")}`, detail: `Dismiss to let it land without one, or tell its author. ${how}`.slice(0, 600), patch: x.id, item: x.item });
+        }
+      }
       for (const push of Object.values(this.s.pushes)) {
         if (push.id.startsWith(all) && plan && !plan.ids.includes(push.id) && this.s.needsUser.some((x) => x.key === `approve-push:${push.id}`)) {
           this.event(this.ev("try-declined", { push: push.id, text: "not needed anymore: the stack changed since it was planned", by: "factory" }));
