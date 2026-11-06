@@ -3035,7 +3035,7 @@ class Planner {
       const h = shortHash(all.map((p) => p.id)).slice(0, 10);
       const e = this.rewriteEdits(`backout-${st.id}-${h}`, all);
       const rw = this.want(`backout-stack:${st.id}:${h}`, () =>
-        this.cli("rewrite", "stack.ts", ["rewrite", "--cwd", st.worktree, "--base", st.base ?? this.config.baseRef, "--branch", st.branch, "--order", all.map((p) => p.sha).join(","), ...e.args], {
+        this.cli("rewrite", "stack.ts", ["rewrite", "--cwd", st.worktree, "--base", st.base ?? this.config.baseRef, "--fetch", "--branch", st.branch, "--order", all.map((p) => p.sha).join(","), ...e.args], {
           cwd: st.worktree,
           files: e.files,
           purpose: { stack: st.id, reason: "backed out", patches: Object.fromEntries(all.map((p) => [p.sha.slice(0, 12), p.id])) },
@@ -3143,7 +3143,8 @@ class Planner {
         // Landed patches leave the order, and their edits with them.
         const e = this.rewriteEdits(`land-${st.id}-${h}`, o.order.map((pid) => this.s.patches[pid]));
         const rw = this.want(`rewrite-land:${st.id}:${h}:v2`, () =>
-          this.cli("rewrite", "stack.ts", ["rewrite", "--cwd", st.worktree, "--base", st.base ?? this.config.baseRef, "--branch", st.branch, "--order", o.order.map((pid) => this.s.patches[pid].sha).join(","), ...e.args], {
+          // On the latest central: what lands goes on top of it.
+          this.cli("rewrite", "stack.ts", ["rewrite", "--cwd", st.worktree, "--base", st.base ?? this.config.baseRef, "--fetch", "--branch", st.branch, "--order", o.order.map((pid) => this.s.patches[pid].sha).join(","), ...e.args], {
             cwd: st.worktree,
             files: e.files,
             purpose: { stack: st.id, patches: Object.fromEntries(ps.map((p) => [p.sha.slice(0, 12), p.id])), reason: "landing order" },

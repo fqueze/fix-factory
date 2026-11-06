@@ -3662,6 +3662,7 @@ describe("10. landing", () => {
     sc.complete(key, { output: { order: ["p-test-a", "p-test-b"], flippedSoftDeps: [{ patch: "p-test-b", needs: "p-test-a", kind: "soft", reason: "shares a helper", source: "agent" }], landable: ["p-test-a"] } });
     const [rewrite] = sc.settle();
     assert.match(rewrite, /^rewrite-land:root:/);
+    assert.ok(sc.plan(rewrite).cli!.args.includes("--fetch"), "on the latest central");
     assert.deepEqual(JSON.parse(sc.plan(rewrite).files![0].content), { [sha("e")]: { revision: "https://phabricator.services.mozilla.com/D100" }, [sha("f")]: { revision: "https://phabricator.services.mozilla.com/D101" } });
     sc.complete(rewrite, { output: { mapping: { [sha("f")]: sha("5"), [sha("e")]: sha("6") } } });
     const [adapt] = sc.settle();

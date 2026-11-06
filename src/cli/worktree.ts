@@ -91,7 +91,7 @@ function run(cmd: string[], cwd: string, env: NodeJS.ProcessEnv, outFd: number):
 
 // A remote-tracking base (origin/main) is only as fresh as the last fetch: fetch it first. Worktrees created at
 // the same time fetch at the same time, and git refuses to update a ref another fetch has locked: retry.
-async function fetchRemoteBase(repo: string, base: string): Promise<void> {
+export async function fetchRemoteBase(repo: string, base: string): Promise<void> {
   const ref = (await exec(["git", "rev-parse", "--symbolic-full-name", base], { cwd: repo })).stdout.trim();
   const m = /^refs\/remotes\/([^/]+)\/(.+)$/.exec(ref);
   if (!m) return;

@@ -18,7 +18,8 @@
 //   input: {patches: [{id, effort?, value?, testOnly?, accepted?, commentsAddressed?, landed?}],
 //           deps: Dep[], previous?: PatchId[]}
 //   → {order: PatchId[], flippedSoftDeps: Dep[], landable: PatchId[]}. Rules in stack/order.ts.
-// rewrite --base <ref> --order <sha>[,<sha>...] [<sha>...] [--edits <edits.json>] [--branch <name>] [--leave-conflict]
+// rewrite --base <ref> --order <sha>[,<sha>...] [<sha>...] [--edits <edits.json>] [--branch <name>] [--leave-conflict] [--fetch]
+//   --fetch: a remote-tracking base (origin/main) is fetched first.
 //   edits: {"<sha>": {bug?: number, message?: string, diff?: string}}
 //   → {branch, head, backup?, shas, mapping: {old: new}, dropped, empty, diffChanged: [old sha],
 //      changedRevisions, messageChangedRevisions, parentChangedRevisions: number[], conflict?,
@@ -42,6 +43,7 @@
 import { readFileSync } from "node:fs";
 import { UsageError, runCli, type Subcommand } from "../lib/cli.ts";
 import { assemble, rewrite } from "./stack/build.ts";
+import { fetchRemoteBase } from "./worktree.ts";
 import { check } from "./stack/check.ts";
 import { detectDeps } from "./stack/deps.ts";
 import { importStack } from "./stack/import.ts";
@@ -94,6 +96,7 @@ const subcommands: Record<string, Subcommand> = {
   },
   rewrite: async (pos, values) => {
     const order = [...str(values, "order").split(","), ...pos].filter(Boolean);
+    if (values.fetch) await fetchRemoteBase(cwdOf(values), str(values, "base"));
     return rewrite(cwdOf(values), {
       base: str(values, "base"),
       order,
@@ -128,5 +131,6 @@ if (import.meta.main) {
     try: { type: "string" },
     "bugzilla-url": { type: "string" },
     "leave-conflict": { type: "boolean" },
+    fetch: { type: "boolean" },
   });
 }
