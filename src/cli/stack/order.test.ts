@@ -162,5 +162,6 @@ test("one fix's patches stay together, landable ones apart from the others, afte
     ],
     deps: [{ patch: "c2", needs: "b", kind: "hard", reason: "r", source: "agent" }],
   });
-  assert.deepEqual(out.order, ["a1", "a2", "c1", "b", "c2"]);
+  // Each fix by its hardest patch: b (2), a (3), c (4).
+  assert.deepEqual(out.order, ["b", "a1", "a2", "c1", "c2"]);
 });

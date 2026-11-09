@@ -2,7 +2,7 @@ import type { Dep, PatchId } from "../../types.ts";
 
 // Stack ordering: pure functions, no git.
 //
-// Rule: easy first (effort ascending), then valuable first (value = failures/week, descending), then
+// Rule: easy first (effort ascending; a fix's patches by the hardest of them), then valuable first (value = failures/week, descending), then
 // test-only first, then the previous order, then the input order. Each patch comes after its hard
 // deps, and a dep is pulled in just before its first dependent rather than going to the top: we walk
 // the patches in rank order and, before placing one, place its not-yet-placed hard deps (themselves
@@ -42,7 +42,11 @@ export interface OrderOutput {
 function rankComparator(patches: OrderPatch[], previous: PatchId[] | undefined, landable: Set<PatchId>): (a: OrderPatch, b: OrderPatch) => number {
   const inputIndex = new Map(patches.map((p, i) => [p.id, i]));
   const prevIndex = new Map((previous ?? []).map((id, i) => [id, i]));
-  const effort = (p: OrderPatch) => p.effort ?? Infinity;
+  // A fix takes the attention of its hardest patch: its easy test patch doesn't bring its product patch among the easy
+  // ones.
+  const fixEffort = new Map<string, number>();
+  for (const p of patches) if (p.fix !== undefined) fixEffort.set(`${p.fix}\n${landable.has(p.id)}`, Math.max(fixEffort.get(`${p.fix}\n${landable.has(p.id)}`) ?? -Infinity, p.effort ?? Infinity));
+  const effort = (p: OrderPatch) => (p.fix === undefined ? p.effort ?? Infinity : fixEffort.get(`${p.fix}\n${landable.has(p.id)}`)!);
   return (a, b) =>
     Number(landable.has(b.id)) - Number(landable.has(a.id)) ||
     effort(a) - effort(b) ||

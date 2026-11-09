@@ -1715,8 +1715,9 @@ class Planner {
       }),
       deps: inStack.flatMap((p) => this.s.patches[p.id].deps).map((d) => ({ ...d, needs: this.depTarget(d.needs, inStack.map((x) => x.id)) })),
     };
-    // Ordered again when what it's ordered by changes (an effort, a dep, how the factory ranks them).
-    const oh = shortHash([JSON.stringify(orderInput)]).slice(0, 6);
+    // Ordered again when what it's ordered by changes (an effort, a dep, how the factory ranks them: rank-v2, a fix by
+    // its hardest patch).
+    const oh = shortHash([JSON.stringify(orderInput), "rank-v2"]).slice(0, 6);
     const orderFile = dataPath(this.config, this.s.id, `order-${id}-${hash}-${oh}.json`);
     const ord = this.want(`order:${id}:${hash}:${oh}`, () =>
       this.cli("order", "stack.ts", ["order", orderFile], {
@@ -2583,6 +2584,7 @@ class Planner {
       const inv = item?.investigation;
       return {
         sha: p.sha,
+        ...(p.item ? { fix: p.item } : {}),
         bug: p.bug ?? (p.bugDraft ? "its own, to file" : "the meta bug"),
         title: p.title.replace(/^Bug (\d+|X+)\s*-\s*/i, "").replace(/,?\s*r[=?]\S+$/, ""),
         testOnly: p.testOnly,
