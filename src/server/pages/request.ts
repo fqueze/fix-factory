@@ -342,7 +342,6 @@ interface Row {
   title: string;
   end: Html | null;
   state: Html;
-  patches?: Html; // a fix of several patches: a line per patch, in sight
   trust?: Html | null; // the evidence and reproduction behind it, once opened
   flag?: Html | null; // what it waits for you to do on Phabricator, with its buttons, on a line of its own
   warn?: Html | null; // what you should know before answering, under its state
@@ -357,7 +356,7 @@ interface Row {
 // Opened, the box under its name comes first in the body (clicking in it mustn't fold the row), styled as hanging
 // from its label; its state and trust lines then move under the box.
 function row(x: Row): Html {
-  const lines = html`<span class="state">${x.state}</span>${x.patches ? html`<span class="patchlines">${x.patches}</span>` : null}${x.flag ? html`<span class="rowflag">${x.flag}</span>` : null}${x.trust ? html`<span class="trust">${x.trust}</span>` : null}`;
+  const lines = html`<span class="state">${x.state}</span>${x.flag ? html`<span class="rowflag">${x.flag}</span>` : null}${x.trust ? html`<span class="trust">${x.trust}</span>` : null}`;
   const d = html`<details class="row${x.you ? " you" : null}${x.bucket ? ` b-${x.bucket.replaceAll(" ", "-")}` : null}" ${x.anchor} data-fold="${x.fold}"><summary><span class="st ${x.cls}" title="${x.tip ?? ICON_TIPS[x.cls]}"></span><span class="name" title="${x.title}">${x.name}</span><span class="end">${x.end}</span>${lines}${
     x.warn ? html`<span class="warn">${x.warn}</span>` : null
   }</summary>${x.under ? html`<div class="under">${x.under}<div class="lines">${raw(lines.value.replace(/ id="patch-[^"]*"/g, ""))}</div></div>` : null}<div class="rowbody">${
@@ -697,11 +696,13 @@ function fixRow(r: RequestState, ps: PatchView[], ctx: RenderContext): Html {
   const sentence = itemSentence(r, item, ctx);
   const covered = Object.values(r.items).filter((i) => ps.some((p) => i.coveredBy === p.id));
   const landable = parts.every((x) => x.landable);
-  const lines = html`${ps.map(
+  // Each patch's title where a row's name is, its own links at its end; under it, what's its own (its review, landable,
+  // what it waits for you to do).
+  const names = html`${ps.map(
     (p, n) =>
-      html`<span class="patchline" id="patch-${p.id}" data-patch="${p.id}"><span class="st ${parts[n].cls}" title="${ICON_TIPS[parts[n].cls]}"></span><span class="pname" title="${p.title}">${parts[n].name}</span>${
-        parts[n].status.length ? html` <span class="sub">· ${join(parts[n].status, " · ")}</span>` : null
-      }<span class="end">${parts[n].end}</span>${parts[n].flag ? html`<span class="rowflag">${parts[n].flag}</span>` : null}</span>`,
+      html`<span class="patchline" id="patch-${p.id}" data-patch="${p.id}"><span class="pname" title="${p.title}">${parts[n].name}</span><span class="end">${parts[n].end}</span>${
+        parts[n].status.length ? html`<span class="pstate">${join(parts[n].status, " · ")}</span>` : null
+      }${parts[n].flag ? html`<span class="rowflag">${parts[n].flag}</span>` : null}</span>`,
   )}`;
   const controls = parts.some((x) => x.bugBoxShown) && r.needsUser.some((n) => ps.some((p) => n.patch === p.id) && actionKind(n, r) === "file-bug") ? null : sentence.controls;
   return row({
@@ -709,18 +710,17 @@ function fixRow(r: RequestState, ps: PatchView[], ctx: RenderContext): Html {
     anchor: html`id="fix-${item.id}" data-item="${item.id}"`,
     fold: `fix-${item.id}`,
     bucket: landable && itemBucket(r, item, ctx) === "ready" ? "landable" : itemBucket(r, item, ctx),
-    cls: rowClass(r, item, ctx),
+    cls: phabClass(ps[0], rowClass(r, item, ctx)),
     tip: closedTip(r, item),
-    name: html`${groupLinks(r, item)} <span class="sub">· ${ps.length} patches</span>`,
-    title: item.group.tests.join(", "),
+    name: html`<span class="patchlines">${names}</span>`,
+    title: ps.map((p) => p.title).join("\n"),
     end: costLabel(r, item, ctx),
     state: html`${[
       item.state === "in stack" || item.state === "landed" || item.state === "waiting for review" ? null : html`${stateText(r, item, ctx)}`,
-      covered.length ? html`also fixes <b>${join(covered.map((i) => groupLinks(r, i)), ", ")}</b>` : null,
+      html`fixes <b>${groupLinks(r, item)}</b>${covered.length ? html` and <b>${join(covered.map((i) => groupLinks(r, i)), ", ")}</b>` : null}`,
     ]
       .filter((x) => x !== null)
       .map((x, i) => (i ? html` · ${x}` : x))}`,
-    patches: lines,
     trust: trustLine(r, item, ctx),
     ask: (() => {
       const group = askBlock(r, item, ctx, [], controls !== null);

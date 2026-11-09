@@ -457,8 +457,10 @@ describe("one fixture per step of docs/MVP.md", () => {
     r.needsUser.push({ key: "note:close", action: "Something odd", detail: "look at it", item: "i-close", since: r.createdAt });
     const h = renderRequest(r, ctx, true).value;
     const fix = rowOf(h, "fix-i-close");
-    assert.match(fix, /<span class="sub">· 2 patches<\/span>/);
     const summary = fix.slice(0, fix.indexOf("</summary>"));
+    assert.equal(summary.split('class="st ').length - 1, 1, "one icon");
+    assert.match(summary, /<span class="name" title="[^"]*"><span class="patchlines">/, "its name is its patches' titles");
+    assert.match(summary, /<span class="state">[^]*fixes <b>/, "the fix's state once");
     assert.match(summary, /<span class="patchline" id="patch-p-close2" data-patch="p-close2">[^]*Second part/, "each patch on a line, unopened");
     assert.match(summary, /<span class="patchline" id="patch-p-close" data-patch="p-close">/);
     assert.equal(h.split('<div class="ask-you">').length - 1 - (renderRequest(get(T), ctx, true).value.split('<div class="ask-you">').length - 1), 1, "its question once");

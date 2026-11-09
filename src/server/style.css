@@ -224,11 +224,14 @@ details.row.you { background: var(--action-bg); }
 details.row .state b.you { font-weight: 600; }
 details.row > summary { list-style: none; cursor: pointer; display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; gap: 0 8px; padding: 5px 12px; align-items: baseline; }
 details.row > summary::-webkit-details-marker { display: none; }
-/* A fix of several patches: a line per patch under its row's state, each with its own icon, review and buttons. */
-.patchlines { grid-column: 2 / -1; display: block; margin-top: 2px; }
-.patchline { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; gap: 0 8px; align-items: baseline; font-size: 13px; color: var(--text-primary); }
+/* A fix of several patches: its name is its patches' titles, a line each with its own links at its end, and its own
+   review and flags under it. */
+details.row .name:has(> .patchlines) { white-space: normal; overflow: visible; grid-column: 2 / 3; }
+.patchlines { display: block; }
+.patchline { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0 10px; align-items: baseline; }
 .patchline .pname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.patchline .rowflag { grid-column: 2 / -1; }
+.patchline .end { display: flex; gap: 10px; font-size: 12px; font-weight: 400; color: var(--text-muted); white-space: nowrap; }
+.patchline .pstate, .patchline .rowflag { grid-column: 1 / -1; font-size: 12px; font-weight: 400; color: var(--text-secondary); }
 details.row > summary:hover { background: var(--bg); }
 details.row .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
 details.row .end { display: flex; gap: 10px; font-size: 12px; color: var(--text-muted); white-space: nowrap; }
