@@ -574,7 +574,7 @@ export interface RouteRequestReport {
   folder?: string;
   rev?: string;
   title?: string;
-  config?: { folders: string[]; tests: string[]; platforms: string[]; constraints: string[] };
+  config?: { folders: string[]; tests: string[]; platforms: string[]; constraints: string[]; withPushCommits?: boolean };
   questions?: string[];
   feedback: Feedback[];
 }

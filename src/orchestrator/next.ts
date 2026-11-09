@@ -1967,7 +1967,8 @@ class Planner {
     const failuresFile = dataPath(this.config, this.s.id, `failures-${info.id}.json`);
     const initialFile = dataPath(this.config, this.s.id, "initial-pushes.json");
     const debug = this.debugGroups().flatMap((g) => g.commits);
-    const planKey = `plan:verify:${info.id}:${info.code}${e}${ask ? `:ask${ask.n}` : ""}${debug.length ? `:${shortHash(debug).slice(0, 6)}` : ""}`;
+    const tryWith = typeof this.s.config.tryWith === "string" ? `:with-${this.s.config.tryWith.slice(0, 8)}` : "";
+    const planKey = `plan:verify:${info.id}:${info.code}${e}${ask ? `:ask${ask.n}` : ""}${debug.length ? `:${shortHash(debug).slice(0, 6)}` : ""}${tryWith}`;
     // After an earlier push of the stack: what changed since, and what it claims to fix, before planning the next.
     // Only a new plan waits for it; the current plan's own pushes aren't earlier ones.
     const since = this.sinceLastPush(info, ask);

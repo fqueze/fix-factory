@@ -119,6 +119,13 @@ describe("1. request", () => {
     ]);
   });
 
+  it("a try push whose patches its fixes need is pushed with them: tryWith, its revision", () => {
+    const sc = new Scenario("unrouted", { text: "fix what the repeat jobs of try push abcdef123456 find" });
+    sc.step();
+    sc.complete("route", { report: routed({ kind: "try-push", rev: "abcdef123456", title: "repeat failures", config: { folders: [], tests: [], platforms: [], constraints: [], withPushCommits: true } }) });
+    assert.equal((sc.commands[0] as { routed: { config: { tryWith?: string } } }).routed.config.tryWith, "abcdef123456");
+  });
+
   it("a routed try push goes to the work list with its push", () => {
     const sc = new Scenario("try-push", { rev: "abcdef123456", text: "fix the failures of try push abcdef123456" });
     assert.deepEqual(sc.settle(), ["watch:initial"]);

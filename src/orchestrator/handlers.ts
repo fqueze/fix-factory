@@ -109,7 +109,14 @@ export function handleFinished(input: HandlerInput): HandlerResult {
         id: `new-${job.job}`,
         cmd: "tell-factory",
         text: s.text,
-        routed: { from: s.id, title: r.title.trim().slice(0, 80), kind: r.kind, ...(r.kind === "burndown" ? { folder: r.folder } : { rev: r.rev }), config: { ...r.config, ...(questions.length ? { questions } : {}) } },
+        routed: {
+          from: s.id,
+          title: r.title.trim().slice(0, 80),
+          kind: r.kind,
+          ...(r.kind === "burndown" ? { folder: r.folder } : { rev: r.rev }),
+          // The push's own commits go with every try push of its fixes.
+          config: { ...r.config, ...(r.config?.withPushCommits && r.kind === "try-push" ? { tryWith: r.rev } : {}), ...(questions.length ? { questions } : {}) },
+        },
       });
       break;
     }

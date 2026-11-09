@@ -55,6 +55,10 @@
             "type": "string"
           },
           "description": "Other constraints stated in the text, one sentence each."
+        },
+        "withPushCommits": {
+          "type": "boolean",
+          "description": "true when the text says the try push carries patches its fixes must be tested with (the jobs it adds, like mochitest-repeat): every try push of the fixes carries them."
         }
       },
       "required": [
