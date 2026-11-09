@@ -1164,6 +1164,30 @@ describe("4. investigate and fix", () => {
     }
   });
 
+  it("after your message to its author, its unchanged patch is reviewed again: your message may answer the findings", () => {
+    const sc = workList([group("ka", "a/test_a.js", "boom")]);
+    investigating(sc, "i-test-a");
+    const job = linted(sc, "author:i-test-a:initial", sha("1"));
+    sc.settle();
+    sc.complete(`review:p-test-a:${job}`, { report: { verdict: "findings", findings: [{ severity: "must-fix", text: "nobody ran it" }], feedback: [] } });
+    const again = `author:i-test-a:review:${job}`;
+    sc.settle();
+    sc.complete(again, { report: fixed([sha("1")], { summary: "can't run it here" }) });
+    const second = sc.view().byKey.get(again)![0].job;
+    sc.settle();
+    sc.complete(`import:${second}`, { output: imported(sha("1"), "Bug 1 - Fix", ["a/test_a.js"], 1) });
+    sc.settle();
+    const plan = resumeAuthorPlan(ID, sc.view(), "i-test-a", "continue", { message: "run it on a display" }, "investigating");
+    assert.ok(plan && plan !== "busy");
+    plan.purpose.key = "author:i-test-a:continue:c-1";
+    sc.startJob(plan);
+    sc.complete("author:i-test-a:continue:c-1", { report: fixed([sha("1")], { summary: "ran it: 0 of 6 with the fix" }) });
+    const third = sc.view().byKey.get("author:i-test-a:continue:c-1")![0].job;
+    sc.settle();
+    sc.complete(`import:${third}`, { output: imported(sha("1"), "Bug 1 - Fix", ["a/test_a.js"], 1) });
+    assert.ok(sc.settle().includes(`review:p-test-a:${third}`));
+  });
+
   it("an author that leaves its patch unchanged after a review's findings comes to you instead of another review, once", () => {
     const sc = workList([group("ka", "a/test_a.js", "boom")]);
     investigating(sc, "i-test-a");

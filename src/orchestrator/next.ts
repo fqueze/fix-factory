@@ -1411,7 +1411,9 @@ class Planner {
       return;
     }
     // The same commits a critical review already found problems in: another review would say the same. You decide.
-    const prior = patches.map((p) => this.view.jobs.filter((j) => j.purpose.what === "review" && j.purpose.patch === p.id && j.purpose.sha === p.sha && j.purpose.key !== `review:${p.id}:${author.job}` && succeeded(j)).at(-1));
+    // Since your last message to its author (or its start): what you told it may answer those findings.
+    const since = this.authorJobs(item.id).findLast((j) => j.purpose.reason === "initial" || j.purpose.reason === "start" || j.purpose.reason === "continue")?.startedAt ?? 0;
+    const prior = patches.map((p) => this.view.jobs.filter((j) => j.purpose.what === "review" && j.purpose.patch === p.id && j.purpose.sha === p.sha && j.purpose.key !== `review:${p.id}:${author.job}` && j.startedAt > since && succeeded(j)).at(-1));
     // Once submitted, nits don't count: only must-fix findings make it a question for you.
     const submitted = patches.some((p) => this.s.patches[p.id]?.revision !== undefined);
     const blocking = (j: JobRecord) => {
