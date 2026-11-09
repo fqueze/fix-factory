@@ -92,6 +92,8 @@ details.row > summary > .name > .ptitle { min-width: 0; overflow: hidden; text-o
 details.row[open] > summary > .name > .ptitle { white-space: normal; overflow-wrap: anywhere; }
 details.row[open]:has(> .under) > summary > .name > .bug.tofile { align-self: stretch; flex: none; }
 details.row > summary > .name > :is(.bug, .phab) { flex: none; }
+/* In a flex name its vertical-align doesn't apply: lowered as much as it would lower it. */
+details.row > summary > .name:has(> .ptitle) > .phab { position: relative; top: 3px; }
 /* A fix's row: over all the lines of the patches that share it. */
 details.row[open]:has(> .under) .patchline .pbug { display: flex; align-self: stretch; }
 details.row[open]:has(> .under) .patchline .pbug > .bug.tofile { align-self: stretch; }
@@ -245,7 +247,7 @@ details.row .name:has(> .patchlines) { white-space: normal; overflow: visible; g
 /* One grid for all its lines: the bug column as wide as its widest label, the titles aligned after it. */
 .patchlines { display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto; gap: 0 6px; align-items: baseline; }
 .patchline { display: contents; }
-.patchline .pphab { grid-column: 1; display: flex; }
+.patchline .pphab { grid-column: 1; }
 .patchline .pphab .phab { margin-right: 2px; }
 .patchline .pbug { white-space: nowrap; grid-column: 2; }
 .patchline .pname { grid-column: 3; }
