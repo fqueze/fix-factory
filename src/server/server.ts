@@ -26,7 +26,7 @@ import type { CommandInput } from "../state/commands.ts";
 import type { CommandSink, StateSource } from "./state-source.ts";
 
 export interface ServerOptions {
-  config: Pick<FactoryConfig, "port" | "profilerOrigin" | "profilerPort" | "stackViewerCommand" | "mdViewerCommand" | "diffViewerCommand" | "stateDir" | "maxAgents" | "maxBuilds" | "allowedHosts" | "bugzillaEmail" | "worktreesDir" | "firefoxRepo">;
+  config: Pick<FactoryConfig, "port" | "profilerOrigin" | "profilerPort" | "stackViewerCommand" | "mozPhabCommand" | "mdViewerCommand" | "diffViewerCommand" | "stateDir" | "maxAgents" | "maxBuilds" | "allowedHosts" | "bugzillaEmail" | "worktreesDir" | "firefoxRepo">;
   state: StateSource;
   sink: CommandSink;
   now?: () => number;
@@ -270,6 +270,7 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
       runningAgents: opts.state.listRequests().reduce((n, r) => n + Object.values(r.jobs).filter((j) => j.kind === "agent" && j.endedAt === undefined).length, 0),
       open,
       bugzillaEmail: opts.config.bugzillaEmail,
+      mozPhab: opts.config.mozPhabCommand,
       interdiff: readInterdiff,
       diffStat,
       landoUrl,

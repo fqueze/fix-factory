@@ -8,6 +8,7 @@
   "metaBugBlocks": [2063593],
   "phabPollHours": 3,
   "claudeCommand": ["mozsb", "claude"],
+  "mozPhabCommand": "moz-phab",
   "bugzillaEmail": "you@mozilla.com",
   "allowedHosts": [],
   "maxAgents": 10,

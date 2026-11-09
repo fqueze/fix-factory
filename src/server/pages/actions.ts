@@ -90,20 +90,20 @@ export function flagControls(r: RequestState, n: NeedsUser, ctx: RenderContext):
     case "meta-bug": {
       const draft = r.metaBug?.draft;
       const stack = findStack(r, n);
-      controls = html`${draft ? html`<a class="btn small" href="${metaBugUrl(r, draft, ctx)}" target="_blank" rel="noopener">Meta: Bug to file ↗</a>` : null}${bugBox(r.id, "meta", back)}${stack ? submitControls(r, stack, back) : null}`;
+      controls = html`${draft ? html`<a class="btn small" href="${metaBugUrl(r, draft, ctx)}" target="_blank" rel="noopener">Meta: Bug to file ↗</a>` : null}${bugBox(r.id, "meta", back)}${stack ? submitControls(r, stack, back, ctx) : null}`;
       break;
     }
     // What it asks, in its buttons; the checks are on the stack, below.
     case "submit": {
       const stack = findStack(r, n);
-      controls = stack ? html`${stackViewerLink(r, stack)}${mozPhabButton(r.id, stack, !submitChecks(r, stack)[0].ok)}` : null;
+      controls = stack ? html`${stackViewerLink(r, stack)}${mozPhabButton(r.id, stack, !submitChecks(r, stack)[0].ok, ctx)}` : null;
       break;
     }
     case "resubmit": {
       const stack = findStack(r, n);
       const p = n.patch === undefined ? undefined : r.patches[n.patch];
       // Only its patch: the others stay as their reviewers saw them. Or decide against it (it lands as it is).
-      controls = stack ? html`${mozPhabButton(r.id, stack, false, p?.sha)}${dismissButton(r.id, n.key, back)}` : null;
+      controls = stack ? html`${mozPhabButton(r.id, stack, false, ctx, p?.sha)}${dismissButton(r.id, n.key, back)}` : null;
       break;
     }
     case "reopen-bug": {
@@ -117,7 +117,7 @@ export function flagControls(r: RequestState, n: NeedsUser, ctx: RenderContext):
       break;
     case "land": {
       const stack = findStack(r, n);
-      controls = stack ? reorgButton(r.id, stack, n.key) : null;
+      controls = stack ? reorgButton(r.id, stack, n.key, ctx) : null;
       break;
     }
     case "failed": {
@@ -244,10 +244,10 @@ export function bugBox(request: string, patch: string, back: string, cls = "inli
 
 // The checks say what isn't ready yet; you decide, but a WIP or DEBUG commit is never submitted.
 // Only the checks that fail, before the command: you decide, but a WIP or DEBUG commit is never submitted.
-export function submitControls(r: RequestState, stack: StackView, back: string): Html {
+export function submitControls(r: RequestState, stack: StackView, back: string, ctx: RenderContext): Html {
   const checks = submitChecks(r, stack);
   const failing = checks.filter((c) => !c.ok);
-  return html`${failing.length ? html`<span class="checks">${failing.map((c) => html`<span class="bad">${c.text}</span>`)}</span>` : null}${mozPhabButton(r.id, stack, !checks[0].ok)}`;
+  return html`${failing.length ? html`<span class="checks">${failing.map((c) => html`<span class="bad">${c.text}</span>`)}</span>` : null}${mozPhabButton(r.id, stack, !checks[0].ok, ctx)}`;
 }
 
 export function summaryId(request: string, stack: string): string {
@@ -266,20 +266,20 @@ export function stackViewerLink(r: RequestState, stack: StackView): Html {
 // The factory never runs moz-phab: you copy the command and run it yourself.
 // On the stack's branch: its worktree may have its try branch checked out.
 // One patch (single): moz-phab submits only that commit, the stack's others stay as they are on Phabricator.
-export function mozPhabCommand(stack: StackView, single?: string): string {
-  return `cd ${stack.worktree} && git switch ${stack.branch} && moz-phab submit${single ? ` --single ${single.slice(0, 12)}` : ""}`;
+export function mozPhabCommand(stack: StackView, mozPhab = "moz-phab", single?: string): string {
+  return `cd ${stack.worktree} && git switch ${stack.branch} && ${mozPhab} submit${single ? ` --single ${single.slice(0, 12)}` : ""}`;
 }
 
 // Copying it tells the factory to look for the revisions moz-phab creates.
 // Copying it answers the ⚑.
-function reorgButton(request: string, stack: StackView, key: string): Html {
+function reorgButton(request: string, stack: StackView, key: string, ctx: RenderContext): Html {
   const id = `mozphab-reorg-${request}-${stack.id}`;
-  return html`<form class="inline cmd" method="post" action="/api/commands">${commandFields([{ cmd: "copied-reorg", request, key }], requestUrl(request))}<textarea hidden id="${id}">cd ${stack.worktree} && git switch ${stack.branch} && moz-phab reorg</textarea><button type="button" class="btn small primary" data-copy="${id}">Copy the moz-phab reorg command</button></form>`;
+  return html`<form class="inline cmd" method="post" action="/api/commands">${commandFields([{ cmd: "copied-reorg", request, key }], requestUrl(request))}<textarea hidden id="${id}">cd ${stack.worktree} && git switch ${stack.branch} && ${ctx.mozPhab ?? "moz-phab"} reorg</textarea><button type="button" class="btn small primary" data-copy="${id}">Copy the moz-phab reorg command</button></form>`;
 }
 
-function mozPhabButton(request: string, stack: StackView, disabled: boolean, single?: string): Html {
+function mozPhabButton(request: string, stack: StackView, disabled: boolean, ctx: RenderContext, single?: string): Html {
   const id = `mozphab-${request}-${stack.id}${single ? `-${single.slice(0, 12)}` : ""}`;
-  return html`<form class="inline cmd" method="post" action="/api/commands">${commandFields([{ cmd: "copied-submit", request, stack: stack.id }], requestUrl(request))}<textarea hidden id="${id}">${mozPhabCommand(stack, single)}</textarea><button type="button" class="btn small primary" data-copy="${id}"${
+  return html`<form class="inline cmd" method="post" action="/api/commands">${commandFields([{ cmd: "copied-submit", request, stack: stack.id }], requestUrl(request))}<textarea hidden id="${id}">${mozPhabCommand(stack, ctx.mozPhab, single)}</textarea><button type="button" class="btn small primary" data-copy="${id}"${
     disabled ? html` disabled` : null
   }>Copy the moz-phab command</button></form>`;
 }

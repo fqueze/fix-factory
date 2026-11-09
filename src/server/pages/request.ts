@@ -174,7 +174,7 @@ export function renderRequestBody(r: RequestState, ctx: RenderContext): Html {
               }</div>`,
           )}</details>`
         : null
-    }` : null}${stacks.length === 1 ? stackSubmit(r, stacks[0]) : null}${pushes.length || stacks.length === 1 ? html`<hr class="part">` : null}
+    }` : null}${stacks.length === 1 ? stackSubmit(r, stacks[0], ctx) : null}${pushes.length || stacks.length === 1 ? html`<hr class="part">` : null}
     ${r.metaBug && !(hasBug(r.metaBug) && (stacks.length || landed.length)) ? metaBugLine(r, back, ctx) : null}
     ${stacks.map((s) => stackSection(r, s, ctx, stacks.length > 1))}
     ${loose.length ? html`<h3>Patches</h3><div class="rows">${loose.map((p) => patchRow(r, p, ctx))}</div>` : null}
@@ -286,13 +286,13 @@ function stackSection(r: RequestState, s: StackView, ctx: RenderContext, header:
       .map((p) => patchRow(r, p, ctx))}${
       dropped.length ? html`<details class="fold" data-fold="dropped-${s.id}"><summary>${dropped.length} dropped</summary><div class="rows">${dropped.map((p) => patchRow(r, p, ctx))}</div></details>` : null
     }</div>
-    ${header ? stackSubmit(r, s, submitted) : null}`;
+    ${header ? stackSubmit(r, s, ctx, submitted) : null}`;
 }
 
 // Verifying and submitting the stack: with one stack, right under the try pushes (so its rows meet what landed below
 // them); with several, under each.
-function stackSubmit(r: RequestState, s: StackView, submitted = livePatches(r, s).some((p) => p.revision !== undefined) && r.step !== "done"): Html {
-  return html`<div class="stack-submit">${submitted ? verifyStackButton(r.id, requestUrl(r.id)) : null}${submitControls(r, s, requestUrl(r.id))}</div>`;
+function stackSubmit(r: RequestState, s: StackView, ctx: RenderContext, submitted = livePatches(r, s).some((p) => p.revision !== undefined) && r.step !== "done"): Html {
+  return html`<div class="stack-submit">${submitted ? verifyStackButton(r.id, requestUrl(r.id)) : null}${submitControls(r, s, requestUrl(r.id), ctx)}</div>`;
 }
 
 function stackMenu(r: RequestState, s: StackView, ctx: RenderContext): Html | null {

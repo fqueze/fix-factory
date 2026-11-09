@@ -942,6 +942,11 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.ok(h.includes(cmd({ cmd: "copied-reorg", request: "r-20261001-mouse-button", key: "land:mouse-button" })), "copying it answers the ⚑");
     assert.match(h, /<textarea hidden id="mozphab-reorg-r-20261001-mouse-button-mouse-button">cd \/build\/worktrees\/mouse-button && git switch ff\/mouse-button && moz-phab reorg<\/textarea>/);
     assert.match(h, /data-copy="mozphab-reorg-r-20261001-mouse-button-mouse-button">Copy the moz-phab reorg command</);
+    // Your moz-phab, from the config (a fork, an alias).
+    const mine = renderRequest(source.getRequest("r-20261001-mouse-button")!, { ...ctx, mozPhab: "my-phab" }, true).value;
+    assert.match(mine, /git switch ff\/mouse-button && my-phab reorg<\/textarea>/);
+    const focus = renderRequest(source.getRequest("r-20261007-focus")!, { ...ctx, mozPhab: "my-phab" }, true).value;
+    assert.match(focus, /&amp;&amp; my-phab submit<\/textarea>/);
   });
 
   it("groups that landed outside a stack are under Landed, after those not in a stack yet", () => {

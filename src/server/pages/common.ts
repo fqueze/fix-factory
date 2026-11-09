@@ -16,6 +16,7 @@ export interface RenderContext {
   runningAgents?: number; // across requests, for "waiting for an agent (N/M running)"
   open?: string[]; // ids of the requests to show expanded
   bugzillaEmail?: string; // bugs to file are assigned to you
+  mozPhab?: string; // the moz-phab the commands you copy run (config mozPhabCommand)
   // The text of a patch's interdiffFile, read by the server inside stateDir.
   interdiff?: (p: PatchView) => string | undefined;
   // The lines its commit adds and removes, read with git.

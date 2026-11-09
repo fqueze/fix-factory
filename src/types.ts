@@ -23,6 +23,7 @@ export interface FactoryConfig {
   claudeCommand: string[]; // e.g. ["mozsb", "claude"]; the runner appends -p and its flags
   // The viewers the page runs; by default the factory's own (tools.ts update).
   stackViewerCommand?: string[];
+  mozPhabCommand?: string; // the moz-phab the commands you copy run, default "moz-phab" (yours: a fork, an alias)
   mdViewerCommand?: string[]; // for the authors' evidence and reproduction files
   diffViewerCommand?: string[]; // for their widening patches
   profilerOrigin?: string; // a profiler front end for the profile links; by default the factory's own, on profilerPort
