@@ -83,7 +83,7 @@ details.row > .under .lines { display: flex; flex-direction: column; margin-top:
 details.row > .under .lines .state { white-space: normal; overflow-wrap: anywhere; }
 details.row:has(> summary .st.find) > .under .state { color: var(--serious); }
 /* Its padding taken back by its margins: opening the row moves nothing. */
-details.row[open]:has(> .under) .bug.tofile { background: var(--tofile-bg); border-radius: 6px 6px 0 0; padding: 2px 3px 6px 4px; margin: -2px 0 -6px; }
+details.row[open]:has(> .under) .bug.tofile { background: var(--tofile-bg); border-radius: 6px 6px 0 0; padding: 2px 3px 6px 4px; margin-top: -2px; margin-bottom: -6px; }
 /* A patch's name lays out the same open or closed (its title in a box of its own, cut short closed); open, the label
    goes down to the box however many lines its title takes. */
 details.row > summary > .name:has(> .ptitle) { display: flex; align-items: baseline; column-gap: 0.3em; }
