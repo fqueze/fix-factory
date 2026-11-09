@@ -3130,7 +3130,7 @@ class Planner {
               path: file,
               content:
                 JSON.stringify({
-                  patches: ps.map((p) => ({ id: p.id, effort: p.effort, value: this.s.items[p.item ?? ""]?.group.ratePerWeek, testOnly: p.testOnly, ...landingState(this.s, p) })),
+                  patches: ps.map((p) => ({ id: p.id, effort: p.effort, value: this.s.items[p.item ?? ""]?.group.ratePerWeek, testOnly: p.testOnly, ...(p.item ? { fix: p.item } : {}), ...landingState(this.s, p) })),
                   deps: ps.flatMap((p) => p.deps),
                   previous: st.order,
                 }) + "\n",

@@ -150,3 +150,17 @@ test("landable: cycles among landable patches are an error", () => {
   const yes = { accepted: true, commentsAddressed: true };
   assert.throws(() => orderPatches({ patches: [p("a", 1, 0, yes), p("b", 1, 0, yes)], deps: [hard("a", "b"), hard("b", "a")] }), /cycle/);
 });
+
+test("one fix's patches stay together, landable ones apart from the others, after the patches they need", () => {
+  const out = orderPatches({
+    patches: [
+      { id: "a1", effort: 1, fix: "a" },
+      { id: "b", effort: 2, fix: "b" },
+      { id: "a2", effort: 3, fix: "a" },
+      { id: "c1", effort: 1, fix: "c" },
+      { id: "c2", effort: 4, fix: "c" },
+    ],
+    deps: [{ patch: "c2", needs: "b", kind: "hard", reason: "r", source: "agent" }],
+  });
+  assert.deepEqual(out.order, ["a1", "a2", "c1", "b", "c2"]);
+});

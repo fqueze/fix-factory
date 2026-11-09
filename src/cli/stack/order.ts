@@ -19,6 +19,7 @@ export interface OrderPatch {
   effort?: number; // 1-5; unknown efforts go last
   value?: number; // failures/week; unknown counts as 0
   testOnly?: boolean;
+  fix?: string; // the fix it's a patch of: one fix's patches stay together
   // On Phabricator:
   accepted?: boolean;
   commentsAddressed?: boolean;
@@ -129,5 +130,22 @@ export function orderPatches(input: OrderInput): OrderOutput {
     input.deps,
     rankComparator(input.patches, input.previous, landable),
   );
-  return { order, flippedSoftDeps: flippedSoftDeps(input.deps, order, input.previous), landable: order.filter((id) => landable.has(id)) };
+  const together = keepFixesTogether(order, input.patches, input.deps, landable);
+  return { order: together, flippedSoftDeps: flippedSoftDeps(input.deps, together, input.previous), landable: together.filter((id) => landable.has(id)) };
+}
+
+// One fix's patches next to each other, where its first one is, in their order: those landable apart from those that
+// aren't, which come later.
+// A patch is only pulled forward once the patches it needs (hard deps) are placed.
+function keepFixesTogether(order: PatchId[], patches: OrderPatch[], deps: Dep[], landable: Set<PatchId>): PatchId[] {
+  const fixOf = new Map(patches.map((p) => [p.id, p.fix]));
+  const group = (id: PatchId) => (fixOf.get(id) === undefined ? id : `${fixOf.get(id)}\n${landable.has(id)}`);
+  const needs = (id: PatchId) => deps.filter((d) => d.kind === "hard" && d.patch === id && order.includes(d.needs)).map((d) => d.needs);
+  const out: PatchId[] = [];
+  for (const id of order) {
+    if (out.includes(id)) continue;
+    out.push(id);
+    for (const x of order) if (x !== id && !out.includes(x) && group(x) === group(id) && needs(x).every((n) => out.includes(n))) out.push(x);
+  }
+  return out;
 }
