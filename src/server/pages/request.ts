@@ -1301,7 +1301,9 @@ function pushAnalysis(r: RequestState, p: PushView, ctx: RenderContext): Html | 
     // A test failing with no patch to blame: the fix it has (the one of its group, or one made for it from this push).
     if (g.verdict === "still failing") {
       const item = Object.values(r.items).findLast((i) => i.group.tests.some((t) => testKey(t) === testKey(g.test)));
-      return item ? html`its fix: <a href="#${itemAnchor(r, item)}">${stateText(r, item, ctx)}</a>` : html`no fix for it yet`;
+      if (!item) return html`no fix for it yet`;
+      const fixed = Object.values(r.patches).some((x) => x.item === item.id);
+      return html`${fixed ? "its fix" : "looked into"}: <a href="#${itemAnchor(r, item)}">${stateText(r, item, ctx)}</a>`;
     }
     if (g.verdict !== "broken by patch") return null;
     return join(

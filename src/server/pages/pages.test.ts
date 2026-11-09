@@ -1544,7 +1544,12 @@ describe("a push's failures as triaged", () => {
       { test: "t/test_b.js", config: "mac", verdict: "broken by patch", patch: sha.slice(0, 12), evidence: "TypeError" },
       // Named otherwise by a later triage: the same test, by file name with a note, the patch by id, two configs.
       { test: "test_b.js (missing from the result table)", config: "test-mac; windows", verdict: "broken by patch", patch: "p-panel", evidence: "TypeError again" },
+      // No patch to blame: what came of it.
+      { test: "t/test_new.js", config: "linux", verdict: "still failing", evidence: "2nd run only" },
+      { test: "t/test_none.js", config: "linux", verdict: "still failing", evidence: "2nd run only" },
     ] as NonNullable<RequestState["pushes"][string]["analysis"]>;
+    const first = Object.values(r.items)[0];
+    r.items["i-new"] = { ...structuredClone(first), id: "i-new", state: "left as-is", group: { ...first.group, tests: ["t/test_new.js"] } };
     r.pushes.x = { id: "x", purpose: "verify", command: [], rev: "abc", url: "u", result: "failures", summary: "9 failed", analysis: cells };
     const row = rowOf(renderRequest(r, ctx, true).value, "push-x");
     assert.ok(row.indexOf(">broken by patch <") < row.indexOf(">pre-existing <"));
@@ -1552,6 +1557,8 @@ describe("a push's failures as triaged", () => {
     assert.match(row, /broken by patch <span class="count">1 test<\/span>/);
     assert.match(row, /pre-existing <span class="count">7 tests<\/span>/);
     assert.match(row, /<summary>\+2 more<\/summary>/);
+    assert.match(row, /<li>t\/test_new\.js [^]*?<div class="next">→ looked into: <a href="#item-i-new">/);
+    assert.match(row, /<li>t\/test_none\.js [^]*?<div class="next">→ no fix for it yet<\/div>/);
   });
 });
 
