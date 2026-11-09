@@ -1106,7 +1106,7 @@ function pushRowOf(r: RequestState, p: PushView, ctx: RenderContext): Html {
                 ? "you discarded it"
                 : html`you declined it: ${p.declined}`
           : waiting
-            ? "waiting for your approval"
+            ? html`waiting for your approval${rebuildOf(p) > 1 ? html` · each job run ${rebuildOf(p)} times` : null}${p.title && p.purpose ? html`<div class="sub">${p.purpose}</div>` : null}`
             : !job
               ? "approved"
               : job.endedAt === undefined
@@ -1124,6 +1124,12 @@ function pushRowOf(r: RequestState, p: PushView, ctx: RenderContext): Html {
       waiting ? pushJobs(p) : html`<details class="fold" data-fold="pushjobs-${p.id}"><summary>Its jobs, commits and command</summary>${pushJobs(p)}</details>`
     }${revisable(r, p) ? reviseBox(r, p) : null}`,
   });
+}
+
+// How many times each of its jobs runs (mach try --rebuild).
+function rebuildOf(p: PushView): number {
+  const i = p.command?.indexOf("--rebuild") ?? -1;
+  return i >= 0 ? Number(p.command![i + 1]) : 1;
 }
 
 // A push planned again after your comment: what you said, and what its planner answered (its revision run's answer).

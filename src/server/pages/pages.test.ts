@@ -161,7 +161,7 @@ describe("one fixture per step of docs/MVP.md", () => {
     const header = h.slice(0, h.indexOf("</summary>"));
     assert.doesNotMatch(header, /approve-push/, "not in the header: on its row");
     const row = rowOf(h, "push-unskip");
-    assert.match(row, /<span class="state">waiting for your approval<\/span>/);
+    assert.match(row, /<span class="state">waiting for your approval · each job run 10 times<\/span>/);
     const top = row.slice(0, row.indexOf("</summary>"));
     assert.ok(top.includes(cmd({ cmd: "approve-push", request: "r-20261014-extensions-xpcshell", push: "unskip" })), "Approve on its top line");
     assert.ok(top.includes(cmd({ cmd: "decline-push", request: "r-20261014-extensions-xpcshell", push: "unskip", text: "discarded" })), "🗑 on its top line");
@@ -555,7 +555,7 @@ describe("one fixture per step of docs/MVP.md", () => {
     const n = r.needsUser.find((x) => x.key === "approve-push:A")!;
     n.detail = `312 tasks · ${r.pushes.A.purpose} · --chemspill-priority is set · Large push: 312 tasks`;
     const h = renderRequest(r, ctx, true).value;
-    assert.match(rowOf(h, "push-A"), /<span class="state">waiting for your approval<\/span><span class="warn">⚠ --chemspill-priority is set · Large push: 312 tasks<\/span><\/summary>/);
+    assert.match(rowOf(h, "push-A"), /<span class="state">waiting for your approval · each job run 5 times<\/span><span class="warn">⚠ --chemspill-priority is set · Large push: 312 tasks<\/span><\/summary>/);
     assert.doesNotMatch(rowOf(h, "push-B"), /class="warn"/, "no warnings");
     r.pushes.A.purpose = "";
     n.detail = "312 tasks · chunks: xpcshell-1, xpcshell-2";
