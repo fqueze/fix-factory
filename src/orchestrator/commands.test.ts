@@ -22,7 +22,7 @@ function run(sc: Scenario, c: Command): Effect[] {
 function withPatch(): Scenario {
   const sc = new Scenario("try-push", { rev: "abc" });
   sc.add({ type: "item-created", request: ID, item: "i-a", folder: "a", group: { message: "boom", tests: ["a/test_a.js"], configs: ["linux"] } });
-  sc.startJob({ purpose: { key: "author:i-a:initial", what: "author", item: "i-a", reason: "initial" }, kind: "agent", name: "investigate-and-fix", item: "i-a", cwd: "/wt/a", agent: { sessionId: "s-1", resume: false, vars: { test: "a/test_a.js", worktree: "/wt/a", failureSummary: "boom" } } });
+  sc.startJob({ purpose: { key: "author:i-a:initial", what: "author", item: "i-a", reason: "initial" }, kind: "agent", name: "investigate-and-fix", item: "i-a", cwd: "/wt/a", agent: { sessionId: "s-1", resume: false, vars: { test: "a/test_a.js", worktree: "/wt/a", failureSummary: "boom", request: "r" } } });
   sc.complete("author:i-a:initial", { report: { state: "fix verified locally", summary: "s", cause: "c", verification: "v", commits: [sha("1")], landsAfter: [], feedback: [] } });
   sc.add({ type: "patch", request: ID, patch: "p-a", item: "i-a", sha: sha("1"), worktree: "/wt/a", title: "Bug XXXXXXX - Fix", bug: null, bugDraft: { product: "Core", component: "DOM", summary: "s", description: "d" } });
   return sc;
@@ -301,7 +301,7 @@ describe("commands", () => {
   it("split-request makes a request per part with its groups' history and the pushes made, and archives this one", () => {
     const sc = withPatch();
     sc.add({ type: "item-created", request: ID, item: "i-b", folder: "b", group: { message: "bang", tests: ["b/test_b.js"], configs: ["linux"] } });
-    sc.startJob({ purpose: { key: "author:i-b:initial", what: "author", item: "i-b", reason: "initial" }, kind: "agent", name: "investigate-and-fix", item: "i-b", cwd: "/wt/b", agent: { sessionId: "s-2", resume: false, vars: { test: "b/test_b.js", worktree: "/wt/b", failureSummary: "bang" } } });
+    sc.startJob({ purpose: { key: "author:i-b:initial", what: "author", item: "i-b", reason: "initial" }, kind: "agent", name: "investigate-and-fix", item: "i-b", cwd: "/wt/b", agent: { sessionId: "s-2", resume: false, vars: { test: "b/test_b.js", worktree: "/wt/b", failureSummary: "bang", request: "r" } } });
     sc.complete("author:i-b:initial", { report: { state: "fix verified locally", summary: "s", cause: "c", verification: "v", commits: [sha("2")], landsAfter: [], feedback: [] } });
     sc.add({ type: "patch", request: ID, patch: "p-b", item: "i-b", sha: sha("2"), worktree: "/wt/b", title: "Bug 5 - Fix b", bug: 5 });
     for (const item of ["i-a", "i-b"]) sc.add({ type: "item-state", request: ID, item, state: "in stack" });

@@ -739,6 +739,7 @@ describe("4. investigate and fix", () => {
     assert.equal(author.cwd, `/wt/${ID}-i-test-a`);
     assert.equal(author.agent?.resume, false);
     assert.match(String(author.agent?.vars?.failureSummary), /^"boom" on 1 configs, 2 failures\/week; the full group, with its configs and task ids, is in \/state\/requests\/.*\/data\/items\/i-test-a.json\.$/);
+    assert.equal(author.agent?.vars?.request, sc.state().text.trim(), "the request as you wrote it, with any file it points at");
     assert.equal(sc.state().items["i-test-a"].state, "investigating");
 
     const draft = { product: "Core", component: "XPCOM", summary: "s", description: "d" };

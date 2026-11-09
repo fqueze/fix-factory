@@ -944,7 +944,7 @@ class Planner {
     };
     if (groups.length <= 1) return withSingles(groups.map(strip));
     const clustersFile = dataPath(this.config, this.s.id, `clusters-${scope}-${run}.json`);
-    const merge = this.wantAgent(`merge:${scope}:${run}`, "merge", "merge-clusters", { clustersFile, logsDir: artifactsDir(this.config) }, { files: [{ path: clustersFile, content: JSON.stringify({ groups }, null, 2) + "\n" }] });
+    const merge = this.wantAgent(`merge:${scope}:${run}`, "merge", "merge-clusters", { clustersFile, logsDir: artifactsDir(this.config), request: this.s.text.trim() }, { files: [{ path: clustersFile, content: JSON.stringify({ groups }, null, 2) + "\n" }] });
     if (!merge) return undefined;
     const byKey = new Map(groups.map((g) => [g.key, g]));
     const merged = this.rep<MergeClustersReport>(merge).groups.map((g) => {
@@ -1180,7 +1180,7 @@ class Planner {
         this.agent(
           "author",
           "investigate-and-fix",
-          { test: tests, worktree: path, failureSummary: `"${item.group.message}" on ${item.group.configs.length} configs${rate}; the full group, with its configs and task ids, is in ${groupFile}.${reuse}${before}` },
+          { test: tests, worktree: path, failureSummary: `"${item.group.message}" on ${item.group.configs.length} configs${rate}; the full group, with its configs and task ids, is in ${groupFile}.${reuse}${before}`, request: this.s.text.trim() },
           {
             key: `${prefix}:initial`,
             item: item.id,

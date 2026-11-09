@@ -500,7 +500,7 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
           name: session.name,
           item: c.item,
           cwd: session.cwd,
-          agent: { sessionId: sessionIdFor(s.id, key), resume: false, vars: { ...startVars(item.group.tests, session.cwd), failureSummary: `"${item.group.message}" on ${item.group.configs.length} configs.\n\nInstructions for this run: ${c.prompt}` } },
+          agent: { sessionId: sessionIdFor(s.id, key), resume: false, vars: { ...startVars(item.group.tests, session.cwd), failureSummary: `"${item.group.message}" on ${item.group.configs.length} configs.\n\nInstructions for this run: ${c.prompt}`, request: s.text.trim() } },
           startEvents: [{ type: "item-state", request: s.id, item: c.item, state: "investigating", detail: "started again" }],
         },
       });
