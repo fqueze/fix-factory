@@ -3,7 +3,8 @@
 //   node src/cli/artifacts.ts fetch <taskId> [--run N] --into <dir>
 //     → {taskId, run, state, files: [{kind, name, path, bytes, skipped?}], missing: [{name, reason}]}
 //       kind: "log" (live_backing.log) | "errorsummary" | "test-profile" (profile_<test>.json[.gz],
-//       including the retry's profile_<test>-2…) | "resource-profile" (profile_resource-usage.json).
+//       including the retry's profile_<test>-2…) | "resource-profile" (profile_run-task-resource-usage.json, or
+//       test_info/profile_resource-usage.json before November 2026).
 //       name is the artifact's file name, and the file is saved as <dir>/<run>/<name>: a retried
 //       task's runs each have their own logs.
 //       state: the run's Taskcluster state. A run that hasn't finished (pending or running) is refused,
@@ -55,6 +56,8 @@ export type Fetch = typeof fetch;
 // Returns the kind of a full artifact name, or null for artifacts we don't download.
 export function kindOf(name: string): ArtifactKind | null {
   if (name === "public/logs/live_backing.log") return "log";
+  // Since November 2026, run-task writes it at the top, under this name; test_info/profile_resource-usage.json before.
+  if (name === "public/profile_run-task-resource-usage.json") return "resource-profile";
   if (!name.startsWith(TEST_INFO)) return null;
   const base = name.slice(TEST_INFO.length);
   if (base.includes("/")) return null;
@@ -195,7 +198,7 @@ export async function fetchArtifacts(
   if (resource && (await get(resource.name, resource.kind))) {
     markerNames = artifactMarkerFilenames(readFileSync(join(dir, baseName(resource.name)), "utf8"));
   } else if (!resource) {
-    missing.push({ name: "profile_resource-usage.json", reason: "not in the artifact listing" });
+    missing.push({ name: "profile_run-task-resource-usage.json", reason: "not in the artifact listing" });
   }
   for (const w of wanted) {
     if (w !== resource) await get(w.name, w.kind);

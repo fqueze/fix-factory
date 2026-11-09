@@ -59,6 +59,7 @@ test("kindOf", () => {
   assert.equal(kindOf("public/test_info/xpcshell_errorsummary.log"), "errorsummary");
   assert.equal(kindOf("public/test_info/mochitest-browser-a11y_errorsummary.log"), "errorsummary");
   assert.equal(kindOf("public/test_info/profile_resource-usage.json"), "resource-profile");
+  assert.equal(kindOf("public/profile_run-task-resource-usage.json"), "resource-profile", "its name since November 2026");
   assert.equal(kindOf("public/test_info/profile_browser_notification-2.js.json.gz"), "test-profile");
   assert.equal(kindOf("public/test_info/profile_test_async_transactions.js.json.gz"), "test-profile");
   assert.equal(kindOf("public/test_info/perfherder-data-resource-usage.json"), null);
@@ -197,7 +198,7 @@ test("fetchArtifacts reports a job with no resource-usage profile", () =>
     mkdirSync(join(dir, "0"));
     writeFileSync(join(dir, "0", "live_backing.log.part"), "half");
     const r = await fetchArtifacts(RZLA, { run: 0, into: dir, fetchImpl });
-    assert.deepEqual(r.missing, [{ name: "profile_resource-usage.json", reason: "not in the artifact listing" }]);
+    assert.deepEqual(r.missing, [{ name: "profile_run-task-resource-usage.json", reason: "not in the artifact listing" }]);
     assert.equal(r.files.length, 6);
     assert.ok(r.files.every((f) => !f.skipped));
   }));
