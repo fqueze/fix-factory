@@ -79,7 +79,7 @@ export function startPlan(deps: RunnerDeps, request: string, plan: JobPlan): Job
   }
   const started = startJob(
     config.stateDir,
-    { cmd, cwd: plan.cwd, env: { FACTORY_CONFIG: deps.configPath }, ...(stdinFile ? { stdinFile } : {}), kind: plan.kind, name: plan.name, request, ...(plan.item ? { item: plan.item } : {}) },
+    { cmd, cwd: plan.cwd, env: { FACTORY_CONFIG: deps.configPath, FACTORY_NET_LOG: join(jobDir(config.stateDir, job), "net.jsonl") }, ...(stdinFile ? { stdinFile } : {}), kind: plan.kind, name: plan.name, request, ...(plan.item ? { item: plan.item } : {}) },
     { job, files: jobFiles },
   );
   appendEventSafe(config.stateDir, {

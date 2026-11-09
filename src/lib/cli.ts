@@ -1,4 +1,7 @@
 import { parseArgs, type ParseArgsConfig } from "node:util";
+import { logFetches } from "./netlog.ts";
+
+logFetches();
 
 // Common entry point for the CLIs in src/cli/: one JSON document on stdout,
 // logs on stderr, exit code 1 with {"error": "..."} on failure.

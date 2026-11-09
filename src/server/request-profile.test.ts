@@ -110,6 +110,22 @@ describe("request profile", () => {
     assert.equal(running.end, NOW - p.meta.startTime, "running jobs end now");
   });
 
+  it("has its jobs' network requests on their tracks, a 429 as failed", () => {
+    const state = source.getRequest(ID)!;
+    const t = Date.parse(state.jobs["j-inv-copy"].startedAt);
+    const net = { "j-inv-copy": [
+      { start: t + 1000, end: t + 1300, method: "conduit differential.revision.search", url: "https://phabricator.services.mozilla.com/api/differential.revision.search", status: 200, bytes: 512 },
+      { start: t + 2000, end: t + 2100, method: "conduit transaction.search", url: "https://phabricator.services.mozilla.com/api/transaction.search", status: 429 },
+    ] } as Record<string, { start: number; end: number; method: string; url: string; status: number; bytes?: number }[]>;
+    const p = buildRequestProfile(state, source.getEvents(ID), NOW, undefined, (job) => net[job] ?? []) as Profile;
+    const reqs = markers(p, p.threads.find((x) => x.name === "storage/test/unit/test_backup.js")!).filter((m) => m.data.type === "Request");
+    assert.deepEqual(reqs.map((m) => [m.name, m.end - m.start, m.data.status, p.meta.categories[m.category].name]), [
+      ["conduit differential.revision.search 200", 300, 200, "Network"],
+      ["conduit transaction.search 429", 100, 429, "Failed"],
+    ]);
+    assert.ok(p.meta.markerSchema.some((x) => x.name === "Request"));
+  });
+
   it("has try push markers from push to finish, and waits for you from needs-user to user-done", () => {
     const p = build();
     const request = markers(p, p.threads[0]);

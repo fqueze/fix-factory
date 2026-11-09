@@ -3,7 +3,8 @@
 // an interval marker per job, try push and wait for you. Modeled on
 // createFirefoxProfile in https://github.com/fqueze/claude-profiler.
 
-import type { Event, ItemId, RequestState } from "../types.ts";
+import type { Event, ItemId, JobId, RequestState } from "../types.ts";
+import type { NetEntry } from "../lib/netlog.ts";
 
 const CATEGORIES = [
   { name: "Other", color: "grey", subcategories: ["Other"] },
@@ -13,8 +14,9 @@ const CATEGORIES = [
   { name: "Try", color: "blue", subcategories: ["Other"] },
   { name: "Waiting for you", color: "yellow", subcategories: ["Other"] },
   { name: "Failed", color: "red", subcategories: ["Other"] },
+  { name: "Network", color: "lightblue", subcategories: ["Other"] },
 ];
-const CATEGORY = { other: 0, script: 1, agent: 2, build: 3, try: 4, user: 5, failed: 6 } as const;
+const CATEGORY = { other: 0, script: 1, agent: 2, build: 3, try: 4, user: 5, failed: 6, network: 7 } as const;
 const JOB_CATEGORY = { script: CATEGORY.script, agent: CATEGORY.agent, build: CATEGORY.build, "try-watch": CATEGORY.try } as const;
 
 const MARKER_SCHEMA = [
@@ -50,6 +52,21 @@ const MARKER_SCHEMA = [
     ],
   },
   {
+    name: "Request",
+    tooltipLabel: "{marker.data.method} {marker.data.url}: {marker.data.status}",
+    tableLabel: "{marker.data.method} {marker.data.url}: {marker.data.status} {marker.data.error}",
+    chartLabel: "{marker.data.method}",
+    display: ["marker-chart", "marker-table", "timeline-overview"],
+    fields: [
+      { key: "method", label: "Method", format: "string" },
+      { key: "url", label: "URL", format: "url" },
+      { key: "status", label: "Status", format: "integer" },
+      { key: "bytes", label: "Size", format: "bytes" },
+      { key: "error", label: "Error", format: "string" },
+      { key: "job", label: "Job", format: "unique-string" },
+    ],
+  },
+  {
     name: "NeedsUser",
     tooltipLabel: "waiting for you: {marker.data.action}",
     tableLabel: "waiting for you: {marker.data.action}",
@@ -80,8 +97,8 @@ interface Track {
 }
 
 // `now` (ms) closes the intervals that haven't ended yet.
-// only: one group's track and nothing else.
-export function buildRequestProfile(state: RequestState, events: Event[], now: number, only?: ItemId): object {
+// only: one group's track and nothing else. netOf: a job's network requests, from its net.jsonl.
+export function buildRequestProfile(state: RequestState, events: Event[], now: number, only?: ItemId, netOf: (job: JobId) => NetEntry[] = () => []): object {
   const startTime = Date.parse(state.createdAt);
   const strings: string[] = [];
   const stringIndex = new Map<string, number>();
@@ -141,6 +158,19 @@ export function buildRequestProfile(state: RequestState, events: Event[], now: n
       cmd: job.cmd.join(" "),
       error: job.error,
     });
+    // Its network requests, on its track: a 429 or an error shows as failed.
+    for (const n of netOf(job.job)) {
+      const bad = n.error !== undefined || (n.status ?? 0) >= 400;
+      add(trackFor(job.item), `${n.method} ${n.status ?? "error"}`, n.start, n.end, bad ? CATEGORY.failed : CATEGORY.network, {
+        type: "Request",
+        method: n.method,
+        url: n.url,
+        status: n.status,
+        bytes: n.bytes,
+        error: n.error,
+        job: intern(job.job),
+      });
+    }
   }
 
   // Try pushes and waits for you are only in the events: the folded state keeps

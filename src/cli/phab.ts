@@ -24,6 +24,7 @@
 // suggestionText, so the changeset AJAX scraping of phab-suggestions.py is no longer needed.
 
 import { spawn } from "node:child_process";
+import { netLog } from "../lib/netlog.ts";
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
@@ -60,11 +61,19 @@ const curlFetch = ((url: string, init: RequestInit) =>
     curl.stdout.on("data", (c: Buffer) => out.push(c));
     curl.stderr.on("data", (c: Buffer) => err.push(c));
     curl.on("error", reject);
+    const start = Date.now();
+    const method = `conduit ${url.slice(API.length)}`;
     curl.on("close", (code) => {
-      if (code !== 0) return reject(new Error(`curl: ${Buffer.concat(err).toString().trim() || `exit ${code}`}`));
+      if (code !== 0) {
+        const error = `curl: ${Buffer.concat(err).toString().trim() || `exit ${code}`}`;
+        netLog({ start, end: Date.now(), method, url, error });
+        return reject(new Error(error));
+      }
       const text = Buffer.concat(out).toString();
       const nl = text.lastIndexOf("\n");
-      resolve(new Response(text.slice(0, nl), { status: Number(text.slice(nl + 1)) }));
+      const status = Number(text.slice(nl + 1));
+      netLog({ start, end: Date.now(), method, url, status, bytes: nl });
+      resolve(new Response(text.slice(0, nl), { status }));
     });
     curl.stdin.end(String(init.body));
   })) as typeof fetch;

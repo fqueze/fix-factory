@@ -16,6 +16,7 @@ import { readFeedback, renderFeedback } from "./pages/feedback.ts";
 import { renderMain, renderOverview, renderStrip } from "./pages/overview.ts";
 import { renderRequest } from "./pages/request.ts";
 import { buildRequestProfile } from "./request-profile.ts";
+import type { NetEntry } from "../lib/netlog.ts";
 import { buildPatchView, buildPushView, buildStackReview, isRevName } from "./stack-review.ts";
 import { AGENT_FILE_CSP, AGENT_FILES, agentFilePath, renderAgentFile, type AgentFile } from "./agent-files.ts";
 import { pushTasks } from "./pages/tasks.ts";
@@ -43,6 +44,13 @@ interface Profiler {
 
 // The factory's claude-profiler (tools.ts update): its command is a link to its main module. Missing until the
 // first update.
+// A job's network requests (net.jsonl, written by its script): none when it made none.
+function netEntries(stateDir: string, job: string): NetEntry[] {
+  const file = join(jobDir(stateDir, job), "net.jsonl");
+  if (!existsSync(file)) return [];
+  return readFileSync(file, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as NetEntry);
+}
+
 function findClaudeProfiler(stateDir: string): string | null {
   try {
     return realpathSync(join(toolsBin(stateDir), "claude-profiler"));
@@ -361,7 +369,7 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
       const id = decodeURIComponent(m[1]);
       const r = getRequest(id);
       const item = url.searchParams.get("item") ?? undefined;
-      const body = Buffer.from(JSON.stringify(buildRequestProfile(r, opts.state.getEvents?.(id) ?? [], now(), item)), "utf8");
+      const body = Buffer.from(JSON.stringify(buildRequestProfile(r, opts.state.getEvents?.(id) ?? [], now(), item, (job) => netEntries(opts.config.stateDir, job))), "utf8");
       res.writeHead(200, {
         "Content-Type": "application/json; charset=utf-8",
         "Content-Length": body.length,

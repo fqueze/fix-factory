@@ -26,6 +26,7 @@ import { KEEP_MAX_BYTES, keptDir } from "../lib/kept.ts";
 import { basename, dirname, join, resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { log, runCli, UsageError } from "../lib/cli.ts";
+import { netLog } from "../lib/netlog.ts";
 import { exec, execOk } from "../lib/exec.ts";
 import { loadConfig } from "../config.ts";
 
@@ -97,7 +98,10 @@ export async function fetchRemoteBase(repo: string, base: string): Promise<void>
   if (!m) return;
   for (let attempt = 1; ; attempt++) {
     log(`git fetch ${m[1]} ${m[2]}`);
+    const start = Date.now();
     const r = await exec(["git", "fetch", m[1], m[2]], { cwd: repo });
+    const url = (await exec(["git", "remote", "get-url", m[1]], { cwd: repo })).stdout.trim();
+    netLog({ start, end: Date.now(), method: "git fetch", url: `${url} ${m[2]}`, ...(r.code === 0 ? {} : { error: r.stderr.trim().slice(0, 300) }) });
     if (r.code === 0) return;
     if (attempt === 3) throw new Error(`git fetch ${m[1]} ${m[2]}: ${r.stderr.trim()}`);
     await sleep(5000 * attempt);
