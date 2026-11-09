@@ -630,7 +630,8 @@ function patchParts(r: RequestState, p: PatchView, ctx: RenderContext) {
     // On a fix's row: its bug, once for the patches that share it, then its revision and title.
     bug: first.id === p.id ? bugLabel(p, ctx) : bugLabel(first, ctx),
     bugKey: hasBug(p) ? `bug ${p.bug}` : `draft ${first.id}`,
-    title: html`${p.revision ? html`<a class="phab" href="${phabUrl(p.revision)}" title="D${p.revision}" target="_blank" rel="noopener">${PHAB_ICON}</a>` : null}${patchTitle(p)}`,
+    phab: p.revision ? html`<a class="phab" href="${phabUrl(p.revision)}" title="D${p.revision}" target="_blank" rel="noopener">${PHAB_ICON}</a>` : null,
+    title: html`${patchTitle(p)}`,
     end: html`${hoverInfo(r, p, item, ctx)}${viewLink(r, p)}`,
     // Where its review stands, whether it can land, what you need to do about it.
     status: [
@@ -700,9 +701,10 @@ function fixRow(r: RequestState, ps: PatchView[], ctx: RenderContext): Html {
   const sentence = itemSentence(r, item, ctx);
   const covered = Object.values(r.items).filter((i) => ps.some((p) => i.coveredBy === p.id));
   const landable = parts.every((x) => x.landable);
-  // Each patch's title where a row's name is, its own links at its end; under it, what's its own (its review, landable,
-  // what it waits for you to do).
-  // A grid row per patch line and per line under it; a bug its patches share spans all of theirs.
+  // Each patch's revision, bug and title where a row's name is, its own links at its end; under it, what's its own (its
+  // review, landable, what it waits for you to do), where a row's state is.
+  // A grid row per patch line and per line under it; a bug its patches share is on the first, and opened with its box
+  // under it, spans all of theirs (--span).
   const gridRows = (n: number) => 1 + (parts[n].status.length ? 1 : 0) + (parts[n].flag ? 1 : 0);
   const span = (n: number) => {
     let rows = gridRows(n);
@@ -711,8 +713,8 @@ function fixRow(r: RequestState, ps: PatchView[], ctx: RenderContext): Html {
   };
   const names = html`${ps.map(
     (p, n) =>
-      html`<span class="patchline" id="patch-${p.id}" data-patch="${p.id}">${
-        n > 0 && parts[n - 1].bugKey === parts[n].bugKey ? null : html`<span class="pbug" style="grid-row: span ${span(n)}">${parts[n].bug}</span>`
+      html`<span class="patchline" id="patch-${p.id}" data-patch="${p.id}"><span class="pphab">${parts[n].phab}</span>${
+        n > 0 && parts[n - 1].bugKey === parts[n].bugKey ? null : html`<span class="pbug" style="--span: ${span(n)}">${parts[n].bug}</span>`
       }<span class="pname" title="${p.title}">${parts[n].title}</span><span class="end">${parts[n].end}</span>${
         parts[n].status.length ? html`<span class="pstate">${join(parts[n].status, " · ")}</span>` : null
       }${parts[n].flag ? html`<span class="rowflag">${parts[n].flag}</span>` : null}</span>`,

@@ -467,7 +467,7 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.doesNotMatch(h, /<details class="row[^"]*" id="patch-p-close/, "no row of their own");
     // Their shared bug once, on the first line; the next line's bug column empty, its title aligned.
     assert.equal(summary.split('class="pbug"').length - 1, 1, "once");
-    assert.match(summary, /<span class="pbug" style="grid-row: span 2">/, "over both lines");
+    assert.match(summary, /<span class="pbug" style="--span: 2">/, "over both lines");
     assert.doesNotMatch(summary, /same bug/);
   });
 
