@@ -48,6 +48,7 @@ export function sectionOf(r: RequestState): Section {
 }
 
 export function requestName(r: RequestState): string {
+  if (r.title) return r.title;
   if (r.kind === "burndown" && r.folder) {
     return `Flakiness burndown: ${r.folder}`;
   }

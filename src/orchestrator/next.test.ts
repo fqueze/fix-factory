@@ -96,7 +96,7 @@ describe("similarMessages", () => {
 describe("1. request", () => {
   const routed = (fields: object) => ({ config: { folders: [], tests: [], platforms: [], constraints: [] }, questions: [], feedback: [], ...fields });
 
-  it("routes text from the main box: a try push gets its kind and revision, then goes to the work list with its push", () => {
+  it("routes text from the main box: a try push gets its kind, revision and title, as a request of its own named by its title", () => {
     const sc = new Scenario("unrouted", { text: "fix the failures of try push abcdef123456" });
     sc.activeRequests = [{ id: "r-20261014-other", summary: "Flakiness burndown of dom/base/test (step: work list)" }];
     assert.deepEqual(sc.step(), ["route"]);
@@ -107,9 +107,20 @@ describe("1. request", () => {
     assert.deepEqual(plan.files, [{ path: requestsFile, content: "r-20261014-other  Flakiness burndown of dom/base/test (step: work list)\n" }]);
     assert.deepEqual(plan.purpose.requests, ["r-20261014-other"]);
     assert.deepEqual(sc.step(), []);
-    sc.complete("route", { report: routed({ kind: "try-push", rev: "abcdef123456", questions: ["which platforms?"] }) });
-    assert.equal(sc.state().kind, "try-push");
-    assert.deepEqual(sc.state().config.questions, ["which platforms?"]);
+    assert.throws(() => sc.complete("route", { report: routed({ kind: "try-push", rev: "abcdef123456" }) }), /needs a title/);
+    const job = sc.complete("route", { report: routed({ kind: "try-push", rev: "abcdef123456", title: "xpcshell: try abcdef12 failures", questions: ["which platforms?"] }) });
+    assert.deepEqual(sc.commands, [
+      {
+        id: `new-${job}`,
+        cmd: "tell-factory",
+        text: "fix the failures of try push abcdef123456",
+        routed: { from: ID, title: "xpcshell: try abcdef12 failures", kind: "try-push", rev: "abcdef123456", config: { folders: [], tests: [], platforms: [], constraints: [], questions: ["which platforms?"] } },
+      },
+    ]);
+  });
+
+  it("a routed try push goes to the work list with its push", () => {
+    const sc = new Scenario("try-push", { rev: "abcdef123456", text: "fix the failures of try push abcdef123456" });
     assert.deepEqual(sc.settle(), ["watch:initial"]);
     const s = sc.state();
     assert.equal(s.step, "work list");
@@ -119,10 +130,7 @@ describe("1. request", () => {
   });
 
   it("routes a burndown to the first signal", () => {
-    const sc = new Scenario("unrouted", { text: "burn down dom/base/test" });
-    sc.step();
-    assert.equal(sc.plan("route").files![0].content, "(no active requests)\n");
-    sc.complete("route", { report: routed({ kind: "burndown", folder: "dom/base/test" }) });
+    const sc = new Scenario("burndown", { folder: "dom/base/test", text: "burn down dom/base/test" });
     sc.step();
     const s = sc.state();
     assert.deepEqual([s.kind, s.folder, s.step], ["burndown", "dom/base/test", "first signal"]);

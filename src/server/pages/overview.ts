@@ -78,7 +78,8 @@ function diskSize(gb: number): string {
 export function renderMain(requests: RequestState[], ctx: RenderContext): Html {
   // A stable order: by latest activity, or with those needing you first, requests kept moving with every event.
   // Active ones newest first, queued ones in the order they start, finished ones latest finished first.
-  const byCreation = [...requests].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  // Text that became a request of its own, named by its title, is that request.
+  const byCreation = requests.filter((r) => !r.becameNew).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const active = byCreation.filter((r) => sectionOf(r) === "active");
   const queued = byCreation.filter((r) => sectionOf(r) === "queued").reverse();
   // Finished requests open like the active ones; text that was forwarded or rephrased is one line.

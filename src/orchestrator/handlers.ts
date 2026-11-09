@@ -102,9 +102,15 @@ export function handleFinished(input: HandlerInput): HandlerResult {
       // The folder ends up in CLI arguments and worktree paths, the revision in a Treeherder URL.
       if (r.kind === "burndown" && !(r.folder && !r.folder.startsWith("/") && !r.folder.split("/").includes(".."))) throw new Error(`a burndown needs a folder relative to the repository, not ${JSON.stringify(r.folder)}`);
       if (r.kind === "try-push" && !/^[0-9a-f]{12,40}$/i.test(r.rev ?? "")) throw new Error(`a try-push request needs a revision of 12 to 40 hex digits, not ${JSON.stringify(r.rev)}`);
-      ev("request-routed", { kind: r.kind, ...(r.kind === "burndown" ? { folder: r.folder } : { rev: r.rev }) });
+      if (!r.title?.trim()) throw new Error("a new request needs a title");
+      // A request of its own, its id made from its title: this one, named by your first words, only forwards to it.
       const questions = r.questions ?? [];
-      ev("config-set", { config: { ...r.config, ...(questions.length ? { questions } : {}) } });
+      commands.push({
+        id: `new-${job.job}`,
+        cmd: "tell-factory",
+        text: s.text,
+        routed: { from: s.id, title: r.title.trim().slice(0, 80), kind: r.kind, ...(r.kind === "burndown" ? { folder: r.folder } : { rev: r.rev }), config: { ...r.config, ...(questions.length ? { questions } : {}) } },
+      });
       break;
     }
     case "merge": {

@@ -1,7 +1,7 @@
 [
   {
     "match": "^You wrote this in the factory's main box",
-    "report": { "kind": "try-push", "rev": "abcdef123456", "config": { "folders": ["dom/base/test"], "tests": [], "platforms": [], "constraints": [] }, "questions": [], "feedback": [] }
+    "report": { "kind": "try-push", "rev": "abcdef123456", "title": "dom/base: failures of try push abcdef12", "config": { "folders": ["dom/base/test"], "tests": [], "platforms": [], "constraints": [] }, "questions": [], "feedback": [] }
   },
   {
     "match": "are clustered by exact message",

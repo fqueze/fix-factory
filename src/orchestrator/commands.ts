@@ -84,6 +84,16 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
     case "presence":
       return effects; // the loop tracks presence from the commands themselves
     case "tell-factory":
+      if (c.request === undefined && c.routed) {
+        // Routed: the request, under an id made from its title; the text's own request forwards to it.
+        const { from, title, kind, folder, rev, config } = c.routed;
+        const request = newRequestId({ t: c.t, text: title }, ctx.exists);
+        effects.push({ type: "event", event: { type: "request-created", request, kind, text: c.text, title, ...(folder !== undefined ? { folder } : {}), ...(rev !== undefined ? { rev } : {}), command: c.id } });
+        effects.push({ type: "event", event: { type: "config-set", request, config } as EventInput });
+        effects.push({ type: "event", event: { type: "request-forwarded", request: from, to: request, asNew: true } });
+        effects.push({ type: "event", event: { type: "step", request: from, step: "done" } });
+        return effects;
+      }
       if (c.request === undefined) {
         // The global box: a request of its own, which route-request makes a new one or forwards.
         const request = newRequestId(c, ctx.exists);

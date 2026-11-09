@@ -134,9 +134,10 @@ export interface InlineComment {
 export type JobKind = "script" | "agent" | "build" | "try-watch";
 
 export type Event =
-  | (EventBase & { type: "request-created"; kind: RequestKind; text: string; folder?: string; rev?: string; command?: string })
+  | (EventBase & { type: "request-created"; kind: RequestKind; text: string; title?: string; folder?: string; rev?: string; command?: string })
+  | (EventBase & { type: "request-titled"; title: string })
   | (EventBase & { type: "request-routed"; kind: Exclude<RequestKind, "unrouted">; folder?: string; rev?: string })
-  | (EventBase & { type: "request-forwarded"; to: RequestId })
+  | (EventBase & { type: "request-forwarded"; to: RequestId; asNew?: true }) // asNew: became that request, named by its title
   | (EventBase & { type: "request-superseded"; by: RequestId })
   | (EventBase & { type: "request-split"; into: RequestId[]; moved?: Record<ItemId, RequestId> }) // archived: its groups went to these requests (moved: absent on the first split)
   | (EventBase & { type: "split-from"; from: RequestId }) // made by splitting that request
@@ -247,7 +248,7 @@ export type Command =
   | (CommandBase & { cmd: "revise-test-plan"; patch: PatchId; text: string }) // what its agent should change
   | (CommandBase & { cmd: "set-reviewer"; patch: PatchId; reviewer: string }) // its r=, e.g. "#ai-frontend-reviewers-rotation"
   | (CommandBase & { cmd: "draft-meta-bug" }) // its agent drafts the optional meta bug
-  | (CommandBase & { cmd: "tell-factory"; text: string })
+  | (CommandBase & { cmd: "tell-factory"; text: string; routed?: { from: RequestId; title: string; kind: Exclude<RequestKind, "unrouted">; folder?: string; rev?: string; config: Record<string, unknown> } }) // routed: route-request's answer, a request of its own named by its title
   | (CommandBase & { cmd: "reply-recovery"; job: JobId; text: string })
   | (CommandBase & { cmd: "start-now" })
   | (CommandBase & { cmd: "redo-annotations" }) // the skip-ifs group again, from today's manifests
@@ -474,6 +475,8 @@ export interface RequestState {
   rev?: string;
   fromCommand?: string; // the tell-factory command that created it
   forwardedTo?: RequestId; // route-request said its text is about that request
+  becameNew?: true; // forwarded to a new request of its own, named by route-request's title
+  title?: string; // route-request's name for it
   supersededBy?: RequestId; // route-request failed, and you rephrased it in the main box as that request
   splitInto?: RequestId[]; // split into these, and archived
   movedTo?: Record<ItemId, RequestId>; // its groups the split moved, and where
@@ -569,6 +572,7 @@ export interface RouteRequestReport {
   kind?: Exclude<RequestKind, "unrouted">;
   folder?: string;
   rev?: string;
+  title?: string;
   config?: { folders: string[]; tests: string[]; platforms: string[]; constraints: string[] };
   questions?: string[];
   feedback: Feedback[];

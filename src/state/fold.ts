@@ -60,6 +60,7 @@ export function foldEvents(events: readonly Event[]): RequestState {
         s.id = e.request;
         s.kind = e.kind;
         s.text = e.text;
+        if (e.title) s.title = e.title;
         s.folder = e.folder;
         s.rev = e.rev;
         s.fromCommand = e.command;
@@ -67,6 +68,10 @@ export function foldEvents(events: readonly Event[]): RequestState {
         break;
       case "request-forwarded":
         s.forwardedTo = e.to;
+        if (e.asNew) s.becameNew = true;
+        break;
+      case "request-titled":
+        s.title = e.title;
         break;
       case "request-superseded":
         s.supersededBy = e.by;

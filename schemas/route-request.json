@@ -21,6 +21,10 @@
       "type": "string",
       "description": "The try push revision whose failures to fix (try-push)."
     },
+    "title": {
+      "type": "string",
+      "description": "For a new request: its name on the page, under 60 characters, saying what and where (\"devtools: failures on mochitest-repeat\", \"Flakiness burndown: dom/events\"). Its id is made from it."
+    },
     "config": {
       "type": "object",
       "properties": {
