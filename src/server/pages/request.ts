@@ -702,9 +702,18 @@ function fixRow(r: RequestState, ps: PatchView[], ctx: RenderContext): Html {
   const landable = parts.every((x) => x.landable);
   // Each patch's title where a row's name is, its own links at its end; under it, what's its own (its review, landable,
   // what it waits for you to do).
+  // A grid row per patch line and per line under it; a bug its patches share spans all of theirs.
+  const gridRows = (n: number) => 1 + (parts[n].status.length ? 1 : 0) + (parts[n].flag ? 1 : 0);
+  const span = (n: number) => {
+    let rows = gridRows(n);
+    for (let k = n + 1; k < ps.length && parts[k].bugKey === parts[n].bugKey; k++) rows += gridRows(k);
+    return rows;
+  };
   const names = html`${ps.map(
     (p, n) =>
-      html`<span class="patchline" id="patch-${p.id}" data-patch="${p.id}"><span class="pbug">${n > 0 && parts[n - 1].bugKey === parts[n].bugKey ? null : parts[n].bug}</span><span class="pname" title="${p.title}">${parts[n].title}</span><span class="end">${parts[n].end}</span>${
+      html`<span class="patchline" id="patch-${p.id}" data-patch="${p.id}">${
+        n > 0 && parts[n - 1].bugKey === parts[n].bugKey ? null : html`<span class="pbug" style="grid-row: span ${span(n)}">${parts[n].bug}</span>`
+      }<span class="pname" title="${p.title}">${parts[n].title}</span><span class="end">${parts[n].end}</span>${
         parts[n].status.length ? html`<span class="pstate">${join(parts[n].status, " · ")}</span>` : null
       }${parts[n].flag ? html`<span class="rowflag">${parts[n].flag}</span>` : null}</span>`,
   )}`;

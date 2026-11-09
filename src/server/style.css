@@ -80,10 +80,14 @@ details.row[open]:has(> .under) > summary > :is(.state, .trust) { display: none;
 details.row > .under .lines { display: flex; flex-direction: column; margin-top: 2px; }
 details.row > .under .lines .state { white-space: normal; overflow-wrap: anywhere; }
 details.row:has(> summary .st.find) > .under .state { color: var(--serious); }
-details.row[open]:has(> .under) .bug.tofile { background: var(--tofile-bg); border-radius: 6px 6px 0 0; padding: 2px 6px 6px; }
+/* Its padding taken back by its margins: opening the row moves nothing. */
+details.row[open]:has(> .under) .bug.tofile { background: var(--tofile-bg); border-radius: 6px 6px 0 0; padding: 2px 4px 6px; margin: -2px -4px -6px; }
 /* Down to the box however many lines its title takes. */
-details.row[open]:has(> .under) > summary > .name { display: flex; align-items: baseline; column-gap: 4px; }
+details.row[open]:has(> .under) > summary > .name { display: flex; align-items: baseline; column-gap: 0.3em; }
 details.row[open]:has(> .under) > summary > .name > .bug.tofile { align-self: stretch; flex: none; }
+/* A fix's row: over all the lines of the patches that share it. */
+details.row[open]:has(> .under) .patchline .pbug { display: flex; }
+details.row[open]:has(> .under) .patchline .pbug > .bug.tofile { align-self: stretch; }
 .box.tofile { background: var(--tofile-bg); border-radius: 0 8px 8px 8px; margin: 0 0 4px; cursor: auto; }
 :root { --tofile-bg: color-mix(in srgb, var(--critical) 9%, transparent); }
 .bug.none { color: var(--text-muted); font-weight: normal; }
@@ -233,7 +237,9 @@ details.row .name:has(> .patchlines) { white-space: normal; overflow: visible; g
 /* One grid for all its lines: the bug column as wide as its widest label, the titles aligned after it. */
 .patchlines { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 0 6px; align-items: baseline; }
 .patchline { display: contents; }
-.patchline .pbug { white-space: nowrap; }
+.patchline .pbug { white-space: nowrap; grid-column: 1; }
+.patchline .pname { grid-column: 2; }
+.patchline .end { grid-column: 3; }
 .patchline .pname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .patchline .end { display: flex; gap: 10px; font-size: 12px; font-weight: 400; color: var(--text-muted); white-space: nowrap; }
 .patchline .pstate, .patchline .rowflag { grid-column: 2 / -1; font-size: 12px; font-weight: 400; color: var(--text-secondary); }
