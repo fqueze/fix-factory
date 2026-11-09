@@ -465,9 +465,9 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.match(summary, /<span class="patchline" id="patch-p-close" data-patch="p-close">/);
     assert.equal(h.split('<div class="ask-you">').length - 1 - (renderRequest(get(T), ctx, true).value.split('<div class="ask-you">').length - 1), 1, "its question once");
     assert.doesNotMatch(h, /<details class="row[^"]*" id="patch-p-close/, "no row of their own");
-    // Their shared bug once, on the first line; the next line's bug column empty, its title aligned.
-    assert.equal(summary.split('class="pbug"').length - 1, 1, "once");
-    assert.match(summary, /<span class="pbug" style="--span: 2">/, "over both lines");
+    // A filed bug they share, on each line.
+    assert.equal(summary.split('class="pbug"').length - 1, 2, "on each line");
+    assert.match(summary, /<span class="pbug" style="--span: 1">/);
     assert.doesNotMatch(summary, /same bug/);
   });
 

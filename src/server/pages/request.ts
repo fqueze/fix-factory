@@ -629,7 +629,8 @@ function patchParts(r: RequestState, p: PatchView, ctx: RenderContext) {
     }<span class="ptitle">${patchTitle(p)}</span>`,
     // On a fix's row: its bug, once for the patches that share it, then its revision and title.
     bug: first.id === p.id ? bugLabel(p, ctx) : bugLabel(first, ctx),
-    bugKey: hasBug(p) ? `bug ${p.bug}` : `draft ${first.id}`,
+    // A filed bug is on each of its patches' lines; one to file, on the first, its box under it.
+    bugKey: hasBug(p) ? `bug ${p.bug} ${p.id}` : `draft ${first.id}`,
     phab: p.revision ? html`<a class="phab" href="${phabUrl(p.revision)}" title="D${p.revision}" target="_blank" rel="noopener">${PHAB_ICON}</a>` : null,
     title: html`${patchTitle(p)}`,
     end: html`${hoverInfo(r, p, item, ctx)}${viewLink(r, p)}`,
