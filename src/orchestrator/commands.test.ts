@@ -255,6 +255,18 @@ describe("commands", () => {
     assert.deepEqual(run(sc, cmd({ cmd: "cancel-job", job: author, reason: "stuck" }))[0], { type: "cancel", job: author, request: ID, detail: "cancelled by you" });
   });
 
+  it("retry starts another agent than an author afresh: its session may hold that it can't report", () => {
+    const sc = withPatch();
+    sc.startJob({ purpose: { key: "prior-art-verdict:i-a", what: "prior-art-verdict", item: "i-a" }, kind: "agent", name: "prior-art-verdict", item: "i-a", cwd: "/r", agent: { sessionId: "s-judge", resume: false, vars: { test: "a/test_a.js", facts: "f" } } });
+    const job = sc.complete("prior-art-verdict:i-a", { error: "invalid report: $: no structured_output" });
+    sc.add({ type: "needs-user", request: ID, key: `failed:${job}`, action: "prior-art-verdict failed twice", detail: "", job });
+    run(sc, cmd({ cmd: "retry", job }));
+    const plan = sc.plan("prior-art-verdict:i-a");
+    assert.equal(plan.agent?.resume, false);
+    assert.notEqual(plan.agent?.sessionId, "s-judge");
+    assert.deepEqual(plan.agent?.vars, { test: "a/test_a.js", facts: "f" });
+  });
+
   it("resume-agent, set-state, redo-step, edit-config and shell", () => {
     const sc = withPatch();
     const resume = cmd({ cmd: "resume-agent", item: "i-a", message: "stop and report what you have", reason: "6 hours" });

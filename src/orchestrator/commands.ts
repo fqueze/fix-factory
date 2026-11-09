@@ -414,10 +414,14 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
         break;
       }
       // The same plan through the same path, so a dry run still adds --dry-run (or refuses).
+      // An author continues in its session, which holds its work. Another agent starts afresh: its session, where its
+      // report failed, may hold that it can't (a tool it decided was broken).
       const plan: JobPlan =
-        job.kind === "agent" && job.sessionId
+        job.kind === "agent" && job.sessionId && (job.purpose.what === "author" || job.name === "investigate-and-fix")
           ? { purpose: { ...job.purpose, retried: true }, kind: "agent", name: job.name, item: job.item, cwd: job.cwd, agent: { sessionId: job.sessionId, resume: true, message: "Try again: continue where you stopped, then end with the JSON report." } }
-          : { ...saved, purpose: { ...job.purpose } };
+          : saved.agent && !saved.agent.resume
+            ? { ...saved, purpose: { ...job.purpose, retried: true }, agent: { ...saved.agent, sessionId: sessionIdFor(s.id, `${job.purpose.key}:retry:${c.id}`) } }
+            : { ...saved, purpose: { ...job.purpose } };
       // A resumed agent isn't started again: its group's line says so.
       plan.startEvents = plan.agent?.resume ? saved.startEvents?.map((e) => (e.type === "item-state" && e.state === "investigating" ? { ...e, detail: "retried" } : e)) : saved.startEvents;
       effects.push({ type: "start", plan });
