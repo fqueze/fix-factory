@@ -61,6 +61,7 @@ export function renderRequest(r: RequestState, ctx: RenderContext, open = ctx.op
     <summary>
       <span class="rname">${meta ? html`<a class="bug" href="${bugUrl(meta.bug!)}" target="_blank" rel="noopener">Bug ${meta.bug}</a> ${r.metaBug!.draft?.summary ?? requestName(r)}` : requestName(r)}</span>
       <span class="rsum"><span class="rprog">${progressLine(requestProgress(r, ctx), submittedDetail(r, ctx))}</span>${summary ? ` · ${summary}` : null}</span>
+      ${r.title && r.text.trim() ? html`<span class="rprompt" title="${r.text}">${r.text}</span>` : null}
       <span class="rright">${cost > 0 ? html`<a class="cost hide-sm" href="${profileUrl(ctx, r.id)}" target="_blank" rel="noopener" title="What the agents of this request cost so far: its profile">${formatCost(cost)}</a>` : null}${
         one ? html`${stackViewerLink(r, one)}${stackMenu(r, one, ctx)}` : null
       }</span>
@@ -97,7 +98,8 @@ export function requestSummary(r: RequestState): string {
     const sum = (k: "done" | "total" | "failures") => running.reduce((n, p) => n + (p.progress?.[k] ?? 0), 0);
     parts.push(`try: ${running.length} pushes, ${sum("done")}/${sum("total")}, ${plural(sum("failures"), "failure")}`);
   } else if (last) {
-    parts.push(`try: ${pushStatus(last)}`);
+    // Its counts: the failed jobs are listed with the push.
+    parts.push(`try: ${pushStatus(last).split(": ")[0]}`);
   }
   return parts.join(" · ");
 }

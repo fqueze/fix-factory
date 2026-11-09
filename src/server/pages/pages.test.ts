@@ -143,6 +143,18 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.match(h, /<span class="res run">route request<\/span>/);
     assert.match(h, /<span class="rsum"><span class="rprog"><span class="sub">nothing to work on yet<\/span><\/span> · not routed yet: a new request, or about an existing one\? · route request<\/span>/, "its own job isn't a group");
   });
+  it("1. request: once routed, its title, your prompt under it, and try's counts without the failed jobs' list", () => {
+    const r = structuredClone(source.getRequest("r-20261010-xpcshell-cwd")!);
+    r.title = "xpcshell: failures of try abc";
+    r.text = "Fix the failures of the try push, and see my notes in /tmp/triage.md";
+    r.pushes.initial = { ...r.pushes.initial, result: "failures", summary: "133 jobs, 45 failed: test-a (testfailed), test-b (testfailed)" };
+    const top = renderRequest(r, ctx, true).value.split("</summary>")[0];
+    assert.match(top, /<span class="rname">xpcshell: failures of try abc<\/span>/);
+    assert.match(top, /<span class="rprompt" title="Fix the failures of the try push, and see my notes in \/tmp\/triage.md">Fix the failures of the try push, and see my notes in \/tmp\/triage.md<\/span>/);
+    assert.match(top, /try: 133 jobs, 45 failed</);
+    assert.doesNotMatch(top, /test-a \(testfailed\)/);
+  });
+
   it("2. first signal: approve or decline the un-skip push on its row, its jobs, command and try_task_config under it", () => {
     const h = expanded("r-20261014-extensions-xpcshell");
     assert.match(h, /From your request: .*<b>platforms<\/b>: linux, windows/);
