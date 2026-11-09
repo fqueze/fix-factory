@@ -1,6 +1,9 @@
 // try.ts: plan, push and watch try pushes. Every subcommand that touches the
 // Firefox tree takes the worktree with --cwd.
 //
+// node src/cli/try.ts import-push <rev> --cwd <repo> --base <ref> --branch <name>
+//   The try push's own commits (not its try selection's), applied on base as branch: {branch, shas}.
+//
 // node src/cli/try.ts dry-run --cwd <worktree> [--pending <file>] -- <selector> <mach try args...>
 //   Runs `./mach try <selector> --no-push <args>` and prints
 //   {command: string[], taskCount: number, tasks: string[], tryTaskConfig: {...},
@@ -57,6 +60,7 @@ import { log, runCli, UsageError } from "../lib/cli.ts";
 import { COMMITS_CHANGED } from "../state/flags.ts";
 import { exec, execJson, type ExecResult } from "../lib/exec.ts";
 import { dryRunJobs, taskgraphJobs, type TryJob } from "./task-set.ts";
+import { importPush } from "./try-commits.ts";
 
 export const TREEHERDER = "https://treeherder.mozilla.org";
 // The Lando instance mach uses by default (section lando-prod-new of .lando.ini).
@@ -874,6 +878,11 @@ export async function testRuns(rev: string, tests: string[]): Promise<TestRuns[]
 async function main(): Promise<void> {
   await runCli(
     {
+      // import-push <rev> --cwd <repo> --base <ref> --branch <name>: the push's own commits on base, as branch.
+      "import-push": async (args, values) => {
+        if (!args[0] || typeof values.base !== "string" || typeof values.branch !== "string") throw new UsageError("usage: import-push <rev> --cwd <repo> --base <ref> --branch <name>");
+        return importPush(requireCwd(values), args[0], values.base, values.branch);
+      },
       "test-runs": async (args) => {
         if (args.length < 2) throw new UsageError("usage: test-runs <rev> <test>...");
         return testRuns(args[0], args.slice(1));
@@ -910,6 +919,8 @@ async function main(): Promise<void> {
     },
     {
       cwd: { type: "string" },
+      base: { type: "string" },
+      branch: { type: "string" },
       pending: { type: "string" },
       "lando-timeout": { type: "string" },
       "expect-commits": { type: "string" },

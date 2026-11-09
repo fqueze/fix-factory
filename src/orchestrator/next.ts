@@ -2146,8 +2146,15 @@ class Planner {
   // (the approach doesn't fit) asks you on the group's row, and the push waits.
   private tryBranch(info: StackInfo, base: string, e: string): { branch: string } | undefined {
     const groups = this.debugGroups();
-    if (!groups.length) return { branch: base };
-    const shas = groups.flatMap((g) => g.commits);
+    // A try push whose own commits the fixes need (the jobs they add): on top of the stack, in every push of it.
+    const tryWith = typeof this.s.config.tryWith === "string" ? this.s.config.tryWith : undefined;
+    const imported = tryWith
+      ? this.want(`try-with:${tryWith}`, () => this.cli("try-with", "try.ts", ["import-push", tryWith, "--cwd", this.config.firefoxRepo, "--base", this.config.baseRef, "--branch", `${this.s.id}-try-with`], { cwd: this.config.firefoxRepo }))
+      : undefined;
+    if (tryWith && !imported) return undefined;
+    const withShas = imported ? this.out<{ shas: string[] }>(imported).shas : [];
+    if (!groups.length && !withShas.length) return { branch: base };
+    const shas = [...groups.flatMap((g) => g.commits), ...withShas];
     const h = shortHash([info.hash, e, ...shas]).slice(0, 6);
     const branch = `${base}-try-${h}`;
     let cur = this.want(`try-branch:${info.id}:${h}`, () =>
@@ -2157,7 +2164,11 @@ class Planner {
       const o = this.out<{ conflict?: { sha: string; files: string[] }; remaining?: string[] }>(cur);
       if (!o.conflict) return { branch };
       const { sha, files } = o.conflict;
-      const owner = groups.find((g) => g.commits.includes(sha))!;
+      const owner = groups.find((g) => g.commits.includes(sha));
+      if (!owner) {
+        this.raise(`failed:${cur.job}`, { action: `The commits of try push ${tryWith?.slice(0, 12)} don't apply on top of the stack`, detail: `${sha.slice(0, 12)} conflicts in ${files.join(", ")}`, job: cur.job });
+        return undefined;
+      }
       const res = this.wantAgent(`resolve:${info.id}:try-${h}:${sha}`, "resolve", "resolve-conflict", { sha, base: branch, files: files.join(", ") }, { cwd: info.wt, purpose: { stack: info.id, sha } });
       if (!res) return undefined;
       const r = this.rep<ResolveConflictReport>(res);

@@ -1284,8 +1284,9 @@ function twoReviewed(reportA?: object): Scenario {
 }
 
 // twoReviewed, assembled, ordered b then a, reviewed and summarized: step 6.
-function stacked(reportA?: object): Scenario {
+function stacked(reportA?: object, config?: Record<string, unknown>): Scenario {
   const sc = twoReviewed(reportA);
+  if (config) sc.add({ type: "config-set", request: ID, config: { ...sc.state().config, ...config } });
   sc.complete("wt:root", { output: { name: `${ID}-root`, path: `/wt/${ID}-root`, branch: `${ID}-root` } });
   sc.settle();
   const key = sc.view().jobs.find((j) => j.purpose.what === "assemble")!.purpose.key;
@@ -1349,6 +1350,20 @@ describe("4b. try repro", () => {
     sc.add({ type: "item-created", request: ID, item: "i-x", folder: "x", group: { message: "m", tests: ["x/test_x.js"], configs: [] } });
     sc.add({ type: "job-started", request: ID, job: "j-a", item: "i-x", kind: "agent", name: "investigate-and-fix", pid: 1, pidStartTime: 1, cmd: [], cwd: "/wt/x", codeVersion: "t", sessionId: "s", purpose: { key: "author:i-x:initial", what: "author", item: "i-x", reason: "initial" } } as never);
     assert.throws(() => sc.complete("author:i-x:initial", { report: fixed([sha("d")], { state: "needs a try repro", summary: "logs only" }) }), (e: Error) => e instanceof InvalidReport && /profiles of the failing tasks first/.test(e.message));
+  });
+
+  it("pushes the stack with the commits of the try push it was asked with on top (the jobs its fixes need)", () => {
+    const sc = stacked(undefined, { tryWith: "164da8583219" });
+    assert.ok(!sc.view().jobs.some((j) => j.purpose.what === "plan-pushes"), "not before they're imported");
+    assert.deepEqual(sc.plan("try-with:164da8583219").cli?.args, ["import-push", "164da8583219", "--cwd", config.firefoxRepo, "--base", config.baseRef, "--branch", `${ID}-try-with`]);
+    sc.complete("try-with:164da8583219", { output: { branch: `${ID}-try-with`, shas: [sha("7"), sha("8")] } });
+    sc.settle();
+    const tb = keyOf(sc, "try-branch:root:");
+    assert.deepEqual(sc.plan(tb).cli?.args.slice(-2), [sha("7"), sha("8")]);
+    sc.complete(tb, { output: { branch: `${ID}-root-try-${tb.split(":")[2]}`, head: sha("f"), commits: [] } });
+    sc.settle();
+    const planKey = sc.view().jobs.find((j) => j.purpose.what === "plan-pushes")!.purpose.key;
+    assert.equal(sc.plan(planKey).agent?.vars?.branch, `${ID}-root-try-${tb.split(":")[2]}`);
   });
 
   it("puts a waiting group's DEBUG commits on top of the stack's verify push, then gives its author the results", () => {
