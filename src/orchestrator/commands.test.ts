@@ -568,6 +568,7 @@ describe("commands", () => {
     sc.complete(`author:i-a:comment:${resume.id}`, { exitCode: -1, error: "cancelled by you" });
     run(sc, cmd({ cmd: "continue", item: "i-a", text: "go on" }));
     assert.deepEqual(sc.open(), []);
+    assert.ok(!sc.view().done.has(`reopen:${job}`), "the stopped author run isn't started again beside the new one: they'd share its session");
     run(sc, cmd({ cmd: "stop", job }));
     assert.match(executed(sc).at(-1)!.detail!, /isn't running/);
   });

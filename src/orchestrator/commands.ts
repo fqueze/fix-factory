@@ -76,8 +76,8 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
   };
   // Keys of the item whose job you stopped: next() may start them again (a stopped lint would otherwise stay
   // stopped when the author comes back with the same commit).
-  const reopen = (item: ItemId) => {
-    for (const j of view!.jobs.filter((x) => x.item === item && x.end?.error?.startsWith(CANCELLED) && !view!.done.has(`reopen:${x.job}`))) ev({ type: "user-done", key: `reopen:${j.job}` });
+  const reopen = (item: ItemId, which: (j: { purpose: { what: string } }) => boolean = () => true) => {
+    for (const j of view!.jobs.filter((x) => x.item === item && x.end?.error?.startsWith(CANCELLED) && !view!.done.has(`reopen:${x.job}`) && which(x))) ev({ type: "user-done", key: `reopen:${j.job}` });
   };
 
   switch (c.cmd) {
@@ -477,7 +477,8 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
       const error = resume(c.item, "continue", `A message from the user:\n${c.text}\n\nDo what it says, amending your commit if your fix changes, then end with the JSON report again. If you think it is wrong, don't do it: leave your commits as they are and say why in \`disagreement\`.${draftsNote(s, c.item)}`);
       if (!error) {
         clearItemFlags(c.item);
-        reopen(c.item);
+        // Its author's cancelled runs aren't reopened: this run is their answer, and two would resume one session.
+        reopen(c.item, (j) => j.purpose.what !== "author");
       }
       done(!error, error);
       break;
