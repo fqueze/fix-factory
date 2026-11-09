@@ -72,8 +72,6 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-sp
 .bug { font-weight: 500; white-space: nowrap; margin-right: 4px; }
 .bug.tofile { color: var(--critical); }
 .bug.tofile::before { content: "⚑ "; }
-/* The room its background takes open, kept closed: opening the row moves nothing, its tab's edge on its box's. */
-.bug.tofile { padding: 0 3px 0 4px; }
 /* Opened, a patch's bug to file hangs from its label, like a tab.
    It is the body's first thing, so that clicking in it doesn't fold the row; the state lines move under it. */
 details.row > .under { padding: 0 12px 0 38px; }
@@ -83,7 +81,8 @@ details.row > .under .lines { display: flex; flex-direction: column; margin-top:
 details.row > .under .lines .state { white-space: normal; overflow-wrap: anywhere; }
 details.row:has(> summary .st.find) > .under .state { color: var(--serious); }
 /* Its padding taken back by its margins: opening the row moves nothing. */
-details.row[open]:has(> .under) .bug.tofile { background: var(--tofile-bg); border-radius: 6px 6px 0 0; padding: 2px 3px 6px 4px; margin-top: -2px; margin-bottom: -6px; }
+/* Its background reaches out past its text, which stays where it is closed, as every bug label's does. */
+details.row[open]:has(> .under) .bug.tofile { background: var(--tofile-bg); border-radius: 6px 6px 0 0; padding: 2px 3px 6px 4px; margin: -2px 1px -6px -4px; }
 /* A patch's name lays out the same open or closed (its title in a box of its own, cut short closed); open, the label
    goes down to the box however many lines its title takes. */
 details.row > summary > .name:has(> .ptitle) { display: flex; align-items: baseline; column-gap: 0.3em; }
@@ -94,7 +93,7 @@ details.row > summary > .name > :is(.bug, .phab) { flex: none; }
 /* A fix's row: over all the lines of the patches that share it. */
 details.row[open]:has(> .under) .patchline .pbug { display: flex; align-self: stretch; }
 details.row[open]:has(> .under) .patchline .pbug > .bug.tofile { align-self: stretch; }
-.box.tofile { background: var(--tofile-bg); border-radius: 0 8px 8px 8px; margin: 0 0 4px; cursor: auto; }
+.box.tofile { background: var(--tofile-bg); border-radius: 0 8px 8px 8px; margin: 0 0 4px -4px; cursor: auto; }
 :root { --tofile-bg: color-mix(in srgb, var(--critical) 9%, var(--surface-1)); } /* opaque: where the label meets its box, no darker strip */
 .bug.none { color: var(--text-muted); font-weight: normal; }
 .sub { color: var(--text-muted); font-size: 12px; }
