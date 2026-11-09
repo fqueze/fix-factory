@@ -627,6 +627,10 @@ function patchParts(r: RequestState, p: PatchView, ctx: RenderContext) {
     name: html`${p.revision ? html`<a class="phab" href="${phabUrl(p.revision)}" title="D${p.revision}" target="_blank" rel="noopener">${PHAB_ICON}</a>` : null}${
       first.id === p.id ? bugLabel(p, ctx) : html`<a class="bug tofile" href="#patch-${first.id}" title="Filed from ${first.title}">same bug</a>`
     } ${patchTitle(p)}`,
+    // On a fix's row: its bug, once for the patches that share it, then its revision and title.
+    bug: first.id === p.id ? bugLabel(p, ctx) : bugLabel(first, ctx),
+    bugKey: hasBug(p) ? `bug ${p.bug}` : `draft ${first.id}`,
+    title: html`${p.revision ? html`<a class="phab" href="${phabUrl(p.revision)}" title="D${p.revision}" target="_blank" rel="noopener">${PHAB_ICON}</a>` : null}${patchTitle(p)}`,
     end: html`${hoverInfo(r, p, item, ctx)}${viewLink(r, p)}`,
     // Where its review stands, whether it can land, what you need to do about it.
     status: [
@@ -700,7 +704,7 @@ function fixRow(r: RequestState, ps: PatchView[], ctx: RenderContext): Html {
   // what it waits for you to do).
   const names = html`${ps.map(
     (p, n) =>
-      html`<span class="patchline" id="patch-${p.id}" data-patch="${p.id}"><span class="pname" title="${p.title}">${parts[n].name}</span><span class="end">${parts[n].end}</span>${
+      html`<span class="patchline" id="patch-${p.id}" data-patch="${p.id}"><span class="pbug">${n > 0 && parts[n - 1].bugKey === parts[n].bugKey ? null : parts[n].bug}</span><span class="pname" title="${p.title}">${parts[n].title}</span><span class="end">${parts[n].end}</span>${
         parts[n].status.length ? html`<span class="pstate">${join(parts[n].status, " · ")}</span>` : null
       }${parts[n].flag ? html`<span class="rowflag">${parts[n].flag}</span>` : null}</span>`,
   )}`;

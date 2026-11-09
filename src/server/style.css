@@ -227,11 +227,13 @@ details.row > summary::-webkit-details-marker { display: none; }
 /* A fix of several patches: its name is its patches' titles, a line each with its own links at its end, and its own
    review and flags under it. */
 details.row .name:has(> .patchlines) { white-space: normal; overflow: visible; grid-column: 2 / 3; }
-.patchlines { display: block; }
-.patchline { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0 10px; align-items: baseline; }
+/* One grid for all its lines: the bug column as wide as its widest label, the titles aligned after it. */
+.patchlines { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 0 6px; align-items: baseline; }
+.patchline { display: contents; }
+.patchline .pbug { white-space: nowrap; }
 .patchline .pname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .patchline .end { display: flex; gap: 10px; font-size: 12px; font-weight: 400; color: var(--text-muted); white-space: nowrap; }
-.patchline .pstate, .patchline .rowflag { grid-column: 1 / -1; font-size: 12px; font-weight: 400; color: var(--text-secondary); }
+.patchline .pstate, .patchline .rowflag { grid-column: 2 / -1; font-size: 12px; font-weight: 400; color: var(--text-secondary); }
 details.row > summary:hover { background: var(--bg); }
 details.row .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
 details.row .end { display: flex; gap: 10px; font-size: 12px; color: var(--text-muted); white-space: nowrap; }
