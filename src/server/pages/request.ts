@@ -1126,10 +1126,11 @@ function pushRowOf(r: RequestState, p: PushView, ctx: RenderContext): Html {
   });
 }
 
-// How many times each of its jobs runs (mach try --rebuild).
+// How many times each of its jobs runs (mach try --rebuild): mach lowers it to 3 with --full.
 function rebuildOf(p: PushView): number {
   const i = p.command?.indexOf("--rebuild") ?? -1;
-  return i >= 0 ? Number(p.command![i + 1]) : 1;
+  const asked = i >= 0 ? Number(p.command![i + 1]) : 1;
+  return p.command?.includes("--full") ? Math.min(asked, 3) : asked;
 }
 
 // A push planned again after your comment: what you said, and what its planner answered (its revision run's answer).

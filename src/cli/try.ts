@@ -184,6 +184,11 @@ export function parseDryRunOutput(stdout: string): ParsedDryRun {
         "Add --show-chunk-numbers for exact labels.",
     );
   }
+  // mach lowers --rebuild to 3 with --full (tools/tryselect/task_config.py), saying so only in this line.
+  const capped = /warning: limiting --rebuild to (\d+)/.exec(stdout);
+  if (capped) {
+    warnings.push(`mach lowered --rebuild to ${capped[1]} (it does with --full): each job runs ${capped[1]} times, not as many as asked.`);
+  }
   const large = /Your push would schedule at least (\d+) tasks/.exec(stdout);
   if (large) {
     warnings.push(`Large push (at least ${large[1]} tasks): it will run at the lowest priority.`);

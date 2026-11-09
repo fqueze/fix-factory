@@ -119,6 +119,11 @@ test("parseDryRunOutput: per-label rebuild and chemspill priority", () => {
   assert.deepEqual(p.warnings, ["--chemspill-priority needs the user's permission, for this push only."]);
 });
 
+test("parseDryRunOutput: --rebuild lowered by mach", () => {
+  const p = parseDryRunOutput(`warning: limiting --rebuild to 3 when using --full. Use custom push actions to add more.\n${text("dry-run-rebuild.txt")}`);
+  assert.deepEqual(p.warnings, ["mach lowered --rebuild to 3 (it does with --full): each job runs 3 times, not as many as asked."]);
+});
+
 test("parseDryRunOutput: large push prompt", () => {
   const p = parseDryRunOutput(text("dry-run-large-push.txt"));
   assert.equal(p.taskCount, p.tasks.length * 2);
