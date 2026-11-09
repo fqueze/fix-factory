@@ -165,3 +165,16 @@ test("one fix's patches stay together, landable ones apart from the others, afte
   // Each fix by its hardest patch: b (2), a (3), c (4).
   assert.deepEqual(out.order, ["b", "a1", "a2", "c1", "c2"]);
 });
+
+test("test-only fixes come before those changing product code, a fix with a product patch among them", () => {
+  const out = orderPatches({
+    patches: [
+      { id: "p", effort: 1, fix: "p" },
+      { id: "t", effort: 3, testOnly: true, fix: "t" },
+      { id: "m1", effort: 1, testOnly: true, fix: "m" },
+      { id: "m2", effort: 2, fix: "m" },
+    ],
+    deps: [],
+  });
+  assert.deepEqual(out.order, ["t", "p", "m1", "m2"]);
+});

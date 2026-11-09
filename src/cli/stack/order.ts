@@ -2,7 +2,8 @@ import type { Dep, PatchId } from "../../types.ts";
 
 // Stack ordering: pure functions, no git.
 //
-// Rule: easy first (effort ascending; a fix's patches by the hardest of them), then valuable first (value = failures/week, descending), then
+// Rule: test-only fixes before those changing product code, then easy first (effort ascending; a fix's patches by
+// the hardest of them), then valuable first (value = failures/week, descending), then
 // test-only first, then the previous order, then the input order. Each patch comes after its hard
 // deps, and a dep is pulled in just before its first dependent rather than going to the top: we walk
 // the patches in rank order and, before placing one, place its not-yet-placed hard deps (themselves
@@ -47,8 +48,12 @@ function rankComparator(patches: OrderPatch[], previous: PatchId[] | undefined, 
   const fixEffort = new Map<string, number>();
   for (const p of patches) if (p.fix !== undefined) fixEffort.set(`${p.fix}\n${landable.has(p.id)}`, Math.max(fixEffort.get(`${p.fix}\n${landable.has(p.id)}`) ?? -Infinity, p.effort ?? Infinity));
   const effort = (p: OrderPatch) => (p.fix === undefined ? p.effort ?? Infinity : fixEffort.get(`${p.fix}\n${landable.has(p.id)}`)!);
+  // Test-only fixes before those that change product code: a fix with a product patch is a product fix.
+  const product = new Set(patches.filter((p) => !p.testOnly).map((p) => p.fix ?? p.id));
+  const isProduct = (p: OrderPatch) => Number(product.has(p.fix ?? p.id));
   return (a, b) =>
     Number(landable.has(b.id)) - Number(landable.has(a.id)) ||
+    isProduct(a) - isProduct(b) ||
     effort(a) - effort(b) ||
     (b.value ?? 0) - (a.value ?? 0) ||
     Number(!!b.testOnly) - Number(!!a.testOnly) ||

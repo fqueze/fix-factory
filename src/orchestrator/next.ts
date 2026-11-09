@@ -1715,9 +1715,9 @@ class Planner {
       }),
       deps: inStack.flatMap((p) => this.s.patches[p.id].deps).map((d) => ({ ...d, needs: this.depTarget(d.needs, inStack.map((x) => x.id)) })),
     };
-    // Ordered again when what it's ordered by changes (an effort, a dep, how the factory ranks them: rank-v2, a fix by
-    // its hardest patch).
-    const oh = shortHash([JSON.stringify(orderInput), "rank-v2"]).slice(0, 6);
+    // Ordered again when what it's ordered by changes (an effort, a dep, how the factory ranks them: rank-v3, test-only
+    // fixes first, a fix by its hardest patch).
+    const oh = shortHash([JSON.stringify(orderInput), "rank-v3"]).slice(0, 6);
     const orderFile = dataPath(this.config, this.s.id, `order-${id}-${hash}-${oh}.json`);
     const ord = this.want(`order:${id}:${hash}:${oh}`, () =>
       this.cli("order", "stack.ts", ["order", orderFile], {
@@ -2564,7 +2564,7 @@ class Planner {
     if (!info?.ready) return;
     const ps = st.order.map((pid) => this.s.patches[pid]);
     // The prompt's version too: a better prompt writes it again.
-    const h = shortHash(["v5", info.code, ...ps.map((p) => `${p.id}:${p.bug}`)]).slice(0, 10);
+    const h = shortHash(["v6", info.code, ...ps.map((p) => `${p.id}:${p.bug}`)]).slice(0, 10);
     const file = dataPath(this.config, this.s.id, `meta-${st.id}-${h}.json`);
     const first = ps.find((p) => p.bugDraft)?.bugDraft;
     // Fields you had its agent change stay.
@@ -2605,7 +2605,7 @@ class Planner {
         name: "write-meta-bug",
         cwd: last.cwd,
         files,
-        agent: { sessionId: last.sessionId!, resume: true, message: `The stack changed: ${file} has its patches now. Write the description again, keeping what the user asked of you before. The patches of one fix (the same \`fix\`, next to each other) are one bullet, under the section of its hardest patch, naming each patch's bug. Then end with the JSON report again.` },
+        agent: { sessionId: last.sessionId!, resume: true, message: `The stack changed: ${file} has its patches now. Write the description again, keeping what the user asked of you before. The patches of one fix (the same \`fix\`, next to each other) are one bullet, naming each patch's bug: a fix with a product patch is a product fix. Then end with the JSON report again.` },
       }));
       return;
     }
