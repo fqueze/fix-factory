@@ -1120,7 +1120,7 @@ function pushRowOf(r: RequestState, p: PushView, ctx: RenderContext): Html {
     // While it waits for you, what it would run; once made, what came of it, its jobs and command folded under it.
     // While it waits for you, what it would run is in sight once opened, without a fetch.
     ...(waiting ? {} : { lazy: { r, ctx } }),
-    body: () => html`${sinceSection(r, p, ctx)}${waiting ? null : pushAnalysis(r, p)}${
+    body: () => html`${sinceSection(r, p, ctx)}${waiting ? null : pushAnalysis(r, p, ctx)}${
       waiting ? pushJobs(p) : html`<details class="fold" data-fold="pushjobs-${p.id}"><summary>Its jobs, commits and command</summary>${pushJobs(p)}</details>`
     }${revisable(r, p) ? reviseBox(r, p) : null}`,
   });
@@ -1268,7 +1268,7 @@ function pushOutcome(r: RequestState, p: PushView): Html {
 }
 
 // Each failure no patch's tests matched, as triage saw it, with what it rests on.
-function pushAnalysis(r: RequestState, p: PushView): Html | null {
+function pushAnalysis(r: RequestState, p: PushView, ctx: RenderContext): Html | null {
   if (!p.analysis?.length) {
     return null;
   }
@@ -1297,7 +1297,12 @@ function pushAnalysis(r: RequestState, p: PushView): Html | null {
     groups.set(key, g);
   }
   // What came of a failure pinned on a patch: its author's run for this push, or why there's none.
-  const next = (g: { verdict: string; pids: string[] }): Html | null => {
+  const next = (g: { verdict: string; test: string; pids: string[] }): Html | null => {
+    // A test failing with no patch to blame: the fix it has (the one of its group, or one made for it from this push).
+    if (g.verdict === "still failing") {
+      const item = Object.values(r.items).findLast((i) => i.group.tests.some((t) => testKey(t) === testKey(g.test)));
+      return item ? html`its fix: <a href="#${itemAnchor(r, item)}">${stateText(r, item, ctx)}</a>` : html`no fix for it yet`;
+    }
     if (g.verdict !== "broken by patch") return null;
     return join(
       g.pids.map((pid) => {
@@ -1326,6 +1331,12 @@ function pushAnalysis(r: RequestState, p: PushView): Html | null {
       these.length > 5 ? html`<details class="fold" data-fold="analysis-${p.id}-${v}"><summary>+${these.length - 5} more</summary><ul class="analysis">${these.slice(5).map(li)}</ul></details>` : null
     }`;
   })}`;
+}
+
+// Where an item's row is: its patch's, its fix's, or its own.
+function itemAnchor(r: RequestState, item: ItemView): string {
+  const ps = Object.values(r.patches).filter((p) => p.item === item.id);
+  return ps.length === 0 ? `item-${item.id}` : ps.length === 1 ? `patch-${ps[0].id}` : `fix-${item.id}`;
 }
 
 const testKey = (t: string) => t.replace(/\s*\([^)]*\)/g, "").trim().split("/").pop()!;
