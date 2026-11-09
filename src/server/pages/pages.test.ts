@@ -316,7 +316,7 @@ describe("one fixture per step of docs/MVP.md", () => {
     const body = h.slice(h.indexOf('<div class="rbody">'));
     const answer = body.indexOf('<div class="action reply" data-key="recovery:j-recover">');
     assert.ok(answer > 0 && answer < body.indexOf('<form class="ask cmd reqask"'), "its answer is in the body, above the box");
-    const line = `<div class="jobs"><details class="job" data-fold="job-j-recover-2" data-watch="/api/requests/r-20261013-tab-failures/jobs/j-recover-2/activity" data-live><summary><span class="res run">working on <span class="said" title="${said}">“${said}”</span></span> <span class="sub">Opus · running <span data-since="2026-10-15T08:59:00.000Z">1 min</span></span> <form`;
+    const line = `<div class="jobs"><details class="job" data-fold="job-j-recover-2" data-watch="/api/requests/r-20261013-tab-failures/jobs/j-recover-2/activity" data-live><summary><span class="res run">working on <span class="said" title="${said}">“${said}”</span></span> <span class="sub">Opus · <a href="http://localhost:4242/from-url/${encodeURIComponent("http://factory:4300/api/requests/r-20261013-tab-failures/jobs/j-recover-2/profile")}?thread=0" target="_blank" rel="noopener" title="Its profile, so far">running <span data-since="2026-10-15T08:59:00.000Z">1 min</span></a></span> <form`;
     const at = body.indexOf(line);
     assert.ok(at > 0 && at < body.indexOf('<form class="ask cmd reqask"') && body.indexOf("</details></div>", at) < body.indexOf('<form class="ask cmd reqask"'));
     assert.ok(!body.slice(at + line.length, body.indexOf('<form class="ask cmd reqask"')).includes('<details class="row'), "nothing between it and the box but its own line");
@@ -1093,7 +1093,7 @@ describe("a burndown with closed groups, running agents and a dropped patch", ()
     const row = rowOf(h, "item-i-browser-policy-sitepolicies-serviceworke-2");
     assert.match(row, /<div class="job"><span class="res run"><a href="\/api\/requests\/[^"]+\/jobs\/j-wt-sw2\/log" target="_blank" rel="noopener" title="Its output">build worktree<\/a><\/span>/, "a script opens its log");
     const tp = rowOf(h, "item-i-browser-policy-trackingprotection");
-    assert.match(tp, /<span class="res run">investigating<\/span> <span class="sub">Opus · running/);
+    assert.match(tp, /<span class="res run">investigating<\/span> <span class="sub">Opus · <a href="[^"]*%2Fprofile\?thread=0" target="_blank" rel="noopener" title="Its profile, so far">running/, "a running agent's time opens its profile so far");
     assert.doesNotMatch(tp, /<span class="res ok">(lint message|build worktree)</);
     assert.doesNotMatch(h, /data-fold="jobs"[^]*j-inv-tp/, "a group's jobs aren't the request's");
   });

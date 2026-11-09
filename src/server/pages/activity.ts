@@ -25,14 +25,16 @@ export function jobLine(r: RequestState, j: JobView, ctx: RenderContext): Html {
     const name = `${j.kind === "build" ? "build profile" : "profile"}${j.machProfiles! > 1 ? ` ${n + 1}` : ""}`;
     return html` · <a href="${ctx.profilerOrigin}/from-url/${encodeURIComponent(url)}" target="_blank" rel="noopener" title="Its mach resource-usage profile, in the Firefox Profiler">${name}</a>`;
   });
-  // An agent's cost opens its profile.
+  // An agent's cost opens its profile; while it runs (no cost yet), its time does.
+  const agentProfile = `${ctx.profilerOrigin}/from-url/${encodeURIComponent(`${ctx.baseUrl}${jobUrl(r.id, j.job, "profile")}`)}?thread=0`;
   const cost =
     j.costUsd === undefined
       ? null
       : j.kind === "agent"
-        ? html` · <a class="cost" href="${ctx.profilerOrigin}/from-url/${encodeURIComponent(`${ctx.baseUrl}${jobUrl(r.id, j.job, "profile")}`)}?thread=0" target="_blank" rel="noopener" title="Its profile">${formatCost(j.costUsd)}</a>`
+        ? html` · <a class="cost" href="${agentProfile}" target="_blank" rel="noopener" title="Its profile">${formatCost(j.costUsd)}</a>`
         : html` · ${formatCost(j.costUsd)}`;
-  const line = html`<span class="res ${cls}">${label}</span> <span class="sub">${j.model ? `${modelLabel(j.model)} · ` : ""}${time}${cost}</span>${
+  const shownTime = j.kind === "agent" && j.costUsd === undefined ? html`<a href="${agentProfile}" target="_blank" rel="noopener" title="Its profile, so far">${time}</a>` : time;
+  const line = html`<span class="res ${cls}">${label}</span> <span class="sub">${j.model ? `${modelLabel(j.model)} · ` : ""}${shownTime}${cost}</span>${
       running && !isPushJob(j) ? html` ${stopButton(r.id, j.job, requestUrl(r.id))}` : null
     }${profiles}${j.outcome ? html`<span class="outcome clamp1" title="${j.outcome}">${j.outcome}</span>` : j.kind !== "agent" && j.error ? html`<span class="outcome clamp1" title="${j.error}">${j.error}</span>` : null}`;
   const title = j.error ? html` title="${j.error}"` : null;
