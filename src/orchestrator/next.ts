@@ -3141,7 +3141,8 @@ class Planner {
       if (!ord) continue;
       const o = this.out<OrderOutput>(ord);
       // One reorg to ask for at a time, for the stack's order: an earlier one's is moot.
-      const landKey = `land:${st.id}:${shortHash(st.order).slice(0, 10)}`;
+      // Keyed by Phabricator's order too: the same order asked for again after a reorg elsewhere is a new question.
+      const landKey = `land:${st.id}:${shortHash([...st.order, "|", ...(this.phabOrder(st) ?? [])]).slice(0, 10)}`;
       for (const n of this.s.needsUser) if (n.key.startsWith(`land:${st.id}:`) && n.key !== landKey) this.clear(n.key);
       if (!o.landable.length) {
         this.clear(landKey);

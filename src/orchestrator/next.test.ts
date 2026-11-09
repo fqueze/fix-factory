@@ -3824,6 +3824,17 @@ describe("10. landing: the reorg flag", () => {
     sc.settle();
   };
 
+  it("asks again for the same order once Phabricator has another one again", () => {
+    const { sc, order } = reordered();
+    const [bottom, top] = order.map((pid) => sc.state().patches[pid].revision);
+    const first = sc.open().find((k) => k.startsWith("land:root:"))!;
+    pollAgain(sc, polled("accepted").map((r: { revision: number }) => ({ ...r, ...(r.revision === top ? { parent: bottom } : {}) })));
+    assert.ok(!sc.open().includes(first), "answered by the reorg");
+    // Phabricator's order changed back (a resubmit from elsewhere): the stack's order is asked for again.
+    pollAgain(sc, polled("accepted").map((r: { revision: number }) => ({ ...r, ...(r.revision === bottom ? { parent: top } : {}) })));
+    assert.ok(sc.open().some((k) => k.startsWith("land:root:")));
+  });
+
   it("is answered by a reorg however you ran it: Phabricator's parents have the new order", () => {
     const { sc, order } = reordered();
     const [bottom, top] = order.map((pid) => sc.state().patches[pid].revision);
