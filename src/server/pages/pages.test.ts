@@ -523,7 +523,7 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.doesNotMatch(renderRequest(r, ctx, true).value, /data-patch="p-drag"/, "blocked after the review limit: still a draft");
     r.items["i-drag"].state = "reviewed";
     const reviewed = renderRequest(r, ctx, true).value;
-    assert.match(rowOf(reviewed, "patch-p-drag"), /<span class="name" title="[^"]*"><a class="bug tofile" href="https:\/\/bugzilla\.mozilla\.org\/enter_bug\.cgi\?[^"]*Drag\+session\+left\+open[^"]*"[^>]*>Bug to file<\/a> <span class="ptitle">Close the drag session/);
+    assert.match(rowOf(reviewed, "patch-p-drag"), /<span class="name" title="[^"]*"><a class="bug tofile" href="https:\/\/bugzilla\.mozilla\.org\/enter_bug\.cgi\?[^"]*Drag\+session\+left\+open[^"]*"[^>]*>Bug to file<\/a><span class="ptitle">Close the drag session/);
     assert.match(reviewed, /<span class="ready">2 ready<\/span>/);
   });
   it("names a try push by what it's for, numbered", () => {
@@ -620,10 +620,10 @@ describe("one fixture per step of docs/MVP.md", () => {
     const order = ["p-fixture", "p-copydir", "p-storage", "p-prefs"].map((p) => h.indexOf(`data-patch="${p}"`));
     assert.deepEqual([...order].sort((a, b) => a - b), order);
     assert.ok(order[0] > 0);
-    assert.match(h, /<span class="bug missing" title="[^"]*">no bug yet<\/span> <span class="ptitle">Save the prefs file of test_libPrefs\.js in the temp dir, r=gstoll\./, "only annotation patches go under the meta bug");
+    assert.match(h, /<span class="bug missing" title="[^"]*">no bug yet<\/span><span class="ptitle">Save the prefs file of test_libPrefs\.js in the temp dir, r=gstoll\./, "only annotation patches go under the meta bug");
     const r = structuredClone(get("r-20261010-xpcshell-cwd"));
     r.patches["p-prefs"].item = "i-annotations";
-    assert.match(renderRequest(r, ctx, true).value, /<span class="bug none" title="Goes under the meta bug">meta bug<\/span> <span class="ptitle">Save the prefs file/);
+    assert.match(renderRequest(r, ctx, true).value, /<span class="bug none" title="Goes under the meta bug">meta bug<\/span><span class="ptitle">Save the prefs file/);
     assert.match(h, /⛔ hard: needs “Make nsLocalFile::CopyDirectoryTo/);
     assert.match(h, /🔗 soft: needs a newer sqlite on the try builders \(the vacuum test is slow without it\)/);
     assert.match(rowOf(h, "patch-p-prefs"), /<summary>The failure and its cause<\/summary><div class="failure">Test wrote into its own directory · 31 failures\/week · <a href="https:\/\/tests\.firefox\.dev\/test\.html\?test=storage%2Ftest%2Funit%2Ftest_libPrefs\.js"[^>]*>rates on tests\.firefox\.dev ↗<\/a><\/div><div class="sub">linux64\/debug, windows11-64\/opt<\/div>/);
@@ -919,7 +919,7 @@ describe("one fixture per step of docs/MVP.md", () => {
   it("9. review comments: reviewers, interdiff, draft reply with Copy reply and Open comment", () => {
     const h = expanded("r-20261005-newtab");
     assert.match(h, /<a class="phab" href="https:\/\/phabricator\.services\.mozilla\.com\/D327101" title="D327101"/);
-    assert.match(h, /<a class="bug" href="https:\/\/bugzilla\.mozilla\.org\/show_bug\.cgi\?id=2011958"[^>]*>Bug 2011958<\/a> <span class="ptitle">Count the sponsored tiles/);
+    assert.match(h, /<a class="bug" href="https:\/\/bugzilla\.mozilla\.org\/show_bug\.cgi\?id=2011958"[^>]*>Bug 2011958<\/a><span class="ptitle">Count the sponsored tiles/);
     assert.match(h, /accepted with comments/);
     assert.match(h, /<span class="r">-  let tiles = row\.querySelectorAll\(&quot;\.top-site-outer&quot;\);<\/span>/);
     assert.match(h, /<textarea rows="1" id="reply-p-sponsored-1873402">Done\.<\/textarea>/);

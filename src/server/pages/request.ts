@@ -626,7 +626,7 @@ function patchParts(r: RequestState, p: PatchView, ctx: RenderContext) {
     cls: own.some((n) => actionKind(n, r) === "resubmit") ? ("resubmit" as StateClass) : phabClass(p, item ? rowClass(r, item, ctx) : landable ? "ok" : "wait"),
     name: html`${p.revision ? html`<a class="phab" href="${phabUrl(p.revision)}" title="D${p.revision}" target="_blank" rel="noopener">${PHAB_ICON}</a>` : null}${
       first.id === p.id ? bugLabel(p, ctx) : html`<a class="bug tofile" href="#patch-${first.id}" title="Filed from ${first.title}">same bug</a>`
-    } <span class="ptitle">${patchTitle(p)}</span>`,
+    }<span class="ptitle">${patchTitle(p)}</span>`,
     // On a fix's row: its bug, once for the patches that share it, then its revision and title.
     bug: first.id === p.id ? bugLabel(p, ctx) : bugLabel(first, ctx),
     bugKey: hasBug(p) ? `bug ${p.bug}` : `draft ${first.id}`,
