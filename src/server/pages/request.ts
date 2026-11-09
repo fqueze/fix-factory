@@ -1247,8 +1247,10 @@ function pushOutcome(r: RequestState, p: PushView): Html {
   }
   // "32 jobs, 5 failed (3 retried): <every job>…" → its count; the jobs are under it.
   const count = status.split(":")[0];
-  const verdicts = new Map<string, number>();
-  for (const c of p.analysis ?? []) verdicts.set(c.verdict, (verdicts.get(c.verdict) ?? 0) + 1);
+  // Tests, as the section under it counts them, not the configs each failed on.
+  const tests = new Map<string, Set<string>>();
+  for (const c of p.analysis ?? []) tests.set(c.verdict, (tests.get(c.verdict) ?? new Set()).add(testKey(c.test ? relativeTest(r, c.test) : (c.taskId ?? "a job"))));
+  const verdicts = [...tests].sort(([a], [b]) => VERDICT_ORDER.indexOf(a) - VERDICT_ORDER.indexOf(b)).map(([v, t]) => [v, t.size] as const);
   const authors = routedTo(r, p);
   const asker = askedBy(r, p);
   if (asker) {
@@ -1256,7 +1258,7 @@ function pushOutcome(r: RequestState, p: PushView): Html {
     return html`${count} · ${asker.job ? (asker.job.endedAt ? html`its author: ${answer ?? "done"}` : "its author is reading the results") : "results go to its author"}`;
   }
   const made = [
-    ...[...verdicts].map(([v, n]) => `${n} ${v}`),
+    ...(verdicts.length ? [`${plural(verdicts.reduce((n, [, k]) => n + k, 0), "test")}: ${verdicts.map(([v, n]) => `${n} ${v}`).join(", ")}`] : []),
     ...(authors.length ? [`sent to the author${authors.length > 1 ? "s" : ""} of ${authors.map((i) => groupLabel(r, i)).join(", ")}`] : []),
   ];
   return html`${count}${made.length ? html` · ${made.join(" · ")}` : null}`;
@@ -1270,7 +1272,6 @@ function pushAnalysis(r: RequestState, p: PushView): Html | null {
   // One row per test (its configs and patches together), by verdict, what needs attention first; long lists folded
   // after 5. Triage names a test by its path or its file name, sometimes with a note, and a config by a job name or
   // a list: grouped by file name, the longest name shown.
-  const testKey = (t: string) => t.replace(/\s*\([^)]*\)/g, "").trim().split("/").pop()!;
   const configsOf = (c: string | undefined) => (c ?? "").split(/[;,]\s*/).map((x) => x.trim().replace(/^test-/, "")).filter(Boolean);
   const patchOf = (ref: string) => r.patches[ref] ?? Object.values(r.patches).find((x) => [x.sha, ...(x.pastShas ?? [])].some((s) => s.startsWith(ref) || ref.startsWith(s)));
   const groups = new Map<string, { verdict: string; test: string; patches: Html[]; seen: Set<string>; configs: string[]; evidence: string; pids: string[] }>();
@@ -1303,7 +1304,7 @@ function pushAnalysis(r: RequestState, p: PushView): Html | null {
         if (item && r.followUps?.includes(`${p.id} ${item}`)) return html`left as a follow-up by you: it doesn't hold its patch back`;
         // Not worth a fix now (a test too slow in chaos mode…): it neither goes to its author nor holds its patch back.
         const followUp = html` <form class="inline cmd" method="post" action="/api/commands">${commandFields([{ cmd: "follow-up", request: r.id, push: p.id, patch: pid }], requestUrl(r.id))}<button class="btn small" title="It doesn't go to its author and doesn't keep its patch from landing">Leave as a follow-up</button></form>`;
-        if (!job) return html`not sent to its author${t && !t.verified ? ": its newer fix wasn't in this push, and goes to try in a push of its own" : ""}${followUp}`;
+        if (!job) return html`not sent to its author: ${t && !t.verified ? "its newer fix wasn't in this push, and goes to try in a push of its own" : "they changed the patch since this push, and its next push tells"}${followUp}`;
         if (job.endedAt === undefined) return html`<span class="working">its author is looking at it</span>`;
         const said = job.said ?? job.outcome;
         return html`its author: ${said ?? job.error ?? "no answer"}${followUp}`;
@@ -1323,6 +1324,8 @@ function pushAnalysis(r: RequestState, p: PushView): Html | null {
     }`;
   })}`;
 }
+
+const testKey = (t: string) => t.replace(/\s*\([^)]*\)/g, "").trim().split("/").pop()!;
 
 const VERDICT_ORDER = ["broken by patch", "still failing", "fixed", "infra", "pre-existing"];
 

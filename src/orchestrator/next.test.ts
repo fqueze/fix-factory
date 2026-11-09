@@ -1896,6 +1896,9 @@ describe("6. verify on try", () => {
       { id: "p-test-a", sha: sha("d"), title: "Bug XXXXXXX - Fix a/test_a.js, r=smaug.", files: ["a/test_a.js"] },
     ]);
     assert.deepEqual([input.rev, input.rows.map((r: { test: string }) => r.test), input.unparsed], ["fed", ["z/test_z.js"], []]);
+    // The factory reorders the stack after the push: its patch's sha changes, not what its author pushed.
+    const b = sc.state().patches["p-test-b"];
+    sc.add({ type: "patch", request: ID, patch: b.id, item: b.item, sha: sha("e"), worktree: b.worktree, title: b.title, bug: b.bug });
     sc.complete(`triage:${push}:final:v2`, { report: { cells: [{ test: "z/test_z.js", verdict: "broken by patch", patch: sha("c"), evidence: "TypeError" }], feedback: [] } });
     assert.deepEqual(sc.settle(), [`author:i-test-b:try:${push}`]);
     assert.equal(sc.state().step, "verify on try");

@@ -1818,7 +1818,8 @@ class Planner {
 
   patchBySha(sha: string): PatchView | undefined {
     const short = sha.slice(0, 12);
-    return Object.values(this.s.patches).find((p) => p.sha.startsWith(short));
+    // Its shas since the push that names it too: the factory's rebases and reorders since keep it the same patch.
+    return Object.values(this.s.patches).find((p) => [p.sha, ...(this.s.patchShas[p.id] ?? [])].some((x) => x.startsWith(short)));
   }
 
   // Bug numbers go in commit messages with stack.ts rewrite: your set-bug, and the meta bug for
@@ -2481,8 +2482,9 @@ class Planner {
         if (item) cellsOf.set(item, [...(cellsOf.get(item) ?? []), c]);
       }
       for (const [item, cells] of cellsOf) {
-        // A push of an older version of its patches: their author changed them since.
-        if (Object.values(this.s.patches).some((x) => x.item === item && !this.carries(push, x.id))) continue;
+        // A push of an older version of its patches: their author changed them since (not the factory's rebases and
+        // reorders, which keep what was pushed).
+        if (this.changedSince(item, push)) continue;
         const lines = (list: typeof cells) => list.map((c) => `- ${c.test ?? c.taskId ?? "a job"}${c.config ? ` on ${c.config}` : ""}${c.verdict === "still failing" ? " (still failing with your fix)" : ""}: ${c.evidence}`);
         const fresh = cells.filter((c) => !toldCells.has(`${c.test} ${c.config}`));
         if (fresh.length) this.routeToAuthor(item, push, lines(fresh), earlyTriage ? ":final" : "");
@@ -2502,6 +2504,12 @@ class Planner {
   }
 
   // Whether an author run left its commits as its previous run had them.
+  // An author run that changed its commits ended after the push was made.
+  private changedSince(item: ItemId, push: PushId): boolean {
+    const at = this.view.byKey.get(`dry-run:${push}`)?.find(succeeded)?.end?.at;
+    return at !== undefined && this.authorJobs(item).filter(succeeded).some((j) => j.end!.at > at && commitsOf(j.name, this.rep(j)).length > 0 && !this.unchangedBy(item, j));
+  }
+
   private unchangedBy(item: ItemId, j: JobRecord): boolean {
     const jobs = this.authorJobs(item).filter(succeeded);
     const before = jobs.slice(0, jobs.findIndex((x) => x.job === j.job)).findLast((x) => commitsOf(x.name, this.rep(x)).length > 0);
