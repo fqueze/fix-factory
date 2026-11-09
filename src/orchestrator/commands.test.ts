@@ -265,6 +265,12 @@ describe("commands", () => {
     assert.equal(plan.agent?.resume, false);
     assert.notEqual(plan.agent?.sessionId, "s-judge");
     assert.deepEqual(plan.agent?.vars, { test: "a/test_a.js", facts: "f" });
+    // A retry of that retry starts afresh too.
+    const again = sc.complete("prior-art-verdict:i-a", { error: "invalid report: $: no structured_output" });
+    sc.add({ type: "needs-user", request: ID, key: `failed:${again}`, action: "prior-art-verdict failed twice", detail: "", job: again });
+    run(sc, cmd({ cmd: "retry", job: again }));
+    assert.equal(sc.plan("prior-art-verdict:i-a").agent?.resume, false);
+    assert.deepEqual(sc.plan("prior-art-verdict:i-a").agent?.vars, { test: "a/test_a.js", facts: "f" });
   });
 
   it("resume-agent, set-state, redo-step, edit-config and shell", () => {
