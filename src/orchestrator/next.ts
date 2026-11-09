@@ -2351,6 +2351,11 @@ class Planner {
         if (push.id.startsWith(all) && plan && !plan.ids.includes(push.id) && this.s.needsUser.some((x) => x.key === `approve-push:${push.id}`)) {
           this.event(this.ev("try-declined", { push: push.id, text: "not needed anymore: the stack changed since it was planned", by: "factory" }));
         }
+        // An earlier ask's push still waiting: this ask's plan carries what it asked.
+        const k = Number(new RegExp(`^${info.id}-ask(\\d+)-`).exec(push.id)?.[1] ?? n);
+        if (plan?.ids.length && k < n && this.s.needsUser.some((x) => x.key === `approve-push:${push.id}`)) {
+          this.event(this.ev("try-declined", { push: push.id, text: `not needed anymore: the push for ask ${n} carries what it asked`, by: "factory" }));
+        }
       }
     }
   }

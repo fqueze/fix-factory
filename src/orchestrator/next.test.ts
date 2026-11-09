@@ -3002,6 +3002,28 @@ describe("9. a try push of a submitted stack", () => {
     return { sc, planKey };
   };
 
+  it("a later ask's plan withdraws an earlier ask's push still waiting for you: it carries what that one asked", () => {
+    const { sc, planKey } = verifying();
+    sc.complete(planKey, { report: { pushes: [{ purpose: "the failing jobs", tryArgs: ["fuzzy", "-q", "x"], rebuild: 5 }], feedback: [] } });
+    const dry = sc.settle().find((k) => k.startsWith("dry-run:"))!;
+    const first = sc.purpose(dry).push!;
+    sc.complete(dry, { output: { command: ["./mach", "try", "fuzzy"], taskCount: 5, tasks: [], tryTaskConfig: {}, commits: [sc.state().patches["p-test-a"].sha], warnings: [] } });
+    sc.settle();
+    assert.ok(sc.open().includes(`approve-push:${first}`));
+    command(sc, { cmd: "verify-stack", reason: "and check the backout job too" });
+    for (const k of sc.settle().filter((k) => k.startsWith("since:"))) sc.complete(k, { output: { changes: [], removed: [] } });
+    const again = [...sc.settle(), ...sc.view().jobs.filter((j) => !j.end).map((j) => j.purpose.key)].find((k) => k.startsWith("plan:verify:root:") && k !== planKey)!;
+    assert.ok(again);
+    assert.match(String(sc.plan(again).agent?.vars?.goal), /Verify the fix of D101[^]*and check the backout job too/, "it carries the earlier ask");
+    sc.complete(again, { report: { pushes: [{ purpose: "both", tryArgs: ["fuzzy", "-q", "x", "-q", "y"], rebuild: 5 }], feedback: [] } });
+    const dry2 = sc.settle().find((k) => k.startsWith("dry-run:"))!;
+    sc.complete(dry2, { output: { command: ["./mach", "try", "fuzzy"], taskCount: 7, tasks: [], tryTaskConfig: {}, commits: [sc.state().patches["p-test-a"].sha], warnings: [] } });
+    sc.settle();
+    assert.ok(sc.open().includes(`approve-push:${sc.purpose(dry2).push}`));
+    assert.ok(!sc.open().includes(`approve-push:${first}`));
+    assert.match(String(sc.state().pushes[first].declined), /carries what it asked/);
+  });
+
   it("a fix no push can verify (nothing in the stack fixes what the push found) comes to you; dismissed, it may land", () => {
     const { sc, planKey } = verifying();
     sc.complete(planKey, { report: { pushes: [], regressions: [{ failure: "test_a.js timed out", causedBy: "p-test-a", status: "not fixed", how: "Nothing since fixes the timeout." }], feedback: [] } });
