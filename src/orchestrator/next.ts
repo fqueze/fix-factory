@@ -822,7 +822,7 @@ class Planner {
         // A submitted group stays where its review is: the push is the stack's, not a step back for it.
         const items = stack ? (this.stackInfos.get(stack)?.patches.map((x) => x.item) ?? []).filter((i) => !this.submittedItem(i)) : [];
         const pushed = this.want(`push:${push.id}`, () =>
-          this.cli("push", "try.ts", ["push", "--cwd", cwd, "--expect-commits", commits.join(","), "--", ...args], {
+          this.cli("push", "try.ts", ["push", "--cwd", cwd, "--no-wait", "--expect-commits", commits.join(","), "--", ...args], {
             cwd,
             purpose: { push: push.id },
             startEvents: [...new Set(items)].map((item) => this.ev("item-state", { item, state: "in try" })),

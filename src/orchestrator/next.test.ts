@@ -251,7 +251,7 @@ describe("2. first signal", () => {
     // Approved: pushed, watched, and the step moves on once the push exists.
     sc.add({ type: "user-done", request: ID, key: "approve-push:unskip" });
     assert.deepEqual(sc.settle(), ["push:unskip"]);
-    assert.deepEqual(sc.plan("push:unskip").cli?.args, ["push", "--cwd", `/wt/${ID}-signal`, "--expect-commits", "c2,c1", "--", "fuzzy", "-q", "xpcshell", "--rebuild", "10"]);
+    assert.deepEqual(sc.plan("push:unskip").cli?.args, ["push", "--cwd", `/wt/${ID}-signal`, "--no-wait", "--expect-commits", "c2,c1", "--", "fuzzy", "-q", "xpcshell", "--rebuild", "10"]);
     sc.complete("push:unskip", { output: { landoJobId: 7, landoUrl: "l", treeherderUrl: "t" } });
     assert.deepEqual(sc.settle(), ["watch:unskip"]);
     assert.deepEqual(sc.plan("watch:unskip").cli?.args, ["watch", "--lando", "7"]);

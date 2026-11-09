@@ -21,12 +21,12 @@
 //   the dry-run outputs of pending pushes with `push` added; duplicateOf is set (to
 //   `push`, or the list index) when one has the same try config and commits.
 //
-// node src/cli/try.ts push --cwd <worktree> [--lando-timeout <s>] [--expect-commits <sha,sha...>] -- <selector> <mach try args...>
+// node src/cli/try.ts push --cwd <worktree> [--no-wait | --lando-timeout <s>] [--expect-commits <sha,sha...>] -- <selector> <mach try args...>
 //   --expect-commits: the dry run's commits (newest first); refuses to push a stack whose code differs (a
 //   reworded commit is fine), with an error starting with "not pushed: commits changed".
 //   Under --dry-run, or when the config has dryRun, refuses and prints
 //   {dryRun: true, command, cwd}. Otherwise runs `./mach try <args>` and prints
-//   {landoJobId, landoUrl, treeherderUrl, rev?}. rev is missing when Lando hasn't
+//   {landoJobId, landoUrl, treeherderUrl, rev?}. rev is missing with --no-wait, or when Lando hasn't
 //   landed the push within --lando-timeout seconds (default 600); `watch --lando`
 //   resolves it later. If Lando needs an Auth0 login, a line
 //   "lando-login-required: <url>" goes to stderr and mach waits for the login.
@@ -382,7 +382,7 @@ function runStreaming(cmd: string[], cwd: string, input: string, onLine: (line: 
 export async function push(
   cwd: string,
   args: string[],
-  opts: { dryRun: boolean; landoTimeoutMs?: number; deps?: Partial<WatchDeps>; run?: typeof runStreaming; expectCommits?: string[]; exec?: typeof exec },
+  opts: { dryRun: boolean; landoTimeoutMs?: number; wait?: boolean; deps?: Partial<WatchDeps>; run?: typeof runStreaming; expectCommits?: string[]; exec?: typeof exec },
 ): Promise<PushResult | { dryRun: true; command: string[]; cwd: string }> {
   checkTryArgs(args);
   const command = ["./mach", "try", ...args];
@@ -431,6 +431,8 @@ export async function push(
   }
   const { landoJobId, treeherderUrl } = parsePushOutput(r.stdout);
   const result: PushResult = { landoJobId, landoUrl: `${LANDO}/landings/${landoJobId}`, treeherderUrl };
+  // Watched from there by watch --lando, which says what Lando does while it does it.
+  if (opts.wait === false) return result;
   const deps = { ...defaultDeps(), ...opts.deps };
   try {
     result.rev = await waitForLando(landoJobId, deps, { intervalMs: 10_000, timeoutMs: opts.landoTimeoutMs ?? 600_000 });
@@ -903,6 +905,7 @@ async function main(): Promise<void> {
           dryRun: isDryRun,
           expectCommits: typeof values["expect-commits"] === "string" ? values["expect-commits"].split(",").filter(Boolean) : undefined,
           landoTimeoutMs: positiveNumber(values["lando-timeout"], "--lando-timeout", 600) * 1000,
+          wait: values["no-wait"] !== true,
         });
       },
       watch: async (args, values) => {
@@ -928,6 +931,7 @@ async function main(): Promise<void> {
       branch: { type: "string" },
       pending: { type: "string" },
       "lando-timeout": { type: "string" },
+      "no-wait": { type: "boolean" },
       "expect-commits": { type: "string" },
       lando: { type: "string" },
       expect: { type: "string" },

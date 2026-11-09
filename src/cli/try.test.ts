@@ -580,6 +580,18 @@ test("push returns without a revision when Lando is slow", async () => {
   assert.equal(r.treeherderUrl, "https://treeherder.mozilla.org/jobs?repo=try&landoInstance=lando-prod-2025&landoCommitID=103624");
 });
 
+test("push with --no-wait returns once Lando has it, without asking Lando for its revision", async () => {
+  const world = fakeWorld({ landoLandsAt: 0, pushAppearsAt: 0, jobs: () => json("jobs-d25e111ef965.json") });
+  const r = await push("/wt", ["fuzzy", "-q", "x"], {
+    dryRun: false,
+    wait: false,
+    deps: { ...world.deps, fetch: async () => assert.fail("asked Lando") },
+    run: async () => ({ code: 0, stdout: text("push-output.txt"), stderr: "" }),
+  });
+  assert.ok(!("dryRun" in r) && !("rev" in r));
+  assert.equal(r.landoJobId, 103624);
+});
+
 test("push refuses a stack that differs from the approved dry run's commits", async () => {
   let ran = false;
   const opts = (stack: string) => ({
