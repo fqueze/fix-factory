@@ -83,6 +83,7 @@ export interface StreamSummary {
   done: boolean; // the result line was seen
   sessionId?: string;
   report?: unknown; // structured_output
+  lastReportAttempt?: Record<string, unknown>; // the input of its last StructuredOutput call, which the tool may have refused
   resultText?: string;
   // total_cost_usd. After a --resume, claude reports the cost of the whole session so far (checked on
   // stream-json-haiku-resume.jsonl), so subtract the previous runs' cost to get this run's.
@@ -99,6 +100,7 @@ interface ContentBlock {
   type?: string;
   name?: string;
   text?: string;
+  input?: unknown;
 }
 
 export function parseStreamJson(text: string): StreamSummary {
@@ -121,6 +123,7 @@ export function parseStreamJson(text: string): StreamSummary {
       const content: ContentBlock[] = Array.isArray(msg.message?.content) ? msg.message.content : [];
       for (const block of content) {
         if (block.type === "tool_use" && typeof block.name === "string") {
+          if (block.name === "StructuredOutput" && typeof block.input === "object" && block.input !== null) out.lastReportAttempt = block.input as Record<string, unknown>;
           out.toolUses.count++;
           out.toolUses.byName[block.name] = (out.toolUses.byName[block.name] ?? 0) + 1;
         } else if (block.type === "text" && typeof block.text === "string" && block.text.trim() && !msg.parent_tool_use_id) {
@@ -301,4 +304,31 @@ export function appendFeedback(stateDir: string, jobId: JobId, feedback: Feedbac
 // "-build-worktrees-test-2-conformance2--extensions--x").
 export function transcriptPath(homeDir: string, cwd: string, sessionId: string): string {
   return join(homeDir, ".claude", "projects", cwd.replace(/[^A-Za-z0-9]/g, "-"), `${sessionId}.jsonl`);
+}
+
+// A tool call whose string parameter swallowed the parameters after it, as Haiku writes one when the string holds JSON:
+// `"quote": "…</quote>\n<parameter name=\"feedback\">[]"`. Each swallowed one is read back (JSON when it parses), the
+// string cut where it ended. Undefined when there was nothing to repair.
+export function repairSwallowedParameters(input: Record<string, unknown>): Record<string, unknown> | undefined {
+  let changed = false;
+  const out: Record<string, unknown> = { ...input };
+  for (const [key, value] of Object.entries(input)) {
+    if (typeof value !== "string") continue;
+    const end = value.indexOf(`</${key}>`);
+    if (end < 0) continue;
+    const rest = value.slice(end + key.length + 3);
+    const params = [...rest.matchAll(/<parameter name="([^"]+)">([\s\S]*?)(?:<\/parameter>|(?=<parameter name=)|$)/g)];
+    if (!params.length) continue;
+    out[key] = value.slice(0, end);
+    for (const [, name, raw] of params) {
+      if (name in input) continue;
+      try {
+        out[name] = JSON.parse(raw.trim());
+      } catch {
+        out[name] = raw.trim();
+      }
+    }
+    changed = true;
+  }
+  return changed ? out : undefined;
 }

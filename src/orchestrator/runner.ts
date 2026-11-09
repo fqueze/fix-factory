@@ -4,7 +4,7 @@
 import { spawnSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { appendFeedback, buildAgentCommand, parseStreamJson, promptVersion, renderPrompt, validateReport, type JsonSchema } from "../agents/run.ts";
+import { appendFeedback, buildAgentCommand, parseStreamJson, promptVersion, repairSwallowedParameters, renderPrompt, validateReport, type JsonSchema } from "../agents/run.ts";
 import { appendCommand } from "../state/commands.ts";
 import type { EventInput } from "../state/events.ts";
 import { appendEventSafe } from "./event-data.ts";
@@ -162,6 +162,9 @@ export function finishJob(deps: RunnerDeps, s: RequestState, view: View, rec: Jo
       // Jobs started before schema.json was saved have only the current one.
       const saved = join(jobDir(config.stateDir, rec.job), "schema.json");
       const schema = JSON.parse(readFileSync(existsSync(saved) ? saved : join(deps.factoryRoot, "schemas", `${rec.name}.json`), "utf8")) as JsonSchema;
+      // A report the tool refused because Haiku's call swallowed parameters into a string: repaired, it may be valid.
+      const repaired = summary.report === undefined && summary.lastReportAttempt ? repairSwallowedParameters(summary.lastReportAttempt) : undefined;
+      if (repaired && validateReport(schema, repaired).length === 0) summary.report = repaired;
       const problems = summary.report === undefined ? ["$: no structured_output"] : validateReport(schema, summary.report);
       if (problems.length > 0) error = `invalid report: ${problems.join("; ")}`.slice(0, 1500);
     }

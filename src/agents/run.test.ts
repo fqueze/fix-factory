@@ -14,6 +14,7 @@ import {
   transcriptPath,
   validateReport,
   type JsonSchema,
+  repairSwallowedParameters,
 } from "./run.ts";
 
 const fixture = (name: string) => readFileSync(fileURLToPath(new URL(`../../test/fixtures/agents/${name}`, import.meta.url)), "utf8");
@@ -205,4 +206,11 @@ test("streamSteps lists tool calls in short form, in order, subagent steps marke
     { tool: "Edit", text: "/build/worktrees/spinner/browser/base/content/test/tabs/browser_tabSpinner.js" },
   ]);
   assert.deepEqual(streamSteps(fixture("stream-json-haiku.jsonl")), [{ tool: "StructuredOutput", text: "the report" }]);
+});
+
+test("repairSwallowedParameters reads back the parameters Haiku's call swallowed into a string", () => {
+  // As the prior-art-verdict agent wrote it, its quote JSON copied from the facts.
+  const input = { verdict: "reuse", bug: 2011566, quote: '{"id":2011566,"status":"NEW"}</quote>\n<parameter name="feedback">[{"target":"inputs","text":"t"}]' };
+  assert.deepEqual(repairSwallowedParameters(input), { verdict: "reuse", bug: 2011566, quote: '{"id":2011566,"status":"NEW"}', feedback: [{ target: "inputs", text: "t" }] });
+  assert.equal(repairSwallowedParameters({ verdict: "none", quote: "assigned to X", feedback: [] }), undefined, "nothing to repair");
 });
