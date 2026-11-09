@@ -3703,6 +3703,24 @@ describe("10. landing", () => {
   });
 });
 
+describe("10. landing: adapting a soft dependency", () => {
+  it("refuses a branch whose commits an agent reordered: each patch would take the other's revision", () => {
+    const sc = inReview();
+    const [d100, d101] = polled("accepted");
+    sc.complete("poll:0", { output: [{ ...d100, status: "needs-review", reviewers: [{ name: "smaug", status: "pending" }] }, d101] });
+    sc.settle();
+    const key = sc.view().jobs.find((j) => j.purpose.key.startsWith("order-landable:"))!.purpose.key;
+    sc.complete(key, { output: { order: ["p-test-a", "p-test-b"], flippedSoftDeps: [{ patch: "p-test-b", needs: "p-test-a", kind: "soft", reason: "shares a helper", source: "agent" }], landable: ["p-test-a"] } });
+    const [rewrite] = sc.settle();
+    sc.complete(rewrite, { output: { mapping: { [sha("f")]: sha("5"), [sha("e")]: sha("6") } } });
+    const [adapt] = sc.settle();
+    sc.complete(adapt, { report: { state: "adapted", commits: [sha("4"), sha("5")], summary: "swapped them back", feedback: [] } });
+    const [refresh] = sc.settle();
+    const [a, b] = ["p-test-a", "p-test-b"].map((pid) => sc.state().patches[pid].title);
+    assert.throws(() => sc.complete(refresh, { output: [{ ...imported(sha("4"), b, [], 22)[0] }, { ...imported(sha("5"), a, [], 999)[0] }] }), /isn't|aren't in the stack's order/);
+  });
+});
+
 describe("10. landing: the reorg flag", () => {
   const accepted = () => {
     const sc = inReview();

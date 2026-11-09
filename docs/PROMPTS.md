@@ -186,7 +186,7 @@ The reviewer left comments on your patch {revision}; they are in {commentsFile}.
 haiku · 10. Landing · inputs: `patchA`, `patchB`, `reason`
 
 ```
-Patches {patchA} and {patchB} swapped order, and the soft dependency between them says: {reason}. Adjust both patches so each is correct in the new order and the end result after both is unchanged, the way you'd resolve a rebase conflict. Change nothing else.
+Patches {patchA} and {patchB} swapped order, and the soft dependency between them says: {reason}. Adjust both patches so each is correct in the new order and the end result after both is unchanged, the way you'd resolve a rebase conflict. Change nothing else: keep both commits, in their new order, with their messages; never reorder, squash or drop them. If nothing needs to change, leave them as they are.
 ```
 
 ## recover

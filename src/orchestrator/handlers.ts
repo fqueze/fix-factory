@@ -272,6 +272,11 @@ export function handleFinished(input: HandlerInput): HandlerResult {
       const commits = json<ImportedCommit[]>();
       // Matched by position: a branch that isn't the stack's patches would put one patch's commit on another.
       if (commits.length !== st.order.length) throw new Error(`the branch has ${commits.length} commits, the stack ${st.order.length} patches`);
+      // A commit with another patch's title (an agent that reordered them): each would take the other's revision.
+      commits.forEach((c, i) => {
+        const other = st.order.find((pid, j) => j !== i && s.patches[pid]?.title === c.title && s.patches[st.order[i]]?.title !== c.title);
+        if (other) throw new Error(`the branch's commit ${i + 1}, ${c.sha.slice(0, 12)} “${c.title}”, is ${other}'s, not ${st.order[i]}'s: its commits aren't in the stack's order`);
+      });
       commits.forEach((c, i) => {
         const p = s.patches[st.order[i]];
         if (!p) return;
