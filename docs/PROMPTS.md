@@ -87,7 +87,7 @@ When the messages don't tell, look at the failed jobs: their logs under {logsDir
 haiku · 3. Work list · inputs: `test`, `facts`
 
 ```
-Facts about existing bugs and revisions for {test}: {facts}. Someone is actively working on it only if a revision is in review or was updated in the last 30 days, or the bug is assigned to a person who commented in the last 30 days; bot comments and automated changes never count. Otherwise, say whether there's an open bug we should reuse, or neither. Give the bug your verdict is about, and quote the fact it rests on.
+Facts about existing bugs and revisions for {test}: {facts}. Someone is actively working on it only if a revision is in review or was updated in the last 30 days, or the bug is assigned to a person who commented in the last 30 days; bot comments and automated changes never count. Otherwise, say whether there's an open bug we should reuse, or neither. Give the bug your verdict is about, and the fact it rests on in a few words of plain text ("assigned to X, who commented on 2026-10-30"), not JSON copied from the facts.
 ```
 
 ## investigate-and-fix

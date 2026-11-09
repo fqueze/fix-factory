@@ -16,7 +16,7 @@
     },
     "quote": {
       "type": "string",
-      "description": "The fact the verdict rests on."
+      "description": "The fact the verdict rests on, in a few words of plain text (\"assigned to X, who commented on 2026-10-30\"): not JSON, not the facts copied."
     },
     "feedback": {
       "type": "array",
