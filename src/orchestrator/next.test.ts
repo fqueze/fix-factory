@@ -2070,6 +2070,37 @@ describe("6. verify on try, early then final", () => {
   });
 });
 
+describe("6. verify on try, an author's answer", () => {
+  it("the final run's triage reads what an author answered about a failure the early one pinned on its patch", () => {
+    const sc = stacked();
+    const planKey = sc.view().jobs.find((j) => j.purpose.what === "plan-pushes")!.purpose.key;
+    sc.complete(planKey, { report: { pushes: [{ purpose: "verify", tryArgs: ["fuzzy", "-q", "x"], rebuild: 5 }], feedback: [] } });
+    const [dry] = sc.settle();
+    const push = sc.purpose(dry).push!;
+    sc.complete(dry, { output: { command: ["./mach", "try", "fuzzy"], taskCount: 5, tasks: [], tryTaskConfig: {}, commits: [], warnings: [] } });
+    sc.add({ type: "user-done", request: ID, key: `approve-push:${push}` });
+    sc.add({ type: "try-pushed", request: ID, push, rev: "fed", url: "u" });
+    sc.add({ type: "try-progress", request: ID, push, done: 2, total: 9, failures: 1, tests: { done: 3, total: 5 } });
+    sc.settle();
+    const z = { test: "z/test_z.js", config: "linux", result: "fail", failures: ["zap"], taskIds: ["T2"] };
+    sc.complete(`try-table:${push}:early`, { output: table([z]) });
+    sc.settle();
+    sc.complete(`triage:${push}:early:v2`, { report: { cells: [{ test: "z/test_z.js", config: "linux", verdict: "broken by patch", patch: "p-test-b", evidence: "same group" }], feedback: [] } });
+    assert.deepEqual(sc.settle(), [`author:i-test-b:try:${push}`]);
+    const b = sc.view().jobs.findLast((j) => j.purpose.key.startsWith("author:i-test-b:") && j.end)!;
+    sc.complete(`author:i-test-b:try:${push}`, { report: fixed(commitsOf(b.name, sc.reports.get(b.job)), { disagreement: "Not mine: test_z leaves its state set." }) });
+    sc.add({ type: "try-finished", request: ID, push, result: "failures", summary: "s" });
+    sc.settle();
+    sc.complete(`try-table:${push}:final`, { output: table([z]) });
+    const key = sc.settle().find((k) => k.startsWith(`triage:${push}:final:v2:said-`))!;
+    assert.deepEqual(JSON.parse(sc.plan(key).files![0].content).authorsSaid, [{ test: "z/test_z.js", patches: ["p-test-b"], said: "Not mine: test_z leaves its state set." }]);
+    // Not its patch's: a group of its own.
+    sc.complete(key, { report: { cells: [{ test: "z/test_z.js", config: "linux", verdict: "still failing", evidence: "test_z leaves its state set" }], feedback: [] } });
+    sc.settle();
+    assert.ok(Object.values(sc.state().items).some((i) => i.group.tests.includes("z/test_z.js")));
+  });
+});
+
 function verified(reportA?: object): Scenario {
   const sc = stacked(reportA);
   const planKey = sc.view().jobs.find((j) => j.purpose.what === "plan-pushes")!.purpose.key;

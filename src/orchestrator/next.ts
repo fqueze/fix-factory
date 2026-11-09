@@ -2435,6 +2435,8 @@ class Planner {
       const early = run.startsWith("final") ? this.view.byKey.get(`try-table:${push}:${run.replace(/^final/, "early")}`)?.find(succeeded) : undefined;
       const told = new Set(early ? this.out<TryTable>(early).rows.filter((r) => r.result === "fail").map((r) => `${r.test} ${r.config}`) : []);
       let authorsOwn = false;
+      // What authors answered about failures pinned on their patches: the final run's triage reads it.
+      const said: { test: string; item: ItemId; said: string }[] = [];
       for (const [item, rows] of byItem) {
         const fresh = rows.filter((r) => !told.has(`${r.test} ${r.config}`));
         if (fresh.length) this.routeToAuthor(item, push, fresh.map(line), early ? ":final" : "");
@@ -2442,8 +2444,10 @@ class Planner {
         let disowned = false;
         for (const suffix of ["", ":final"]) {
           const r = this.view.byKey.get(`author:${item}${this.itemEpoch(item)}:try:${push}${suffix}`)?.find(succeeded);
-          if (r && this.rep<{ disagreement?: string }>(r).disagreement) {
+          const disagreement = r && this.rep<{ disagreement?: string }>(r).disagreement;
+          if (disagreement) {
             unmatched.push(...rows.filter((x) => !unmatched.includes(x)));
+            for (const x of rows) said.push({ test: x.test, item, said: disagreement });
             rejected = true;
             disowned = true;
           }
@@ -2459,12 +2463,23 @@ class Planner {
         continue;
       }
       const file = dataPath(this.config, this.s.id, `triage-${push}-${run}.json`);
-      // Rows an author handed back come after the first triage of the run: a triage of their own.
+      if (final) {
+        const early = this.view.byKey.get(`triage:${push}:${run.replace(/^final/, "early")}:v2`)?.find(succeeded);
+        for (const c of early ? this.rep<TriageTryReport>(early).cells : []) {
+          const item = c.verdict === "broken by patch" && c.patch ? (this.s.patches[c.patch] ?? this.patchBySha(c.patch))?.item : undefined;
+          const a = item && this.view.byKey.get(`author:${item}${this.itemEpoch(item)}:try:${push}`)?.find(succeeded);
+          const disagreement = a && this.rep<{ disagreement?: string }>(a).disagreement;
+          if (item && c.test && disagreement && !said.some((x) => x.test === c.test && x.item === item)) said.push({ test: c.test, item, said: disagreement });
+        }
+      }
+      // Rows an author handed back come after the first triage of the run: a triage of their own. So does an author's
+      // answer about a failure the early run's triage pinned on its patch.
       // v2: with the stack's patches, and pre-existing only when shown on central.
-      const key = rejected ? `triage:${push}:${run}:v2:${shortHash(unmatched.map((r) => `${r.test} ${r.config}`)).slice(0, 6)}` : `triage:${push}:${run}:v2`;
+      const key = `triage:${push}:${run}:v2${rejected ? `:${shortHash(unmatched.map((r) => `${r.test} ${r.config}`)).slice(0, 6)}` : ""}${said.length ? `:said-${shortHash(said.map((x) => `${x.test} ${x.item} ${x.said}`)).slice(0, 6)}` : ""}`;
+      const authorsSaid = said.map((x) => ({ test: x.test, patches: patches.filter((q) => q.item === x.item).map((q) => q.id), said: x.said }));
       const triage = this.wantAgent(key, "triage", "triage-try", { rev: p.rev!, goal: p.purpose || "verify the stack", tableFile: file, logsDir: artifactsDir(this.config) }, {
         purpose: { push },
-        files: [{ path: file, content: JSON.stringify({ rev: p.rev, patches: patches.map((x) => ({ id: x.id, sha: x.sha, title: x.title, files: this.patchFiles(x) })), rows: unmatched, unparsed: t.unparsed }, null, 2) + "\n" }],
+        files: [{ path: file, content: JSON.stringify({ rev: p.rev, patches: patches.map((x) => ({ id: x.id, sha: x.sha, title: x.title, files: this.patchFiles(x) })), rows: unmatched, unparsed: t.unparsed, ...(authorsSaid.length ? { authorsSaid } : {}) }, null, 2) + "\n" }],
       });
       if (!triage) continue;
       const report = this.rep<TriageTryReport>(triage);
@@ -2506,7 +2521,7 @@ class Planner {
   // Whether an author run left its commits as its previous run had them.
   // An author run that changed its commits ended after the push was made.
   private changedSince(item: ItemId, push: PushId): boolean {
-    const at = this.view.byKey.get(`dry-run:${push}`)?.find(succeeded)?.end?.at;
+    const at = this.view.pushedAt.get(push);
     return at !== undefined && this.authorJobs(item).filter(succeeded).some((j) => j.end!.at > at && commitsOf(j.name, this.rep(j)).length > 0 && !this.unchangedBy(item, j));
   }
 
