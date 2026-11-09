@@ -1176,11 +1176,17 @@ class Planner {
       const before = fixed.length
         ? ` This test already has a fix for another failure (${fixed.map((j) => `"${this.s.items[j!.item!].group.message}": the commits beyond origin/main in ${j!.cwd}`).join("; ")}). First check whether it fixes this failure too; if it does, change nothing and report "left as-is", saying so.`
         : "";
+      // The push's own commits (the jobs and harness changes it tests), which authors apply to run tests as it did.
+      const pushCommits = this.tryWithBranch();
+      if (pushCommits === null) return;
+      const withPush = pushCommits
+        ? ` The failures come from a try push whose own commits (the jobs and harness changes it tests) aren't in your tree: they're branch ${pushCommits.branch} (\`git log ${this.config.baseRef}..${pushCommits.branch}\`). To run the tests as that push did, apply them uncommitted, \`git diff ${this.config.baseRef} ${pushCommits.branch} | git apply\`, and take them out (\`git diff ${this.config.baseRef} ${pushCommits.branch} | git apply -R\`) before you commit: they are never part of your fix.`
+        : "";
       this.want(`${prefix}:initial`, () =>
         this.agent(
           "author",
           "investigate-and-fix",
-          { test: tests, worktree: path, failureSummary: `"${item.group.message}" on ${item.group.configs.length} configs${rate}; the full group, with its configs and task ids, is in ${groupFile}.${reuse}${before}`, request: this.s.text.trim() },
+          { test: tests, worktree: path, failureSummary: `"${item.group.message}" on ${item.group.configs.length} configs${rate}; the full group, with its configs and task ids, is in ${groupFile}.${reuse}${before}${withPush}`, request: this.s.text.trim() },
           {
             key: `${prefix}:initial`,
             item: item.id,
@@ -2146,15 +2152,22 @@ class Planner {
 
   // Like the stack's assembly: a conflict goes to resolve-conflict, then the rest is assembled. One it can't resolve
   // (the approach doesn't fit) asks you on the group's row, and the push waits.
+  // The commits of the try push the request was asked with (config tryWith), imported once as a branch: undefined
+  // without one, null while it's imported.
+  private tryWithBranch(): { branch: string; shas: string[] } | undefined | null {
+    const tryWith = typeof this.s.config.tryWith === "string" ? this.s.config.tryWith : undefined;
+    if (!tryWith) return undefined;
+    const imported = this.want(`try-with:${tryWith}`, () => this.cli("try-with", "try.ts", ["import-push", tryWith, "--cwd", this.config.firefoxRepo, "--base", this.config.baseRef, "--branch", `${this.s.id}-try-with`], { cwd: this.config.firefoxRepo }));
+    return imported ? this.out<{ branch: string; shas: string[] }>(imported) : null;
+  }
+
   private tryBranch(info: StackInfo, base: string, e: string): { branch: string } | undefined {
     const groups = this.debugGroups();
     // A try push whose own commits the fixes need (the jobs they add): on top of the stack, in every push of it.
-    const tryWith = typeof this.s.config.tryWith === "string" ? this.s.config.tryWith : undefined;
-    const imported = tryWith
-      ? this.want(`try-with:${tryWith}`, () => this.cli("try-with", "try.ts", ["import-push", tryWith, "--cwd", this.config.firefoxRepo, "--base", this.config.baseRef, "--branch", `${this.s.id}-try-with`], { cwd: this.config.firefoxRepo }))
-      : undefined;
-    if (tryWith && !imported) return undefined;
-    const withShas = imported ? this.out<{ shas: string[] }>(imported).shas : [];
+    const pushCommits = this.tryWithBranch();
+    if (pushCommits === null) return undefined;
+    const tryWith = this.s.config.tryWith as string | undefined;
+    const withShas = pushCommits?.shas ?? [];
     if (!groups.length && !withShas.length) return { branch: base };
     const shas = [...groups.flatMap((g) => g.commits), ...withShas];
     const h = shortHash([info.hash, e, ...shas]).slice(0, 6);

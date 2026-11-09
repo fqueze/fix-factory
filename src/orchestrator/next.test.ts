@@ -2853,6 +2853,18 @@ describe("10. backouts", () => {
   });
 });
 
+describe("4. a request pushed with a try push's commits", () => {
+  it("gives its authors those commits to apply uncommitted, to run their tests as that push did", () => {
+    const sc = workList([group("ka", "a/test_a.js", "boom")]);
+    sc.add({ type: "config-set", request: ID, config: { tryWith: "164da8583219" } });
+    investigating(sc, "i-test-a");
+    assert.ok(!sc.view().byKey.has("author:i-test-a:initial"), "not before they're imported");
+    sc.complete("try-with:164da8583219", { output: { branch: `${ID}-try-with`, shas: [sha("7")] } });
+    sc.settle();
+    assert.match(String(sc.plan("author:i-test-a:initial").agent?.vars?.failureSummary), new RegExp(`git diff origin/main ${ID}-try-with \\| git apply\\b`));
+  });
+});
+
 describe("4. a fix for a failure only try shows", () => {
   it("is reported as a fix for the stack's try push, not as not reproduced", () => {
     const sc = workList([group("ka", "a/test_a.js", "boom")]);
