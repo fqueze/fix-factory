@@ -1950,8 +1950,9 @@ class Planner {
 
   // The ids of the verification pushes of the stack's current code.
   private verifyPrefix(info: StackInfo, ask?: Ask): string {
-    // The DEBUG commits on top are part of what's pushed (none: the same ids as before them).
-    const debug = this.debugGroups().flatMap((g) => g.commits);
+    // The DEBUG commits on top are part of what's pushed (none: the same ids as before them), and a try push's commits.
+    const tryWith = typeof this.s.config.tryWith === "string" ? [`with:${this.s.config.tryWith}`] : [];
+    const debug = [...this.debugGroups().flatMap((g) => g.commits), ...tryWith];
     if (ask) return `${info.id}-ask${ask.n}-${shortHash([info.code, ...debug]).slice(0, 4)}`;
     return `${info.id}-${shortHash([info.code, this.stepEpoch("verify on try"), ...debug]).slice(0, 4)}`;
   }

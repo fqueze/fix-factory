@@ -1371,6 +1371,12 @@ describe("4b. try repro", () => {
     sc.settle();
     const planKey = sc.view().jobs.find((j) => j.purpose.what === "plan-pushes")!.purpose.key;
     assert.equal(sc.plan(planKey).agent?.vars?.branch, `${ID}-root-try-${tb.split(":")[2]}`);
+    // Its pushes have ids of their own: not those of a plan made without them.
+    const without = stacked();
+    const withoutKey = without.view().jobs.find((j) => j.purpose.what === "plan-pushes")!.purpose.key;
+    for (const s of [sc, without]) s.complete(s === sc ? planKey : withoutKey, { report: { pushes: [{ purpose: "p", tryArgs: ["fuzzy", "-q", "x"], rebuild: 1 }], feedback: [] } });
+    const ids = [sc, without].map((s) => s.purpose(s.settle().find((k) => k.startsWith("dry-run:"))!).push);
+    assert.notEqual(ids[0], ids[1]);
   });
 
   it("puts a waiting group's DEBUG commits on top of the stack's verify push, then gives its author the results", () => {
