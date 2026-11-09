@@ -1581,7 +1581,7 @@ describe("5. stack", () => {
     const [ord] = sc.settle();
     assert.match(ord, new RegExp(`^order:root:${hash}:[0-9a-f]{6}$`));
     const input = JSON.parse(sc.plan(ord).files![0].content);
-    assert.deepEqual(input.patches, [{ id: "p-test-a", effort: 2, value: 3, testOnly: true, accepted: false, commentsAddressed: true }, { id: "p-test-b", effort: 1, value: 1, testOnly: true, accepted: false, commentsAddressed: true }]);
+    assert.deepEqual(input.patches, [{ id: "p-test-a", effort: 2, value: 3, testOnly: true, fix: "i-test-a", accepted: false, commentsAddressed: true }, { id: "p-test-b", effort: 1, value: 1, testOnly: true, fix: "i-test-b", accepted: false, commentsAddressed: true }]);
     sc.complete(ord, { output: { order: ["p-test-b", "p-test-a"], flippedSoftDeps: [] } });
     assert.deepEqual(sc.settle(), [`re${ord}`]);
     assert.deepEqual(sc.plan(`re${ord}`).cli?.args.slice(-2), ["--order", `${sha("b")},${sha("a")}`]);
