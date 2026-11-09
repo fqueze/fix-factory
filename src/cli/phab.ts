@@ -23,7 +23,7 @@
 // Token: ~/.arcrc. Suggested edits come from transaction.search, which now exposes hasSuggestion and
 // suggestionText, so the changeset AJAX scraping of phab-suggestions.py is no longer needed.
 
-import { request } from "node:https";
+import { spawn } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
@@ -50,21 +50,26 @@ export function arcToken(arcrc = join(homedir(), ".arcrc")): string {
   return token;
 }
 
-// Phabricator answers 429 to Node's fetch (its headers or fingerprint), whatever the token, and not to a plain request.
-const httpsFetch = ((url: string, init: RequestInit) =>
+// Phabricator answers 429 to Node's own requests (fetch, then https too: its TLS connection), whatever the token, and
+// not to curl's. The body goes on stdin: the token stays out of the process list.
+const curlFetch = ((url: string, init: RequestInit) =>
   new Promise<Response>((resolve, reject) => {
-    const body = String(init.body);
-    const req = request(url, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded", "content-length": Buffer.byteLength(body) } }, (res) => {
-      const chunks: Buffer[] = [];
-      res.on("data", (c: Buffer) => chunks.push(c));
-      res.on("end", () => resolve(new Response(Buffer.concat(chunks), { status: res.statusCode })));
-      res.on("error", reject);
+    const curl = spawn("curl", ["-sS", "--data-binary", "@-", "-H", "content-type: application/x-www-form-urlencoded", "-w", "\n%{http_code}", url]);
+    const out: Buffer[] = [];
+    const err: Buffer[] = [];
+    curl.stdout.on("data", (c: Buffer) => out.push(c));
+    curl.stderr.on("data", (c: Buffer) => err.push(c));
+    curl.on("error", reject);
+    curl.on("close", (code) => {
+      if (code !== 0) return reject(new Error(`curl: ${Buffer.concat(err).toString().trim() || `exit ${code}`}`));
+      const text = Buffer.concat(out).toString();
+      const nl = text.lastIndexOf("\n");
+      resolve(new Response(text.slice(0, nl), { status: Number(text.slice(nl + 1)) }));
     });
-    req.on("error", reject);
-    req.end(body);
+    curl.stdin.end(String(init.body));
   })) as typeof fetch;
 
-export function makeConduit(fetchFn: typeof fetch = httpsFetch, getToken: () => string = () => arcToken()): Conduit {
+export function makeConduit(fetchFn: typeof fetch = curlFetch, getToken: () => string = () => arcToken()): Conduit {
   let token: string | undefined;
   return async (method, params) => {
     token ??= getToken();
