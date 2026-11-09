@@ -448,14 +448,21 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.doesNotMatch(row, />(Dismiss|Close)</);
   });
 
-  it("asks a flagged group's question once when it has two patches", () => {
+  it("shows a fix of two patches as one row, a line per patch in sight, its question asked once", () => {
     const T = "r-20261013-tab-failures";
     const r = structuredClone(get(T));
-    r.patches["p-close2"] = { ...r.patches["p-close"], id: "p-close2", sha: "e".repeat(40) };
+    r.patches["p-close2"] = { ...r.patches["p-close"], id: "p-close2", sha: "e".repeat(40), title: "Bug 2 - Second part, r=dao." };
+    const st = Object.values(r.stacks).find((x) => x.order.includes("p-close"));
+    if (st) st.order.splice(st.order.indexOf("p-close") + 1, 0, "p-close2");
     r.needsUser.push({ key: "note:close", action: "Something odd", detail: "look at it", item: "i-close", since: r.createdAt });
     const h = renderRequest(r, ctx, true).value;
-    assert.match(rowOf(h, "patch-p-close"), /<div class="ask-you"><div class="md"><p>look at it<\/p><\/div>/);
-    assert.doesNotMatch(rowOf(h, "patch-p-close2"), /ask-you/);
+    const fix = rowOf(h, "fix-i-close");
+    assert.match(fix, /<span class="sub">· 2 patches<\/span>/);
+    const summary = fix.slice(0, fix.indexOf("</summary>"));
+    assert.match(summary, /<span class="patchline" id="patch-p-close2" data-patch="p-close2">[^]*Second part/, "each patch on a line, unopened");
+    assert.match(summary, /<span class="patchline" id="patch-p-close" data-patch="p-close">/);
+    assert.equal(h.split('<div class="ask-you">').length - 1 - (renderRequest(get(T), ctx, true).value.split('<div class="ask-you">').length - 1), 1, "its question once");
+    assert.doesNotMatch(h, /<details class="row[^"]*" id="patch-p-close/, "no row of their own");
   });
 
   it("asks you when its author disagrees with your message, with Tell it again, Go ahead and Drop", () => {

@@ -279,11 +279,12 @@ function stackSection(r: RequestState, s: StackView, ctx: RenderContext, header:
   return html`${header ? html`<h3 class="stackhead"><span title="Branch ${s.branch}; as on Phabricator, its top first: in review order from the bottom up, easy and valuable first, each after its hard deps">${title}</span>${stackViewerLink(r, s)}${stackMenu(r, s, ctx)}</h3>` : null}
     ${r.needsUser.filter((n) => flagItemOf(r, n) === undefined && n.patch === undefined && n.stack === s.id && flagPlaceOf(r, n) !== undefined).map((n) => renderAction(r, n, ctx))}
     ${optionalMetaBug(r, s, ctx)}
-    <div class="rows">${patches
-      .filter((p) => !isDropped(r, p))
+    <div class="rows">${patchRows(
+      r,
       // As Phabricator lists a stack: its top (last commit) first.
-      .reverse()
-      .map((p) => patchRow(r, p, ctx))}${
+      patches.filter((p) => !isDropped(r, p)).reverse(),
+      ctx,
+    )}${
       dropped.length ? html`<details class="fold" data-fold="dropped-${s.id}"><summary>${dropped.length} dropped</summary><div class="rows">${dropped.map((p) => patchRow(r, p, ctx))}</div></details>` : null
     }</div>
     ${header ? stackSubmit(r, s, ctx, submitted) : null}`;
@@ -341,6 +342,7 @@ interface Row {
   title: string;
   end: Html | null;
   state: Html;
+  patches?: Html; // a fix of several patches: a line per patch, in sight
   trust?: Html | null; // the evidence and reproduction behind it, once opened
   flag?: Html | null; // what it waits for you to do on Phabricator, with its buttons, on a line of its own
   warn?: Html | null; // what you should know before answering, under its state
@@ -355,10 +357,10 @@ interface Row {
 // Opened, the box under its name comes first in the body (clicking in it mustn't fold the row), styled as hanging
 // from its label; its state and trust lines then move under the box.
 function row(x: Row): Html {
-  const lines = html`<span class="state">${x.state}</span>${x.flag ? html`<span class="rowflag">${x.flag}</span>` : null}${x.trust ? html`<span class="trust">${x.trust}</span>` : null}`;
+  const lines = html`<span class="state">${x.state}</span>${x.patches ? html`<span class="patchlines">${x.patches}</span>` : null}${x.flag ? html`<span class="rowflag">${x.flag}</span>` : null}${x.trust ? html`<span class="trust">${x.trust}</span>` : null}`;
   const d = html`<details class="row${x.you ? " you" : null}${x.bucket ? ` b-${x.bucket.replaceAll(" ", "-")}` : null}" ${x.anchor} data-fold="${x.fold}"><summary><span class="st ${x.cls}" title="${x.tip ?? ICON_TIPS[x.cls]}"></span><span class="name" title="${x.title}">${x.name}</span><span class="end">${x.end}</span>${lines}${
     x.warn ? html`<span class="warn">${x.warn}</span>` : null
-  }</summary>${x.under ? html`<div class="under">${x.under}<div class="lines">${lines}</div></div>` : null}<div class="rowbody">${
+  }</summary>${x.under ? html`<div class="under">${x.under}<div class="lines">${raw(lines.value.replace(/ id="patch-[^"]*"/g, ""))}</div></div>` : null}<div class="rowbody">${
     typeof x.body === "function" ? (x.lazy ? foldContent(x.lazy.r, x.lazy.ctx, x.fold, x.body) : x.body()) : x.body
   }</div></details>`;
   return x.ask ? html`<div class="asks">${d}<div class="ask-you">${x.ask}</div></div>` : d;
@@ -418,7 +420,7 @@ function itemRows(r: RequestState, i: ItemView, ctx: RenderContext): Html {
   const stacked = new Set(Object.values(r.stacks).flatMap((s) => s.order));
   const own = Object.values(r.patches).filter((p) => p.item === i.id && !isDraft(r, p) && !isDropped(r, p));
   const live = own.some((p) => stacked.has(p.id)) ? own.filter((p) => stacked.has(p.id)) : own;
-  return live.length ? html`${live.map((p) => patchRow(r, p, ctx))}` : groupRow(r, i, ctx);
+  return live.length ? patchRows(r, live, ctx) : groupRow(r, i, ctx);
 }
 
 function itemCost(r: RequestState, i: ItemView): number {
@@ -601,65 +603,148 @@ export function configTable(configs: string[]): Html {
   })}</tbody></table>` : null}${others.length ? html`<div class="sub">${others.join(", ")}</div>` : null}`;
 }
 
-function patchRow(r: RequestState, p: PatchView, ctx: RenderContext): Html {
+// What a patch shows of itself, whether alone on its row or as a line of its fix's row.
+function patchParts(r: RequestState, p: PatchView, ctx: RenderContext) {
   const back = requestUrl(r.id);
   const item = itemOf(r, p);
-  const sentence = item ? itemSentence(r, item, ctx) : undefined;
   const landable = isLandable(r, p);
-  // Groups whose own fix was dropped because this patch fixes them too.
-  const covered = Object.values(r.items).filter((i) => i.coveredBy === p.id);
   // Patches sharing a bug draft have it filed once, from the first one's row.
   const first = sameBugDraft(r, p.id)[0];
   const bugBoxShown = !hasBug(p) && p.bugDraft !== undefined && first.id === p.id;
-  // A "file the bug" ⚑'s buttons are the bug box's.
-  const controls = bugBoxShown && r.needsUser.some((n) => n.patch === p.id && actionKind(n, r) === "file-bug") ? null : sentence?.controls;
-  // A group's question is asked once, on the row of its first patch.
-  // A blocked group's patch still in its stack counts: that row is the only one it has.
-  const stacked = new Set(Object.values(r.stacks).flatMap((st) => st.order));
-  const asks = item !== undefined && Object.values(r.patches).find((x) => x.item === item.id && (!isDraft(r, x) || stacked.has(x.id)) && !isDropped(r, x)) === p;
   // What it waits for you to do (resubmit after review fixes, file its bug…), said on the row; those about no group are
   // asked right under it.
   const yours = r.needsUser.filter((n) => n.patch === p.id);
   // Resubmitting or posting replies: a line of the row; anything else it asks, in the box under it.
   const onLine = (n: NeedsUser) => ["resubmit", "reply"].includes(actionKind(n, r));
   const own = yours.filter((n) => flagItemOf(r, n) === undefined && flagPlaceOf(r, n) !== undefined);
-  return row({
-    you: yours.length > 0 || (asks && item !== undefined && r.needsUser.some((n) => flagItemOf(r, n) === item.id)),
-    anchor: html`id="patch-${p.id}" data-patch="${p.id}"`,
-    fold: `patch-${p.id}`,
-    bucket: item ? (landable && itemBucket(r, item, ctx) === "ready" ? "landable" : itemBucket(r, item, ctx)) : landable ? "landable" : undefined,
-    cls: own.some((n) => actionKind(n, r) === "resubmit") ? "resubmit" : phabClass(p, item ? rowClass(r, item, ctx) : landable ? "ok" : "wait"),
-    tip: item && p.review?.status !== "abandoned" ? closedTip(r, item) : undefined,
+  return {
+    item,
+    landable,
+    bugBoxShown,
+    yours,
+    own,
+    onLine,
+    cls: own.some((n) => actionKind(n, r) === "resubmit") ? ("resubmit" as StateClass) : phabClass(p, item ? rowClass(r, item, ctx) : landable ? "ok" : "wait"),
     name: html`${p.revision ? html`<a class="phab" href="${phabUrl(p.revision)}" title="D${p.revision}" target="_blank" rel="noopener">${PHAB_ICON}</a>` : null}${
       first.id === p.id ? bugLabel(p, ctx) : html`<a class="bug tofile" href="#patch-${first.id}" title="Filed from ${first.title}">same bug</a>`
     } ${patchTitle(p)}`,
-    title: p.title,
-    end: html`${hoverInfo(r, p, item, ctx)}${viewLink(r, p)}${item ? costLabel(r, item, ctx) : null}`,
-    // "in the stack" says nothing a patch row in its stack's section doesn't.
-    // What matters most first (where its review stands, landable, what you need to do): a long list of tests is cut off.
-    state: html`${[
-      item ? (item.state === "in stack" || item.state === "landed" ? null : item.state === "waiting for review" && p.review ? html`${reviewText(p)}` : item.state === "waiting for review" && p.revision === undefined ? html`reviewed, not submitted yet` : html`${stateText(r, item, ctx)}`) : p.review ? html`${reviewText(p)}` : null,
+    end: html`${hoverInfo(r, p, item, ctx)}${viewLink(r, p)}`,
+    // Where its review stands, whether it can land, what you need to do about it.
+    status: [
+      p.review && (item?.state === "waiting for review" || !item) ? html`${reviewText(p)}` : null,
       landable ? html`<span class="landable">landable</span>` : null,
       backoutText(r, p),
       r.tryNeeded?.[p.id] && !r.tryNeeded[p.id].verified ? html`<span class="bad" title="Not landable yet: it was changed for ${r.tryNeeded[p.id].why}, and no green try push has carried that change since">needs a green try push</span>` : null,
       ...yours.filter((n) => !own.includes(n) || !onLine(n)).map((n) => html`<b class="you">${n.action}</b>`),
+    ].filter((x) => x !== null),
+    flag: own.some(onLine) ? html`${own.filter(onLine).map((n) => html`<span class="flagitem" data-key="${n.key}"><b>${n.action}</b>${n.detail ? html` <span class="sub">${n.detail}</span>` : null}${flagControls(r, n, ctx)}</span>`)}` : null,
+    rest: own.filter((n) => !onLine(n)).map((n) => renderAction(r, n, ctx)),
+    under: bugBoxShown ? bugDraftBox(r, p, back) : null,
+    body: () => html`${testPlanSection(r, p, back)}${yourComments(r, p)}${p.deps.map((d) => depLine(r, d))}${reviewBox(r, p, p.interdiffFile === undefined ? undefined : ctx.interdiff?.(p))}${leftFindings(r, p, ctx)}`,
+  };
+}
+
+function patchRow(r: RequestState, p: PatchView, ctx: RenderContext): Html {
+  const parts = patchParts(r, p, ctx);
+  const { item, landable } = parts;
+  const sentence = item ? itemSentence(r, item, ctx) : undefined;
+  // Groups whose own fix was dropped because this patch fixes them too.
+  const covered = Object.values(r.items).filter((i) => i.coveredBy === p.id);
+  // A "file the bug" ⚑'s buttons are the bug box's.
+  const controls = parts.bugBoxShown && r.needsUser.some((n) => n.patch === p.id && actionKind(n, r) === "file-bug") ? null : sentence?.controls;
+  // A group's question is asked once, on the row of its first patch.
+  // A blocked group's patch still in its stack counts: that row is the only one it has.
+  const stacked = new Set(Object.values(r.stacks).flatMap((st) => st.order));
+  const asks = item !== undefined && Object.values(r.patches).find((x) => x.item === item.id && (!isDraft(r, x) || stacked.has(x.id)) && !isDropped(r, x)) === p;
+  return row({
+    you: parts.yours.length > 0 || (asks && item !== undefined && r.needsUser.some((n) => flagItemOf(r, n) === item.id)),
+    anchor: html`id="patch-${p.id}" data-patch="${p.id}"`,
+    fold: `patch-${p.id}`,
+    bucket: item ? (landable && itemBucket(r, item, ctx) === "ready" ? "landable" : itemBucket(r, item, ctx)) : landable ? "landable" : undefined,
+    cls: parts.cls,
+    tip: item && p.review?.status !== "abandoned" ? closedTip(r, item) : undefined,
+    name: parts.name,
+    title: p.title,
+    end: html`${parts.end}${item ? costLabel(r, item, ctx) : null}`,
+    // "in the stack" says nothing a patch row in its stack's section doesn't.
+    // What matters most first (where its review stands, landable, what you need to do): a long list of tests is cut off.
+    state: html`${[
+      item ? (item.state === "in stack" || item.state === "landed" ? null : item.state === "waiting for review" && p.review ? null : item.state === "waiting for review" && p.revision === undefined ? html`reviewed, not submitted yet` : html`${stateText(r, item, ctx)}`) : null,
+      ...parts.status,
       item ? html`fixes <b>${groupLinks(r, item)}</b>${covered.length ? html` and <b>${join(covered.map((i) => groupLinks(r, i)), ", ")}</b>` : null}` : null,
     ]
       .filter((x) => x !== null)
       .map((x, i) => (i ? html` · ${x}` : x))}`,
     trust: item ? trustLine(r, item, ctx) : null,
-    flag: own.some(onLine) ? html`${own.filter(onLine).map((n) => html`<span class="flagitem" data-key="${n.key}"><b>${n.action}</b>${n.detail ? html` <span class="sub">${n.detail}</span>` : null}${flagControls(r, n, ctx)}</span>`)}` : null,
+    flag: parts.flag,
     ask: (() => {
       const group = item && asks ? askBlock(r, item, ctx, [], controls !== null) : undefined;
-      const rest = own.filter((n) => !onLine(n));
-      return group || rest.length ? html`${group}${rest.map((n) => renderAction(r, n, ctx))}` : undefined;
+      return group || parts.rest.length ? html`${group}${parts.rest}` : undefined;
     })(),
-    under: bugBoxShown ? bugDraftBox(r, p, back) : null,
+    under: parts.under,
     lazy: { r, ctx },
-    body: () => html`${item ? whyFold(r, item) : null}${testPlanSection(r, p, back)}${yourComments(r, p)}${p.deps.map((d) => depLine(r, d))}${controls && !sentence?.ask ? html`<div class="jobctl">${controls}</div>` : null}${reviewBox(r, p, p.interdiffFile === undefined ? undefined : ctx.interdiff?.(p))}${leftFindings(r, p, ctx)}${
+    body: () => html`${item ? whyFold(r, item) : null}${parts.body()}${controls && !sentence?.ask ? html`<div class="jobctl">${controls}</div>` : null}${
       item ? html`<h4 class="part">What the factory did</h4>${itemJobs(r, item, ctx)}${talkBox(r, item, ctx, p)}` : null
     }`,
   });
+}
+
+// A fix of several patches: one row, a line per patch (its icon, review, landable, what it waits for you to do) in sight,
+// what's the fix's (its state, evidence, question, agents) once.
+function fixRow(r: RequestState, ps: PatchView[], ctx: RenderContext): Html {
+  const item = itemOf(r, ps[0])!;
+  const parts = ps.map((p) => patchParts(r, p, ctx));
+  const sentence = itemSentence(r, item, ctx);
+  const covered = Object.values(r.items).filter((i) => ps.some((p) => i.coveredBy === p.id));
+  const landable = parts.every((x) => x.landable);
+  const lines = html`${ps.map(
+    (p, n) =>
+      html`<span class="patchline" id="patch-${p.id}" data-patch="${p.id}"><span class="st ${parts[n].cls}" title="${ICON_TIPS[parts[n].cls]}"></span><span class="pname" title="${p.title}">${parts[n].name}</span>${
+        parts[n].status.length ? html` <span class="sub">· ${join(parts[n].status, " · ")}</span>` : null
+      }<span class="end">${parts[n].end}</span>${parts[n].flag ? html`<span class="rowflag">${parts[n].flag}</span>` : null}</span>`,
+  )}`;
+  const controls = parts.some((x) => x.bugBoxShown) && r.needsUser.some((n) => ps.some((p) => n.patch === p.id) && actionKind(n, r) === "file-bug") ? null : sentence.controls;
+  return row({
+    you: parts.some((x) => x.yours.length > 0) || r.needsUser.some((n) => flagItemOf(r, n) === item.id),
+    anchor: html`id="fix-${item.id}" data-item="${item.id}"`,
+    fold: `fix-${item.id}`,
+    bucket: landable && itemBucket(r, item, ctx) === "ready" ? "landable" : itemBucket(r, item, ctx),
+    cls: rowClass(r, item, ctx),
+    tip: closedTip(r, item),
+    name: html`${groupLinks(r, item)} <span class="sub">· ${ps.length} patches</span>`,
+    title: item.group.tests.join(", "),
+    end: costLabel(r, item, ctx),
+    state: html`${[
+      item.state === "in stack" || item.state === "landed" || item.state === "waiting for review" ? null : html`${stateText(r, item, ctx)}`,
+      covered.length ? html`also fixes <b>${join(covered.map((i) => groupLinks(r, i)), ", ")}</b>` : null,
+    ]
+      .filter((x) => x !== null)
+      .map((x, i) => (i ? html` · ${x}` : x))}`,
+    patches: lines,
+    trust: trustLine(r, item, ctx),
+    ask: (() => {
+      const group = askBlock(r, item, ctx, [], controls !== null);
+      const rest = parts.flatMap((x) => x.rest);
+      return group || rest.length ? html`${group}${rest}` : undefined;
+    })(),
+    under: parts.some((x) => x.under) ? html`${parts.map((x) => x.under)}` : null,
+    lazy: { r, ctx },
+    body: () => html`${whyFold(r, item)}${ps.map((p, n) => {
+      const b = parts[n].body();
+      return b.value.trim() ? html`<h4 class="part">${patchTitle(p)}</h4>${b}` : null;
+    })}${controls && !sentence.ask ? html`<div class="jobctl">${controls}</div>` : null}<h4 class="part">What the factory did</h4>${itemJobs(r, item, ctx)}${talkBox(r, item, ctx, ps[0])}`,
+  });
+}
+
+// Rows of patches in order, a fix's patches next to each other in one.
+function patchRows(r: RequestState, ps: PatchView[], ctx: RenderContext): Html {
+  const out: Html[] = [];
+  for (let n = 0; n < ps.length; n++) {
+    const run = [ps[n]];
+    while (ps[n].item !== undefined && ps[n + 1]?.item === ps[n].item) run.push(ps[++n]);
+    out.push(run.length > 1 ? fixRow(r, run, ctx) : patchRow(r, run[0], ctx));
+  }
+  return html`${out}`;
 }
 
 // What you told its author, each with the answer of the run it started (its summary starts with one line per point).
