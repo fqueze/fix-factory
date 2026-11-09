@@ -3119,8 +3119,9 @@ class Planner {
     if (this.s.step !== "landing") return;
     for (const st of this.liveStacks()) {
       const ps = st.order.map((pid) => this.s.patches[pid]);
-      // What makes patches landable, not their order or shas: the reorder below changes those.
-      const h = shortHash(ps.map((p) => `${p.id}:${JSON.stringify(landingState(this.s, p))}`).sort()) + this.stepEpoch("landing");
+      // What makes patches landable, not their order or shas: the reorder below changes those. And the ordering's rules:
+      // a stack ordered by earlier ones is ordered again (fixes-v1: one fix's patches together).
+      const h = shortHash([...ps.map((p) => `${p.id}:${JSON.stringify(landingState(this.s, p))}`).sort(), "fixes-v1"]) + this.stepEpoch("landing");
       const file = dataPath(this.config, this.s.id, `landable-${st.id}-${h}.json`);
       const ord = this.want(`order-landable:${st.id}:${h}`, () =>
         this.cli("order", "stack.ts", ["order", file], {
