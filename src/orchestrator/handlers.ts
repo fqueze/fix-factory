@@ -158,11 +158,13 @@ export function handleFinished(input: HandlerInput): HandlerResult {
       commits.forEach((c, i) => {
         const id = patchId(purpose.item!, i);
         const existing = s.patches[id];
+        // A commit it had before, rebased since (into the stack): a run that left it as it was doesn't move it back.
+        const moved = existing && existing.sha !== c.sha && (s.patchShas[id] ?? []).includes(c.sha);
         ev("patch", {
           patch: id,
           item: purpose.item,
-          sha: c.sha,
-          worktree: job.cwd,
+          sha: moved ? existing.sha : c.sha,
+          worktree: moved ? existing.worktree : job.cwd,
           title: c.title,
           // Only the bug you gave outlives a commit that says Bug XXXXXXX: an earlier commit's own number (the same
           // patch id reused for another commit) doesn't.

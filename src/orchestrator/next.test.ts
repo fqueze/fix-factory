@@ -1934,6 +1934,12 @@ describe("6. verify on try", () => {
     const b = sc.view().jobs.findLast((j) => j.purpose.key.startsWith("author:i-test-b:") && j.end)!;
     sc.complete(`author:i-test-b:try:${push}`, { report: fixed(commitsOf(b.name, sc.reports.get(b.job)), { summary: "Not mine: test_a's harness change moves the frame." }) });
     sc.settle();
+    // Its commit as it was: the patch stays where the stack has it.
+    const inStack = sc.state().patches["p-test-b"];
+    const answer = sc.view().byKey.get(`author:i-test-b:try:${push}`)![0].job;
+    sc.complete(`import:${answer}`, { output: imported(commitsOf(b.name, sc.reports.get(b.job))[0], inStack.title, ["a/test_b.js"], 22) });
+    sc.settle();
+    assert.deepEqual([sc.state().patches["p-test-b"].sha, sc.state().patches["p-test-b"].worktree], [inStack.sha, inStack.worktree]);
     const n = sc.state().needsUser.find((x) => x.key === `disowned:${push}:i-test-b`)!;
     assert.equal(n.action, "Its author says these try failures aren't its patch's");
     assert.match(n.detail ?? "", /z\/test_z.js on linux: submenu closed .* its author: Not mine/);
