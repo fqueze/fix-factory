@@ -3796,6 +3796,21 @@ describe("10. landing: what's still checked on Phabricator", () => {
   });
 });
 
+describe("10. landing: a dependency outside the stack", () => {
+  it("is removed for good once the order found the base has the commit it names", () => {
+    const sc = inReview();
+    const dep = { patch: "p-test-b", needs: "Bug 2088484 (D339216, 63102f7198e7)", kind: "hard", reason: "r", source: "agent" } as const;
+    sc.add({ type: "dep", request: ID, dep });
+    sc.complete("poll:0", { output: polled("accepted") });
+    sc.settle();
+    const key = sc.view().jobs.find((j) => j.purpose.key.startsWith("order-landable:"))!.purpose.key;
+    assert.deepEqual(sc.plan(key).cli?.args.slice(-4), ["--cwd", `/wt/${ID}-root`, "--base", "origin/main"]);
+    sc.complete(key, { output: { order: sc.state().stacks.root.order, flippedSoftDeps: [], landable: sc.state().stacks.root.order, metDeps: [dep] } });
+    sc.settle();
+    assert.deepEqual(sc.state().patches["p-test-b"].deps, []);
+  });
+});
+
 describe("10. landing: adapting a soft dependency", () => {
   it("refuses a branch whose commits an agent reordered: each patch would take the other's revision", () => {
     const sc = inReview();

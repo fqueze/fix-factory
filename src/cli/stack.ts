@@ -14,10 +14,11 @@
 //      conflictLeft?, remaining?}. Without --leave-conflict a conflict leaves the branch untouched.
 // deps --base <ref>
 //   → Dep[] (source "textual") for base..HEAD; patch ids are the commit shas.
-// order <input.json | ->
+// order <input.json | -> [--cwd <repo> --base <ref>]
 //   input: {patches: [{id, effort?, value?, testOnly?, accepted?, commentsAddressed?, landed?}],
 //           deps: Dep[], previous?: PatchId[]}
-//   → {order: PatchId[], flippedSoftDeps: Dep[], landable: PatchId[]}. Rules in stack/order.ts.
+//   → {order: PatchId[], flippedSoftDeps: Dep[], landable: PatchId[], metDeps?}. Rules in stack/order.ts. With --base:
+//   a hard dep on a commit outside the stack (its sha in the text) that base has is met, listed in metDeps.
 // rewrite --base <ref> --order <sha>[,<sha>...] [<sha>...] [--edits <edits.json>] [--branch <name>] [--leave-conflict] [--fetch]
 //   --fetch: a remote-tracking base (origin/main) is fetched first.
 //   edits: {"<sha>": {bug?: number, message?: string, diff?: string}}
@@ -42,6 +43,8 @@
 
 import { readFileSync } from "node:fs";
 import { UsageError, runCli, type Subcommand } from "../lib/cli.ts";
+import { exec } from "../lib/exec.ts";
+import type { Dep } from "../types.ts";
 import { assemble, rewrite } from "./stack/build.ts";
 import { fetchRemoteBase } from "./worktree.ts";
 import { check } from "./stack/check.ts";
@@ -92,7 +95,19 @@ const subcommands: Record<string, Subcommand> = {
   deps: async (_pos, values) => detectDeps(cwdOf(values), str(values, "base")),
   order: async (pos, values) => {
     const input = readJson<OrderInput>(onePositional(pos, "an input file"));
-    return orderPatches(input);
+    if (typeof values.base !== "string") return orderPatches(input);
+    // A hard dep on a commit outside the stack (free text naming its sha) is met once the base has that commit.
+    const ids = new Set(input.patches.map((p) => p.id));
+    const metDeps: Dep[] = [];
+    for (const d of input.deps.filter((d) => d.kind === "hard" && !ids.has(d.needs))) {
+      for (const sha of d.needs.match(/\b[0-9a-f]{7,40}\b/g) ?? []) {
+        if ((await exec(["git", "merge-base", "--is-ancestor", sha, values.base], { cwd: cwdOf(values) })).code === 0) {
+          metDeps.push(d);
+          break;
+        }
+      }
+    }
+    return { ...orderPatches({ ...input, deps: input.deps.filter((d) => !metDeps.includes(d)) }), metDeps };
   },
   rewrite: async (pos, values) => {
     const order = [...str(values, "order").split(","), ...pos].filter(Boolean);

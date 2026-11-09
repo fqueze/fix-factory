@@ -36,6 +36,7 @@ export interface OrderOutput {
   order: PatchId[];
   flippedSoftDeps: Dep[];
   landable: PatchId[]; // the bottom of `order` that can land now
+  metDeps?: Dep[]; // hard deps on a commit outside the stack that the base already has (stack.ts order --cwd --base)
 }
 
 function rankComparator(patches: OrderPatch[], previous: PatchId[] | undefined, landable: Set<PatchId>): (a: OrderPatch, b: OrderPatch) => number {

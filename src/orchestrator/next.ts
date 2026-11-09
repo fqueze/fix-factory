@@ -3133,11 +3133,12 @@ class Planner {
     for (const st of this.liveStacks()) {
       const ps = st.order.map((pid) => this.s.patches[pid]);
       // What makes patches landable, not their order or shas: the reorder below changes those. And the ordering's rules:
-      // a stack ordered by earlier ones is ordered again (fixes-v1: one fix's patches together).
-      const h = shortHash([...ps.map((p) => `${p.id}:${JSON.stringify(landingState(this.s, p))}`).sort(), "fixes-v1"]) + this.stepEpoch("landing");
+      // a stack ordered by earlier ones is ordered again (fixes-v1: one fix's patches together; met-v1: deps outside it that
+      // landed).
+      const h = shortHash([...ps.map((p) => `${p.id}:${JSON.stringify(landingState(this.s, p))}`).sort(), "fixes-v1", "met-v1"]) + this.stepEpoch("landing");
       const file = dataPath(this.config, this.s.id, `landable-${st.id}-${h}.json`);
       const ord = this.want(`order-landable:${st.id}:${h}`, () =>
-        this.cli("order", "stack.ts", ["order", file], {
+        this.cli("order", "stack.ts", ["order", file, "--cwd", st.worktree, "--base", st.base ?? this.config.baseRef], {
           purpose: { stack: st.id },
           files: [
             {
@@ -3154,6 +3155,8 @@ class Planner {
       );
       if (!ord) continue;
       const o = this.out<OrderOutput>(ord);
+      // What it needed from outside the stack landed: that dep is gone for good.
+      for (const d of o.metDeps ?? []) if (this.s.patches[d.patch]?.deps.some((x) => x.needs === d.needs)) this.event(this.ev("dep-removed", { patch: d.patch, needs: d.needs, final: true }));
       // One reorg to ask for at a time, for the stack's order: an earlier one's is moot.
       // Keyed by Phabricator's order too: the same order asked for again after a reorg elsewhere is a new question.
       const landKey = `land:${st.id}:${shortHash([...st.order, "|", ...(this.phabOrder(st) ?? [])]).slice(0, 10)}`;
