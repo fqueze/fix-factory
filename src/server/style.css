@@ -245,10 +245,13 @@ details.row > summary::-webkit-details-marker { display: none; }
    review and flags under it. */
 details.row .name:has(> .patchlines) { white-space: normal; overflow: visible; grid-column: 2 / 3; }
 /* One grid for all its lines: the bug column as wide as its widest label, the titles aligned after it. */
-.patchlines { display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto; gap: 0 6px; align-items: baseline; }
+.patchlines { display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto; align-items: baseline; }
+/* No gaps: the room after a revision and a bug is theirs, as in a patch's own row; a line without a revision has none. */
 .patchline { display: contents; }
 .patchline .pphab { grid-column: 1; }
-.patchline .pphab .phab { margin-right: 2px; }
+.patchline .pphab .phab { margin-right: calc(4px + 0.3em); }
+.patchline .pbug { padding-right: 0.3em; }
+.patchline .end { margin-left: 6px; }
 .patchline .pbug { white-space: nowrap; grid-column: 2; }
 .patchline .pname { grid-column: 3; }
 .patchline .end { grid-column: 4; }
