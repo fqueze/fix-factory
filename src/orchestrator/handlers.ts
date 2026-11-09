@@ -423,6 +423,10 @@ function authorReport(input: HandlerInput, ev: <T extends EventInput["type"]>(ty
         ev("item-state", { item, state: "waiting for a try repro", detail: r.summary.slice(0, 300) });
         return;
       }
+      // Seen failing on try, with a fix that can't run here (another platform): a fix for the stack's try push to check.
+      if (r.state === "not reproduced" && r.reproduction?.reproduced && r.reproduction.where === "on try" && r.commits.length) {
+        throw new InvalidReport(`The failure reproduced on try and you committed a fix you can't run here: report it as "fix verified locally", your \`verification\` saying it wasn't run and what the stack's try push must check. "not reproduced" is for a failure nobody saw happen.`);
+      }
       // A fix for a failure nobody saw happen can't be trusted.
       if (r.state === "not reproduced") {
         blocked(r.summary, "The author couldn't reproduce the failure");

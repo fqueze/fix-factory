@@ -2825,6 +2825,17 @@ describe("10. backouts", () => {
   });
 });
 
+describe("4. a fix for a failure only try shows", () => {
+  it("is reported as a fix for the stack's try push, not as not reproduced", () => {
+    const sc = workList([group("ka", "a/test_a.js", "boom")]);
+    investigating(sc, "i-test-a");
+    assert.throws(
+      () => sc.complete("author:i-test-a:initial", { report: fixed([sha("1")], { state: "not reproduced", reproduction: { reproduced: true, where: "on try", before: "2 of 2 on win11" } }) }),
+      (e: Error) => e instanceof InvalidReport && /report it as "fix verified locally"/.test(e.message),
+    );
+  });
+});
+
 describe("10. an answer after submission adding a commit", () => {
   it("doesn't put the new commit on a bug of its own when the first is on one", () => {
     const sc = inReview();
