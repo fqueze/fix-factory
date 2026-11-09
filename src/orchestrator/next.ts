@@ -2764,9 +2764,10 @@ class Planner {
   }
 
   // Revisions are checked whatever the step (a stack back on try for review fixes is still on Phabricator), and for three
-  // days after the request is done (a backout reopens them).
+  // days after the request is done (a backout reopens them). One that landed over a day ago is done: a backout comes
+  // within hours.
   private pollPhab(): void {
-    const revisions = Object.values(this.s.patches).filter((p) => p.revision !== undefined);
+    const revisions = Object.values(this.s.patches).filter((p) => p.revision !== undefined && !(this.s.landedAt[p.id] && this.ctx.now - Date.parse(this.s.landedAt[p.id]) > 24 * HOUR));
     if (this.s.step === "done" && (!this.s.finishedAt || this.ctx.now - Date.parse(this.s.finishedAt) > 3 * 24 * HOUR)) return;
     if (revisions.length === 0 || !this.pollDue()) return;
     const n = this.view.jobs.filter((j) => j.purpose.what === "poll").length;

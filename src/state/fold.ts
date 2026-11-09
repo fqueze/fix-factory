@@ -35,6 +35,7 @@ export function foldEvents(events: readonly Event[]): RequestState {
     pushes: {},
     patchSent: {},
     reopened: {},
+    landedAt: {},
     backouts: {},
     tryNeeded: {},
     followUps: [],
@@ -354,6 +355,8 @@ export function foldEvents(events: readonly Event[]): RequestState {
       }
       case "review-status":
         if (reviews.get(e.patch)?.status === "published" && e.status !== "published") s.reopened[e.patch] = e.t;
+        if (e.status === "published") s.landedAt[e.patch] ??= e.t;
+        else delete s.landedAt[e.patch];
         // A reopen no poll saw coming (it landed and was backed out between two polls): Phabricator's own time for it.
         // One already recorded at the poll that saw it is later than Phabricator's.
         if (e.reopenedAt && e.status !== "published" && !(s.reopened[e.patch] && s.reopened[e.patch] >= e.reopenedAt)) s.reopened[e.patch] = e.reopenedAt;

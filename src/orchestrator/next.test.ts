@@ -3703,6 +3703,23 @@ describe("10. landing", () => {
   });
 });
 
+describe("10. landing: what's still checked on Phabricator", () => {
+  it("stops checking a revision a day after it landed: no backout comes that late", () => {
+    const sc = inReview();
+    const [d100, d101] = polled("accepted");
+    sc.complete("poll:0", { output: [{ ...d100, status: "published" }, { ...d101, status: "needs-review", reviewers: [{ name: "smaug", status: "pending" }] }] });
+    sc.settle();
+    const pollArgs = () => sc.plan(sc.view().jobs.findLast((j) => j.purpose.key.startsWith("poll:"))!.purpose.key).cli!.args;
+    sc.now += 4 * HOUR;
+    sc.settle();
+    assert.deepEqual(pollArgs(), ["poll", "D100", "D101"], "within a day: a backout may still reopen it");
+    sc.complete(sc.view().jobs.findLast((j) => j.purpose.key.startsWith("poll:"))!.purpose.key, { output: [{ ...d100, status: "published" }, { ...d101, status: "needs-review", reviewers: [{ name: "smaug", status: "pending" }] }] });
+    sc.now += 24 * HOUR;
+    sc.settle();
+    assert.deepEqual(pollArgs(), ["poll", "D101"]);
+  });
+});
+
 describe("10. landing: adapting a soft dependency", () => {
   it("refuses a branch whose commits an agent reordered: each patch would take the other's revision", () => {
     const sc = inReview();
