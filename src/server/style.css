@@ -251,7 +251,7 @@ details.row .name:has(> .patchlines) { white-space: normal; overflow: visible; g
 .patchline .pphab { grid-column: 1; }
 .patchline .pphab .phab { margin-right: calc(4px + 0.3em); }
 .patchline .pbug { padding-right: 0.3em; }
-.patchline .end { margin-left: 6px; }
+.patchline .end { margin-left: 6px; justify-content: flex-end; } /* its links at the right edge, whatever hovering shows before them */
 .patchline .pbug { white-space: nowrap; grid-column: 2; }
 .patchline .pname { grid-column: 3; }
 .patchline .end { grid-column: 4; }
