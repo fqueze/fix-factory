@@ -2693,7 +2693,7 @@ describe("10. backouts", () => {
     assert.equal(sc.state().backouts["p-test-b"].culprit, true);
     assert.equal(sc.state().backouts["p-test-a"].culprit, false);
     assert.equal(sc.state().items["i-test-a"].state, "waiting for review", "not landed anymore");
-    const told = sc.view().jobs.find((j) => j.purpose.key.startsWith("author:i-test-b:backout:p-test-b:"))!;
+    const told = sc.view().jobs.find((j) => j.purpose.key.startsWith("author:i-test-b:backout:"))!;
     assert.match(sc.plan(told.purpose.key).agent?.message ?? "", /landed, then was backed out:\nBacked out for causing mochitest failures @test_b\.js/);
     assert.ok(!sc.view().jobs.some((j) => j.purpose.key.startsWith("author:i-test-a:backout:")));
     const s = sc.state();
@@ -2713,25 +2713,38 @@ describe("10. backouts", () => {
     assert.equal(sc.state().backouts["p-test-b"].culprit, true);
   });
 
-  it("an author leaving its patch as it is, or saying why the failure isn't its patch's, clears it", () => {
+  it("an author saying why the failure isn't its patch's clears it; one leaving it unchanged doesn't", () => {
     const sc = backedOut("Backed out for causing failures at test_other.html.");
-    for (const [item, report] of [["i-test-a", (c: string[]) => fixed(c)], ["i-test-b", (c: string[]) => fixed([sha("9")], { disagreement: "test_other.html fails from another patch: " + c.join() })]] as const) {
+    for (const [item, report] of [["i-test-a", (c: string[]) => fixed(c)], ["i-test-b", (c: string[]) => fixed(c, { disagreement: "test_other.html fails from another patch" })]] as const) {
       const told = sc.view().jobs.find((j) => j.purpose.key.startsWith(`author:${item}:backout:`))!.purpose.key;
       sc.complete(told, { report: report(sc.state().items[item].investigation!.commits) });
       sc.settle();
     }
-    assert.equal(sc.state().backouts["p-test-a"].culprit, false);
+    assert.equal(sc.state().backouts["p-test-a"].culprit, true, "unchanged: maybe fixed by an earlier answer");
     assert.equal(sc.state().backouts["p-test-b"].culprit, false);
-    assert.ok(!sc.state().verifyAsked?.some((t) => t.includes("after its backout")));
   });
 
-  it("its fix shown by a local reproduction of the failure needs no try push", () => {
+  it("asks once about all of a fix's backed out patches: its author fixing them answers for both", () => {
+    const sc = backedOut();
+    const b = sc.state().backouts["p-test-b"];
+    const { deps: _d, review: _r, replyDrafts: _rd, id: _id, ...rest } = sc.state().patches["p-test-b"];
+    sc.add({ type: "patch", request: ID, ...rest, patch: "p-test-b-2", sha: sha("8"), title: "Bug 22 - Fix the race too, r=smaug.", revision: 102 });
+    sc.add({ type: "backout", request: ID, patch: "p-test-b-2", at: b.at, reason: b.reason, culprit: true });
+    sc.settle();
+    const asked = sc.view().jobs.filter((j) => j.purpose.key.startsWith("author:i-test-b:backout:"));
+    assert.equal(asked.length, 1);
+    sc.complete(asked[0].purpose.key, { report: fixed([sha("5"), sha("9")]) });
+    sc.settle();
+    assert.equal(sc.view().jobs.filter((j) => j.purpose.key.startsWith("author:i-test-b:backout:")).length, 1, "not asked again for its second patch");
+    assert.deepEqual([sc.state().backouts["p-test-b"].culprit, sc.state().backouts["p-test-b-2"].culprit], [true, true]);
+  });
+
+  it("its fix goes to try even with a local reproduction of the failure", () => {
     const sc = backedOut();
     const told = sc.view().jobs.find((j) => j.purpose.key.startsWith("author:i-test-b:backout:"))!.purpose.key;
     sc.complete(told, { report: fixed([sha("5")], { disagreement: null, reproduction: { reproduced: true, where: "locally", before: "2 of 2 at 1600x1200", after: "0 of 6" } }) });
     sc.settle();
-    assert.equal(sc.state().backouts["p-test-b"].verified, true);
-    assert.ok(!sc.state().verifyAsked?.some((t) => t.includes("after its backout")));
+    assert.ok(!sc.state().backouts["p-test-b"].verified);
   });
 
   it("its fix, once reviewed, gets a try push of the failing jobs; green, it may land again", () => {

@@ -3050,42 +3050,45 @@ class Planner {
       const { id, ...rest } = st;
       this.event(this.ev("stack", { stack: id, ...rest, order: all.map((p) => p.id) }));
     }
+    // One question per fix, about all its patches the backout took: asked once per patch, an author that fixed the first
+    // answers the second with its commits unchanged.
+    const byItem = new Map<ItemId, { at: string; reason: string; patches: PatchView[] }>();
     for (const [pid, b] of Object.entries(this.s.backouts)) {
       const p = this.s.patches[pid];
       if (!b.culprit || b.verified || !p?.item) continue;
-      const item = p.item;
-      const key = `author:${item}${this.itemEpoch(item)}:backout:${pid}:${b.at}`;
+      const g = byItem.get(p.item) ?? { at: b.at, reason: b.reason, patches: [] };
+      g.patches.push(p);
+      byItem.set(p.item, g);
+    }
+    for (const [item, { at, reason, patches }] of byItem) {
+      const names = patches.map((p) => `D${p.revision} (${p.title})`).join(", ");
+      // Its answer under a key of its own (one per patch, from before), or the fix's.
+      const earlier = this.view.jobs.findLast((j) => j.purpose.key.startsWith(`author:${item}${this.itemEpoch(item)}:backout:`) && j.purpose.key.endsWith(`:${at}`) && succeeded(j));
+      const key = earlier?.purpose.key ?? `author:${item}${this.itemEpoch(item)}:backout:${at}`;
       const run = this.resumeAuthor(
         item,
         key,
         "backout",
-        `D${p.revision} landed, then was backed out:\n${b.reason}\n\nRead the failure (the log linked above, and the test's runs with fx-tests) and find whether your patch causes it. If it doesn't, leave your commit as it is and say what causes it in \`disagreement\`. If it does, fix it by amending your commit, and put how you reproduced this failure locally, without and with your fix, in \`reproduction\`: without a local reproduction, it won't land again before a try push shows those jobs green with your fix. Then end with the JSON report again.`,
+        `${names} landed, then ${patches.length > 1 ? "were" : "was"} backed out:\n${reason}\n\nRead the failure (the log linked above, and the test's runs with fx-tests) and find whether your patches cause it. If they don't, leave your commits as they are and say what causes it in \`disagreement\`. If they do, fix it by amending your commits. Then end with the JSON report again. They land again only once a try push shows those jobs green with your fix.`,
       );
-      // Its answer: its patch left as it is, or why the failure isn't its patch's, clears it; a fix shown by a local
-      // reproduction of this failure (not the one it had) needs no try push.
-      if (run && succeeded(run)) {
-        const r = this.rep<InvestigateReport>(run);
-        if (r.disagreement || this.unchangedBy(item, run)) {
-          this.event(this.ev("backout", { patch: pid, at: b.at, reason: b.reason, culprit: false }));
-          continue;
-        }
-        if (r.reproduction?.reproduced && r.reproduction.where === "locally" && JSON.stringify(r.reproduction) !== JSON.stringify(this.s.items[item].investigation?.reproduction)) {
-          this.event(this.ev("backout-verified", { patch: pid }));
-          continue;
-        }
+      if (!run) continue;
+      // Not its patches': they may land again as they are.
+      if (this.rep<InvestigateReport>(run).disagreement) {
+        for (const p of patches) this.event(this.ev("backout", { patch: p.id, at, reason, culprit: false }));
+        continue;
       }
       // Its answer reviewed and back on its way to Phabricator: then the push.
-      if (!run || this.s.items[item].state !== "waiting for review") continue;
-      const st = Object.values(this.s.stacks).find((x) => x.order.includes(pid));
+      if (this.s.items[item].state !== "waiting for review") continue;
+      const st = Object.values(this.s.stacks).find((x) => patches.some((p) => x.order.includes(p.id)));
       if (!st) continue;
-      const text = `Verify D${p.revision} (${p.title}) after its backout, with its fix: the jobs that failed must be green. The backout: ${b.reason.slice(0, 1500)}`;
+      const text = `Verify ${names} after ${patches.length > 1 ? "their" : "its"} backout, with the fix: the jobs that failed must be green. The backout: ${reason.slice(0, 1500)}`;
       const n = (this.s.verifyAsked ?? []).indexOf(text) + 1;
       if (!n) {
         this.event(this.ev("verify-asked", { text }));
         continue;
       }
       const pushes = Object.values(this.s.pushes).filter((x) => x.id.startsWith(`${st.id}-ask${n}-`) && x.rev);
-      if (pushes.length && pushes.every((x) => this.clearOf(x.id, pid))) this.event(this.ev("backout-verified", { patch: pid }));
+      for (const p of patches) if (pushes.length && pushes.every((x) => this.clearOf(x.id, p.id))) this.event(this.ev("backout-verified", { patch: p.id }));
     }
   }
 
