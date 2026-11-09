@@ -3159,6 +3159,8 @@ class Planner {
           this.raise(`failed:${rw.job}`, { action: "Conflict while moving landable patches down", detail: "stack.ts rewrite stopped on a conflict", job: rw.job, stack: st.id });
           continue;
         }
+        // An earlier reorder's conflict, since resolved: this one went through.
+        for (const n of this.s.needsUser) if (n.key.startsWith("failed:") && n.stack === st.id && n.action === "Conflict while moving landable patches down") this.clear(n.key);
         if (o.order.join() !== st.order.join()) {
           const { id, ...rest } = st;
           this.event(this.ev("stack", { stack: id, ...rest, order: o.order }));

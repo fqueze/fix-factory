@@ -3682,12 +3682,14 @@ describe("10. landing", () => {
     assert.deepEqual(sc.state().stacks.root.order, ["p-test-b", "p-test-a"]);
     const key = sc.view().jobs.find((j) => j.purpose.key.startsWith("order-landable:"))!.purpose.key;
     sc.complete(key, { output: { order: ["p-test-a", "p-test-b"], flippedSoftDeps: [{ patch: "p-test-b", needs: "p-test-a", kind: "soft", reason: "shares a helper", source: "agent" }], landable: ["p-test-a"] } });
+    sc.add({ type: "needs-user", request: ID, key: "failed:j-old", action: "Conflict while moving landable patches down", detail: "", stack: "root" });
     const [rewrite] = sc.settle();
     assert.match(rewrite, /^rewrite-land:root:/);
     assert.ok(sc.plan(rewrite).cli!.args.includes("--fetch"), "on the latest central");
     assert.deepEqual(JSON.parse(sc.plan(rewrite).files![0].content), { [sha("e")]: { revision: "https://phabricator.services.mozilla.com/D100" }, [sha("f")]: { revision: "https://phabricator.services.mozilla.com/D101" } });
     sc.complete(rewrite, { output: { mapping: { [sha("f")]: sha("5"), [sha("e")]: sha("6") } } });
     const [adapt] = sc.settle();
+    assert.ok(!sc.open().includes("failed:j-old"), "an earlier reorder's conflict goes once one goes through");
     assert.equal(sc.plan(adapt).name, "adapt-soft-dep");
     assert.deepEqual(sc.plan(adapt).agent?.vars, { patchA: sha("6"), patchB: sha("5"), reason: "shares a helper" });
     sc.complete(adapt, { report: { state: "adapted", commits: [sha("5"), sha("4")], summary: "s", feedback: [] } });
