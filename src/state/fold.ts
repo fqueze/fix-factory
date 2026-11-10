@@ -248,6 +248,8 @@ export function foldEvents(events: readonly Event[]): RequestState {
           pastShas: before && before.sha !== e.sha ? [...(before.pastShas ?? []), before.sha] : before?.pastShas,
           deps: [],
           replyDrafts: [],
+          // Your comments, with the runs answering them, outlive its commits.
+          ...(before?.yourComments ? { yourComments: before.yourComments } : {}),
           ...(before?.testPlan ? { testPlan: before.testPlan } : {}),
           ...(before?.testPlanSent ? { testPlanSent: before.testPlanSent } : {}),
         };

@@ -194,6 +194,15 @@ test("test plans: code in link text, which Phabricator doesn't render, becomes p
   assert.equal(s.patches.p1.testPlan, "Fixes [browser_foo.js](https://tests.firefox.dev/test.html?test=a%2Fbrowser_foo.js) in `bar`.");
 });
 
+test("your comments on a patch, and the runs answering them, outlive its commits", () => {
+  const s = fold(
+    ev({ type: "patch", patch: "p1", sha: "a", worktree: "/wt", title: "t", bug: 1 }),
+    ev({ type: "comment-sent", patch: "p1", text: "are you sure?", key: "author:i1:stack-comments:c1" }),
+    ev({ type: "patch", patch: "p1", sha: "b", worktree: "/wt", title: "t", bug: 1 }),
+  );
+  assert.deepEqual(s.patches.p1.yourComments?.map((c) => c.key), ["author:i1:stack-comments:c1"]);
+});
+
 test("pushes: triage-try reports of a push's jobs are its analysis, a re-triaged cell replacing the earlier one", () => {
   const triage = (job: string, push: string | undefined) =>
     ev({ type: "job-started", job, kind: "agent", name: "triage-try", pid: 1, pidStartTime: 1, cmd: ["claude"], cwd: "/", codeVersion: "sha", purpose: { key: job, what: "triage", ...(push ? { push } : {}) } });
