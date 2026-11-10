@@ -357,13 +357,16 @@ class Planner {
         tests.length ? this.want(`test-runs:${push.id}:${shortHash(tests).slice(0, 8)}`, () => this.cli("test-runs", "try.ts", ["test-runs", push.rev!, ...tests], { purpose: { push: push.id } })) : undefined,
       );
       if (tests.length && runsOf.some((r) => !r)) continue;
+      // This version of it: its author's commit, and the factory's rebases and rewrites of it since (its bug in its
+      // message, the stack reordered), which change its sha, not its code.
+      const ownShas = this.versionShas(p.id);
       const results = had.map(({ push, commits }, i) => ({
         purpose: push.purpose,
         rev: push.rev,
         url: push.url,
         result: push.result,
         summary: push.summary,
-        thisVersion: commits.some((c) => same(c, p.sha)),
+        thisVersion: commits.some((c) => ownShas.some((x) => same(c, x))),
         ...(runsOf[i] ? { runs: this.out<TestRuns[]>(runsOf[i]!) } : {}),
       }));
       // The version changes with the prompt: an earlier version's session isn't resumed.
@@ -371,7 +374,12 @@ class Planner {
       // passes-v1: plans written before told to confirm a push's runs with fx-tests --test are rewritten in their session;
       // pushes-v2: and those given every push of the request, whether it had the patch or not; positive-v1: and those
       // saying what wasn't run, or leaving out the tests it fixes too; runs-v1: and those not given the tests' runs.
-      const key = `${version}${shortHash([JSON.stringify([inv, results]), "passes-v1", "pushes-v2", "positive-v1", "runs-v1", ...(alsoFixes.length ? [JSON.stringify(alsoFixes)] : [])]).slice(0, 8)}`;
+      // Keyed by the sha it had when written (thisVersion: the push had that very commit); written under any sha of this
+      // version, it's current.
+      const keyAt = (sha: string) =>
+        `${version}${shortHash([JSON.stringify([inv, results.map((x, i) => ({ ...x, thisVersion: had[i].commits.some((c) => same(c, sha)) }))]), "passes-v1", "pushes-v2", "positive-v1", "runs-v1", ...(alsoFixes.length ? [JSON.stringify(alsoFixes)] : [])]).slice(0, 8)}`;
+      if (ownShas.some((sha) => sha !== p.sha && this.view.byKey.get(keyAt(sha))?.some(succeeded))) continue;
+      const key = keyAt(p.sha);
       const investigationFile = dataPath(this.config, this.s.id, `test-plan-${p.id}-investigation.json`);
       const pushesFile = dataPath(this.config, this.s.id, `test-plan-${p.id}-pushes.json`);
       const notes = Object.values(inv?.files ?? {});
@@ -1855,6 +1863,16 @@ class Planner {
   // 6. Verify on try
 
   // Its author commit's patch-id, from the import of its author's commits (none from before patch-ids).
+  // The shas a patch has had since its author's latest commit for it.
+  private versionShas(pid: PatchId): string[] {
+    const p = this.s.patches[pid];
+    const author = p.item ? this.authorReport(p.item) : undefined;
+    const source = author?.commits.find((_, i) => patchId(p.item!, i) === pid);
+    const hist = this.s.patchShas[pid] ?? [];
+    const from = source === undefined ? -1 : hist.findIndex((x) => x.startsWith(source) || source.startsWith(x));
+    return from >= 0 ? hist.slice(from) : [p.sha];
+  }
+
   private codeOf(pid: PatchId): string | undefined {
     const p = this.s.patches[pid];
     const author = p.item ? this.authorReport(p.item) : undefined;

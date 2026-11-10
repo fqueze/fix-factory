@@ -3339,7 +3339,7 @@ describe("9. review comments", () => {
     assert.ok(!started.some((k) => k.startsWith("test-plan:p-test-a-2:")));
   });
 
-  it("gives a test plan only the pushes that had its patch, saying whether they had this version of it", () => {
+  it("gives a test plan only the pushes that had its patch, saying whether they had this version of it, rewritten by the factory since or not", () => {
     const sc = stacked();
     const planKey = sc.view().jobs.find((j) => j.purpose.what === "plan-pushes")!.purpose.key;
     sc.complete(planKey, { report: { pushes: [{ purpose: "verify", tryArgs: ["fuzzy", "-q", "x"], rebuild: 5 }], feedback: [] } });
@@ -3354,10 +3354,11 @@ describe("9. review comments", () => {
     sc.complete(`try-table:${push}:final`, { output: table() });
     sc.settle();
     const { deps: _d, review: _r, replyDrafts: _rd, id, ...a } = sc.state().patches["p-test-a"];
+    // The factory rewrites it (its bug in its message): the same version, a new sha.
     sc.add({ type: "patch", request: ID, patch: id, ...a, sha: sha("7") });
     sc.settle();
     const pushesOf = (pid: string) => JSON.parse(sc.plan(sc.view().jobs.findLast((j) => j.purpose.key.startsWith(`test-plan:${pid}:`))!.purpose.key).files![1].content);
-    assert.deepEqual(pushesOf("p-test-a").map((x: { rev: string; thisVersion: boolean }) => [x.rev, x.thisVersion]), [["fed", false]]);
+    assert.deepEqual(pushesOf("p-test-a").map((x: { rev: string; thisVersion: boolean }) => [x.rev, x.thisVersion]), [["fed", true]]);
     assert.deepEqual(pushesOf("p-test-a")[0].runs, [{ test: "a/test_a.js", configs: [{ jobName: "test-linux2404-64/opt-mochitest-plain-1", jobs: 1, passed: 1, passedOnRetry: 0, failed: 0 }] }], "where its test ran, read by the factory");
     assert.deepEqual(pushesOf("p-test-b"), [], "that push didn't have test_b's patch");
   });
@@ -3375,6 +3376,10 @@ describe("9. review comments", () => {
     sc.complete(key, { report: { testPlan: "- Reproduced by widening the race: 6/6 failures, 0/20 with the fix.\n- Green on try.\n", feedback: [] } });
     assert.equal(sc.state().patches["p-test-a"].testPlan, "- Reproduced by widening the race: 6/6 failures, 0/20 with the fix.\n- Green on try.");
     assert.ok(!sc.settle().some((k) => k.startsWith("test-plan:p-test-a:")), "written once for the same investigation and try results");
+    // Its bug set in its message, the stack rebased: a new sha, the same plan.
+    const { deps: _d, review: _r, replyDrafts: _rd, id: pid, ...a } = sc.state().patches["p-test-a"];
+    sc.add({ type: "patch", request: ID, patch: pid, ...a, sha: sha("9") });
+    assert.ok(!sc.settle().some((k) => k.startsWith("test-plan:p-test-a:")), "not written again for a sha the factory gave it");
 
     const command = { v: 1, id: "c-plan", t: "2026-10-15T09:00:00.000Z", request: ID, cmd: "set-test-plan", patch: "p-test-a", text: "  Edited plan.\n" } as Command;
     const effects = commandEffects(command, { config, state: sc.state(), view: sc.view(), exists: () => false, plan: (j) => sc.plans.get(j) });
