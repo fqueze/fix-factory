@@ -1627,16 +1627,19 @@ class Planner {
     const wt = info.wt!;
     const prev = this.s.stacks[id];
     const bySource = new Map(info.patches.map((p) => [p.source, p]));
-    // Keep the previous order across reassemblies, new patches last; a patch after those it needs (a hard dep its
-    // author reported: a commit written on top of another patch of the stack doesn't apply before it).
+    // Keep the previous order across reassemblies, new patches last; a patch after those it needs (a commit written on
+    // top of another patch of the stack doesn't apply before it).
     const before = [...(prev?.order ?? []).filter((pid) => info.patches.some((p) => p.id === pid)), ...info.patches.filter((p) => !prev?.order.includes(p.id)).map((p) => p.id)];
-    const ordered = afterTheirDeps(before, (pid) => this.s.patches[pid].deps.filter((d) => d.kind === "hard" && d.source === "agent").map((d) => d.needs));
-    const sources = ordered.map((pid) => info.patches.find((p) => p.id === pid)!.source);
+    const ordered = afterTheirDeps(before, (pid) => this.s.patches[pid].deps.filter((d) => d.kind === "hard").map((d) => d.needs));
     // Authors may report short shas; the stack scripts answer with full ones.
     const sourceOf = (sha: string) => bySource.get(sha) ?? info.patches.find((p) => sha.startsWith(p.source) || p.source.startsWith(sha))!;
     const patchesOf = (shas: string[]) => Object.fromEntries(shas.map((sha) => [sha.slice(0, 12), sourceOf(sha).id]));
-    // Moved by a dep: assembled again in that order.
-    const key = `assemble:${id}:${hash}${ordered.join() === before.join() ? "" : `:deps-${shortHash(ordered).slice(0, 6)}`}`;
+    // Stopped on a commit that needs a later one: assembled again with each after what it needs. Otherwise the stack
+    // is ordered once assembled.
+    const plain = this.view.byKey.get(`assemble:${id}:${hash}`)?.find(succeeded);
+    const stopped = plain !== undefined && this.out<{ conflict?: unknown }>(plain).conflict !== undefined;
+    const key = `assemble:${id}:${hash}${stopped && ordered.join() !== Object.values(plain.purpose.patches ?? {}).join() ? `:deps-${shortHash(ordered).slice(0, 6)}` : ""}`;
+    const sources = (key.includes(":deps-") ? ordered : before).map((pid) => info.patches.find((p) => p.id === pid)!.source);
     const reassembly = this.view.jobs.some((j) => j.purpose.what === "assemble" && j.purpose.stack === id && j.purpose.key !== key && !j.purpose.key.startsWith(`${key}:after:`));
     const first = this.want(key, () =>
       reassembly
