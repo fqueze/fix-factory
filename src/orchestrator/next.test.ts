@@ -3916,15 +3916,31 @@ describe("10. landing", () => {
 });
 
 describe("10. landing: what's still checked on Phabricator", () => {
+  it("waits twice as long after each refused poll, up to an hour", () => {
+    const sc = inReview();
+    const key = () => sc.view().jobs.findLast((j) => j.purpose.key.startsWith("poll:"))?.purpose.key;
+    const k0 = key()!;
+    sc.complete(k0, { exitCode: 1, error: "differential.revision.search: HTTP 429" });
+    sc.now += 15 * 60_000;
+    sc.settle();
+    assert.equal(key(), k0, "not after 15 minutes: it waits 20");
+    sc.now += 6 * 60_000;
+    sc.settle();
+    assert.notEqual(key(), k0);
+  });
+
   it("stops checking a revision a day after it landed: no backout comes that late", () => {
     const sc = inReview();
     const [d100, d101] = polled("accepted");
     sc.complete("poll:0", { output: [{ ...d100, status: "published" }, { ...d101, status: "needs-review", reviewers: [{ name: "smaug", status: "pending" }] }] });
     sc.settle();
-    const pollArgs = () => sc.plan(sc.view().jobs.findLast((j) => j.purpose.key.startsWith("poll:"))!.purpose.key).cli!.args;
+    const lastPoll = () => sc.plan(sc.view().jobs.findLast((j) => j.purpose.key.startsWith("poll:"))!.purpose.key).cli!.args;
+    const pollArgs = () => lastPoll().slice(0, lastPoll().indexOf("--previous"));
     sc.now += 4 * HOUR;
     sc.settle();
     assert.deepEqual(pollArgs(), ["poll", "D100", "D101"], "within a day: a backout may still reopen it");
+    // With what the last poll read: what Phabricator hasn't modified since isn't read again.
+    assert.match(lastPoll().at(-1)!, /\/jobs\/[^/]+\/out\.log$/);
     sc.complete(sc.view().jobs.findLast((j) => j.purpose.key.startsWith("poll:"))!.purpose.key, { output: [{ ...d100, status: "published" }, { ...d101, status: "needs-review", reviewers: [{ name: "smaug", status: "pending" }] }] });
     sc.now += 24 * HOUR;
     sc.settle();

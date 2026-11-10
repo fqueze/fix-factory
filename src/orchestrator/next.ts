@@ -2858,6 +2858,9 @@ class Planner {
     // You asked: whether you're present or not.
     if (this.s.pollRequested && (!last || Date.parse(this.s.pollRequested) > last.startedAt)) return true;
     if (!last) return true;
+    // Refused (Phabricator's rate limit): each failed poll in a row doubles the wait, up to an hour.
+    const failed = polls.length - 1 - polls.findLastIndex((j) => succeeded(j));
+    if (failed > 0) return this.ctx.now - last.startedAt >= Math.min(HOUR, (this.config.phabPollMinutes ?? 10) * 60_000 * 2 ** failed);
     // Every few minutes while you're at the page, every few hours while you're away; every 2 minutes for 10 after you
     // copied a moz-phab command (you're resubmitting).
     const age = this.ctx.now - last.startedAt;
@@ -2875,7 +2878,9 @@ class Planner {
     if (revisions.length === 0 || !this.pollDue()) return;
     const n = this.view.jobs.filter((j) => j.purpose.what === "poll").length;
     const ds = revisions.map((p) => p.revision!).sort((a, b) => a - b);
-    this.want(`poll:${n}`, () => this.cli("poll", "phab.ts", ["poll", ...ds.map((d) => `D${d}`)], { priority: REVIEW_PRIORITY }));
+    // What the last poll read: revisions Phabricator hasn't modified since aren't read again.
+    const last = this.view.jobs.filter((j) => j.purpose.what === "poll" && succeeded(j)).at(-1);
+    this.want(`poll:${n}`, () => this.cli("poll", "phab.ts", ["poll", ...ds.map((d) => `D${d}`), ...(last ? ["--previous", outPath(this.config, last.job)] : [])], { priority: REVIEW_PRIORITY }));
   }
 
   // The commit Phabricator's latest diff came from, when this repository has it: one you submitted from elsewhere (your

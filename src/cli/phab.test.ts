@@ -17,6 +17,41 @@ function recordedConduit(): Conduit {
   };
 }
 
+test("poll: a revision Phabricator hasn't modified since the previous poll keeps its result, unread", async () => {
+  const first = await poll([333041, 329684], recordedConduit());
+  const methods: string[] = [];
+  const recorded = recordedConduit();
+  // A search of only some of the revisions: the recorded search of both, filtered.
+  const phids = first.map((r) => r.phid);
+  const subset: Conduit = async (method, params) => {
+    const p = params as { sourcePHIDs?: string[]; constraints?: { revisionPHIDs?: string[] } };
+    if (method === "edge.search" && p.sourcePHIDs?.length === 1) {
+      const all = (await recorded(method, { ...p, sourcePHIDs: phids })) as { data: { sourcePHID: string }[] };
+      return { ...all, data: all.data.filter((e) => p.sourcePHIDs!.includes(e.sourcePHID)) };
+    }
+    if (method === "differential.diff.search" && p.constraints?.revisionPHIDs?.length === 1) {
+      const all = (await recorded(method, { ...p, constraints: { ...p.constraints, revisionPHIDs: phids } })) as { data: { fields: { revisionPHID: string } }[] };
+      return { ...all, data: all.data.filter((d) => p.constraints!.revisionPHIDs!.includes(d.fields.revisionPHID)) };
+    }
+    if ((method === "user.search" || method === "project.search") && (params as { constraints?: { phids?: string[] } }).constraints?.phids) {
+      const want = (params as { constraints: { phids: string[] } }).constraints.phids;
+      const calls = JSON.parse(readFileSync(new URL("poll-conduit.json", fixtures), "utf8")) as { method: string; params: { constraints?: { phids?: string[] } }; result: { data: { phid: string }[] } }[];
+      const all = calls.find((c) => c.method === method && want.every((x) => c.params.constraints?.phids?.includes(x)))!.result;
+      return { ...all, data: all.data.filter((x) => want.includes(x.phid)) };
+    }
+    return recorded(method, params);
+  };
+  const counting: Conduit = (method, params) => (methods.push(method), subset(method, params));
+  // Nothing modified: one call.
+  assert.deepEqual(await poll([333041, 329684], counting, first), first);
+  assert.deepEqual(methods, ["differential.revision.search"]);
+  // One modified since: only its transactions are read again, its parent still named.
+  methods.length = 0;
+  const again = await poll([333041, 329684], counting, [{ ...first[0], modified: 1 }, first[1]]);
+  assert.deepEqual(again, first);
+  assert.equal(methods.filter((m) => m === "transaction.search").length, 1);
+});
+
 test("poll: reviewers, inline comments, suggested edits, replies", async () => {
   const [d333041, d329684] = await poll([333041, 329684], recordedConduit());
   assert.equal(d333041.status, "published");

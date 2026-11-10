@@ -147,6 +147,7 @@ export interface PollResult {
   diff?: { id: number; commit?: string; created: string }; // its latest diff, and the local commit moz-phab sent it from
   reopenedAt?: string; // its latest reopen after a close (a backout), even one no poll saw it closed before
   parent?: number; // the revision under it in its stack on Phabricator (how Phabricator lists the stack)
+  modified?: number; // Phabricator's dateModified: unchanged since a poll, that poll's result stands
 }
 
 async function names(conduit: Conduit, phids: string[]): Promise<Map<string, string>> {
@@ -184,21 +185,31 @@ export async function setTestPlan(revision: number, text: string, conduit: Condu
   return { revision, testPlan: text };
 }
 
-export async function poll(revisions: number[], conduit: Conduit = makeConduit()): Promise<PollResult[]> {
-  const revs = await searchAll(conduit, "differential.revision.search", {
+// previous: an earlier poll's results. A revision Phabricator hasn't modified since keeps its result there, without
+// the calls reading its transactions, diffs and stack: when none changed, a poll is one call.
+export async function poll(revisions: number[], conduit: Conduit = makeConduit(), previous: PollResult[] = []): Promise<PollResult[]> {
+  const all = await searchAll(conduit, "differential.revision.search", {
     constraints: { ids: revisions },
     attachments: { reviewers: true },
   });
-  const byId = new Map(revs.map((r) => [r.id as number, r]));
-  const missing = revisions.filter((id) => !byId.has(id));
+  const missing = revisions.filter((id) => !all.some((r) => r.id === id));
   if (missing.length) {
     throw new Error(`not found: ${missing.map((id) => "D" + id).join(", ")}`);
   }
+  const kept = new Map(previous.filter((p) => p.modified !== undefined && all.some((r) => r.id === p.revision && r.fields.dateModified === p.modified)).map((p) => [p.revision, p]));
+  const changed = revisions.filter((id) => !kept.has(id));
+  if (changed.length === 0) return revisions.map((id) => kept.get(id)!);
+  const fresh = await pollChanged(changed, all.filter((r) => changed.includes(r.id)), all, conduit);
+  return revisions.map((id) => kept.get(id) ?? fresh.find((x) => x.revision === id)!);
+}
+
+async function pollChanged(revisions: number[], revs: any[], all: any[], conduit: Conduit): Promise<PollResult[]> {
+  const byId = new Map(revs.map((r) => [r.id as number, r]));
 
   // Its place in its stack, as Phabricator has it.
   const parentOf = new Map<string, string>();
   for (const e of await searchAll(conduit, "edge.search", { sourcePHIDs: revs.map((r) => r.phid), types: ["revision.parent"] })) parentOf.set(e.sourcePHID, e.destinationPHID);
-  const idOfRev = new Map<string, number>(revs.map((r) => [r.phid as string, r.id as number]));
+  const idOfRev = new Map<string, number>(all.map((r) => [r.phid as string, r.id as number]));
 
   const txnsByRev = new Map<number, any[]>();
   for (const id of revisions) {
@@ -286,6 +297,7 @@ export async function poll(revisions: number[], conduit: Conduit = makeConduit()
         : {}),
       ...(closed && reopened > closed ? { reopenedAt: new Date(reopened * 1000).toISOString() } : {}),
       ...(idOfRev.has(parentOf.get(r.phid) ?? "") ? { parent: idOfRev.get(parentOf.get(r.phid)!) } : {}),
+      modified: r.fields.dateModified,
     };
   });
 }
@@ -337,7 +349,7 @@ export async function reviewers(files: string[], repo: string) {
 async function main() {
   await runCli(
     {
-      poll: async (args) => {
+      poll: async (args, values) => {
         if (!args.length) throw new UsageError("usage: poll <D-number...>");
         let revisions: number[];
         try {
@@ -345,7 +357,8 @@ async function main() {
         } catch (e) {
           throw new UsageError((e as Error).message);
         }
-        return poll(revisions);
+        const previous = typeof values.previous === "string" && existsSync(values.previous) ? (JSON.parse(readFileSync(values.previous, "utf8")) as PollResult[]) : [];
+        return poll(revisions, makeConduit(), previous);
       },
       "set-test-plan": async (args, values) => {
         if (args.length !== 1 || typeof values.file !== "string") throw new UsageError("usage: set-test-plan <D-number> --file <text file>");
@@ -363,7 +376,7 @@ async function main() {
         return reviewers(args, repo);
       },
     },
-    { repo: { type: "string" }, file: { type: "string" } },
+    { repo: { type: "string" }, file: { type: "string" }, previous: { type: "string" } },
   );
 }
 
