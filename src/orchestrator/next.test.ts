@@ -5,7 +5,7 @@ import { InvalidReport } from "./handlers.ts";
 import { commandEffects } from "./commands.ts";
 import { landingState } from "../state/landing.ts";
 import type { Command } from "../types.ts";
-import { commitsOf, resumeAuthorPlan, similarMessages, stackId } from "./next.ts";
+import { afterTheirDeps, commitsOf, resumeAuthorPlan, similarMessages, stackId } from "./next.ts";
 import { config, HOUR, ID, Scenario, sha } from "./testkit.ts";
 import { shortHash } from "./plan.ts";
 import { needsMetaBug } from "../state/meta-bug.ts";
@@ -4492,5 +4492,12 @@ describe("redo-step", () => {
     sc.settle();
     sc.add({ type: "step", request: ID, step: "verify on try" });
     assert.deepEqual(sc.settle(), [`${planKey}@1`]);
+  });
+});
+
+describe("assembling a stack", () => {
+  it("puts a patch after the patches of the stack it needs, the others keeping their places", () => {
+    const needs: Record<string, string[]> = { b: ["e"], d: ["a", "x"] };
+    assert.deepEqual(afterTheirDeps(["a", "b", "c", "d", "e"], (id) => needs[id] ?? []), ["a", "c", "d", "e", "b"]);
   });
 });

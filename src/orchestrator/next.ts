@@ -1581,7 +1581,7 @@ class Planner {
   private assembled(id: string, hash: string): string {
     const runs: string[] = [];
     for (const j of this.view.jobs) {
-      const m = j.purpose.key.match(new RegExp(`^assemble:${id}:([^:]+)$`));
+      const m = j.purpose.key.match(new RegExp(`^assemble:${id}:([^:]+)(?::deps-[0-9a-f]+)?$`));
       if (m && m[1] !== runs.at(-1)) runs.push(m[1]);
     }
     const base = (h: string) => h.replace(/-\d+$/, "");
@@ -1627,15 +1627,16 @@ class Planner {
     const wt = info.wt!;
     const prev = this.s.stacks[id];
     const bySource = new Map(info.patches.map((p) => [p.source, p]));
-    // Keep the previous order across reassemblies, new patches last.
-    const sources = [
-      ...(prev?.order ?? []).map((pid) => info.patches.find((p) => p.id === pid)?.source).filter((x) => x !== undefined),
-      ...info.patches.filter((p) => !prev?.order.includes(p.id)).map((p) => p.source),
-    ];
+    // Keep the previous order across reassemblies, new patches last; a patch after those it needs (a hard dep its
+    // author reported: a commit written on top of another patch of the stack doesn't apply before it).
+    const before = [...(prev?.order ?? []).filter((pid) => info.patches.some((p) => p.id === pid)), ...info.patches.filter((p) => !prev?.order.includes(p.id)).map((p) => p.id)];
+    const ordered = afterTheirDeps(before, (pid) => this.s.patches[pid].deps.filter((d) => d.kind === "hard" && d.source === "agent").map((d) => d.needs));
+    const sources = ordered.map((pid) => info.patches.find((p) => p.id === pid)!.source);
     // Authors may report short shas; the stack scripts answer with full ones.
     const sourceOf = (sha: string) => bySource.get(sha) ?? info.patches.find((p) => sha.startsWith(p.source) || p.source.startsWith(sha))!;
     const patchesOf = (shas: string[]) => Object.fromEntries(shas.map((sha) => [sha.slice(0, 12), sourceOf(sha).id]));
-    const key = `assemble:${id}:${hash}`;
+    // Moved by a dep: assembled again in that order.
+    const key = `assemble:${id}:${hash}${ordered.join() === before.join() ? "" : `:deps-${shortHash(ordered).slice(0, 6)}`}`;
     const reassembly = this.view.jobs.some((j) => j.purpose.what === "assemble" && j.purpose.stack === id && j.purpose.key !== key && !j.purpose.key.startsWith(`${key}:after:`));
     const first = this.want(key, () =>
       reassembly
@@ -1683,7 +1684,7 @@ class Planner {
       mapped.add(conflict.sha);
       const remaining = o.remaining ?? [];
       if (remaining.length === 0) break;
-      cur = this.want(`assemble:${id}:${hash}:after:${conflict.sha.slice(0, 12)}`, () =>
+      cur = this.want(`${key}:after:${conflict.sha.slice(0, 12)}`, () =>
         this.cli("assemble", "stack.ts", ["assemble", "--cwd", wt, "--branch", info.branch, "--leave-conflict", ...remaining], { cwd: wt, purpose: { stack: id, patches: patchesOf(remaining) } }),
       );
     }
@@ -3324,4 +3325,16 @@ class Planner {
       this.want(`remove:${name}`, () => this.cli("remove", "worktree.ts", ["remove", name], { cwd: this.config.firefoxRepo }));
     }
   }
+}
+
+// Each id after the ids it needs that come later in the list (in their order); the others keep their places.
+export function afterTheirDeps(ids: string[], needs: (id: string) => string[]): string[] {
+  const out = [...ids];
+  for (const id of ids) {
+    const deps = needs(id).filter((d) => d !== id && out.includes(d));
+    if (deps.length === 0 || Math.max(...deps.map((d) => out.indexOf(d))) < out.indexOf(id)) continue;
+    out.splice(out.indexOf(id), 1);
+    out.splice(Math.max(...deps.map((d) => out.indexOf(d))) + 1, 0, id);
+  }
+  return out;
 }
