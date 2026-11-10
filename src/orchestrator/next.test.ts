@@ -2456,6 +2456,10 @@ describe("7. meta bug", () => {
     sc.settle();
     assert.deepEqual(sc.open(), []);
     assert.equal(sc.state().step, "submit");
+    // Its group dropping it (covered by another patch): no bug to file.
+    sc.add({ type: "item-state", request: ID, item: "i-test-a", state: "left as-is", detail: "covered" });
+    sc.settle();
+    assert.ok(!sc.open().includes("file-bug:p-test-a:meta-bug-step"));
   });
 });
 

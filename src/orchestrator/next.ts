@@ -2566,9 +2566,11 @@ class Planner {
   // those of a step 7 that was redone.
   private staleFileBugs(): void {
     const epoch = this.stepEpoch("meta bug");
+    // And the ⚑ of a patch whose group dropped it (covered by another patch, left as-is): no bug to file for it.
+    const dropped = (pid: PatchId) => TERMINAL.includes(this.s.items[this.s.patches[pid]?.item ?? ""]?.state as ItemState) && this.s.items[this.s.patches[pid].item!].state !== "landed";
     for (const n of this.s.needsUser) {
       if (!n.key.startsWith("file-bug:")) continue;
-      if (this.s.step !== "meta bug" || n.key !== fileBugKey(n.patch!, epoch)) this.clear(n.key);
+      if (this.s.step !== "meta bug" || n.key !== fileBugKey(n.patch!, epoch) || dropped(n.patch!)) this.clear(n.key);
     }
   }
 
