@@ -2689,6 +2689,19 @@ function inReview(): Scenario {
   return sc;
 }
 
+describe("8. submit, a rebuilt stack", () => {
+  it("gives back the Differential Revision trailer a submitted patch's commit lost, its bug already in its title", () => {
+    const sc = inReview();
+    // The branch as read again: test_b's commit (sha e) rebuilt from its author's, without its trailer.
+    sc.startJob({ purpose: { key: "refresh:root:x", what: "refresh", stack: "root" }, kind: "script", name: "stack.ts import", cwd: `/wt/${ID}-root`, cli: { tool: "stack.ts", args: ["import"] } });
+    sc.complete("refresh:root:x", { output: [imported(sha("e"), "Bug 22 - Fix test_b, r=smaug.", [], 22)[0], { ...imported(sha("f"), "Bug 999 - Fix a, r=smaug.", [], 999)[0], revision: 101 }] });
+    const key = sc.settle().find((k) => k.startsWith("rewrite-bugs:root:"))!;
+    const args = sc.plan(key).cli!.args;
+    const edits = JSON.parse(sc.plan(key).files!.find((f) => f.path === args[args.indexOf("--edits") + 1])!.content);
+    assert.equal(edits[sha("e")].revision, "https://phabricator.services.mozilla.com/D100");
+  });
+});
+
 const polled = (status: string, comments: unknown[] = [], reviewer = "accepted") => [
   { revision: 100, phid: "x", title: "t", status, reviewers: [{ name: "smaug", status: reviewer }], comments: [] },
   { revision: 101, phid: "y", title: "t", status, reviewers: [{ name: "smaug", status: reviewer }], comments },
@@ -4255,7 +4268,10 @@ describe("burndown verification", () => {
     const [assemble] = open();
     assert.match(assemble, /^assemble:a:/);
     const hash = assemble.split(":")[2];
-    assert.deepEqual(sc.plan(assemble).cli?.args.slice(-2), ["--order", `${sha("1")},${sha("7")}`]);
+    const args = sc.plan(assemble).cli!.args;
+    assert.deepEqual(args.slice(args.indexOf("--order"), args.indexOf("--order") + 2), ["--order", `${sha("1")},${sha("7")}`]);
+    // Rebuilt from its authors' commits, each keeps the bug the stack's commit had.
+    assert.deepEqual(JSON.parse(sc.plan(assemble).files!.find((f) => f.path === args[args.indexOf("--edits") + 1])!.content), { [sha("1")]: { bug: sc.state().patches["p-test-a"].bug } });
     sc.complete(assemble, { output: { mapping: { [sha("1")]: sha("a"), [sha("7")]: sha("d") } } });
     sc.settle();
     sc.complete(`deps:a:${hash}`, { output: [] });

@@ -1638,12 +1638,28 @@ class Planner {
     // is ordered once assembled.
     const plain = this.view.byKey.get(`assemble:${id}:${hash}`)?.find(succeeded);
     const stopped = plain !== undefined && this.out<{ conflict?: unknown }>(plain).conflict !== undefined;
-    const key = `assemble:${id}:${hash}${stopped && ordered.join() !== Object.values(plain.purpose.patches ?? {}).join() ? `:deps-${shortHash(ordered).slice(0, 6)}` : ""}`;
+    // Once one such assembly went through, it stands: the stack is ordered from there.
+    const done = this.view.jobs.findLast((j) => j.purpose.key.startsWith(`assemble:${id}:${hash}:deps-`) && !j.purpose.key.includes(":after:") && succeeded(j) && this.out<{ conflict?: unknown }>(j).conflict === undefined);
+    const key = done?.purpose.key ?? `assemble:${id}:${hash}${stopped && ordered.join() !== Object.values(plain.purpose.patches ?? {}).join() ? `:deps-${shortHash(ordered).slice(0, 6)}` : ""}`;
     const sources = (key.includes(":deps-") ? ordered : before).map((pid) => info.patches.find((p) => p.id === pid)!.source);
     const reassembly = this.view.jobs.some((j) => j.purpose.what === "assemble" && j.purpose.stack === id && j.purpose.key !== key && !j.purpose.key.startsWith(`${key}:after:`));
+    // Rebuilt from its authors' commits, each keeps what the stack's commit had: its bug, its Differential Revision.
+    const keptEdits = Object.fromEntries(
+      info.patches.flatMap((p) => {
+        const pv = this.s.patches[p.id];
+        const edit = { ...(pv.bug ? { bug: pv.bug } : {}), ...(pv.revision !== undefined ? { revision: `https://phabricator.services.mozilla.com/D${pv.revision}` } : {}) };
+        return Object.keys(edit).length ? [[p.source, edit]] : [];
+      }),
+    );
+    const keptFile = dataPath(this.config, this.s.id, `edits-assemble-${id}-${shortHash([key])}.json`);
+    const keptArgs = Object.keys(keptEdits).length ? ["--edits", keptFile] : [];
     const first = this.want(key, () =>
       reassembly
-        ? this.cli("assemble", "stack.ts", ["rewrite", "--cwd", wt, "--base", this.config.baseRef, "--branch", info.branch, "--leave-conflict", "--order", sources.join(",")], { cwd: wt, purpose: { stack: id, patches: patchesOf(sources) } })
+        ? this.cli("assemble", "stack.ts", ["rewrite", "--cwd", wt, "--base", this.config.baseRef, "--branch", info.branch, "--leave-conflict", "--order", sources.join(","), ...keptArgs], {
+            cwd: wt,
+            purpose: { stack: id, patches: patchesOf(sources) },
+            files: keptArgs.length ? [{ path: keptFile, content: JSON.stringify(keptEdits) + "\n" }] : [],
+          })
         : this.cli("assemble", "stack.ts", ["assemble", "--cwd", wt, "--branch", info.branch, "--base", this.config.baseRef, "--leave-conflict", ...sources], { cwd: wt, purpose: { stack: id, patches: patchesOf(sources) } }),
     );
     // Follow the chain of conflicts: resolve-conflict, then assemble what's left.
@@ -1850,8 +1866,13 @@ class Planner {
         const bug = p.bug ?? (meta !== null && p.item === ANNOTATIONS_ITEM ? meta : null);
         if (bug !== null) edits[pid] = bug;
       }
-      if (Object.keys(edits).length === 0) continue;
-      const key = `rewrite-bugs:${stack.id}:${shortHash(Object.entries(edits).map(([k, v]) => `${k}=${v}:${this.s.patches[k].sha}`))}`;
+      // A submitted patch whose commit lost its Differential Revision trailer (rebuilt from its author's commit) gets
+      // it back, its bug already in its title or not: as the branch's last import read it.
+      const read = this.view.jobs.filter((j) => j.purpose.stack === stack.id && j.name === "stack.ts import" && succeeded(j)).at(-1);
+      const commits = read ? this.out<ImportedCommit[]>(read) : [];
+      const lacking = stack.order.filter((pid) => this.s.patches[pid]?.revision !== undefined && commits.some((c) => c.sha === this.s.patches[pid].sha && c.revision === undefined));
+      if (Object.keys(edits).length === 0 && lacking.length === 0) continue;
+      const key = `rewrite-bugs:${stack.id}:${shortHash([...Object.entries(edits).map(([k, v]) => `${k}=${v}:${this.s.patches[k].sha}`), ...lacking.map((k) => `${k}:${this.s.patches[k].sha}`)])}`;
       const e = this.rewriteEdits(`${stack.id}-${shortHash([key])}`, stack.order.map((pid) => this.s.patches[pid]), Object.fromEntries(Object.entries(edits).map(([pid, bug]) => [this.s.patches[pid].sha, { bug }])));
       this.want(key, () =>
         this.cli("rewrite", "stack.ts", ["rewrite", "--cwd", stack.worktree, "--base", stack.base ?? this.config.baseRef, "--branch", stack.branch, "--order", stack.order.map((pid) => this.s.patches[pid].sha).join(","), ...e.args], {
