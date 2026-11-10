@@ -451,7 +451,8 @@ function authorReport(input: HandlerInput, ev: <T extends EventInput["type"]>(ty
       let coveredBy: PatchId | undefined;
       if (r.state === "left as-is" && r.coveredBy) {
         const sha = r.coveredBy;
-        coveredBy = Object.values(input.state.patches).find((p) => p.item !== item && (p.sha.startsWith(sha) || sha.startsWith(p.sha.slice(0, 12))))?.id;
+        // By any sha it has had: its author's, before the stack rebased it, is the one other authors see.
+        coveredBy = Object.values(input.state.patches).find((p) => p.item !== item && [p.sha, ...(input.state.patchShas[p.id] ?? [])].some((x) => x.startsWith(sha) || sha.startsWith(x.slice(0, 12))))?.id;
         if (!coveredBy) throw new InvalidReport(`coveredBy: ${sha} isn't a patch of the stack; name the stack's commit that fixes it (\`git log\` on its branch).`);
       }
       // Its patch on Phabricator and its commits kept: nothing to change (a try failure that isn't its own), so it waits for

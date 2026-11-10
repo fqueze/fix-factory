@@ -1797,8 +1797,9 @@ describe("5. stack", () => {
     assert.ok(told, String(started));
     assert.match(sc.plan(told).agent?.message ?? "", /made no change[^]*report "left as-is", with that commit's sha in `coveredBy`/);
     assert.equal(sc.state().items["i-test-b"].state, "investigating");
-    // Its answer names the covering patch, which then fixes its tests too.
-    sc.complete(told, { report: { ...fixed([]), state: "left as-is", summary: "covered by test_a's fix", coveredBy: sha("a").slice(0, 12) } });
+    // Its answer names the covering patch, which then fixes its tests too: by its author's sha, before the stack
+    // rebased it.
+    sc.complete(told, { report: { ...fixed([]), state: "left as-is", summary: "covered by test_a's fix", coveredBy: sha("1").slice(0, 12) } });
     assert.equal(sc.state().items["i-test-b"].coveredBy, "p-test-a");
   });
 
