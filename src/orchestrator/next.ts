@@ -1229,9 +1229,9 @@ class Planner {
       }
     }
     if (author.commits.length === 0) return;
-    // A ⚑ on its author's last run (it disagrees with you, it fixed without reproducing…): nothing goes on until you
-    // answer.
-    if (this.s.needsUser.some((n) => n.job === author.job.job && (n.key.startsWith("disagrees:") || n.key.startsWith("failed:")))) return;
+    // A ⚑ on its author's last run (it disagrees with you, asks you, fixed without reproducing…): nothing goes on until
+    // you answer.
+    if (this.s.needsUser.some((n) => n.job === author.job.job && (n.key.startsWith("disagrees:") || n.key.startsWith("question:") || n.key.startsWith("failed:")))) return;
     this.checkAndReview(item, author.job, author.commits);
   }
 

@@ -275,8 +275,8 @@ export const COMMAND_LABELS: Record<Command["cmd"], string> = {
   dismiss: "dismiss",
 };
 
-export type ActionKind = "approve-push" | "take-it" | "file-bug" | "meta-bug" | "submit" | "resubmit" | "reply" | "reopen-bug" | "land" | "recovery" | "failed" | "stopped" | "disagrees" | "reviewers" | "other";
-const ACTION_KINDS: ActionKind[] = ["approve-push", "take-it", "file-bug", "meta-bug", "submit", "resubmit", "reply", "reopen-bug", "land", "recovery", "failed", "stopped", "disagrees", "reviewers"];
+export type ActionKind = "approve-push" | "take-it" | "file-bug" | "meta-bug" | "submit" | "resubmit" | "reply" | "reopen-bug" | "land" | "recovery" | "failed" | "stopped" | "disagrees" | "question" | "reviewers" | "other";
+const ACTION_KINDS: ActionKind[] = ["approve-push", "take-it", "file-bug", "meta-bug", "submit", "resubmit", "reply", "reopen-bug", "land", "recovery", "failed", "stopped", "disagrees", "question", "reviewers"];
 
 // The key's "<kind>:" prefix names the buttons of a needs-user entry, and the ids
 // it carries (push, item, patch, stack, job) say what they act on. Entries with

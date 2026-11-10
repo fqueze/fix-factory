@@ -20,6 +20,10 @@
       "type": "string",
       "description": "Only when resumed with a message from the user that you didn't follow: why. The factory stops and shows it to them."
     },
+    "question": {
+      "type": "string",
+      "description": "A decision you leave to the user (something you found but didn't do, that's theirs to choose): the question, with the choices and what each means. The factory shows it to them as a flag on your group and resumes you with their answer. Not for anything you can decide yourself."
+    },
     "cause": {
       "type": "string"
     },

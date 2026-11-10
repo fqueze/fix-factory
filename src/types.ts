@@ -293,6 +293,7 @@ export interface InvestigateReport {
   state: "fix verified locally" | "left as-is" | "handed back" | "blocked" | "not reproduced" | "needs a try repro"; // needs a try repro: commits are DEBUG commits widening the race
   summary: string; // one line, shown on the status page
   disagreement?: string; // why it didn't follow your message: the factory stops and asks you
+  question?: string; // a decision it leaves to you: a ⚑ on its group
   cause: string;
   evidence?: { source: "profile" | "log" | "local run" | "code reading"; ref?: string; finding: string }[]; // absent from reports older than it; ref: in the first ones
   verification: string;

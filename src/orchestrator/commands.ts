@@ -72,7 +72,7 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
   };
   // The ⚑s that wait on an item's way forward.
   const clearItemFlags = (item: ItemId) => {
-    for (const n of s!.needsUser.filter((x) => x.item === item && (x.key.startsWith("failed:") || x.key.startsWith("stopped:")))) ev({ type: "user-done", key: n.key });
+    for (const n of s!.needsUser.filter((x) => x.item === item && ["failed:", "stopped:", "disagrees:", "question:"].some((k) => x.key.startsWith(k)))) ev({ type: "user-done", key: n.key });
   };
   // Keys of the item whose job you stopped: next() may start them again (a stopped lint would otherwise stay
   // stopped when the author comes back with the same commit).

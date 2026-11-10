@@ -468,6 +468,8 @@ function authorReport(input: HandlerInput, ev: <T extends EventInput["type"]>(ty
       if (r.disagreement && YOUR_MESSAGES.includes(job.purpose?.reason ?? "")) {
         ev("needs-user", { key: `disagrees:${job.job}`, action: "Its author disagrees with you", detail: r.disagreement.slice(0, 1000), job: job.job, item });
       }
+      // A decision it leaves to you: answered on its group's row, which resumes it.
+      if (r.question) ev("needs-user", { key: `question:${job.job}`, action: "Its author asks you", detail: r.question.slice(0, 1500), job: job.job, item });
       if (r.state !== "fix verified locally") return;
       const patch = patchId(item, Math.max(0, r.commits.length - 1));
       // Each report says what its commits need now: what an earlier one said and this one doesn't is gone.

@@ -134,6 +134,8 @@ export function flagControls(r: RequestState, n: NeedsUser, ctx: RenderContext):
     }
     case "stopped":
       return buttons(retry, talk, handBack, dismissButton(r.id, n.key, back));
+    case "question":
+      return buttons(talk, commandButton(r.id, { cmd: "dismiss", key: n.key }, "Go ahead with its patch", back, false, "Its patch goes on as it is, the question left unanswered"), handBack);
     case "disagrees":
       return buttons(talk, commandButton(r.id, { cmd: "dismiss", key: n.key }, "Go ahead with its patch", back, false, "Its patch goes on to critical review as it is"), handBack);
     case "recovery":

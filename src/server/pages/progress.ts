@@ -152,6 +152,8 @@ export function flagAsk(r: RequestState, i: ItemView, n: NeedsUser): Html {
       return isAuthorJob(job)
         ? html`<p>Its author stopped without a fix:</p>${detail}<p>Resume it where it stopped, tell it what to do, or drop the group (🗑).</p>`
         : html`<p>${jobNoun(job.name).replace(/^./, (c) => c.toUpperCase())} failed:</p>${detail}<p>Retry it, or drop the group (🗑).</p>`;
+    case "question":
+      return html`<p>Its author leaves this to you:</p>${detail}<p>Answer it (its author gets your answer), go ahead with its patch as it is, or drop the group (🗑).</p>`;
     case "disagrees":
       return html`<p>Its author didn't do what you asked:</p>${detail}<p>Tell it again, go ahead with its patch as it is, or drop the group (🗑).</p>`;
     case "take-it":

@@ -1002,6 +1002,18 @@ describe("4. investigate and fix", () => {
     assert.ok(sc.settle().includes(`import:${job}`), "go ahead with its patch");
   });
 
+  it("an author that leaves you a decision asks it as a ⚑ on its group, which your answer to it clears", () => {
+    const sc = workList([group("ka", "a/test_a.js", "boom")]);
+    investigating(sc, "i-test-a");
+    sc.complete("author:i-test-a:initial", { report: fixed([sha("1")], { question: "Fix it in the harness instead? It would fix two other tests too." }) });
+    const job = sc.view().byKey.get("author:i-test-a:initial")![0].job;
+    const n = sc.state().needsUser.find((x) => x.key === `question:${job}`)!;
+    assert.deepEqual([n.action, n.item, n.detail], ["Its author asks you", "i-test-a", "Fix it in the harness instead? It would fix two other tests too."]);
+    assert.ok(!sc.settle().includes(`import:${job}`), "nothing goes on");
+    command(sc, { cmd: "continue", item: "i-test-a", text: "Yes, in the harness." });
+    assert.ok(!sc.open().includes(`question:${job}`), "answered");
+  });
+
   // The author's commit through import and a clean lint; returns the author job.
   function linted(sc: Scenario, author: string, commit: string): string {
     sc.complete(author, { report: fixed([commit]) });
