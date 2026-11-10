@@ -82,6 +82,7 @@
     }
   }
   function reopenFolds(root) {
+    pasteFields(false);
     root.querySelectorAll("details.req, details[data-fold]").forEach(function (d) {
       if (!d.open && opened.has(keyOf(d))) d.open = true;
       // The page of one request comes with it open.
@@ -318,6 +319,45 @@
     }
   });
 
+  // A bug to file you opened in Bugzilla: back here, its label is a field to paste its number in, focused, so filing
+  // it is paste and Enter. Escape gives the label back.
+  var filing = new Set(); // request + "\n" + patch
+  document.addEventListener("click", function (event) {
+    var a = event.target.closest && event.target.closest("a.bug.tofile[data-patch]");
+    var req = a && a.closest("[data-request]");
+    if (!req) return;
+    filing.add(req.dataset.request + "\n" + a.dataset.patch);
+    setTimeout(pasteFields, 0, false);
+  });
+  // Coming back to this tab from Bugzilla's.
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState === "visible") pasteFields(true);
+  });
+  function pasteFields(focus) {
+    if (!filing.size) return;
+    filing.forEach(function (key) {
+      var parts = key.split("\n");
+      document.querySelectorAll('a.bug.tofile[data-patch="' + CSS.escape(parts[1]) + '"]').forEach(function (a) {
+        var form = document.createElement("form");
+        form.className = "cmd bugpaste";
+        form.method = "post";
+        form.action = "/api/commands";
+        form.dataset.key = key;
+        form.innerHTML = '<input type="hidden" name="command"><input type="hidden" name="back"><input type="text" name="bugOrText" required placeholder="Bug number" title="Enter sends it; Escape gives the Bug to file link back">';
+        form.elements.command.value = JSON.stringify({ cmd: "set-bug", request: parts[0], patch: parts[1] });
+        form.elements.back.value = location.pathname;
+        form.addEventListener("keydown", function (event) {
+          if (event.key !== "Escape") return;
+          filing.delete(key);
+          form.replaceWith(a);
+        });
+        a.replaceWith(form);
+      });
+    });
+    var field = focus && document.querySelector("form.bugpaste input[type=text]");
+    if (field) field.focus();
+  }
+
   document.addEventListener("submit", function (event) {
     var form = event.target;
     if (!form.classList.contains("cmd")) return;
@@ -337,6 +377,7 @@
         });
       })
       .then(function () {
+        if (form.dataset.key) filing.delete(form.dataset.key);
         form.querySelectorAll("input[type=text], textarea").forEach(function (i) {
           i.value = "";
         });

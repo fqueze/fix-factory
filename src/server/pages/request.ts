@@ -251,7 +251,7 @@ function metaBugLine(r: RequestState, back: string, ctx: RenderContext): Html {
     ? null
     : unfiled
       ? html`· <span class="sub">to file once the stack's ${plural(unfiled, "other bug")} ${unfiled === 1 ? "is" : "are"} filed</span>`
-      : html`· <a class="bug tofile" href="${metaBugUrl(r, m.draft, ctx)}" target="_blank" rel="noopener">Bug to file</a>`;
+      : html`· <a class="bug tofile" data-patch="meta" href="${metaBugUrl(r, m.draft, ctx)}" target="_blank" rel="noopener">Bug to file</a>`;
   return html`<div class="box"><h4>Meta bug${required ? null : html` <span class="sub">(optional)</span>`} ${link} ${m.draft ? html`· “${m.draft.summary}”` : null}</h4>${
     m.draft ? html`<details data-fold="desc-meta"><summary>Description</summary><div class="desc">${md(m.draft.description)}</div></details>${revisions(r, "meta")}` : null
   }${bugBox(r.id, "meta", back, "row")}</div>`;
@@ -805,7 +805,7 @@ function bugLabel(p: PatchView, ctx: RenderContext): Html | null {
     return html`<a class="bug" href="${bugUrl(p.bug)}" target="_blank" rel="noopener">Bug ${p.bug}</a>`;
   }
   if (p.bugDraft) {
-    return html`<a class="bug tofile" href="${enterBugUrl(p.bugDraft, ctx)}" target="_blank" rel="noopener" title="Opens a prefilled enter_bug.cgi; paste its number below">Bug to file</a>`;
+    return html`<a class="bug tofile" data-patch="${p.id}" href="${enterBugUrl(p.bugDraft, ctx)}" target="_blank" rel="noopener" title="Opens a prefilled enter_bug.cgi; back here, paste its number in the field it leaves in its place">Bug to file</a>`;
   }
   return p.item === ANNOTATIONS_ITEM ? html`<span class="bug none" title="Goes under the meta bug">meta bug</span>` : html`<span class="bug missing" title="Its author gives it one: an open bug for this failure, or a draft to file">no bug yet</span>`;
 }

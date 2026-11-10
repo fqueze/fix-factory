@@ -523,7 +523,7 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.doesNotMatch(renderRequest(r, ctx, true).value, /data-patch="p-drag"/, "blocked after the review limit: still a draft");
     r.items["i-drag"].state = "reviewed";
     const reviewed = renderRequest(r, ctx, true).value;
-    assert.match(rowOf(reviewed, "patch-p-drag"), /<span class="name" title="[^"]*"><a class="bug tofile" href="https:\/\/bugzilla\.mozilla\.org\/enter_bug\.cgi\?[^"]*Drag\+session\+left\+open[^"]*"[^>]*>Bug to file<\/a><span class="ptitle">Close the drag session/);
+    assert.match(rowOf(reviewed, "patch-p-drag"), /<span class="name" title="[^"]*"><a class="bug tofile" data-patch="p-drag" href="https:\/\/bugzilla\.mozilla\.org\/enter_bug\.cgi\?[^"]*Drag\+session\+left\+open[^"]*"[^>]*>Bug to file<\/a><span class="ptitle">Close the drag session/);
     assert.match(reviewed, /<span class="ready">2 ready<\/span>/);
   });
   it("names a try push by what it's for, numbered", () => {
@@ -600,7 +600,7 @@ describe("one fixture per step of docs/MVP.md", () => {
   it("7. bugs: the patch's Bug to file link, and the paste-number/comment box hanging from it", () => {
     const h = expanded("r-20261010-xpcshell-cwd");
     const row = rowOf(h, "patch-p-copydir");
-    assert.match(row, /<a class="bug tofile" href="https:\/\/bugzilla\.mozilla\.org\/enter_bug\.cgi\?product=Core&amp;component=XPCOM&amp;short_desc=CopyDirectoryTo\+leaves/);
+    assert.match(row, /<a class="bug tofile" data-patch="[^"]*" href="https:\/\/bugzilla\.mozilla\.org\/enter_bug\.cgi\?product=Core&amp;component=XPCOM&amp;short_desc=CopyDirectoryTo\+leaves/);
     assert.match(row, /blocked=2081200/);
     assert.doesNotMatch(row, /assigned_to/, "no Bugzilla email configured");
     const mine = rowOf(renderRequest(source.getRequest("r-20261010-xpcshell-cwd")!, { ...ctx, bugzillaEmail: "me@mozilla.com" }, true).value, "patch-p-copydir");
@@ -857,7 +857,7 @@ describe("one fixture per step of docs/MVP.md", () => {
     r.patches["p-captive"].item = "i-annotations";
     r.patches["p-webrtc"].bug = 2079003;
     assert.doesNotMatch(box(r)!, /optional/);
-    assert.match(box(r)!, /<a class="bug tofile" href="[^"]*dependson=2079003%2C2079001/);
+    assert.match(box(r)!, /<a class="bug tofile" data-patch="meta" href="[^"]*dependson=2079003%2C2079001/);
     // A patch's own bug still to file: the meta bug, which depends on it, comes after.
     r.patches["p-webrtc"].bug = null;
     r.patches["p-webrtc"].bugDraft = { product: "Core", component: "DOM", summary: "s", description: "d" };
@@ -872,7 +872,7 @@ describe("one fixture per step of docs/MVP.md", () => {
     r.patches["p-webrtc"].bug = 2079003;
     r.patches["p-perm"].bug = 2079001;
     assert.match(box(r)!, /Meta bug <span class="sub">\(optional\)<\/span>/);
-    assert.match(box(r)!, /tofile" href="[^"]*dependson=2079003%2C2079002%2C2079001/);
+    assert.match(box(r)!, /tofile" data-patch="meta" href="[^"]*dependson=2079003%2C2079002%2C2079001/);
     // Filed: its link.
     r.metaBug = { bug: 2079009, draft: r.metaBug!.draft };
     assert.equal(box(r), null);

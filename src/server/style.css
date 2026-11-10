@@ -481,3 +481,6 @@ a.cost { color: inherit; }
 .strip .running:hover .running-list, .strip .running:focus-within .running-list { display: block; }
 .strip .running-list a { display: block; padding: 3px 10px; color: var(--text-primary); text-decoration: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .strip .running-list a:hover { background: var(--track); }
+/* A bug to file's label, once opened in Bugzilla: the field its number goes in. */
+form.bugpaste { display: inline-flex; flex: none; margin: 0; }
+form.bugpaste input { font: inherit; font-size: 13px; width: 8em; padding: 1px 6px; border: 1px solid var(--critical); border-radius: 6px; background: var(--surface-1); color: var(--text-primary); }
