@@ -4,7 +4,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
-import { arcToken, makeConduit, parseFileInfoReviewers, parseRevision, poll, reviewerStatus, reviewersCommand, setTestPlan, stripBadge, unknownReviewers, type Conduit } from "./phab.ts";
+import { arcToken, makeConduit, switchingFetch, parseFileInfoReviewers, parseRevision, poll, reviewerStatus, reviewersCommand, setTestPlan, stripBadge, unknownReviewers, type Conduit } from "./phab.ts";
 
 const fixtures = new URL("../../test/fixtures/phab/", import.meta.url);
 
@@ -183,4 +183,26 @@ test("setTestPlan edits the revision's Test Plan field", async () => {
   const conduit: Conduit = async (method, params) => (calls.push([method, params]), { object: { id: 5 } });
   assert.deepEqual(await setTestPlan(335332, "- Green on try.", conduit), { revision: 335332, testPlan: "- Green on try." });
   assert.deepEqual(calls, [["differential.revision.edit", { objectIdentifier: "D335332", transactions: [{ type: "testPlan", value: "- Green on try." }] }]]);
+});
+
+test("a call refused (429) through one client goes through the other, which later calls use first", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "phab-client-"));
+  const file = join(dir, "phab-client");
+  const calls: string[] = [];
+  let blocked = "curl";
+  const client = (name: string) => (async () => (calls.push(name), new Response("{}", { status: name === blocked ? 429 : 200 }))) as unknown as typeof fetch;
+  const f = switchingFetch({ curl: client("curl"), node: client("node") }, file);
+  assert.equal((await f("u", { body: "b" })).status, 200);
+  assert.deepEqual(calls, ["curl", "node"]);
+  assert.equal((await f("u", { body: "b" })).status, 200);
+  assert.deepEqual(calls, ["curl", "node", "node"], "node first now");
+  blocked = "node";
+  await f("u", { body: "b" });
+  assert.deepEqual(calls.slice(3), ["node", "curl"], "and back");
+  // Both refusing: the 429 stands, nothing switched.
+  blocked = "both";
+  const both = switchingFetch({ curl: (async () => new Response("", { status: 429 })) as unknown as typeof fetch, node: (async () => new Response("", { status: 429 })) as unknown as typeof fetch }, file);
+  assert.equal((await both("u", { body: "b" })).status, 429);
+  assert.equal(readFileSync(file, "utf8").trim(), "curl");
+  rmSync(dir, { recursive: true });
 });

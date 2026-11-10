@@ -25,7 +25,7 @@
 
 import { spawn } from "node:child_process";
 import { netLog } from "../lib/netlog.ts";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { runCli, UsageError } from "../lib/cli.ts";
@@ -51,8 +51,9 @@ export function arcToken(arcrc = join(homedir(), ".arcrc")): string {
   return token;
 }
 
-// Phabricator answers 429 to Node's own requests (fetch, then https too: its TLS connection), whatever the token, and
-// not to curl's. The body goes on stdin: the token stays out of the process list.
+// Phabricator's CDN answers 429 to one kind of client at a time (Node's TLS connection, then curl's), whatever the
+// token, and not to the others: a call refused through one goes through the other, which the next calls use. The body
+// goes on curl's stdin: the token stays out of the process list.
 const curlFetch = ((url: string, init: RequestInit) =>
   new Promise<Response>((resolve, reject) => {
     const curl = spawn("curl", ["-sS", "--data-binary", "@-", "-H", "content-type: application/x-www-form-urlencoded", "-w", "\n%{http_code}", url]);
@@ -78,7 +79,28 @@ const curlFetch = ((url: string, init: RequestInit) =>
     curl.stdin.end(String(init.body));
   })) as typeof fetch;
 
-export function makeConduit(fetchFn: typeof fetch = curlFetch, getToken: () => string = () => arcToken()): Conduit {
+type Client = "curl" | "node";
+const CLIENTS: Record<Client, typeof fetch> = { curl: curlFetch, node: ((url: string, init: RequestInit) => fetch(url, init)) as typeof fetch };
+
+// The client the last refused call switched to, for every job: in the factory's state directory.
+function clientFile(): string | undefined {
+  const path = process.env.FACTORY_CONFIG ?? "factory.config.json";
+  return existsSync(path) ? join(loadConfig(path).stateDir, "phab-client") : undefined;
+}
+
+export function switchingFetch(clients: Record<Client, typeof fetch> = CLIENTS, file: string | undefined = clientFile()): typeof fetch {
+  return (async (url: string, init: RequestInit) => {
+    const first: Client = file && existsSync(file) && readFileSync(file, "utf8").trim() === "node" ? "node" : "curl";
+    const res = await clients[first](url, init);
+    if (res.status !== 429) return res;
+    const other: Client = first === "curl" ? "node" : "curl";
+    const again = await clients[other](url, init);
+    if (again.status !== 429 && file) writeFileSync(file, other + "\n");
+    return again;
+  }) as typeof fetch;
+}
+
+export function makeConduit(fetchFn: typeof fetch = switchingFetch(), getToken: () => string = () => arcToken()): Conduit {
   let token: string | undefined;
   return async (method, params) => {
     token ??= getToken();
