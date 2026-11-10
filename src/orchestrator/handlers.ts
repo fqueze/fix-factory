@@ -412,10 +412,12 @@ function authorReport(input: HandlerInput, ev: <T extends EventInput["type"]>(ty
   switch (job.name) {
     case "investigate-and-fix": {
       const r = input.report as InvestigateReport;
-      // One failure's fix is on one bug: a commit added after its first one had a bug doesn't get a bug of its own.
+      // One failure's fix is on one bug: a commit added after its first one had a bug doesn't get a bug of its own. A
+      // first commit that is to file replaces the one that had it (a fix redone elsewhere, on a bug of its own).
       const first = input.state.patches[patchId(item, 0)];
+      const names = (x: string, c: string | undefined) => c !== undefined && (c.startsWith(x) || x.startsWith(c.slice(0, 12)));
       // A draft naming none of its commits is an earlier report's, carried over: ignored like at import.
-      if (first?.bug && r.bugDrafts?.some((d) => d.commits.length === 0 || d.commits.some((x) => r.commits.some((c) => c.startsWith(x) || x.startsWith(c.slice(0, 12)))))) {
+      if (first?.bug && !r.bugDrafts?.some((d) => d.commits.some((x) => names(x, r.commits[0]))) && r.bugDrafts?.some((d) => d.commits.length === 0 || d.commits.some((x) => r.commits.some((c) => names(x, c))))) {
         throw new InvalidReport(`Your first commit is on Bug ${first.bug}: the commits of this fix share it. Put \`Bug ${first.bug}\` in the message of every commit of yours that says Bug XXXXXXX, drop their bugDrafts, and end with the JSON report again.`);
       }
       if (r.state === "blocked") {

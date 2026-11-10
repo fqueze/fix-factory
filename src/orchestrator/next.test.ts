@@ -1842,6 +1842,19 @@ describe("5. stack", () => {
   });
 });
 
+describe("a fix on a bug of its own", () => {
+  it("replaces the one its first commit had; a commit added after it shares that bug", () => {
+    const sc = stacked();
+    assert.equal(sc.state().patches["p-test-b"].bug, 22);
+    command(sc, { cmd: "continue", item: "i-test-b", text: "Fix it in the harness instead, on a bug of its own." });
+    const key = sc.state().queuedAuthors?.[0]?.key ?? sc.view().jobs.findLast((j) => j.purpose.key.startsWith("author:i-test-b:") && !j.end)!.purpose.key;
+    sc.settle();
+    const draft = (c: string) => ({ bugDrafts: [{ commits: [c], draft: bugDraft }] });
+    assert.throws(() => sc.complete(key, { report: fixed([sha("2"), sha("e")], draft(sha("e"))) }), /Your first commit is on Bug 22/);
+    sc.complete(key, { report: fixed([sha("e")], draft(sha("e"))) });
+  });
+});
+
 describe("6. verify on try", () => {
   it("a failure you leave as a follow-up doesn't go to its author", () => {
     const sc = stacked();
