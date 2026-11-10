@@ -2894,7 +2894,8 @@ class Planner {
   private reviewComments(): void {
     const revisions = Object.values(this.s.patches).filter((p) => p.revision !== undefined);
     this.pollPhab();
-    if (this.s.step !== "review comments" && this.s.step !== "landing") return;
+    // Patches submitted before the rest (some bugs still to file) are in review too: their reviews are answered.
+    if (this.s.step !== "review comments" && this.s.step !== "landing" && !revisions.some((p) => p.review !== undefined)) return;
     const lastPoll = this.view.jobs.filter((j) => j.purpose.what === "poll" && succeeded(j)).at(-1);
     for (const n of this.s.needsUser.filter((x) => x.key.startsWith("resubmit:"))) {
       // Done once Phabricator has a diff newer than the request (polls from before diffs were read: the next poll).

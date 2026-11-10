@@ -2149,6 +2149,18 @@ function verified(reportA?: object): Scenario {
   return sc;
 }
 
+describe("patches submitted before the rest", () => {
+  it("have their reviews read while the request still waits for bugs to file", () => {
+    const sc = verified({ bugDraft });
+    assert.equal(sc.state().step, "meta bug");
+    const p = sc.state().patches["p-test-b"];
+    const { deps: _d, review: _r, replyDrafts: _rd, id, ...fields } = p;
+    sc.add({ type: "patch", request: ID, patch: id, ...fields, revision: 100 });
+    sc.add({ type: "review-status", request: ID, patch: id, revision: 100, status: "accepted", reviewers: [{ name: "smaug", status: "accepted" }], comments: [{ id: 7, author: "smaug", text: "Thanks!", done: false }], author: "me" });
+    assert.ok(sc.settle().some((k) => k.startsWith(`classify-comments:${id}:`)), "its reviewer's comment is classified");
+  });
+});
+
 describe("review fixes", () => {
   it("a fix made without reproducing the failure waits for you: no import, no review", () => {
     const sc = workList([group("ka", "a/test_a.js", "boom")]);
