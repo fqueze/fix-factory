@@ -92,7 +92,8 @@ export function itemSentence(r: RequestState, i: ItemView, ctx: RenderContext): 
   if (job) {
     return { text: html`<span class="working">${runningSentence(job)} · ${elapsed(job.startedAt, ctx)}</span>`, cls: "run", controls: null, detail: i.detail };
   }
-  const flag = r.needsUser.find((n) => flagItemOf(r, n) === i.id);
+  // Filing its bug is the ⚑ Bug to file on its row, and its box: not said again.
+  const flag = r.needsUser.find((n) => flagItemOf(r, n) === i.id && actionKind(n, r) !== "file-bug");
   if (flag) {
     return { text: html`needs you: ${flagText(r, flag)}`, cls: "find", controls: flagControls(r, flag, ctx), ask: flagAsk(r, i, flag) };
   }
@@ -200,7 +201,8 @@ export function itemBucket(r: RequestState, i: ItemView, ctx: RenderContext): Bu
   if (cls === "run") {
     return "working";
   }
-  if (cls === "find") {
+  // A bug to file needs you too, though its row says it only with its ⚑ Bug to file.
+  if (cls === "find" || r.needsUser.some((n) => flagItemOf(r, n) === i.id && actionKind(n, r) === "file-bug")) {
     return "needs you";
   }
   // Its push runs on try: nothing of the factory's does.

@@ -640,7 +640,7 @@ function patchParts(r: RequestState, p: PatchView, ctx: RenderContext) {
       landable ? html`<span class="landable">landable</span>` : null,
       backoutText(r, p),
       r.tryNeeded?.[p.id] && !r.tryNeeded[p.id].verified ? html`<span class="bad" title="Not landable yet: it was changed for ${r.tryNeeded[p.id].why}, and no green try push has carried that change since">needs a green try push</span>` : null,
-      ...yours.filter((n) => !own.includes(n) || !onLine(n)).map((n) => html`<b class="you">${n.action}</b>`),
+      ...yours.filter((n) => (!own.includes(n) || !onLine(n)) && actionKind(n, r) !== "file-bug").map((n) => html`<b class="you">${n.action}</b>`),
     ].filter((x) => x !== null),
     flag: own.some(onLine) ? html`${own.filter(onLine).map((n) => html`<span class="flagitem" data-key="${n.key}"><b>${n.action}</b>${n.detail ? html` <span class="sub">${n.detail}</span>` : null}${flagControls(r, n, ctx)}</span>`)}` : null,
     rest: own.filter((n) => !onLine(n)).map((n) => renderAction(r, n, ctx)),
