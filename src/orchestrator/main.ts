@@ -7,15 +7,15 @@
 //
 // --dry-run (or "dryRun" in the config): starts no agents, and passes --dry-run to every CLI,
 // which then refuses try pushes and Phabricator or Bugzilla writes.
-import { copyFileSync, existsSync, mkdirSync, readFileSync, watch, writeFileSync, type FSWatcher } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, statSync, watch, writeFileSync, type FSWatcher } from "node:fs";
 import { delimiter, dirname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { toolsBin } from "../cli/tools.ts";
 import { loadConfig } from "../config.ts";
 import { execOk } from "../lib/exec.ts";
 import { processNewCommands, readCommands } from "../state/commands.ts";
-import { listRequests, readEvents } from "../state/events.ts";
-import { foldEvents } from "../state/fold.ts";
+import { eventsPath, listRequests, readEvents, readEventsFrom } from "../state/events.ts";
+import { folder } from "../state/fold.ts";
 import { cancelJob, jobDir, jobStatus, reconcile, type ExitInfo } from "../state/jobs.ts";
 import type { Command, FactoryConfig, JobId, JobView, RequestId, RequestState } from "../types.ts";
 import { commandEffects } from "./commands.ts";
@@ -24,7 +24,7 @@ import { handleWatchLines } from "./handlers.ts";
 import { CANCELLED, next, requestSummary, type Action, type Ctx } from "./next.ts";
 import { DEFAULT_PRIORITY, reportPath, shortHash, type JobPlan } from "./plan.ts";
 import { commitExists, defaultCliCommand, finishJob, jsonLines, readOut, readReport, startPlan, type RunnerDeps } from "./runner.ts";
-import { buildView, type JobRecord, type View } from "./view.ts";
+import { viewBuilder, type JobRecord, type View } from "./view.ts";
 
 export const TICK_MS = 30_000;
 export const PRESENCE_MS = 30 * 60_000;
@@ -53,6 +53,7 @@ export class Orchestrator {
   private readonly dryRun: boolean;
   private readonly watchOffsets = new Map<JobId, number>();
   private presenceTimes: number[] = [];
+  private readonly folds = new Map<RequestId, { offset: number; fold: ReturnType<typeof folder>; views: ReturnType<typeof viewBuilder>; loaded?: Loaded }>();
   private readonly deferred: { request: RequestId; plan: JobPlan }[] = []; // commands' jobs waiting for their worktree
   private readonly planErrors = new Set<string>(); // failed:plan:<hash> keys raised by this process // visible=true presence commands, in order
   private ticking: Promise<void> | undefined;
@@ -75,9 +76,24 @@ export class Orchestrator {
     };
   }
 
+  // Each request's fold goes on from where it stopped: only the lines appended since are read (reading them all
+  // took seconds a round). Its state is the same object until they change it.
   private load(id: RequestId): Loaded {
-    const events = readEvents(this.config.stateDir, id);
-    return { s: foldEvents(events), view: buildView(events) };
+    let f = this.folds.get(id);
+    // Shorter than what was read: rewritten (a test's lost event), read again from the start.
+    if (f && statSync(eventsPath(this.config.stateDir, id)).size < f.offset) f = undefined;
+    const { events, offset } = readEventsFrom(this.config.stateDir, id, f?.offset ?? 0);
+    if (f?.loaded && events.length === 0) return f.loaded;
+    if (!f) {
+      if (events.length === 0) throw new Error(`${id} has no events`);
+      f = { offset: 0, fold: folder(events[0]), views: viewBuilder() };
+      this.folds.set(id, f);
+    }
+    f.fold.apply(events);
+    f.views.apply(events);
+    f.offset = offset;
+    f.loaded = { s: f.fold.state(), view: f.views.view };
+    return f.loaded;
   }
 
   private requests(): RequestId[] {

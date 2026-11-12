@@ -39,58 +39,79 @@ export interface View {
 }
 
 export function buildView(events: readonly Event[]): View {
-  const v: View = { jobs: [], byKey: new Map(), raised: new Map(), done: new Set(), stepCount: new Map(), itemResets: new Map(), tryFailures: [], pushedAt: new Map(), executed: new Set(), dismissed: new Map(), flagPatch: new Map() };
+  const b = viewBuilder();
+  b.apply(events);
+  return b.view;
+}
+
+// A view that goes on: apply() the events appended since; `view` is the same object, kept up to date.
+export function viewBuilder(): { apply(events: readonly Event[]): void; view: View } {
+  const v: View = {
+    jobs: [],
+    byKey: new Map(),
+    raised: new Map(),
+    done: new Set(),
+    stepCount: new Map(),
+    itemResets: new Map(),
+    tryFailures: [],
+    pushedAt: new Map(),
+    executed: new Set(),
+    dismissed: new Map(),
+    flagPatch: new Map(),
+  };
   const byJob = new Map<JobId, JobRecord>();
-  for (const e of events) {
-    switch (e.type) {
-      case "job-started": {
-        const purpose = (e as { purpose?: JobPurpose }).purpose ?? { key: `job:${e.job}`, what: "unknown" };
-        const r: JobRecord = { job: e.job, purpose, kind: e.kind, name: e.name, item: e.item, cwd: e.cwd, sessionId: e.sessionId, startedAt: Date.parse(e.t) };
-        v.jobs.push(r);
-        byJob.set(e.job, r);
-        const list = v.byKey.get(purpose.key) ?? [];
-        list.push(r);
-        v.byKey.set(purpose.key, list);
-        break;
-      }
-      case "job-finished": {
-        const r = byJob.get(e.job);
-        if (r) r.end = { exitCode: e.exitCode, error: e.error, at: Date.parse(e.t) };
-        // A start Claude Code refused, its session running in another job (a retry raced next() before 5e5950e):
-        // it never ran, and isn't its key's latest job.
-        if (r && /Session ID \S+ is already in use/.test(e.error ?? "")) {
-          v.jobs.splice(v.jobs.indexOf(r), 1);
-          const list = v.byKey.get(r.purpose.key)!;
-          list.splice(list.indexOf(r), 1);
+  const apply = (events: readonly Event[]): void => {
+    for (const e of events) {
+      switch (e.type) {
+        case "job-started": {
+          const purpose = (e as { purpose?: JobPurpose }).purpose ?? { key: `job:${e.job}`, what: "unknown" };
+          const r: JobRecord = { job: e.job, purpose, kind: e.kind, name: e.name, item: e.item, cwd: e.cwd, sessionId: e.sessionId, startedAt: Date.parse(e.t) };
+          v.jobs.push(r);
+          byJob.set(e.job, r);
+          const list = v.byKey.get(purpose.key) ?? [];
+          list.push(r);
+          v.byKey.set(purpose.key, list);
+          break;
         }
-        break;
+        case "job-finished": {
+          const r = byJob.get(e.job);
+          if (r) r.end = { exitCode: e.exitCode, error: e.error, at: Date.parse(e.t) };
+          // A start Claude Code refused, its session running in another job (a retry raced next() before 5e5950e):
+          // it never ran, and isn't its key's latest job.
+          if (r && /Session ID \S+ is already in use/.test(e.error ?? "")) {
+            v.jobs.splice(v.jobs.indexOf(r), 1);
+            const list = v.byKey.get(r.purpose.key)!;
+            list.splice(list.indexOf(r), 1);
+          }
+          break;
+        }
+        case "needs-user":
+          if (!v.raised.has(e.key)) v.raised.set(e.key, Date.parse(e.t));
+          if (e.patch !== undefined) v.flagPatch.set(e.key, e.patch);
+          break;
+        case "user-done":
+          v.done.add(e.key);
+          if (!e.byFactory) v.dismissed.set(e.key, Date.parse(e.t));
+          break;
+        case "step":
+          v.stepCount.set(e.step, (v.stepCount.get(e.step) ?? 0) + 1);
+          break;
+        case "item-state":
+          if (e.state === "not started") v.itemResets.set(e.item, (v.itemResets.get(e.item) ?? 0) + 1);
+          break;
+        case "try-job-failed":
+          v.tryFailures.push({ push: e.push, taskId: e.taskId, retryId: e.retryId, jobName: e.jobName, platform: e.platform });
+          break;
+        case "command-executed":
+          v.executed.add(e.command);
+          break;
+        case "try-pushed":
+          if (!v.pushedAt.has(e.push)) v.pushedAt.set(e.push, Date.parse(e.t));
+          break;
       }
-      case "needs-user":
-        if (!v.raised.has(e.key)) v.raised.set(e.key, Date.parse(e.t));
-        if (e.patch !== undefined) v.flagPatch.set(e.key, e.patch);
-        break;
-      case "user-done":
-        v.done.add(e.key);
-        if (!e.byFactory) v.dismissed.set(e.key, Date.parse(e.t));
-        break;
-      case "step":
-        v.stepCount.set(e.step, (v.stepCount.get(e.step) ?? 0) + 1);
-        break;
-      case "item-state":
-        if (e.state === "not started") v.itemResets.set(e.item, (v.itemResets.get(e.item) ?? 0) + 1);
-        break;
-      case "try-job-failed":
-        v.tryFailures.push({ push: e.push, taskId: e.taskId, retryId: e.retryId, jobName: e.jobName, platform: e.platform });
-        break;
-      case "command-executed":
-        v.executed.add(e.command);
-        break;
-      case "try-pushed":
-        if (!v.pushedAt.has(e.push)) v.pushedAt.set(e.push, Date.parse(e.t));
-        break;
     }
-  }
-  return v;
+  };
+  return { apply, view: v };
 }
 
 export function succeeded(r: JobRecord): boolean {

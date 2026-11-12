@@ -10,6 +10,8 @@ import { afterTheirDeps, commitsOf, resumeAuthorPlan, similarMessages, stackId }
 import { config, HOUR, ID, Scenario, sha } from "./testkit.ts";
 import { shortHash } from "./plan.ts";
 import { needsMetaBug } from "../state/meta-bug.ts";
+import { foldEvents, folder } from "../state/fold.ts";
+import { buildView, viewBuilder } from "./view.ts";
 
 const none = { verdict: "none", quote: "no bug", feedback: [] };
 const ok = { verdict: "ok", findings: [], feedback: [] };
@@ -4646,5 +4648,19 @@ describe("assembling a stack", () => {
   it("puts a patch after the patches of the stack it needs, the others keeping their places", () => {
     const needs: Record<string, string[]> = { b: ["e"], d: ["a", "x"] };
     assert.deepEqual(afterTheirDeps(["a", "b", "c", "d", "e"], (id) => needs[id] ?? []), ["a", "c", "d", "e", "b"]);
+  });
+});
+
+describe("folding as events come", () => {
+  it("gives at each event the state and view of folding them all at once", () => {
+    const sc = inReview();
+    const f = folder(sc.events[0]);
+    const v = viewBuilder();
+    sc.events.forEach((e, i) => {
+      f.apply([e]);
+      v.apply([e]);
+      assert.deepEqual(f.state(), foldEvents(sc.events.slice(0, i + 1)), `after ${e.type}`);
+    });
+    assert.deepEqual(v.view, buildView(sc.events));
   });
 });
