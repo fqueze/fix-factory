@@ -176,9 +176,11 @@ export function codeInBackticks(description: string): Violation[] {
   return found.length ? [{ rule: "codeInBackticks", text: `put code identifiers in backticks: ${found.slice(0, 6).join(", ")}` }] : [];
 }
 
+// A test's dashboard is linked from its name, where the description names it, or not at all: a bare URL (a "Test
+// dashboard:" line at the end) is padding.
 export function testDashboardLink(description: string): Violation[] {
-  const test = /\b(?:browser|test)_\w+\.(?:js|html|xhtml)\b/.test(description);
-  return test && !description.includes("tests.firefox.dev/test.html") ? [{ rule: "testDashboardLink", text: "link the failing test's dashboard: https://tests.firefox.dev/test.html?test=<path>" }] : [];
+  const bare = /(?<!\]\()https:\/\/tests\.firefox\.dev\/test\.html\S*/.test(description);
+  return bare ? [{ rule: "testDashboardLink", text: "link the test's dashboard from its name where the description first names it ([`browser_x.js`](https://tests.firefox.dev/test.html?test=<path>)), not as a URL of its own; and only when it shows the failure on central" }] : [];
 }
 
 export function lintBug(draft: Partial<BugDraft>): LintResult {
