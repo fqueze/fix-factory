@@ -790,10 +790,14 @@ function testPlanSection(r: RequestState, p: PatchView, back: string): Html | nu
   const sent = p.testPlanSent;
   const id = `test-plan-${p.id}`;
   const status = sent ? html`<span class="sub">on D${sent.revision} since ${formatDate(sent.t)}${sent.text !== text ? ", not this version" : ""}</span>` : null;
+  // Being set: the button would come back until Phabricator has it.
+  const setting = Object.values(r.jobs).some((j) => j.purpose?.key.startsWith(`set-test-plan:${p.id}:`) && j.endedAt === undefined);
   const set =
     p.revision === undefined || sent?.text === text
       ? null
-      : html`<form class="inline cmd" method="post" action="/api/commands">${commandFields([{ cmd: "set-test-plan", request: r.id, patch: p.id, text }], back)}<button class="btn small primary">${sent ? `Update D${p.revision}'s test plan` : `Set as D${p.revision}'s test plan`}</button></form>`;
+      : setting
+        ? html`<span class="sub working">setting it on D${p.revision}</span>`
+        : html`<form class="inline cmd" method="post" action="/api/commands">${commandFields([{ cmd: "set-test-plan", request: r.id, patch: p.id, text }], back)}<button class="btn small primary">${sent ? `Update D${p.revision}'s test plan` : `Set as D${p.revision}'s test plan`}</button></form>`;
   const revise =
     p.testPlan === undefined
       ? null

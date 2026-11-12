@@ -1480,6 +1480,12 @@ describe("test plan", () => {
     assert.ok(row.includes(cmd({ cmd: "set-test-plan", request: r.id, patch: "p-panel", text: r.patches["p-panel"].testPlan })));
     assert.match(row, /Set as D327083(&#39;|')s test plan/);
     assert.ok(row.includes(cmd({ cmd: "revise-test-plan", request: r.id, patch: "p-panel" })));
+    // Being set: no button to click again until Phabricator has it.
+    const setting = structuredClone(r);
+    setting.jobs["j-set"] = { id: "j-set", kind: "script", name: "phab.ts set-test-plan", startedAt: r.createdAt, purpose: { key: "set-test-plan:p-panel:c-1", what: "set-test-plan", patch: "p-panel" } } as never;
+    const busy = rowOf(renderRequest(setting, ctx, true).value, "patch-p-panel");
+    assert.doesNotMatch(busy, /set-test-plan/);
+    assert.match(busy, /setting it on D327083/);
     r.patches["p-panel"].testPlanSent = { revision: 327083, text: r.patches["p-panel"].testPlan, t: "2026-10-16T08:00:00.000Z" };
     row = rowOf(renderRequest(r, ctx, true).value, "patch-p-panel");
     assert.match(row, /on D327083 since Oct 16<\/span>/);
