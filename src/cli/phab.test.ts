@@ -185,6 +185,13 @@ test("setTestPlan edits the revision's Test Plan field", async () => {
   assert.deepEqual(calls, [["differential.revision.edit", { objectIdentifier: "D335332", transactions: [{ type: "testPlan", value: "- Green on try." }] }]]);
 });
 
+test("setTestPlan gets a tag past Phabricator's firewall, which refuses <script> in any request", async () => {
+  const calls: [string, Record<string, unknown>][] = [];
+  const conduit: Conduit = async (method, params) => (calls.push([method, params]), { object: { id: 5 } });
+  assert.deepEqual(await setTestPlan(1, "delaying the module `<script>` by 500ms, a < b", conduit), { revision: 1, testPlan: "delaying the module `<script>` by 500ms, a < b" });
+  assert.equal((calls[0][1].transactions as { value: string }[])[0].value, "delaying the module `<\u200bscript>` by 500ms, a < b");
+});
+
 test("a call refused (429) through one client goes through the other, which later calls use first", async () => {
   const dir = mkdtempSync(join(tmpdir(), "phab-client-"));
   const file = join(dir, "phab-client");

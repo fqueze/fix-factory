@@ -201,9 +201,12 @@ export async function unknownReviewers(names: string[], conduit: Conduit = makeC
   return names.filter((n) => !known.has(bare(n)));
 }
 
-// The revision's Test Plan field, which Phabricator shows when it isn't empty.
+// The revision's Test Plan field, which Phabricator shows when it isn't empty. Its firewall refuses (HTTP 406) any
+// request with <script>, <iframe> or <link …> in it, escaped or not: a zero-width space after each "<" before a
+// letter gets the text through, shown the same.
 export async function setTestPlan(revision: number, text: string, conduit: Conduit = makeConduit()): Promise<{ revision: number; testPlan: string }> {
-  await conduit("differential.revision.edit", { objectIdentifier: `D${revision}`, transactions: [{ type: "testPlan", value: text }] });
+  const value = text.replace(/<(?=[A-Za-z])/g, "<\u200b");
+  await conduit("differential.revision.edit", { objectIdentifier: `D${revision}`, transactions: [{ type: "testPlan", value }] });
   return { revision, testPlan: text };
 }
 
