@@ -290,6 +290,11 @@ export function handleFinished(input: HandlerInput): HandlerResult {
         const p = s.patches[st.order[i]];
         if (!p) return;
         if (p.sha === c.sha && p.title === c.title && p.revision === c.revision) return;
+        // Its author's newer commit, not in the stack yet: the branch's is the one it replaces, which mustn't come back.
+        if (p.worktree !== st.worktree) {
+          if (c.revision !== undefined && p.revision === undefined) patchEvent(p, { revision: c.revision });
+          return;
+        }
         patchEvent(p, { sha: c.sha, title: c.title, bug: c.bug ?? p.bug, ...(c.revision !== undefined ? { revision: c.revision } : {}) });
       });
       break;

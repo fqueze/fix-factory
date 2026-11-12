@@ -2701,6 +2701,20 @@ function inReview(): Scenario {
   return sc;
 }
 
+describe("8. submit, an author's newer commit", () => {
+  it("isn't replaced by the stack's older commit when the branch is read before the stack has it", () => {
+    const sc = inReview();
+    const b = sc.state().patches["p-test-b"];
+    const { deps: _d, review: _r, replyDrafts: _rd, id, ...fields } = b;
+    // Its author amended it (another bug): its worktree's commit, not in the stack yet.
+    sc.add({ type: "patch", request: ID, patch: id, ...fields, sha: sha("9"), worktree: "/wt/author-b", title: "Bug XXXXXXX - Fix test_b, r=smaug.", bug: null });
+    sc.startJob({ purpose: { key: "refresh:root:y", what: "refresh", stack: "root" }, kind: "script", name: "stack.ts import", cwd: `/wt/${ID}-root`, cli: { tool: "stack.ts", args: ["import"] } });
+    sc.complete("refresh:root:y", { output: [{ ...imported(sha("e"), "Bug 22 - Fix test_b, r=smaug.", [], 22)[0], revision: 100 }, { ...imported(sha("f"), "Bug 999 - Fix a, r=smaug.", [], 999)[0], revision: 101 }] });
+    const now = sc.state().patches[id];
+    assert.deepEqual([now.sha, now.bug, now.worktree], [sha("9"), null, "/wt/author-b"]);
+  });
+});
+
 describe("8. submit, a rebuilt stack", () => {
   it("gives back the Differential Revision trailer a submitted patch's commit lost, its bug already in its title", () => {
     const sc = inReview();
