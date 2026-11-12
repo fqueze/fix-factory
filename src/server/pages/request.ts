@@ -471,8 +471,8 @@ function phabClass(p: PatchView, cls: StateClass): StateClass {
   if (cls !== "ok") return cls;
   // Not submitted yet: Phabricator's draft.
   if (p.revision === undefined) return "draft";
-  // Submitted, its review not read yet (or a status of its own): waiting for review, not ready.
-  return ({ published: "landed", accepted: "accepted", "needs-review": "review" } as const)[p.review?.status as "published" | "accepted" | "needs-review"] ?? (p.review === undefined ? "review" : cls);
+  // Submitted, its review not read yet, or a draft Phabricator hasn't sent its reviewers yet: waiting for review.
+  return ({ published: "landed", accepted: "accepted", "needs-review": "review", draft: "review" } as const)[p.review?.status as "published" | "accepted" | "needs-review" | "draft"] ?? (p.review === undefined ? "review" : cls);
 }
 
 function rowClass(r: RequestState, i: ItemView, ctx: RenderContext): StateClass {
