@@ -34,7 +34,15 @@ export async function buildStackReview(opts: { repo: string; command: string[]; 
     if (r.code !== 0) {
       throw new Error(`${cmd.join(" ")} exited with ${r.code}: ${r.stderr.trim().slice(-2000)}`);
     }
-    const shas = Object.fromEntries(stack.order.map((id) => [request.patches[id]?.sha, id]).filter(([sha]) => sha));
+    // The page shows the branch as git has it, which can be ahead of the factory (moz-phab submit gave its commits
+    // their revisions, not read yet): a commit the factory doesn't know by its sha is its patch of the same title.
+    const shas: Record<string, string> = Object.fromEntries(stack.order.map((id) => [request.patches[id].sha, id]));
+    const log = await exec(["git", "-C", stack.worktree, "log", "--format=%H%x09%s", `${base}..${stack.branch}`]);
+    for (const line of log.code === 0 ? log.stdout.split("\n").filter(Boolean) : []) {
+      const [sha, title] = line.split("\t");
+      const same = stack.order.filter((id) => request.patches[id].title === title);
+      if (!shas[sha] && same.length === 1) shas[sha] = same[0];
+    }
     return injectSendButton(readFileSync(file, "utf8"), { request: request.id, stack: stack.id, shas });
   } finally {
     rmSync(dir, { recursive: true, force: true });
