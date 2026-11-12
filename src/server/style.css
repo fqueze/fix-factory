@@ -33,7 +33,7 @@ header h1 { font-size: 16px; margin: 0; }
 .btn[disabled] { opacity: .45; cursor: not-allowed; }
 main { max-width: 1100px; margin: 0 auto; padding: 12px; }
 .ask { display: flex; gap: 6px; margin: 0 0 10px; }
-.ask input { flex: 1; min-width: 0; font: inherit; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-1); color: var(--text-primary); }
+.ask input, .ask textarea.oneline { flex: 1; min-width: 0; font: inherit; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-1); color: var(--text-primary); }
 h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--text-secondary); margin: 18px 0 6px; font-weight: 600; }
 h2 .count { color: var(--text-muted); font-weight: normal; }
 details.req { background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 6px; overflow: hidden; }
@@ -171,7 +171,7 @@ details.cmdline > summary { list-style: none; }
 details.cmdline > summary::-webkit-details-marker { display: none; }
 details.cmdline[open] { display: block; flex-basis: 100%; }
 details.cmdline pre { margin: 4px 0; white-space: pre-wrap; word-break: break-all; }
-.action input[type=text] { font: inherit; font-size: 13px; padding: 2px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-1); color: var(--text-primary); min-width: 0; flex: 1 1 200px; }
+.action input[type=text], .action textarea.oneline { font: inherit; font-size: 13px; padding: 2px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-1); color: var(--text-primary); min-width: 0; flex: 1 1 200px; }
 .box details > summary { cursor: pointer; font-size: 12px; color: var(--text-secondary); }
 .box .desc { white-space: pre-wrap; font-size: 12px; margin: 4px 0; }
 .flash { color: var(--good); font-size: 12px; }
@@ -216,7 +216,7 @@ ul.plan .reason { display: block; color: var(--text-muted); font-size: 12px; pad
 .call pre { margin: 2px 0 4px 14px; font: 11px/1.4 ui-monospace, Menlo, monospace; white-space: pre-wrap; word-break: break-all; max-height: 20em; overflow: auto; background: var(--surface-1); border-radius: 4px; padding: 4px 6px; }
 .call pre.out { color: var(--text-secondary); }
 .jobs .talk { margin: 4px 0 6px; }
-.jobs .talk input[type=text] { width: 32em; max-width: 60vw; }
+.jobs .talk input[type=text], .jobs .talk textarea.oneline { width: 32em; max-width: 60vw; }
 details.reopen { display: inline-block; }
 details.reopen > summary { list-style: none; }
 details.reopen > summary::-webkit-details-marker { display: none; }
@@ -285,7 +285,7 @@ details.row .state .working { color: var(--accent); font-weight: 600; }
 .jobs .job > summary::marker { color: var(--text-muted); }
 div.job { padding-left: 14px; }
 .jobctl { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
-.jobctl input[type=text] { font: inherit; font-size: 12px; padding: 1px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-1); color: var(--text-primary); min-width: 0; flex: 1 1 260px; }
+.jobctl input[type=text], .jobctl textarea.oneline { font: inherit; font-size: 12px; padding: 1px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-1); color: var(--text-primary); min-width: 0; flex: 1 1 260px; }
 .jobs .btn, .jobctl .btn { font-size: 11px; padding: 0 6px; }
 .said { display: inline-block; max-width: 40em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
 /* Landable catches the eye: it goes from blue (ready) to green (landed). */
@@ -343,7 +343,7 @@ details.req > summary > .action { margin: 4px -12px 0; border-radius: 0; padding
 details.req > summary > .action + .action { margin-top: 1px; }
 details.req > summary > .action:last-child { margin-bottom: -8px; }
 form.reqask { margin: 10px -12px -12px; gap: 0; border-top: 1px solid var(--border); }
-form.reqask input { border: 0; border-radius: 0; padding: 8px 12px; }
+form.reqask input, form.reqask textarea.oneline { border: 0; border-radius: 0; padding: 8px 12px; }
 form.reqask .btn { border: 0; border-left: 1px solid var(--border); border-radius: 0; padding: 0 16px; }
 /* Try pushes: the command wrapped across the row, then its jobs and try_task_config. */
 pre.command { margin: 0; white-space: pre-wrap; word-break: break-all; background: var(--bg); border-radius: 6px; padding: 6px 8px; }
@@ -419,7 +419,7 @@ details[open] > summary .onhover, summary:hover .onhover, summary:has(details.me
 h5.verdict { margin: 8px 0 2px; font-size: 12px; font-weight: 600; }
 h5.verdict .count { font-weight: 400; color: var(--text-muted); }
 form.inline-tell { display: flex; gap: 6px; margin: 2px 0 4px; }
-form.inline-tell input { flex: 1; font: inherit; font-size: 12px; padding: 2px 6px; border: 1px solid var(--border); border-radius: 6px; }
+form.inline-tell input, form.inline-tell textarea.oneline { flex: 1; font: inherit; font-size: 12px; padding: 2px 6px; border: 1px solid var(--border); border-radius: 6px; }
 .pfolders { margin: 4px 0; font-size: 12px; }
 .parts { margin: 4px 0 4px 22px; }
 .part ul { margin: 2px 0 8px; padding-left: 18px; }
@@ -485,3 +485,6 @@ a.cost { color: inherit; }
 /* A bug to file's label, once opened in Bugzilla: the field its number goes in. */
 form.bugpaste { display: inline-flex; flex: none; margin: 0; }
 form.bugpaste input { font: inherit; font-size: 13px; width: 8em; padding: 1px 6px; border: 1px solid var(--critical); border-radius: 6px; background: var(--surface-1); color: var(--text-primary); }
+
+/* Looks like a one-line box, keeps the lines of what you paste, and grows with them (client.js). */
+textarea.oneline { width: auto; resize: none; overflow-y: auto; max-height: 12em; box-sizing: border-box; }

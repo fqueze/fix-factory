@@ -190,7 +190,7 @@ export function renderRequestBody(r: RequestState, ctx: RenderContext): Html {
     ${notesFold(r, plans)}
     ${recoveryAnswers(r, ctx)}
     ${recovering.length ? html`<div class="jobs">${recovering.map((j) => jobLine(r, j, ctx))}</div>` : null}
-    <form class="ask cmd reqask" method="post" action="/api/commands">${commandFields([{ cmd: "tell-factory", request: r.id }], back)}<input type="text" name="text" required placeholder="Tell the factory about this request…"><button class="btn">Send</button></form>
+    <form class="ask cmd reqask" method="post" action="/api/commands">${commandFields([{ cmd: "tell-factory", request: r.id }], back)}<textarea class="oneline" name="text" required rows="1" placeholder="Tell the factory about this request…"></textarea><button class="btn">Send</button></form>
   </div>`;
 }
 
@@ -526,7 +526,7 @@ function talkBox(r: RequestState, i: ItemView, ctx: RenderContext, p?: PatchView
   if (!hasAuthorSession(r, i.id)) return null;
   return html`<div class="jobctl">${
     p
-      ? html`<form class="inline cmd joined" method="post" action="/api/commands">${commandFields([{ cmd: "comment-fix", request: r.id, patch: p.id }], requestUrl(r.id))}<input type="text" name="text" required placeholder="Tell its author what to do…"><button class="btn small" title="Resumes its author's session with your message; its patch then goes through lint and critical review again">Send</button></form>`
+      ? html`<form class="inline cmd joined" method="post" action="/api/commands">${commandFields([{ cmd: "comment-fix", request: r.id, patch: p.id }], requestUrl(r.id))}<textarea class="oneline" name="text" required rows="1" placeholder="Tell its author what to do…"></textarea><button class="btn small" title="Resumes its author's session with your message; its patch then goes through lint and critical review again">Send</button></form>`
       : continueBox(r.id, i.id, requestUrl(r.id))
   }</div>`;
 }
@@ -1168,7 +1168,7 @@ function sinceSection(r: RequestState, p: PushView, ctx: RenderContext): Html | 
     const item = g.causedBy ? r.patches[g.causedBy]?.item : undefined;
     return item === undefined
       ? null
-      : html`<form class="cmd inline-tell" method="post" action="/api/commands">${commandFields([{ cmd: "continue", request: r.id, item }], requestUrl(r.id))}<input type="text" name="text" required value="${`The stack's last try push still has this regression from your patch, and nothing since fixes it: ${g.failure} Fix it, or show it fails the same way on central.`}"><button class="btn small">Tell its author</button></form>`;
+      : html`<form class="cmd inline-tell" method="post" action="/api/commands">${commandFields([{ cmd: "continue", request: r.id, item }], requestUrl(r.id))}<textarea class="oneline" name="text" required rows="1">${`The stack's last try push still has this regression from your patch, and nothing since fixes it: ${g.failure} Fix it, or show it fails the same way on central.`}</textarea><button class="btn small">Tell its author</button></form>`;
   };
   const regression = (g: Regression) =>
     html`<li><div class="clamp1" data-expand title="Click to see all of it">${md(g.failure)}</div><div class="sub clamp1" data-expand title="Click to see all of it">${g.causedBy ? html`broken by ${link(g.causedBy)} · ` : null}${g.fixedBy ? html`fixed by ${link(g.fixedBy)}: ` : null}${g.how}</div>${statusOf(g) === "not fixed" ? tell(g) : null}</li>`;

@@ -208,7 +208,7 @@ export function stopButton(request: string, job: string, back: string): Html {
 
 // Resumes the item's author with what you type.
 export function continueBox(request: string, item: string, back: string): Html {
-  return html`<form class="inline cmd joined" method="post" action="/api/commands">${commandFields([{ cmd: "continue", request, item }], back)}<input type="text" name="text" required placeholder="Tell its author what to do…"><button class="btn small" title="Resumes its author's session with your message; its patch then goes through lint and critical review again">Send</button></form>`;
+  return html`<form class="inline cmd joined" method="post" action="/api/commands">${commandFields([{ cmd: "continue", request, item }], back)}<textarea class="oneline" name="text" required rows="1" placeholder="Tell its author what to do…"></textarea><button class="btn small" title="Resumes its author's session with your message; its patch then goes through lint and critical review again">Send</button></form>`;
 }
 
 // The plan a recovery entry asks about: its job's latest plan, or the latest plan
@@ -368,7 +368,7 @@ export function recoveryPlan(r: RequestState, plan: RequestState["recoveryPlans"
       : null
   }${plan.questions.length ? html`<ul class="plan-notes">${plan.questions.map((t) => html`<li>❓ ${t}</li>`)}</ul>` : null}${
     plan.cannotDo.length ? html`<details class="fold" data-fold="cannot-${plan.job}"><summary>${plural(plan.cannotDo.length, "thing")} it can't do</summary><ul class="plan-notes">${plan.cannotDo.map((t) => html`<li>${t}</li>`)}</ul></details>` : null
-  }<form class="inline cmd" method="post" action="/api/commands">${commandFields([{ cmd: "reply-recovery", request: r.id, job: plan.job }], back)}<input type="text" name="text" required placeholder="${plan.questions.length ? "Answer it, or say what to change…" : "Say what to change…"}"><button class="btn small">Reply</button></form>`;
+  }<form class="inline cmd" method="post" action="/api/commands">${commandFields([{ cmd: "reply-recovery", request: r.id, job: plan.job }], back)}<textarea class="oneline" name="text" required rows="1" placeholder="${plan.questions.length ? "Answer it, or say what to change…" : "Say what to change…"}"></textarea><button class="btn small">Reply</button></form>`;
 }
 
 // What a command does, without the text it hands an agent.

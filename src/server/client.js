@@ -420,9 +420,18 @@
     }, cls === "error" ? 6000 : 1500);
   }
 
-  // In a box whose button touches it, Enter sends, as in a one-line box; Shift+Enter makes a new line.
+  // A one-line looking box grows to its text, up to its max-height (scrolling beyond).
+  document.addEventListener("input", function (event) {
+    var area = event.target;
+    if (!area.matches || !area.matches("textarea.oneline")) return;
+    area.style.height = "";
+    area.style.height = area.offsetHeight - area.clientHeight + area.scrollHeight + "px";
+  });
+
+  // In a box whose button touches it, or one that looks like a one-line box (pasted text keeps its lines), Enter sends;
+  // Shift+Enter makes a new line.
   document.addEventListener("keydown", function (event) {
-    var area = event.target.closest && event.target.closest("form.joined textarea");
+    var area = event.target.closest && event.target.closest("form.joined textarea, textarea.oneline");
     if (!area || event.key !== "Enter" || event.shiftKey || event.isComposing) return;
     event.preventDefault();
     if (area.value.trim()) area.form.requestSubmit();
