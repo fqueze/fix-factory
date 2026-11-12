@@ -373,3 +373,15 @@ test("CLI: one JSON document on stdout, error JSON with exit 2 on usage errors",
   assert.equal(failed?.status, 2);
   assert.deepEqual(JSON.parse(failed!.stdout), { error: "--cwd is required" });
 });
+
+test("rewrite refuses an order that would lose the revision the branch's commit for it has since got", async (t) => {
+  const { repo, A, B, C, E } = await fixture();
+  t.after(() => repo.cleanup());
+  // moz-phab submit gives C its revision after the factory read the branch.
+  const submitted = await rewrite(repo.dir, { base: "main", order: [A, B, C, E], edits: { [C]: { revision: `${D.split(": ")[1]}303` } } });
+  await assert.rejects(rewrite(repo.dir, { base: "main", order: [A, B, C, E], edits: { [B]: { bug: 999 } } }), /changed since the factory read it: .*D303/);
+  assert.equal((await repo.git(["rev-parse", "work"])).trim(), submitted.head);
+  // Carrying the revision over is fine.
+  const r = await rewrite(repo.dir, { base: "main", order: [A, B, C, E], edits: { [C]: { revision: `${D.split(": ")[1]}303` } } });
+  assert.equal(r.conflict, undefined);
+});

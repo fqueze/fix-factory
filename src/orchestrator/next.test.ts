@@ -1,4 +1,5 @@
 // One test per step transition of docs/MVP.md, plus the rules of docs/ORCHESTRATOR.md.
+import { BRANCH_MOVED } from "../state/flags.ts";
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { InvalidReport } from "./handlers.ts";
@@ -2439,6 +2440,25 @@ describe("7. meta bug", () => {
     assert.deepEqual(JSON.parse(sc.plan(again).files![0].content), { [sha("f")]: { bug: 999 } });
   });
 
+  it("a rewrite refused because you submitted without copying the command reads the branch, then rewrites from it", () => {
+    const sc = annotated();
+    sc.add({ type: "meta-bug", request: ID, bug: 999 });
+    sc.add({ type: "user-done", request: ID, key: "meta-bug:root" });
+    sc.settle();
+    const rewrite = keyOf(sc, "rewrite-bugs:");
+    sc.complete(rewrite, { exitCode: 1, error: `${BRANCH_MOVED}: it has ${sha("g").slice(0, 12)} (D7), which the order has as ${sha("d").slice(0, 12)} without its revision` });
+    sc.settle();
+    assert.deepEqual(sc.open(), [], "nothing for you to do");
+    assert.equal(sc.view().byKey.get(rewrite)!.length, 1, "not retried as it is");
+    // The stack's sync started since reads the branch moz-phab left.
+    const [b, a] = sc.state().stacks.root.order.map((pid) => sc.state().patches[pid]);
+    const read = sc.view().jobs.filter((j) => j.name === "stack.ts import" && !j.end).map((j) => j.purpose.key);
+    for (const k of read) sc.complete(k, { output: [...imported(b.sha, b.title, [], b.bug), { ...imported(sha("g"), a.title, [], a.bug)[0], revision: 7 }] });
+    assert.equal(sc.state().patches["p-test-a"].revision, 7);
+    const again = sc.settle().find((k) => k.startsWith("rewrite-bugs:root:"))!;
+    assert.deepEqual(JSON.parse(sc.plan(again).files![0].content), { [sha("g")]: { bug: 999, revision: "https://phabricator.services.mozilla.com/D7" } });
+  });
+
   it("a patch already on Phabricator gets its Differential Revision line along with its bug", () => {
     const sc = annotated();
     const { deps: _d, review: _r, replyDrafts: _rd, id, ...p } = sc.state().patches["p-test-a"];
@@ -2750,6 +2770,23 @@ describe("a bug you give a patch", () => {
     const key = sc.settle().find((k) => k.startsWith("rewrite-bugs:root:"))!;
     const args = sc.plan(key).cli!.args;
     assert.deepEqual(JSON.parse(sc.plan(key).files!.find((f) => f.path === args[args.indexOf("--edits") + 1])!.content)[b.sha], { bug: 33 });
+  });
+});
+
+describe("a rewrite refused because the branch moved", () => {
+  it("in review, where nothing else reads the branch, gets a read of its own", () => {
+    const sc = inReview();
+    const b = sc.state().patches["p-test-b"];
+    const { deps: _d, review: _r, replyDrafts: _rd, id, ...fields } = b;
+    sc.add({ type: "patch", request: ID, patch: id, ...fields, bug: 33, bugFromYou: true });
+    const key = sc.settle().find((k) => k.startsWith("rewrite-bugs:root:"))!;
+    sc.complete(key, { exitCode: 1, error: `${BRANCH_MOVED}: it has ${sha("g").slice(0, 12)} (D7), which the order has as ${b.sha.slice(0, 12)} without its revision` });
+    const read = sc.settle().filter((k) => k.startsWith("import-submit:root:moved-"));
+    assert.equal(read.length, 1);
+    const a = sc.state().patches["p-test-a"];
+    sc.complete(read[0], { output: [{ ...imported(sha("g"), b.title, [], 22)[0], revision: 7 }, { ...imported(a.sha, a.title, [], a.bug)[0], revision: a.revision }] });
+    assert.deepEqual([sc.state().patches[id].sha, sc.state().patches[id].revision], [sha("g"), 7]);
+    assert.ok(!sc.settle().some((k) => k.startsWith("import-submit:")), "once");
   });
 });
 

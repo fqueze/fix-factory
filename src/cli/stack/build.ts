@@ -14,6 +14,8 @@ import {
   type CommitObject,
 } from "./git.ts";
 import { editMessage, parseRevision, type MessageEdit } from "./message.ts";
+import { patchId } from "./since.ts";
+import { BRANCH_MOVED } from "../../state/flags.ts";
 
 export interface Conflict {
   sha: string;
@@ -128,6 +130,25 @@ export interface RewriteResult {
   remaining?: string[];
 }
 
+// The branch moved since `order` was read (moz-phab submit gave its commits their revisions): a commit it would drop
+// whose change is still in the order, under a commit without that revision, means rebuilding would lose the revision.
+async function refuseLosingRevisions(cwd: string, dropped: string[], items: ChainItem[]): Promise<void> {
+  const withRevision: { sha: string; revision: number }[] = [];
+  for (const sha of dropped) {
+    const revision = parseRevision((await readCommit(cwd, sha)).message);
+    if (revision !== undefined) withRevision.push({ sha, revision });
+  }
+  if (withRevision.length === 0) return;
+  const lacking = new Map<string, string>();
+  for (const i of items) {
+    if (parseRevision(i.message ?? i.commit.message) === undefined) lacking.set(await patchId(cwd, i.commit.sha), i.commit.sha);
+  }
+  for (const d of withRevision) {
+    const same = lacking.get(await patchId(cwd, d.sha));
+    if (same) throw new Error(`${BRANCH_MOVED}: it has ${d.sha.slice(0, 12)} (D${d.revision}), which the order has as ${same.slice(0, 12)} without its revision`);
+  }
+}
+
 // Rebuilds the branch checked out in `cwd` (or `branch`) on `base`, in `order`, applying `edits`
 // (keyed by sha). Commits whose parent and message don't change keep their sha. A conflict is
 // handled like assemble's; after resolving a left conflict and running `git cherry-pick --continue`,
@@ -158,8 +179,9 @@ export async function rewrite(
   for (const sha of edits.keys()) {
     if (!items.some((i) => i.commit.sha === sha)) throw new Error(`edit for ${sha}, which isn't in the order`);
   }
-  const chain = await buildChain(cwd, base, items);
   const dropped = before.filter((sha) => !items.some((i) => i.commit.sha === sha));
+  await refuseLosingRevisions(cwd, dropped, items);
+  const chain = await buildChain(cwd, base, items);
   if (chain.conflict && opts.leaveConflict && items[chain.conflict.index].diff) {
     throw new Error(
       `${items[chain.conflict.index].commit.sha} conflicts and has a diff edit, which a cherry-pick left in progress can't carry; rewrite without --leave-conflict or without that edit`,

@@ -19,6 +19,10 @@ export function isPushJob(job: Pick<JobView, "name" | "purpose">): boolean {
 // The start of try.ts push's error when the stack's code changed since the dry run: nothing was pushed.
 export const COMMITS_CHANGED = "not pushed: commits changed";
 
+// In stack.ts rewrite's error when the branch has commits the factory hasn't read (moz-phab submit gave them their
+// revisions): nothing was rewritten; the branch is read, and the rewrite made again from it.
+export const BRANCH_MOVED = "the branch changed since the factory read it";
+
 // You can retry any job but a push that may have been made: a refused one only while its push isn't made,
 // declined, or being (or already) pushed by another job.
 export function canRetry(r: RequestState, job: Pick<JobView, "job" | "name" | "purpose" | "error">): boolean {

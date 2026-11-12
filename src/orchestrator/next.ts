@@ -21,7 +21,7 @@ import type { BugInfo, BugLandings } from "../cli/bugzilla.ts";
 import { keptDir } from "../lib/kept.ts";
 import { REQUEST_STEPS } from "../server/commands.ts";
 import { isReviewComment, landingState, unpostedReplies } from "../state/landing.ts";
-import { COMMITS_CHANGED } from "../state/flags.ts";
+import { BRANCH_MOVED, COMMITS_CHANGED } from "../state/flags.ts";
 import { ANNOTATIONS_ITEM, lacksBug, needsMetaBug, sameBugDraft } from "../state/meta-bug.ts";
 import type { EventInput } from "../state/events.ts";
 import type {
@@ -483,6 +483,8 @@ class Planner {
       if (again) this.start(key, again);
       return undefined;
     }
+    // The branch is read first (submitted()); the job is made again from what it has, under another key.
+    if (last.end.error?.includes(BRANCH_MOVED)) return undefined;
     if (jobs.length < 2 && !NO_RETRY.has(last.purpose.what)) {
       const retry = this.retryPlan(last, make);
       if (retry) this.start(key, retry);
@@ -2701,6 +2703,13 @@ class Planner {
     // try or not: you may submit before), after submission too (patches added on top).
     const after = at(this.s.step) > at("submit");
     for (const st of this.liveStacks()) {
+      // A rewrite refused: the branch has commits it hasn't read, which you submitted without copying the command.
+      const moved = this.view.jobs.filter((j) => j.purpose.stack === st.id && j.name === "stack.ts rewrite" && j.end?.error?.includes(BRANCH_MOVED)).at(-1);
+      if (moved && !this.view.jobs.some((j) => j.purpose.stack === st.id && j.name === "stack.ts import" && j.startedAt > moved.startedAt)) {
+        this.want(`import-submit:${st.id}:moved-${moved.job}`, () =>
+          this.cli("import-submit", "stack.ts", ["import", "--cwd", st.worktree, `${st.base ?? this.config.baseRef}..${st.branch}`], { cwd: st.worktree, purpose: { stack: st.id } }),
+        );
+      }
       if (st.order.every((pid) => this.s.patches[pid].revision !== undefined)) continue;
       if (this.s.step !== "submit" && !after && this.stackInfos.get(st.id)?.ready) this.reviewers(st, this.stepEpoch("stack"));
       if (!st.submitCopied || this.ctx.now - Date.parse(st.submitCopied) > SUBMIT_WATCH_MS) continue;
