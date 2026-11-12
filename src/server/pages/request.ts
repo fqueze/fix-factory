@@ -471,7 +471,8 @@ function phabClass(p: PatchView, cls: StateClass): StateClass {
   if (cls !== "ok") return cls;
   // Not submitted yet: Phabricator's draft.
   if (p.revision === undefined) return "draft";
-  return ({ published: "landed", accepted: "accepted", "needs-review": "review" } as const)[p.review?.status as "published" | "accepted" | "needs-review"] ?? cls;
+  // Submitted, its review not read yet (or a status of its own): waiting for review, not ready.
+  return ({ published: "landed", accepted: "accepted", "needs-review": "review" } as const)[p.review?.status as "published" | "accepted" | "needs-review"] ?? (p.review === undefined ? "review" : cls);
 }
 
 function rowClass(r: RequestState, i: ItemView, ctx: RenderContext): StateClass {
@@ -636,8 +637,9 @@ function patchParts(r: RequestState, p: PatchView, ctx: RenderContext) {
     end: html`${hoverInfo(r, p, item, ctx)}${viewLink(r, p)}`,
     // Where its review stands, whether it can land, what you need to do about it.
     status: [
-      p.review && (item?.state === "waiting for review" || !item) ? html`${reviewText(p)}` : null,
+      // Landable first; its reviewers whenever it's on Phabricator, submitted with the rest or before them.
       landable ? html`<span class="landable">landable</span>` : null,
+      p.review ? html`${reviewText(p)}` : null,
       backoutText(r, p),
       r.tryNeeded?.[p.id] && !r.tryNeeded[p.id].verified ? html`<span class="bad" title="Not landable yet: it was changed for ${r.tryNeeded[p.id].why}, and no green try push has carried that change since">needs a green try push</span>` : null,
       ...yours.filter((n) => (!own.includes(n) || !onLine(n)) && actionKind(n, r) !== "file-bug").map((n) => html`<b class="you">${n.action}</b>`),
