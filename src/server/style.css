@@ -472,11 +472,13 @@ details.row.b-needs-you, details.row.you { border-left-color: var(--serious); an
 .closed-section details.row { border-left: 0; }
 .compact-rows details.row:not([open]) { border-bottom-color: transparent; }
 .compact-rows details.row:not([open]):hover { border-bottom-color: var(--border); box-shadow: 0 -1px 0 var(--border); }
-/* A group of several patches has a state line per patch: hidden the same. */
-.compact-rows details.row:not([open]) > summary > :is(.state, .trust, .warn), .compact-rows details.row:not([open]) > summary .patchline > .pstate { max-height: 0; overflow: hidden; }
+.compact-rows details.row:not([open]) > summary > :is(.state, .trust, .warn) { max-height: 0; overflow: hidden; }
+/* A group of several patches has a line per patch saying who reviewed it: shown only once it's open, hovering it
+   adding no line per patch. */
+.compact-rows details.row:not([open]) > summary .patchline > .pstate { display: none; }
 /* Eased only as the pointer enters or leaves the list (client.js): from one row to the next, it's instant. */
-.compact-rows.easing details.row:not([open]) > summary > :is(.state, .trust, .warn), .compact-rows.easing details.row:not([open]) > summary .patchline > .pstate { transition: max-height .15s ease; }
-.compact-rows details.row:not([open]):hover > summary > :is(.state, .trust, .warn), .compact-rows details.row:not([open]):hover > summary .patchline > .pstate { max-height: 20px; }
+.compact-rows.easing details.row:not([open]) > summary > :is(.state, .trust, .warn) { transition: max-height .15s ease; }
+.compact-rows details.row:not([open]):hover > summary > :is(.state, .trust, .warn) { max-height: 20px; }
 a.cost { color: inherit; }
 .strip .running { position: relative; cursor: default; }
 .strip .running-list { display: none; position: absolute; top: 100%; left: 0; z-index: 20; min-width: 360px; max-width: 560px; padding: 6px 0; background: var(--surface-1); border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12); font-size: 12px; }
