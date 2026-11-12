@@ -1005,7 +1005,7 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.ok(at.every((x) => x > 0) && at[0] < at[2] && at[2] < at[1], String(at));
   });
 
-  it("a group's landed patch stays where it is in its stack while its other patch is still in review", () => {
+  it("a group's landed patch is listed with what landed while its other patch is still in review", () => {
     const r = structuredClone(get("r-20261005-newtab"));
     const first = r.patches["p-nimbus"];
     const st = Object.values(r.stacks).find((x) => x.order.includes(first.id))!;
@@ -1014,10 +1014,9 @@ describe("one fixture per step of docs/MVP.md", () => {
     r.patches[second.id] = second;
     st.order = [...st.order, second.id];
     const h = renderRequest(r, ctx, true).value;
-    // Its branch still has it until central does: as on Phabricator, a reorg orders it too.
-    const landedAt = h.indexOf('<div class="landed-section">');
-    assert.ok(h.includes(`data-patch="${second.id}"`) && (landedAt < 0 || h.indexOf(`data-patch="${second.id}"`) < landedAt), "in the stack");
-    assert.equal(h.split(`data-patch="${second.id}"`).length - 1, 1, "once");
+    const landed = h.slice(h.indexOf('<div class="landed-section">'));
+    assert.ok(h.indexOf('<div class="landed-section">') > 0 && landed.includes(`data-patch="${second.id}"`), "in the Landed section");
+    assert.ok(!landed.includes(`data-patch="${first.id}"`) && h.includes(`data-patch="${first.id}"`), "the other one still in the stack");
   });
 
   it("landable needs every hard dep landed or landable", () => {
