@@ -2705,6 +2705,12 @@ class Planner {
       if (this.s.step !== "submit" && !after && this.stackInfos.get(st.id)?.ready) this.reviewers(st, this.stepEpoch("stack"));
       if (!st.submitCopied || this.ctx.now - Date.parse(st.submitCopied) > SUBMIT_WATCH_MS) continue;
       const imports = this.view.jobs.filter((j) => j.purpose.what === "import-submit" && j.purpose.stack === st.id);
+      // Done once what you submitted is there (revisions it didn't have when you copied it) and moz-phab is done with the
+      // branch (two reads in a row the same): the patches you didn't submit wouldn't get theirs.
+      const copied = Date.parse(st.submitCopied);
+      const reads = imports.filter((j) => j.startedAt >= copied && succeeded(j)).map((j) => JSON.stringify(this.out<ImportedCommit[]>(j).map((c) => [c.sha, c.revision])));
+      const gained = st.order.some((pid) => this.s.patches[pid].submittedAt !== undefined && Date.parse(this.s.patches[pid].submittedAt!) >= copied);
+      if (gained && reads.length >= 2 && reads.at(-1) === reads.at(-2)) continue;
       const last = imports.at(-1);
       const every = this.ctx.now - Date.parse(st.submitCopied) < 10 * 60_000 ? SUBMIT_IMPORT_SOON_MS : SUBMIT_IMPORT_MS;
       if (!last || (last.end && this.ctx.now - last.startedAt >= every)) {

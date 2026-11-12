@@ -2597,6 +2597,23 @@ describe("8. submit", () => {
     assert.deepEqual(orderKeys(sc), before);
   });
 
+  it("stops reading the branch for revisions once those you submitted are there and the branch is settled, others still unsubmitted", () => {
+    const sc = submitting();
+    sc.complete("reviewers:root", { output: { files: [], suggestions: [{ name: "smaug", source: "mots" }] } });
+    const [check] = sc.settle();
+    sc.complete(check, { output: { ok: true, failures: [] } });
+    sc.add({ type: "submit-copied", request: ID, stack: "root" });
+    // Only test_b's patch submitted: test_a's has no revision.
+    const read = [{ ...imported(sha("e"), "Bug 22 - Fix test_b, r=smaug.", [], 22)[0], revision: 100 }, ...imported(sha("f"), "Bug 999 - Fix a, r=smaug.", [], 999)];
+    for (const n of [0, 1]) {
+      sc.now += 2 * 60_000;
+      assert.ok(sc.settle().includes(`import-submit:root:${n}`));
+      sc.complete(`import-submit:root:${n}`, { output: read });
+    }
+    sc.now += 2 * 60_000;
+    assert.ok(!sc.settle().some((k) => k.startsWith("import-submit:")), "the same twice: moz-phab is done");
+  });
+
   it("checks the stack, asks you to submit, and notices the Differential Revision trailers", () => {
     const sc = submitting();
     assert.equal(sc.state().step, "submit");
