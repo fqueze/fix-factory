@@ -2701,6 +2701,28 @@ function inReview(): Scenario {
   return sc;
 }
 
+describe("a stack submitted while bugs are still to file", () => {
+  it("asks for a reorg when Phabricator has its submitted patches in another order", () => {
+    const sc = verified({ bugDraft });
+    const [first, second] = sc.state().stacks.root.order;
+    const rev = (pid: string, revision: number, parent?: number) => {
+      const { deps: _d, review: _r, replyDrafts: _rd, id, ...fields } = sc.state().patches[pid];
+      sc.add({ type: "patch", request: ID, patch: id, ...fields, revision });
+      sc.add({ type: "review-status", request: ID, patch: id, revision, status: "needs-review", reviewers: [], comments: [], author: "me", ...(parent ? { parent } : {}) });
+    };
+    // On Phabricator the other way around.
+    rev(second, 200);
+    rev(first, 201, 200);
+    sc.settle();
+    assert.match(sc.state().needsUser.find((x) => x.key.startsWith("land:root:"))!.action, /submitted patches in another order/);
+    // Reorganized: nothing to ask.
+    rev(first, 201);
+    rev(second, 200, 201);
+    sc.settle();
+    assert.ok(!sc.state().needsUser.some((x) => x.key.startsWith("land:root:")));
+  });
+});
+
 describe("a bug you give a patch", () => {
   it("replaces the one its author put in its commit's message", () => {
     const sc = stacked();

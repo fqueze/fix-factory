@@ -3206,7 +3206,10 @@ class Planner {
   // 10. Landing
 
   private landing(): void {
-    if (this.s.step !== "review comments" && this.s.step !== "landing") return;
+    if (this.s.step !== "review comments" && this.s.step !== "landing") {
+      this.partlySubmitted();
+      return;
+    }
     const patches = Object.values(this.s.patches).filter((p) => p.revision !== undefined);
     const landed = (p: PatchView) => landingState(this.s, p).landed;
     const accepted = (p: PatchView) => landingState(this.s, p).accepted;
@@ -3221,7 +3224,10 @@ class Planner {
       return;
     }
     if (patches.some(accepted)) this.setStep("landing");
-    if (this.s.step !== "landing") return;
+    if (this.s.step !== "landing") {
+      this.partlySubmitted();
+      return;
+    }
     for (const st of this.liveStacks()) {
       const ps = st.order.map((pid) => this.s.patches[pid]);
       // What makes patches landable, not their order or shas: the reorder below changes those. And the ordering's rules:
@@ -3298,6 +3304,37 @@ class Planner {
       const k = o.flippedSoftDeps.length;
       const adapted = k ? ` (${k} soft ${k === 1 ? "dependency" : "dependencies"} adapted)` : "";
       this.raise(landKey, { action: `Stack reordered: ${n} landable ${n === 1 ? "patch" : "patches"} moved to the bottom`, detail: `Run moz-phab reorg so Phabricator has the new order${adapted}.`, stack: st.id });
+    }
+  }
+
+  // Before landing (some bugs still to file, or nothing accepted yet): when the stack orders its submitted patches
+  // otherwise than Phabricator has them, you reorg them. The stack's own order is its assembly's: nothing is moved here.
+  private partlySubmitted(): void {
+    for (const st of this.liveStacks()) {
+      const sent = st.order.filter((pid) => this.s.patches[pid]?.revision !== undefined);
+      const key = (phab: PatchId[]) => `land:${st.id}:${shortHash([...st.order, "|", ...phab])}`;
+      const stale = (keep?: string) => {
+        for (const n of this.s.needsUser) if (n.key.startsWith(`land:${st.id}:`) && n.key !== keep) this.clear(n.key);
+      };
+      if (sent.length === 0) {
+        stale();
+        continue;
+      }
+      // Phabricator's order of them, bottom first: each one's parent among them.
+      const byRev = new Map(sent.map((pid) => [this.s.patches[pid].revision, pid]));
+      const phab: PatchId[] = [];
+      let next = sent.filter((pid) => !byRev.has(this.s.patches[pid].review?.parent));
+      while (next.length === 1 && phab.length < sent.length) {
+        phab.push(next[0]);
+        const rev = this.s.patches[next[0]].revision;
+        next = sent.filter((pid) => this.s.patches[pid].review?.parent === rev);
+      }
+      if (phab.length !== sent.length || phab.join() === sent.join()) {
+        stale();
+        continue;
+      }
+      stale(key(phab));
+      this.raise(key(phab), { action: "Stack reordered: Phabricator has its submitted patches in another order", detail: "Run moz-phab reorg on them so Phabricator has the stack's order.", stack: st.id });
     }
   }
 

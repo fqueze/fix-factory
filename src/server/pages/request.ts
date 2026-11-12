@@ -138,7 +138,8 @@ export function renderRequestBody(r: RequestState, ctx: RenderContext): Html {
   const landed = unstacked.filter((i) => i.state === "landed" || (own(i).length > 0 && own(i).every((p) => isLanded(r, p)))).sort((a, b) => rank(b) - rank(a));
   const items = unstacked.filter((i) => !landed.includes(i));
   // A group's landed patch while another of its patches is still in review: listed with what landed, in its place.
-  const partly = Object.values(r.patches).filter((p) => p.item !== undefined && !landed.some((i) => i.id === p.item) && !isDropped(r, p) && isLanded(r, p));
+  const shown = new Set(Object.values(r.stacks).flatMap((st) => livePatches(r, st).map((p) => p.id)));
+  const partly = Object.values(r.patches).filter((p) => p.item !== undefined && !shown.has(p.id) && !landed.some((i) => i.id === p.item) && !isDropped(r, p) && isLanded(r, p));
   const landedRows = [...landed.map((i) => ({ at: rank(i), row: itemRows(r, i, ctx) })), ...partly.map((p) => ({ at: depth(p), row: patchRow(r, p, ctx) }))].sort((a, b) => b.at - a.at);
   // Newest first, as on Treeherder; those waiting for you are the newest anyway.
   const pushes = Object.values(r.pushes).reverse();
@@ -264,8 +265,11 @@ function isLanded(r: RequestState, p: PatchView): boolean {
   return p.review?.status === "published" || (p.item !== undefined && r.items[p.item]?.state === "landed");
 }
 
+// Landed ones too, where they are, as on Phabricator, while others of the stack haven't landed: its branch still has
+// them (central doesn't yet), and a reorg orders them too. Once all landed, it has left.
 function livePatches(r: RequestState, s: StackView): PatchView[] {
-  return stackPatches(r, s).filter((p) => !isLanded(r, p));
+  const all = stackPatches(r, s);
+  return all.every((p) => isLanded(r, p)) ? [] : all;
 }
 
 // Its header only when the request has several: one stack's title and buttons are the request's.

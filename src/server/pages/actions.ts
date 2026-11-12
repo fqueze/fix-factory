@@ -117,7 +117,7 @@ export function flagControls(r: RequestState, n: NeedsUser, ctx: RenderContext):
       break;
     case "land": {
       const stack = findStack(r, n);
-      controls = stack ? reorgButton(r.id, stack, n.key, ctx) : null;
+      controls = stack ? reorgButton(r, stack, n.key, ctx) : null;
       break;
     }
     case "failed": {
@@ -274,9 +274,13 @@ export function mozPhabCommand(stack: StackView, mozPhab = "moz-phab", single?: 
 
 // Copying it tells the factory to look for the revisions moz-phab creates.
 // Copying it answers the ⚑.
-function reorgButton(request: string, stack: StackView, key: string, ctx: RenderContext): Html {
+function reorgButton(r: RequestState, stack: StackView, key: string, ctx: RenderContext): Html {
+  const request = r.id;
   const id = `mozphab-reorg-${request}-${stack.id}`;
-  return html`<form class="inline cmd" method="post" action="/api/commands">${commandFields([{ cmd: "copied-reorg", request, key }], requestUrl(request))}<textarea hidden id="${id}">cd ${stack.worktree} && git switch ${stack.branch} && ${ctx.mozPhab ?? "moz-phab"} reorg</textarea><button type="button" class="btn small primary" data-copy="${id}">Copy the moz-phab reorg command</button></form>`;
+  // Partly submitted: from its first commit up to its topmost submitted one, the others in between left alone.
+  const sent = stack.order.filter((pid) => r.patches[pid]?.revision !== undefined);
+  const range = sent.length && sent.length < stack.order.length ? ` ${r.patches[stack.order[0]].sha.slice(0, 12)} ${r.patches[sent.at(-1)!].sha.slice(0, 12)}` : "";
+  return html`<form class="inline cmd" method="post" action="/api/commands">${commandFields([{ cmd: "copied-reorg", request, key }], requestUrl(request))}<textarea hidden id="${id}">cd ${stack.worktree} && git switch ${stack.branch} && ${ctx.mozPhab ?? "moz-phab"} reorg${range}</textarea><button type="button" class="btn small primary" data-copy="${id}">Copy the moz-phab reorg command</button></form>`;
 }
 
 function mozPhabButton(request: string, stack: StackView, disabled: boolean, ctx: RenderContext, single?: string): Html {
