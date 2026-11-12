@@ -191,3 +191,16 @@ test("landed patches still in the stack come first, under those that can land", 
   });
   assert.deepEqual(out.order, ["landed", "accepted", "review"]);
 });
+
+test("a fix's patches that haven't landed stay above every landed patch, not next to its landed one", () => {
+  const yes = { accepted: true, commentsAddressed: true };
+  const out = orderPatches({
+    patches: [
+      { id: "f-landed", fix: "f", effort: 1, ...yes, published: true },
+      { id: "f-accepted", fix: "f", effort: 1, ...yes },
+      { id: "other-landed", fix: "g", effort: 2, ...yes, published: true },
+    ],
+    deps: [hard("f-accepted", "f-landed")],
+  });
+  assert.deepEqual(out.order, ["f-landed", "other-landed", "f-accepted"]);
+});

@@ -146,12 +146,12 @@ export function orderPatches(input: OrderInput): OrderOutput {
   return { order: together, flippedSoftDeps: flippedSoftDeps(input.deps, together, input.previous), landable: together.filter((id) => landable.has(id)) };
 }
 
-// One fix's patches next to each other, where its first one is, in their order: those landable apart from those that
-// aren't, which come later.
+// One fix's patches next to each other, where its first one is, in their order: those landed apart from those landable,
+// apart from the others, which come later.
 // A patch is only pulled forward once the patches it needs (hard deps) are placed.
 function keepFixesTogether(order: PatchId[], patches: OrderPatch[], deps: Dep[], landable: Set<PatchId>): PatchId[] {
-  const fixOf = new Map(patches.map((p) => [p.id, p.fix]));
-  const group = (id: PatchId) => (fixOf.get(id) === undefined ? id : `${fixOf.get(id)}\n${landable.has(id)}`);
+  const byId = new Map(patches.map((p) => [p.id, p]));
+  const group = (id: PatchId) => (byId.get(id)!.fix === undefined ? id : `${byId.get(id)!.fix}\n${landable.has(id)}\n${!!byId.get(id)!.published}`);
   const needs = (id: PatchId) => deps.filter((d) => d.kind === "hard" && d.patch === id && order.includes(d.needs)).map((d) => d.needs);
   const out: PatchId[] = [];
   for (const id of order) {
