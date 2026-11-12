@@ -1745,9 +1745,9 @@ class Planner {
       }),
       deps: inStack.flatMap((p) => this.s.patches[p.id].deps).map((d) => ({ ...d, needs: this.depTarget(d.needs, inStack.map((x) => x.id)) })),
     };
-    // Ordered again when what it's ordered by changes (an effort, a dep, how the factory ranks them: rank-v4, test-only
-    // fixes first, a fix by its hardest patch, its landed patches apart).
-    const oh = shortHash([JSON.stringify(orderInput), "rank-v4"]).slice(0, 6);
+    // Ordered again when what it's ordered by changes (an effort, a dep, how the factory ranks them: rank-v5, test-only
+    // fixes first, a fix by its hardest patch, its landed patches apart, a patch by its hard deps).
+    const oh = shortHash([JSON.stringify(orderInput), "rank-v5"]).slice(0, 6);
     const orderFile = dataPath(this.config, this.s.id, `order-${id}-${hash}-${oh}.json`);
     const ord = this.want(`order:${id}:${hash}:${oh}`, () =>
       this.cli("order", "stack.ts", ["order", orderFile], {

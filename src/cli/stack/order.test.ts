@@ -41,9 +41,10 @@ test("unknown effort goes last, unknown value counts as 0", () => {
 });
 
 test("a hard dep is placed just before its first dependent, not at the top", () => {
-  // dep is the hardest patch, needed by c (effort 3): it goes right before c, after a and b.
+  // dep is the hardest patch, needed by c (effort 3, but it can't land before dep): it goes right before c, which ranks
+  // with dep's effort, after d.
   const r = orderPatches({ patches: [p("dep", 5), p("a", 1), p("b", 2), p("c", 3), p("d", 4)], deps: [hard("c", "dep")] });
-  assert.deepEqual(r.order, ["a", "b", "dep", "c", "d"]);
+  assert.deepEqual(r.order, ["a", "b", "d", "dep", "c"]);
 });
 
 test("a dep needed by several patches goes before the first of them", () => {
@@ -52,8 +53,9 @@ test("a dep needed by several patches goes before the first of them", () => {
 });
 
 test("chains of hard deps are placed in dependency order", () => {
+  // a needs b needs c: a and b rank with b's effort.
   const r = orderPatches({ patches: [p("a", 1), p("b", 5), p("c", 4), p("d", 2)], deps: [hard("a", "b"), hard("b", "c")] });
-  assert.deepEqual(r.order, ["c", "b", "a", "d"]);
+  assert.deepEqual(r.order, ["d", "c", "b", "a"]);
 });
 
 test("several deps of one patch keep the rank order among themselves", () => {
@@ -203,4 +205,18 @@ test("a fix's patches that haven't landed stay above every landed patch, not nex
     deps: [hard("f-accepted", "f-landed")],
   });
   assert.deepEqual(out.order, ["f-landed", "other-landed", "f-accepted"]);
+});
+
+test("an easy patch that needs a hard one ranks with the hard ones, not bringing it among the easy ones", () => {
+  const out = orderPatches({
+    patches: [
+      { id: "easy1", effort: 2 },
+      { id: "needs-hard", effort: 2 },
+      { id: "easy2", effort: 2 },
+      { id: "hard", effort: 4 },
+      { id: "other-hard", effort: 4 },
+    ],
+    deps: [hard("needs-hard", "hard")],
+  });
+  assert.deepEqual(out.order, ["easy1", "easy2", "hard", "needs-hard", "other-hard"]);
 });
