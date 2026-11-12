@@ -178,3 +178,16 @@ test("test-only fixes come before those changing product code, a fix with a prod
   });
   assert.deepEqual(out.order, ["t", "p", "m1", "m2"]);
 });
+
+test("landed patches still in the stack come first, under those that can land", () => {
+  const yes = { accepted: true, commentsAddressed: true };
+  const out = orderPatches({
+    patches: [
+      { id: "review", effort: 1 },
+      { id: "accepted", effort: 1, ...yes },
+      { id: "landed", effort: 3, ...yes, published: true },
+    ],
+    deps: [],
+  });
+  assert.deepEqual(out.order, ["landed", "accepted", "review"]);
+});

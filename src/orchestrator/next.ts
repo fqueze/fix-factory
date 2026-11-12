@@ -1737,9 +1737,9 @@ class Planner {
     const orderInput = {
       patches: inStack.map((p) => {
         const pv = this.s.patches[p.id];
-        // A landed patch stays in the stack until the base has it: landable, as far as its order goes.
-        const { landed: _l, ...landing } = landingState(this.s, pv);
-        return { id: p.id, effort: pv.effort, value: value(p.id), testOnly: pv.testOnly, ...(pv.item ? { fix: pv.item } : {}), ...landing };
+        // A landed patch stays in the stack until the base has it: at the bottom, under those that can land.
+        const { landed, ...landing } = landingState(this.s, pv);
+        return { id: p.id, effort: pv.effort, value: value(p.id), testOnly: pv.testOnly, ...(pv.item ? { fix: pv.item } : {}), ...(landed ? { accepted: true, commentsAddressed: true, published: true } : landing) };
       }),
       deps: inStack.flatMap((p) => this.s.patches[p.id].deps).map((d) => ({ ...d, needs: this.depTarget(d.needs, inStack.map((x) => x.id)) })),
     };

@@ -25,6 +25,7 @@ export interface OrderPatch {
   accepted?: boolean;
   commentsAddressed?: boolean;
   landed?: boolean;
+  published?: boolean; // landed, still in the stack until its base has it: first of all
 }
 
 export interface OrderInput {
@@ -52,6 +53,7 @@ function rankComparator(patches: OrderPatch[], previous: PatchId[] | undefined, 
   const product = new Set(patches.filter((p) => !p.testOnly).map((p) => p.fix ?? p.id));
   const isProduct = (p: OrderPatch) => Number(product.has(p.fix ?? p.id));
   return (a, b) =>
+    Number(!!b.published) - Number(!!a.published) ||
     Number(landable.has(b.id)) - Number(landable.has(a.id)) ||
     isProduct(a) - isProduct(b) ||
     effort(a) - effort(b) ||
