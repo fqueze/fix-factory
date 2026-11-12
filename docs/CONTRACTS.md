@@ -32,6 +32,10 @@ jobs/<jobId>/out.log              # stdout (a CLI's JSON, or claude's stream-jso
 jobs/<jobId>/err.log
 jobs/<jobId>/pid.json             # {pid, pidStartTime}, written when the job starts
 jobs/<jobId>/exit.json            # {exitCode, endedAt}, written by the wrapper when the job ends
+jobs/<jobId>/net.jsonl            # every network request the job made (FACTORY_NET_LOG), shown in the request's profile
+requests/<requestId>/artifacts/   # the request's own artifacts
+allow-push/<sessionId>            # the one try push you allowed an author session (src/agents/no-push.ts)
+phab-client                       # curl or node: the client Conduit calls use, switched on a 429
 feedback/<target>.md              # agent feedback, one file per Feedback.target
 kept/<worktree>/artifacts/...      # a removed worktree's artifacts/ (files over 20 MB listed in skipped.txt); its commits stay as refs/fix-factory/<worktree>/<sha>
 tools/profiler/ tools/profiler-cli/<rev>/ tools/fx-tests/<rev>/ tools/md-viewer-at/<rev>/ tools/claude-profiler-at/<rev>/ tools/profiler-web/ tools/bin/   # profiler-cli (and the profiler front end), fx-tests, md-viewer and claude-profiler from their repos' main (tools.ts update); agents get tools/bin first on PATH, the page runs its viewers

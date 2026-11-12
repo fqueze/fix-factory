@@ -1,3 +1,5 @@
+> Historical: the initial long-term target design (Oct 2026), not what the code does: see CLAUDE.md.
+
 # Fix factory — workflow breakdown
 
 Last 4 weeks with subagents: ~$1.9k for ~100 patches in 4 stacks, from an analysis of the Claude Code transcripts.

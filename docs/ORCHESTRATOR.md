@@ -35,13 +35,15 @@ A tick runs on any change to `commands.jsonl` or a job file, and at least every 
   - **Matched:** a failure in a test that a patch touches, or that its group fixes, goes to that patch's author (not
     by folder: a burndown's patches share one). If the author says it isn't its patch's, it's triaged as unmatched.
   - **When:** once half the test tasks the push asked for have finished, or 2 h after it started; again when it ends.
-  - **Unmatched:** Haiku (`triage-try`) classifies each one, using its log and the test's history on central:
+  - **Unmatched:** Sonnet (`triage-try`) classifies each one, using its log and the test's history on central:
     - caused by a patch (a product change breaking another test) → that patch's author;
     - also failing on central → only noted on the page;
     - new and unexplained → a new work item;
     - infra → noted on the page. A retrigger is a push, so it needs your approval.
-- **Submission detected:** while a submit is waiting for you, `stack.ts import` runs every 2 min. Once every patch
-  has a `Differential Revision:` trailer, the request moves to review comments.
+- **Submission detected:** after you copy the moz-phab command, `stack.ts import` reads the branch every 20 s for
+  10 min, then every 2 min for the rest of the hour, until what you submitted has its `Differential Revision:`
+  trailers and the branch is settled. Once every patch has one, the request moves to review comments; patches
+  submitted before that are reviewed, and reorganized on Phabricator, like the others.
 - **Phabricator:**
   - **When:** polled every 10 min while you're present (`phabPollMinutes`), every 3 h while you're away
     (`phabPollHours`), and right away when you click "Check Phabricator now".

@@ -9,8 +9,8 @@ You need:
 - A Firefox checkout set up with `./mach bootstrap`. That also installs moz-phab and searchfox-cli.
 - Claude Code, logged in. Agents run it through `claudeCommand`, ideally in a sandbox wrapper (`["mozsb", "claude"]`)
   so they can't read your credentials or push anything themselves.
-- A Phabricator token in `~/.arcrc` (`moz-phab install-certificate`): the factory reads reviews with it. It never
-  submits: the page gives you the `moz-phab submit` command to run.
+- A Phabricator token in `~/.arcrc` (`moz-phab install-certificate`): the factory reads reviews with it and sets test
+  plans when you click. It never submits: the page gives you the `moz-phab submit` command to run.
 - A Lando login for `./mach try` (run one try push by hand once): the factory pushes to try, only after you approve
   each push on the page.
 - Disk: each agent's worktree is about 6 GB. The factory stops creating them below 20 GB free.
@@ -48,20 +48,17 @@ They follow their repositories' main; nothing from your PATH is used for them.
 
 ## Running
 
-The page and the orchestrator restart on their own when `src/` changes; the orchestrator only once the typecheck
-and the tests pass. An open page reloads itself after the server restarts. Ctrl-C stops either; a second Ctrl-C
-stops it at once.
+The page and the orchestrator restart on their own when `src/` changes, once the typecheck and the tests pass.
+An open page reloads itself after the server restarts. Ctrl-C stops either; a second Ctrl-C stops it at once.
 
 ## Design
 
-Design docs, read in this order:
-- [docs/MVP.md](docs/MVP.md): what gets built first, and how the factory updates without stopping
-- [docs/WORKFLOW.md](docs/WORKFLOW.md): the full target workflow
-- [docs/COMPONENTS.md](docs/COMPONENTS.md): scripts and prompts
-- [docs/PROMPTS.md](docs/PROMPTS.md): every prompt in full (generated, `node src/tools/prompts-doc.ts`)
-- [docs/CONTRACTS.md](docs/CONTRACTS.md): conventions between the pieces
+[CLAUDE.md](CLAUDE.md) says how the factory works now. Reference docs:
+- [docs/CONTRACTS.md](docs/CONTRACTS.md): conventions between the pieces, and the state layout
 - [docs/ORCHESTRATOR.md](docs/ORCHESTRATOR.md): what the orchestrator does at each step
-- [docs/mockup-mvp.html](docs/mockup-mvp.html): status page mockup for the first version
-- [docs/mockup.html](docs/mockup.html): status page mockup for the full design
-- [docs/initial-prompt.md](docs/initial-prompt.md): the original request
-- [docs/research/](docs/research/): how the current skills-based workflow works, and which existing tools to reuse
+- [docs/PROMPTS.md](docs/PROMPTS.md): every prompt in full (generated, `node src/tools/prompts-doc.ts`)
+
+The initial design, kept as history: [docs/MVP.md](docs/MVP.md), [docs/WORKFLOW.md](docs/WORKFLOW.md),
+[docs/COMPONENTS.md](docs/COMPONENTS.md), the mockups ([docs/mockup-mvp.html](docs/mockup-mvp.html),
+[docs/mockup.html](docs/mockup.html)), [docs/initial-prompt.md](docs/initial-prompt.md) and
+[docs/research/](docs/research/).

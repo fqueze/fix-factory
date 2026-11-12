@@ -1,3 +1,5 @@
+> Historical: the initial plan of scripts and prompts (Oct 2026); outdated: the scripts are in `src/cli/`, the prompts in `docs/PROMPTS.md` (generated). See CLAUDE.md.
+
 # Fix factory — scripts and prompts
 
 The step IDs in brackets refer to `WORKFLOW.md`.

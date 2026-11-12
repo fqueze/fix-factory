@@ -1,3 +1,5 @@
+> Historical: the original request (Oct 2026), kept as history.
+
 We have been producing stacks of patches to fix test issues, using skills that organize the work, with a parent agent delegating to subagents, and then trying to organize the result. I worked kinda OK but was very expensive in tokens, and resulted in poor status information, and difficult to handle stacks of patches when trying to get them through review.
 
 At this point we know we can produce good patches, and we've produced 30-50 a week. We need to find ways to scale this effort to be in a position to land at least 50 patches a day (and more later). So every step of the process needs to be more reliable, less effort for human reviewers, and cheaper.

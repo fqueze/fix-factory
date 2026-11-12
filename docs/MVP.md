@@ -1,3 +1,5 @@
+> Historical: the initial plan of the pipeline (Oct 2026). Its steps still map `RequestStep`; the rest is history: see CLAUDE.md for how the factory works now.
+
 # Fix factory — first version
 
 `WORKFLOW.md` is the long-term design. This file is the first version, in pipeline order.

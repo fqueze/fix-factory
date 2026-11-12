@@ -1,3 +1,5 @@
+> Historical: research from Oct 2026, kept as history.
+
 # Current fix workflow — digest
 
 Sources: `/build/prompts/skills/` (symlinked into `~/.claude/skills/`), `/build/FLAKINESS_BURNDOWN.md` (superseded

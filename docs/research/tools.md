@@ -1,3 +1,5 @@
+> Historical: research from Oct 2026, kept as history.
+
 # Existing tools to reuse in the fix factory
 
 **Sources.** `/home/florian/buildgit/*` is not reachable from this sandbox, and `gh` is not installed. The repos are public on GitHub as `fqueze/claude-profiler` and `fqueze/md-viewer`. claude-dashboard is not published (it pulls in claude-profiler with `github:fqueze/claude-profiler`). On npm, the name `claude-profiler` belongs to an unrelated package (Softjey); don't use it. Everything below was rebuilt from the Claude Code transcripts in `~/.claude/projects/-home-florian-buildgit-*`. On the host, `claude-profiler` is installed globally as an npm link to `~/buildgit/claude-profiler`.
