@@ -2281,6 +2281,7 @@ class Planner {
       if (stack && this.s.stacks[stack] && push.rev) this.routeTryFailures(push.id, this.s.stacks[stack].order.map((pid) => this.s.patches[pid]));
     }
     if (this.s.step !== "verify on try") {
+      this.changedSinceTry();
       this.askedVerify(this.fixesToVerify());
       return;
     }
@@ -2386,6 +2387,41 @@ class Planner {
     const from = reported ? hist.findIndex((sha) => sha.startsWith(reported)) : -1;
     const shas = [...(from >= 0 ? hist.slice(from) : []), ...(t?.shas ?? []), p.sha];
     return d !== undefined && this.out<DryRunResult>(d).commits.some((c) => shas.some((sha) => sha.startsWith(c) || c.startsWith(sha)));
+  }
+
+  // A patch try verified whose author changed its code since (for your review comment, its nits after), no push
+  // having had that code: the stack goes to try again, its planner picking the jobs where its test failed. A reworded
+  // commit has the same code (git patch-id); a fix for what try found is asked by fixesToVerify.
+  private changedSinceTry(): void {
+    const made = Object.values(this.s.pushes).filter((x) => x.rev !== undefined);
+    const pushed = (shas: string[]) =>
+      made.some((x) => {
+        const d = this.view.byKey.get(`dry-run:${x.id}`)?.find(succeeded);
+        return d !== undefined && this.out<DryRunResult>(d).commits.some((c) => shas.some((sha) => sha.startsWith(c) || c.startsWith(sha)));
+      });
+    for (const st of this.liveStacks()) {
+      for (const p of st.order.map((pid) => this.s.patches[pid])) {
+        if (!p.item || this.s.landedAt[p.id] || (this.s.tryNeeded[p.id] && !this.s.tryNeeded[p.id].verified)) continue;
+        const index = Number(/-(\d+)$/.exec(p.id.slice(patchId(p.item, 0).length))?.[1] ?? 1) - 1;
+        const runs = this.authorJobs(p.item).filter((j) => succeeded(j) && commitsOf(j.name, this.rep(j))[index] !== undefined);
+        const code = (j: JobRecord) => {
+          const imp = this.view.byKey.get(`import:${j.job}`)?.find(succeeded);
+          return imp ? this.out<ImportedCommit[]>(imp)[index]?.patchId : undefined;
+        };
+        const last = runs.at(-1);
+        if (!last || last.purpose.reason === "try" || !code(last)) continue;
+        // Its first run with this code: its commit and every one since (rebases, rewrites) are this code.
+        let first = runs.length - 1;
+        while (first > 0 && code(runs[first - 1]) === code(last)) first--;
+        const hist = this.s.patchShas[p.id] ?? [p.sha];
+        const since = commitsOf(runs[first].name, this.rep(runs[first]))[index];
+        const from = hist.findIndex((x) => x.startsWith(since) || since.startsWith(x));
+
+        if (first === 0 || from < 0 || pushed(hist.slice(from)) || !pushed(hist.slice(0, from))) continue;
+        const text = `Verify ${p.revision !== undefined ? `D${p.revision}` : p.title}, whose author changed its code since its last try push (${shortHash([runs[first].job]).slice(0, 4)}): the jobs where its test failed must be green.`;
+        if (!(this.s.verifyAsked ?? []).includes(text)) this.event(this.ev("verify-asked", { text }));
+      }
+    }
   }
 
   // You asked for a try push of the stack as it stands (verify-stack): planned at whatever step it's at, once per ask,

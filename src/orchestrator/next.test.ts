@@ -3844,6 +3844,31 @@ describe("9. changes after submission", () => {
     return { sc, job };
   }
 
+  it("a patch whose author changed its code since try verified it goes to try again; reworded, it doesn't", () => {
+    const changedSince = (code: string) => {
+      const sc = inReview();
+      const verify = Object.values(sc.state().pushes).find((x) => x.rev && x.id !== "initial")!;
+      // Its push had the stack's commits.
+      const dry = sc.view().byKey.get(`dry-run:${verify.id}`)![0].job;
+      sc.outputs.set(dry, JSON.stringify({ ...JSON.parse(sc.outputs.get(dry)!), commits: sc.state().stacks.root.order.map((pid) => sc.state().patches[pid].sha.slice(0, 12)) }));
+      const first = sc.view().byKey.get("author:i-test-a:initial")![0].job;
+      const imp = sc.view().byKey.get(`import:${first}`)![0].job;
+      sc.outputs.set(imp, JSON.stringify(JSON.parse(sc.outputs.get(imp)!).map((c: object) => ({ ...c, patchId: "verified" }))));
+      // Your review comment's run.
+      const plan = resumeAuthorPlan(ID, sc.view(), "i-test-a", "comment", { message: "m" }, "investigating");
+      assert.ok(plan && plan !== "busy");
+      plan.purpose.key = "author:i-test-a:comment:c-1";
+      sc.startJob(plan);
+      const job = sc.complete(plan.purpose.key, { report: fixed([sha("7")]) });
+      sc.settle();
+      sc.complete(`import:${job}`, { output: imported(sha("7"), "Bug 999 - Fix a, r=smaug.", ["a/test_a.js"], 999).map((c) => ({ ...c, revision: 101, patchId: code })) });
+      sc.settle();
+      return (sc.state().verifyAsked ?? []).filter((t) => /changed its code since its last try push/.test(t));
+    };
+    assert.deepEqual(changedSince("changed").map((t) => t.slice(0, 15)), ["Verify D101, wh"]);
+    assert.deepEqual(changedSince("verified"), []);
+  });
+
   it("an author run putting a submitted patch's code back to what Phabricator has gets no critical review", () => {
     const sc = inReview();
     // The code of the author run you submitted.
