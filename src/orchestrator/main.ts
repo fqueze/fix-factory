@@ -198,14 +198,18 @@ export class Orchestrator {
         return existsSync(path) ? (JSON.parse(readFileSync(path, "utf8")) as JobPlan) : undefined;
       },
     });
-    for (const e of effects) {
+    // The click is recorded as done once its job has started: the page never shows it done with nothing running (a
+    // button back for a moment).
+    const executed = effects.filter((e) => e.type === "event" && e.event.type === "command-executed");
+    for (const e of [...effects.filter((e) => !executed.includes(e)), ...executed]) {
       switch (e.type) {
         case "event":
           appendEventSafe(this.config.stateDir, e.event.type === "request-created" ? { ...e.event, t: c.t } : e.event);
           break;
-        // A retry waits like any job for its worktree to be free.
+        // A retry waits like any job for its worktree to be free; a job outside worktrees starts now.
         case "start":
-          this.deferred.push({ request: loaded!.s.id, plan: e.plan });
+          if (inWorktree(this.config, e.plan)) this.deferred.push({ request: loaded!.s.id, plan: e.plan });
+          else this.start(loaded!.s.id, e.plan);
           break;
         case "cancel": {
           const exit = await cancelJob(this.config.stateDir, e.job);
@@ -328,18 +332,12 @@ export class Orchestrator {
     }
     // Commands' jobs (a retry…) first; they skip the caps but not the worktree lock. The retry reopened its key,
     // so next() plans it too: the retry's job (an agent resumed where it stopped) is the one that runs.
-    const deferred = this.deferred.filter((d) => !only || d.request === only);
     const retried = new Set(this.deferred.map((d) => `${d.request} ${d.plan.purpose.key}`));
     starts = starts.filter((st) => !retried.has(`${st.request} ${st.plan.purpose.key}`));
+    const lock = this.startDeferred(only);
     const running = this.requests().flatMap((id) => Object.values(this.load(id).s.jobs).filter((j) => j.endedAt === undefined));
     let agents = running.filter((j) => j.kind === "agent").length;
     let builds = running.filter((j) => j.kind === "build").length;
-    const lock = worktreeLock(this.config, running);
-    for (const d of deferred) {
-      if (!lock(d.plan)) continue;
-      this.deferred.splice(this.deferred.indexOf(d), 1);
-      this.start(d.request, d.plan);
-    }
     starts.sort((a, b) => (a.plan.priority ?? DEFAULT_PRIORITY) - (b.plan.priority ?? DEFAULT_PRIORITY));
     for (const { request, plan } of starts) {
       if (!only && plan.kind === "agent" && agents >= this.config.maxAgents) continue;
@@ -354,6 +352,18 @@ export class Orchestrator {
       if (plan.kind === "build") builds++;
       this.start(request, plan);
     }
+  }
+
+  // Commands' jobs whose worktree is free; the lock, with them in it, for the jobs started after them.
+  private startDeferred(only?: RequestId): (plan: JobPlan) => boolean {
+    const running = this.requests().flatMap((id) => Object.values(this.load(id).s.jobs).filter((j) => j.endedAt === undefined));
+    const lock = worktreeLock(this.config, running);
+    for (const d of this.deferred.filter((d) => !only || d.request === only)) {
+      if (!lock(d.plan)) continue;
+      this.deferred.splice(this.deferred.indexOf(d), 1);
+      this.start(d.request, d.plan);
+    }
+    return lock;
   }
 
   // -------------------------------------------------------------------------
@@ -379,11 +389,15 @@ export class Orchestrator {
 // One job at a time changes or reads a worktree's checkout (a push detaches it at the approved commits): the
 // returned function takes a plan's worktree, or says it's busy and the plan waits for a later tick. Authors work
 // in their own worktrees.
+// A script or build in a worktree: one at a time there.
+function inWorktree(config: FactoryConfig, j: { kind: string; cwd: string }): boolean {
+  return j.kind !== "agent" && j.cwd.startsWith(join(config.worktreesDir, "/"));
+}
+
 export function worktreeLock(config: FactoryConfig, running: Pick<JobView, "kind" | "cwd">[]): (plan: Pick<JobPlan, "kind" | "cwd">) => boolean {
-  const inWorktree = (j: { kind: string; cwd: string }) => j.kind !== "agent" && j.cwd.startsWith(join(config.worktreesDir, "/"));
-  const busy = new Set(running.filter(inWorktree).map((j) => j.cwd));
+  const busy = new Set(running.filter((j) => inWorktree(config, j)).map((j) => j.cwd));
   return (plan) => {
-    if (!inWorktree(plan)) return true;
+    if (!inWorktree(config, plan)) return true;
     if (busy.has(plan.cwd)) return false;
     busy.add(plan.cwd);
     return true;

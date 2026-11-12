@@ -93,6 +93,23 @@ describe("Orchestrator", () => {
     }
   });
 
+  it("your click's job has started when the click is recorded as done: the page never shows it done with nothing running", async () => {
+    const { root, config, o } = setup();
+    try {
+      add(config.stateDir, { type: "request-created", request: "r-a", kind: "unrouted", text: "fix try push abc" });
+      add(config.stateDir, { type: "patch", request: "r-a", patch: "p-x", sha: "a".repeat(40), worktree: root, title: "Bug 1 - x, r=me.", bug: 1, revision: 5 });
+      await o.startup();
+      await o.tick();
+      appendCommand(config.stateDir, { cmd: "set-test-plan", request: "r-a", patch: "p-x", text: "plan" });
+      await o.tick();
+      const kinds = readEvents(config.stateDir, "r-a").map((e) => (e.type === "job-started" ? `started ${(e as { name: string }).name}` : e.type));
+      const at = kinds.indexOf("started phab.ts set-test-plan");
+      assert.ok(at >= 0 && at < kinds.indexOf("command-executed"), kinds.join(", "));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   // Text from the global box that route-request forwards to r-a, until recover starts on r-a.
   async function forwarded(o: Orchestrator, root: string, config: FactoryConfig) {
     writeFileSync(join(root, "claude.json"), JSON.stringify([{ match: "^You wrote this", report: { existing: "r-a", feedback: [] } }]));
