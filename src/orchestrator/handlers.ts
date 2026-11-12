@@ -168,8 +168,9 @@ export function handleFinished(input: HandlerInput): HandlerResult {
           title: c.title,
           // Only the bug you gave outlives a commit that says Bug XXXXXXX: an earlier commit's own number (the same
           // patch id reused for another commit) doesn't.
-          bug: c.bug ?? (existing?.bugFromYou ? existing.bug : null),
-          ...(c.bug === null && existing?.bugFromYou ? { bugFromYou: true } : {}),
+          // The bug you gave it stands, whatever bug its author's commit says.
+          bug: existing?.bugFromYou ? existing.bug : c.bug,
+          ...(existing?.bugFromYou ? { bugFromYou: true } : {}),
           ...(c.bug === null && draftOf(c, i) ? { bugDraft: draftOf(c, i) } : existing?.bugDraft ? { bugDraft: existing.bugDraft } : {}),
           ...(c.revision ?? existing?.revision ? { revision: c.revision ?? existing?.revision } : {}),
           ...(existing?.effort ? { effort: existing.effort } : {}),

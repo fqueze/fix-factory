@@ -1862,7 +1862,8 @@ class Planner {
       const edits: Record<PatchId, number> = {};
       for (const pid of stack.order) {
         const p = this.s.patches[pid];
-        if (!p || !/^Bug X+\b/i.test(p.title)) continue;
+        // Bug XXXXXXX, or a bug its author put there that isn't the one you gave it.
+        if (!p || !(/^Bug X+\b/i.test(p.title) || (p.bugFromYou && p.bug !== null && /^Bug (\d+)\b/i.exec(p.title)?.[1] !== String(p.bug)))) continue;
         const bug = p.bug ?? (meta !== null && p.item === ANNOTATIONS_ITEM ? meta : null);
         if (bug !== null) edits[pid] = bug;
       }

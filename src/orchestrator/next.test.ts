@@ -2701,6 +2701,19 @@ function inReview(): Scenario {
   return sc;
 }
 
+describe("a bug you give a patch", () => {
+  it("replaces the one its author put in its commit's message", () => {
+    const sc = stacked();
+    const b = sc.state().patches["p-test-b"];
+    assert.match(b.title, /^Bug 22 /);
+    const { deps: _d, review: _r, replyDrafts: _rd, id, ...fields } = b;
+    sc.add({ type: "patch", request: ID, patch: id, ...fields, bug: 33, bugFromYou: true });
+    const key = sc.settle().find((k) => k.startsWith("rewrite-bugs:root:"))!;
+    const args = sc.plan(key).cli!.args;
+    assert.deepEqual(JSON.parse(sc.plan(key).files!.find((f) => f.path === args[args.indexOf("--edits") + 1])!.content)[b.sha], { bug: 33 });
+  });
+});
+
 describe("8. submit, an author's newer commit", () => {
   it("isn't replaced by the stack's older commit when the branch is read before the stack has it", () => {
     const sc = inReview();
