@@ -657,6 +657,8 @@ function patchRow(r: RequestState, p: PatchView, ctx: RenderContext): Html {
   const sentence = item ? itemSentence(r, item, ctx) : undefined;
   // Groups whose own fix was dropped because this patch fixes them too.
   const covered = Object.values(r.items).filter((i) => i.coveredBy === p.id);
+  const fixes = item ? html`fixes <b>${groupLinks(r, item)}</b>${covered.length ? html` and <b>${join(covered.map((i) => groupLinks(r, i)), ", ")}</b>` : null}` : null;
+  const landed = isLanded(r, p);
   // A "file the bug" ⚑'s buttons are the bug box's.
   const controls = parts.bugBoxShown && r.needsUser.some((n) => n.patch === p.id && actionKind(n, r) === "file-bug") ? null : sentence?.controls;
   // A group's question is asked once, on the row of its first patch.
@@ -675,10 +677,11 @@ function patchRow(r: RequestState, p: PatchView, ctx: RenderContext): Html {
     end: html`${parts.end}${item ? costLabel(r, item, ctx) : null}`,
     // "in the stack" says nothing a patch row in its stack's section doesn't.
     // What matters most first (where its review stands, landable, what you need to do): a long list of tests is cut off.
+    // Landed, its group's state (another patch's) is left out.
     state: html`${[
-      item ? (item.state === "in stack" || item.state === "landed" ? null : item.state === "waiting for review" && p.review ? null : item.state === "waiting for review" && p.revision === undefined ? html`reviewed, not submitted yet` : html`${stateText(r, item, ctx)}`) : null,
+      !item || landed ? null : item.state === "in stack" || item.state === "landed" ? null : item.state === "waiting for review" && p.review ? null : item.state === "waiting for review" && p.revision === undefined ? html`reviewed, not submitted yet` : html`${stateText(r, item, ctx)}`,
       ...parts.status,
-      item ? html`fixes <b>${groupLinks(r, item)}</b>${covered.length ? html` and <b>${join(covered.map((i) => groupLinks(r, i)), ", ")}</b>` : null}` : null,
+      fixes,
     ]
       .filter((x) => x !== null)
       .map((x, i) => (i ? html` · ${x}` : x))}`,
