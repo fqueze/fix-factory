@@ -164,7 +164,7 @@ describe("commands", () => {
 
   it("a comment on the meta bug draft goes to the session that wrote it, which looks up what it needs", () => {
     const sc = withPatch();
-    sc.startJob({ purpose: { key: "meta-draft:root:h", what: "meta-draft", stack: "root" }, kind: "agent", name: "write-meta-bug", cwd: "/wt/root", agent: { sessionId: "s-meta", resume: false, vars: { subject: "s", worktree: "/wt/root", stackFile: "f", overall: "o", summary: "" } } });
+    sc.startJob({ purpose: { key: "meta-draft:root:h", what: "meta-draft", stack: "root" }, kind: "agent", name: "write-meta-bug", cwd: "/wt/root", agent: { sessionId: "s-meta", resume: false, vars: { subject: "s", worktree: "/wt/root", stackFile: "f", overall: "o", summary: "", sections: "s" } } });
     sc.complete("meta-draft:root:h", { report: { description: "d", summary: "[meta] x", feedback: [] } });
     sc.add({ type: "meta-bug", request: ID, bug: null, draft: { product: "Core", component: "DOM", summary: "[meta] x", description: "d", blocks: [2063593] } });
     const c = cmd({ cmd: "comment-bug-draft", patch: "meta", text: "reference the bugs that added the standalone jobs" });

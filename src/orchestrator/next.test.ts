@@ -4589,6 +4589,25 @@ describe("burndown verification", () => {
   });
   const draftKeys = (sc: Scenario) => sc.view().jobs.filter((j) => j.purpose.what === "meta-draft").map((j) => j.purpose.key);
 
+  it("the meta bug's draft has the patches that landed too, test fixes before product fixes", () => {
+    const { sc } = verified(false, 22);
+    sc.complete("author:i-annotations:removal", { report: { summary: "every test still fails", feedback: [] } });
+    sc.settle();
+    const before = draftKeys(sc);
+    const a = sc.state().patches["p-test-a"];
+    // Landed, out of the stack (its base has it), and a product fix.
+    sc.add({ type: "patch", request: ID, patch: "p-old", sha: sha("9"), worktree: a.worktree, title: "Bug 5 - Fix the product, r=smaug.", bug: 5, revision: 300, testOnly: false });
+    sc.add({ type: "review-status", request: ID, patch: "p-old", revision: 300, status: "published", reviewers: [], comments: [], author: "me" } as EventInput);
+    sc.settle();
+    const key = draftKeys(sc).find((k) => !before.includes(k))!;
+    const input = JSON.parse(sc.plan(key).files![0].content) as { sha: string; testOnly?: boolean }[];
+    assert.ok(input.some((x) => x.sha === sha("9")), "the landed one");
+    // Its session, started by this version of the prompt, is told how to list them.
+    assert.match(sc.plan(key).agent?.message ?? "", /each kind once/);
+    const kinds = input.map((x) => (x.sha === sha("9") || x.testOnly === false ? "product" : "test"));
+    assert.deepEqual(kinds, [...kinds].sort((x, y) => (x === y ? 0 : x === "test" ? -1 : 1)));
+  });
+
   it("the meta bug's draft: a task blocking the configured bugs, its text by an agent, written again when a patch's bug changes", () => {
     const blocks = config.metaBugBlocks;
     config.metaBugBlocks = [2063593];

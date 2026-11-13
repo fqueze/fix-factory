@@ -94,6 +94,8 @@ export type Action = { type: "event"; event: EventInput } | { type: "start"; pla
 
 export const HOUR = 3600_000;
 export const EARLY_WORK_LIST_MS = 2 * HOUR;
+// How the meta bug's draft lists its patches: in its prompt, and in the message of a session writing it again.
+const META_SECTIONS = 'under one section title per kind, each kind once, in this order: "Skip-if annotations" (patches that only change test manifests), "Test fixes", "Product fixes"; a section with no patch is left out, and within one the patches keep the given order. The patches of one fix (the same `fix`, next to each other) are one bullet, naming each patch\'s bug: a fix with a product patch is a product fix, under that section.';
 export const SUBMIT_IMPORT_MS = 2 * 60_000;
 export const SUBMIT_IMPORT_SOON_MS = 20_000; // the first minutes after you copy it, while moz-phab runs
 export const SUBMIT_WATCH_MS = 60 * 60_000; // after you copy the moz-phab command
@@ -2652,9 +2654,19 @@ class Planner {
     const st = this.liveStacks()[0];
     const info = st && this.stackInfos.get(st.id);
     if (!info?.ready) return;
-    const ps = st.order.map((pid) => this.s.patches[pid]);
-    // The prompt's version too: a better prompt writes it again.
-    const h = shortHash(["v6", info.code, ...ps.map((p) => `${p.id}:${p.bug}`)]).slice(0, 10);
+    // Every patch it tracks, those that landed (out of the stack once its base has them) too: test fixes before product
+    // fixes (a fix with a product patch is one), as the stack has them otherwise, the landed ones first, as they landed.
+    const landed = Object.keys(this.s.landedAt).filter((pid) => !st.order.includes(pid)).sort((a, b) => this.s.landedAt[a].localeCompare(this.s.landedAt[b]));
+    const all = [...landed, ...st.order].map((pid) => this.s.patches[pid]);
+    // A fix's patches next to each other, where its first one is (they may have landed apart).
+    const fixOf = (p: PatchView) => p.item ?? p.id;
+    const product = new Set(all.filter((p) => !p.testOnly).map(fixOf));
+    const firstAt = new Map<string, number>();
+    all.forEach((p, i) => firstAt.has(fixOf(p)) || firstAt.set(fixOf(p), i));
+    const ps = [...all].sort((a, b) => Number(product.has(fixOf(a))) - Number(product.has(fixOf(b))) || firstAt.get(fixOf(a))! - firstAt.get(fixOf(b))!);
+    // The prompt's version too: a better prompt writes it again, in a session of its own.
+    const version = "v8";
+    const h = shortHash([version, info.code, ...ps.map((p) => `${p.id}:${p.bug}`)]).slice(0, 10);
     const file = dataPath(this.config, this.s.id, `meta-${st.id}-${h}.json`);
     const first = ps.find((p) => p.bugDraft)?.bugDraft;
     // Fields you had its agent change stay.
@@ -2687,19 +2699,21 @@ class Planner {
     });
     const files = [{ path: file, content: JSON.stringify(patches, null, 2) + "\n" }];
     // The session that wrote it, which keeps what you asked of it.
-    const last = this.view.jobs.findLast((j) => j.purpose.what === "meta-draft" && j.purpose.stack === st.id && j.sessionId && succeeded(j));
+    const latest = this.view.jobs.findLast((j) => j.purpose.what === "meta-draft" && j.purpose.stack === st.id && j.sessionId && succeeded(j));
+    // Its session, your comments in it, only if this version of the prompt started it.
+    const last = latest && this.view.jobs.find((j) => j.sessionId === latest.sessionId)?.purpose.reason === version ? latest : undefined;
     if (last) {
       this.want(`meta-draft:${st.id}:${h}`, () => ({
-        purpose: { key: "", what: "meta-draft", stack: st.id, draft },
+        purpose: { key: "", what: "meta-draft", stack: st.id, draft, reason: version },
         kind: "agent",
         name: "write-meta-bug",
         cwd: last.cwd,
         files,
-        agent: { sessionId: last.sessionId!, resume: true, message: `The stack changed: ${file} has its patches now. Write the description again, keeping what the user asked of you before. The patches of one fix (the same \`fix\`, next to each other) are one bullet, naming each patch's bug: a fix with a product patch is a product fix. Then end with the JSON report again.` },
+        agent: { sessionId: last.sessionId!, resume: true, message: `The stack changed: ${file} has its patches now. Write the description again, keeping what the user asked of you before, its patches ${META_SECTIONS} Then end with the JSON report again.` },
       }));
       return;
     }
-    this.wantAgent(`meta-draft:${st.id}:${h}`, "meta-draft", "write-meta-bug", { ...this.metaSubject(st), stackFile: file }, { cwd: st.worktree, files, purpose: { stack: st.id, draft } });
+    this.wantAgent(`meta-draft:${st.id}:${h}`, "meta-draft", "write-meta-bug", { ...this.metaSubject(st), stackFile: file, sections: META_SECTIONS }, { cwd: st.worktree, files, purpose: { stack: st.id, draft, reason: version } });
   }
 
   // A burndown's meta bug is about its folder, with its dashboard; any other request's about what it asked, and its
