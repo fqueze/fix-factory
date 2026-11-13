@@ -968,7 +968,8 @@ describe("one fixture per step of docs/MVP.md", () => {
     for (const pid of st.order) r.patches[pid].revision ??= 1;
     r.patches[st.order[0]].review = { ...r.patches[st.order[0]].review!, status: "published" };
     const sha = (pid: string) => r.patches[pid].sha.slice(0, 12);
-    assert.match(renderRequest(r, ctx, true).value, new RegExp(`moz-phab reorg ${sha(st.order[1])} ${sha(st.order.at(-1)!)}</textarea>`));
+    // From its parent: moz-phab's start is exclusive.
+    assert.match(renderRequest(r, ctx, true).value, new RegExp(`moz-phab reorg ${sha(st.order[1])}\\^ ${sha(st.order.at(-1)!)}</textarea>`));
   });
 
   it("groups that landed outside a stack are under Landed, after those not in a stack yet", () => {

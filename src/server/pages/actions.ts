@@ -278,10 +278,11 @@ function reorgButton(r: RequestState, stack: StackView, key: string, ctx: Render
   const request = r.id;
   const id = `mozphab-reorg-${request}-${stack.id}`;
   // From its first commit that hasn't landed (landed ones still in its branch stay where Phabricator has them) up to
-  // its topmost submitted one, the others in between left alone.
+  // its topmost submitted one, the others in between left alone. moz-phab's start is exclusive (git's start..end):
+  // the first commit's parent, or reorg leaves it out and abandons its revision.
   const open = stack.order.filter((pid) => r.patches[pid].review?.status !== "published");
   const sent = open.filter((pid) => r.patches[pid]?.revision !== undefined);
-  const range = sent.length && sent.length < stack.order.length ? ` ${r.patches[open[0]].sha.slice(0, 12)} ${r.patches[sent.at(-1)!].sha.slice(0, 12)}` : "";
+  const range = sent.length && sent.length < stack.order.length ? ` ${r.patches[open[0]].sha.slice(0, 12)}^ ${r.patches[sent.at(-1)!].sha.slice(0, 12)}` : "";
   return html`<form class="inline cmd" method="post" action="/api/commands">${commandFields([{ cmd: "copied-reorg", request, key }], requestUrl(request))}<textarea hidden id="${id}">cd ${stack.worktree} && git switch ${stack.branch} && ${ctx.mozPhab ?? "moz-phab"} reorg${range}</textarea><button type="button" class="btn small primary" data-copy="${id}">Copy the moz-phab reorg command</button></form>`;
 }
 
