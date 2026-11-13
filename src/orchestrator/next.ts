@@ -2282,6 +2282,10 @@ class Planner {
       if (stack && this.s.stacks[stack] && push.rev) this.routeTryFailures(push.id, this.s.stacks[stack].order.map((pid) => this.s.patches[pid]));
     }
     if (this.s.step !== "verify on try") {
+      // The pushes asked since it was verified done (none approved and not made, none made and not finished): no
+      // longer "on try".
+      const pending = Object.values(this.s.pushes).some((p) => (p.rev !== undefined ? p.result === undefined : this.view.done.has(`approve-push:${p.id}`) && p.declined === undefined));
+      if (!pending) for (const item of Object.values(this.s.items)) if (item.state === "in try") this.setItem(item.id, this.submittedItem(item.id) ? "waiting for review" : "in stack");
       this.changedSinceTry();
       this.askedVerify(this.fixesToVerify());
       return;

@@ -2793,6 +2793,18 @@ describe("a group landed before the stack's bugs are all filed", () => {
   });
 });
 
+describe("a push asked after the stack was verified", () => {
+  it("once finished, its groups are no longer on try: back in the stack, or waiting for review once submitted", () => {
+    const sc = verified({ bugDraft });
+    const { deps: _d, review: _r, replyDrafts: _rd, id, ...fields } = sc.state().patches["p-test-b"];
+    sc.add({ type: "patch", request: ID, patch: id, ...fields, revision: 202 });
+    // Its push started (the items went on try), then finished.
+    for (const item of ["i-test-a", "i-test-b"]) sc.add({ type: "item-state", request: ID, item, state: "in try" });
+    sc.settle();
+    assert.deepEqual([sc.state().items["i-test-a"].state, sc.state().items["i-test-b"].state], ["in stack", "waiting for review"]);
+  });
+});
+
 describe("a bug you give a patch", () => {
   it("replaces the one its author put in its commit's message", () => {
     const sc = stacked();
