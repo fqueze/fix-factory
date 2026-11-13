@@ -6,6 +6,7 @@ import { InvalidReport } from "./handlers.ts";
 import { commandEffects } from "./commands.ts";
 import { landingState } from "../state/landing.ts";
 import type { Command } from "../types.ts";
+import type { EventInput } from "../state/events.ts";
 import { afterTheirDeps, commitsOf, resumeAuthorPlan, similarMessages, stackId } from "./next.ts";
 import { config, HOUR, ID, Scenario, sha } from "./testkit.ts";
 import { shortHash } from "./plan.ts";
@@ -2759,6 +2760,23 @@ describe("a stack submitted while bugs are still to file", () => {
     rev(second, 200, 201);
     sc.settle();
     assert.ok(!sc.state().needsUser.some((x) => x.key.startsWith("land:root:")));
+  });
+});
+
+describe("a stack partly landed", () => {
+  it("asks no reorg for a landed patch elsewhere in Phabricator's order than in the stack's, which ranks the landed ones its own way", () => {
+    const sc = verified({ bugDraft });
+    const [first, second] = sc.state().stacks.root.order;
+    const rev = (pid: string, revision: number, parent: number | undefined, status: string) => {
+      const { deps: _d, review: _r, replyDrafts: _rd, id, ...fields } = sc.state().patches[pid];
+      sc.add({ type: "patch", request: ID, patch: id, ...fields, revision });
+      sc.add({ type: "review-status", request: ID, patch: id, revision, status, reviewers: [], comments: [], author: "me", ...(parent ? { parent } : {}) } as EventInput);
+    };
+    rev(second, 200, undefined, "needs-review");
+    rev(first, 201, 200, "published");
+    sc.settle();
+    assert.notEqual(sc.state().step, "done");
+    assert.ok(!sc.state().needsUser.some((x) => x.key.startsWith("land:root:")), "it's in central");
   });
 });
 

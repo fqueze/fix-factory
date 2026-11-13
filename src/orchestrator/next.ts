@@ -3381,7 +3381,9 @@ class Planner {
         const rev = this.s.patches[next[0]].revision;
         next = sent.filter((pid) => this.s.patches[pid].review?.parent === rev);
       }
-      if (phab.length !== sent.length || phab.join() === sent.join()) {
+      // Where landed ones are among them doesn't matter: they're in central.
+      const open = (l: PatchId[]) => l.filter((pid) => !this.s.landedAt[pid]);
+      if (phab.length !== sent.length || open(phab).join() === open(sent).join()) {
         stale();
         continue;
       }

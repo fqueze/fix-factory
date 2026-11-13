@@ -277,9 +277,11 @@ export function mozPhabCommand(stack: StackView, mozPhab = "moz-phab", single?: 
 function reorgButton(r: RequestState, stack: StackView, key: string, ctx: RenderContext): Html {
   const request = r.id;
   const id = `mozphab-reorg-${request}-${stack.id}`;
-  // Partly submitted: from its first commit up to its topmost submitted one, the others in between left alone.
-  const sent = stack.order.filter((pid) => r.patches[pid]?.revision !== undefined);
-  const range = sent.length && sent.length < stack.order.length ? ` ${r.patches[stack.order[0]].sha.slice(0, 12)} ${r.patches[sent.at(-1)!].sha.slice(0, 12)}` : "";
+  // From its first commit that hasn't landed (landed ones still in its branch stay where Phabricator has them) up to
+  // its topmost submitted one, the others in between left alone.
+  const open = stack.order.filter((pid) => r.patches[pid].review?.status !== "published");
+  const sent = open.filter((pid) => r.patches[pid]?.revision !== undefined);
+  const range = sent.length && sent.length < stack.order.length ? ` ${r.patches[open[0]].sha.slice(0, 12)} ${r.patches[sent.at(-1)!].sha.slice(0, 12)}` : "";
   return html`<form class="inline cmd" method="post" action="/api/commands">${commandFields([{ cmd: "copied-reorg", request, key }], requestUrl(request))}<textarea hidden id="${id}">cd ${stack.worktree} && git switch ${stack.branch} && ${ctx.mozPhab ?? "moz-phab"} reorg${range}</textarea><button type="button" class="btn small primary" data-copy="${id}">Copy the moz-phab reorg command</button></form>`;
 }
 

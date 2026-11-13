@@ -962,6 +962,15 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.match(focus, /&amp;&amp; my-phab submit<\/textarea>/);
   });
 
+  it("10. landing: the reorg command starts above the landed patches still in the branch, which it leaves where they are", () => {
+    const r = structuredClone(get("r-20261001-mouse-button"));
+    const st = Object.values(r.stacks)[0];
+    for (const pid of st.order) r.patches[pid].revision ??= 1;
+    r.patches[st.order[0]].review = { ...r.patches[st.order[0]].review!, status: "published" };
+    const sha = (pid: string) => r.patches[pid].sha.slice(0, 12);
+    assert.match(renderRequest(r, ctx, true).value, new RegExp(`moz-phab reorg ${sha(st.order[1])} ${sha(st.order.at(-1)!)}</textarea>`));
+  });
+
   it("groups that landed outside a stack are under Landed, after those not in a stack yet", () => {
     const r = structuredClone(get("r-20261001-mouse-button"));
     const [first] = Object.values(r.items);
