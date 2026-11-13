@@ -2754,7 +2754,25 @@ describe("a stack submitted while bugs are still to file", () => {
     rev(second, 200);
     rev(first, 201, 200);
     sc.settle();
-    assert.match(sc.state().needsUser.find((x) => x.key.startsWith("land:root:"))!.action, /submitted patches in another order/);
+    const flag = sc.state().needsUser.find((x) => x.key.startsWith("land:root:"))!;
+    assert.match(flag.action, /submitted patches in another order/);
+    // You copied the command but didn't run it: Phabricator's next check still has the old order.
+    const at = (revision: number, parent?: number) => ({ revision, phid: `P${revision}`, title: "t", status: "needs-review", reviewers: [], comments: [], author: "me", ...(parent ? { parent } : {}) });
+    const poll = () => {
+      sc.now += 60 * 60_000;
+      sc.settle();
+      sc.complete(sc.view().jobs.find((j) => j.purpose.what === "poll" && !j.end)!.purpose.key, { output: [at(200), at(201, 200)] });
+      sc.settle();
+    };
+    poll();
+    sc.add({ type: "user-done", request: ID, key: flag.key, reorg: true });
+    assert.ok(!sc.state().needsUser.some((x) => x.key.startsWith("land:root:")), "taken as run");
+    poll(); // started before you copied it
+    assert.ok(!sc.state().needsUser.some((x) => x.key.startsWith("land:root:")));
+    poll();
+    const again = sc.state().needsUser.find((x) => x.key.startsWith("land:root:"))!;
+    assert.equal(again.key.startsWith(`${flag.key}:after-`), true, "asked again");
+    assert.match(again.detail ?? "", /still has the old order/);
     // Reorganized: nothing to ask.
     rev(first, 201);
     rev(second, 200, 201);

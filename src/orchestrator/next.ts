@@ -3393,8 +3393,13 @@ class Planner {
         stale();
         continue;
       }
-      stale(key(phab));
-      this.raise(key(phab), { action: "Stack reordered: Phabricator has its submitted patches in another order", detail: "Run moz-phab reorg on them so Phabricator has the stack's order.", stack: st.id });
+      // Copied, the reorg is taken as run; Phabricator still having the old order at a check made since, it wasn't
+      // (you answered No, or it failed): asked again, once per copy.
+      const copied = Math.max(...[...this.view.dismissed].filter(([k]) => k === key(phab) || k.startsWith(`${key(phab)}:after-`)).map(([, t]) => t));
+      const checked = Number.isFinite(copied) && this.view.jobs.some((j) => j.purpose.what === "poll" && succeeded(j) && j.startedAt > copied);
+      const ask = checked ? `${key(phab)}:after-${copied}` : key(phab);
+      stale(ask);
+      this.raise(ask, { action: "Stack reordered: Phabricator has its submitted patches in another order", detail: checked ? "Phabricator still has the old order: run moz-phab reorg on them so it has the stack's order." : "Run moz-phab reorg on them so Phabricator has the stack's order.", stack: st.id });
     }
   }
 
