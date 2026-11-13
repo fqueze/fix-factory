@@ -2668,13 +2668,22 @@ class Planner {
     const version = "v8";
     const h = shortHash([version, info.code, ...ps.map((p) => `${p.id}:${p.bug}`)]).slice(0, 10);
     const file = dataPath(this.config, this.s.id, `meta-${st.id}-${h}.json`);
-    const first = ps.find((p) => p.bugDraft)?.bugDraft;
-    // Fields you had its agent change stay.
+    // Its patches' component when their bug drafts all have the same, else their test harness's: one patch's would be
+    // nonsense for the others.
+    const drafted = [...new Set(ps.flatMap((p) => (p.bugDraft ? [`${p.bugDraft.product}\n${p.bugDraft.component}`] : [])))];
+    const tests = ps.flatMap((p) => (p.item ? (this.s.items[p.item]?.group.tests ?? []) : []));
+    const harness = tests.length && tests.every((t) => /(^|\/)(unit|xpcshell)[^/]*\//.test(t)) ? "XPCShell Harness" : tests.length && tests.every((t) => /(^|\/)(browser|mochitest|chrome|a11y)[^/]*\/|(^|\/)browser_[^/]*$/.test(t)) ? "Mochitest" : "General";
+    const [metaProduct, metaComponent] = drafted.length === 1 ? drafted[0].split("\n") : ["Testing", harness];
+    // Fields you had its agent change stay: its component only if your comment on the draft changed it.
     const current = this.s.metaBug?.draft;
+    const yours = this.view.jobs.some((j) => j.purpose.what === "meta-draft" && j.purpose.key.includes(":revise:") && succeeded(j) && this.rep<{ component?: string }>(j).component);
+    if (current && !yours && (current.product !== metaProduct || current.component !== metaComponent)) {
+      this.event(this.ev("meta-bug", { bug: this.s.metaBug!.bug, draft: { ...current, product: metaProduct, component: metaComponent } }));
+    }
     const blocks = current?.blocks ?? this.config.metaBugBlocks;
     const draft: BugDraft = {
-      product: current?.product ?? first?.product ?? "Testing",
-      component: current?.component ?? first?.component ?? "General",
+      product: (yours && current?.product) || metaProduct,
+      component: (yours && current?.component) || metaComponent,
       summary: current?.summary ?? (this.s.kind === "burndown" ? `[meta] Fix the flakiness in ${this.s.folder ?? st.folder}` : ""),
       description: "",
       bugType: "task",

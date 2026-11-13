@@ -4589,6 +4589,21 @@ describe("burndown verification", () => {
   });
   const draftKeys = (sc: Scenario) => sc.view().jobs.filter((j) => j.purpose.what === "meta-draft").map((j) => j.purpose.key);
 
+  it("the meta bug's component: its patches' when their drafts agree, else their test harness's", () => {
+    const { sc } = verified(false, 22);
+    withRemoval(sc);
+    const meta = () => [sc.state().metaBug!.draft!.product, sc.state().metaBug!.draft!.component];
+    const draft = (pid: string, component: string) => setPatch(sc, pid, { bug: null, bugDraft: { product: "Core", component, summary: "s", description: "d" } });
+    const [one, other] = sc.state().stacks.a.order;
+    draft(one, "DOM: Events");
+    draft(other, "DOM: Events");
+    sc.settle();
+    assert.deepEqual(meta(), ["Core", "DOM: Events"]);
+    draft(other, "Machine Learning: Frontend");
+    sc.settle();
+    assert.equal(meta()[0], "Testing", "not one patch's");
+  });
+
   it("the meta bug's draft has the patches that landed too, test fixes before product fixes", () => {
     const { sc } = verified(false, 22);
     sc.complete("author:i-annotations:removal", { report: { summary: "every test still fails", feedback: [] } });
