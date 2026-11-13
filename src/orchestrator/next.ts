@@ -2392,7 +2392,7 @@ class Planner {
 
   // A patch try verified whose author changed its code since (for your review comment, its nits after), no push
   // having had that code: the stack goes to try again, its planner picking the jobs where its test failed. A reworded
-  // commit has the same code (git patch-id); a fix for what try found is asked by fixesToVerify.
+  // commit has the same code (git patch-id).
   private changedSinceTry(): void {
     const made = Object.values(this.s.pushes).filter((x) => x.rev !== undefined);
     const pushed = (shas: string[]) =>
@@ -2410,7 +2410,8 @@ class Planner {
           return imp ? this.out<ImportedCommit[]>(imp)[index]?.patchId : undefined;
         };
         const last = runs.at(-1);
-        if (!last || last.purpose.reason === "try" || !code(last)) continue;
+        // A fix for what try found, once on Phabricator: fixesToVerify asks for its push.
+        if (!last || (last.purpose.reason === "try" && p.submittedAt !== undefined) || !code(last)) continue;
         // Its first run with this code: its commit and every one since (rebases, rewrites) are this code.
         let first = runs.length - 1;
         while (first > 0 && code(runs[first - 1]) === code(last)) first--;
