@@ -717,8 +717,9 @@ class Planner {
     if (planned.made.every((id) => this.s.pushes[id]?.rev)) setStep("work list");
   }
 
-  // item: the group whose author asked for it, which waits for your approval.
-  private dryRun(push: PushId, args: string[], purpose: string, cwd: string, stack?: string, item?: ItemId, title?: string): DryRunResult | undefined {
+  // item: the group whose author asked for it, which waits for your approval. ref: the branch it's planned for,
+  // checked out for it whatever another job left checked out.
+  private dryRun(push: PushId, args: string[], purpose: string, cwd: string, stack?: string, item?: ItemId, title?: string, ref?: string): DryRunResult | undefined {
     const r = this.want(`dry-run:${push}`, () => {
       // try.ts refuses a duplicate of a push still pending.
       const pending = Object.values(this.s.pushes)
@@ -729,7 +730,7 @@ class Planner {
         })
         .map(({ push: id, tryTaskConfig, commits }) => ({ push: id, tryTaskConfig, commits }));
       const file = dataPath(this.config, this.s.id, `pending-${push}.json`);
-      return this.cli("dry-run", "try.ts", ["dry-run", "--cwd", cwd, "--pending", file, "--", ...args], {
+      return this.cli("dry-run", "try.ts", ["dry-run", "--cwd", cwd, ...(ref ? ["--ref", ref] : []), "--pending", file, "--", ...args], {
         cwd,
         files: [{ path: file, content: JSON.stringify(pending) + "\n" }],
         purpose: { push, args, cwd, purpose, ...(title ? { title } : {}), ...(stack ? { stack } : {}), ...(item ? { item } : {}) },
@@ -767,7 +768,7 @@ class Planner {
       const these = planned.map((_, i) => (r === 0 ? idOf(i, planned.length) : `${idOf(0, 1)}-v${r}${planned.length === 1 ? "" : `-${i + 1}`}`));
       // Its rebuild count, when its arguments don't say it.
       const args = (push: PlanTryPushesReport["pushes"][number]) => (push.rebuild > 1 && !push.tryArgs.includes("--rebuild") ? [...push.tryArgs, "--rebuild", String(push.rebuild)] : push.tryArgs);
-      const d = planned.map((push, i) => this.dryRun(these[i], args(push), push.purpose, cwd, stack, opts?.item, push.title));
+      const d = planned.map((push, i) => this.dryRun(these[i], args(push), push.purpose, cwd, stack, opts?.item, push.title, vars.branch));
       if (d.some((x) => !x)) return undefined;
       // What you judge it by: the previous push's regressions, and what claims to fix each.
       const regressions = this.rep<PlanTryPushesReport>(plan).regressions;

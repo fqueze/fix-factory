@@ -244,7 +244,7 @@ describe("2. first signal", () => {
 
     sc.complete("plan:unskip", { report: { pushes: [{ purpose: "reproduce", tryArgs: ["fuzzy", "-q", "xpcshell"], rebuild: 10 }], feedback: [] } });
     assert.deepEqual(sc.settle(), ["dry-run:unskip"]);
-    assert.deepEqual(sc.plan("dry-run:unskip").cli?.args, ["dry-run", "--cwd", `/wt/${ID}-signal`, "--pending", `/state/requests/${ID}/data/pending-unskip.json`, "--", "fuzzy", "-q", "xpcshell", "--rebuild", "10"], "its rebuild count, which its arguments didn't say");
+    assert.deepEqual(sc.plan("dry-run:unskip").cli?.args, ["dry-run", "--cwd", `/wt/${ID}-signal`, "--ref", `${ID}-signal`, "--pending", `/state/requests/${ID}/data/pending-unskip.json`, "--", "fuzzy", "-q", "xpcshell", "--rebuild", "10"], "its rebuild count, which its arguments didn't say");
     sc.complete("dry-run:unskip", { output: { command: ["./mach", "try", "fuzzy", "-q", "xpcshell"], taskCount: 40, tasks: [], tryTaskConfig: {}, commits: ["c2", "c1"], warnings: ["artifact push"] } });
     sc.settle();
     assert.deepEqual(sc.open(), ["approve-push:unskip"]);

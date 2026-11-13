@@ -4,7 +4,8 @@
 // node src/cli/try.ts import-push <rev> --cwd <repo> --base <ref> --branch <name>
 //   The try push's own commits (not its try selection's), applied on base as branch: {branch, shas}.
 //
-// node src/cli/try.ts dry-run --cwd <worktree> [--pending <file>] -- <selector> <mach try args...>
+// node src/cli/try.ts dry-run --cwd <worktree> [--ref <branch>] [--pending <file>] -- <selector> <mach try args...>
+//   --ref: checked out for the dry run (detached), the worktree put back after.
 //   Runs `./mach try <selector> --no-push <args>` and prints
 //   {command: string[], taskCount: number, tasks: string[], tryTaskConfig: {...},
 //    commits: string[], warnings: string[], duplicateOf?: string}
@@ -249,9 +250,23 @@ export function unmatchedQueries(args: string[], tasks: string[]): string[] {
   });
 }
 
-export async function dryRun(cwd: string, args: string[], opts: { pending?: PendingPush[]; exec?: typeof exec; timeoutS?: number } = {}): Promise<DryRunResult> {
+// ref: what it plans the push of, checked out for it (another job may have checked out something else in this
+// worktree since the branch was made), then the worktree put back as it was.
+export async function dryRun(cwd: string, args: string[], opts: { pending?: PendingPush[]; exec?: typeof exec; timeoutS?: number; ref?: string } = {}): Promise<DryRunResult> {
   checkTryArgs(args);
   const run = opts.exec ?? exec;
+  if (!opts.ref) return dryRunHere(cwd, args, opts, run);
+  const head = await run(["git", "symbolic-ref", "--quiet", "--short", "HEAD"], { cwd });
+  const back = head.code === 0 ? head.stdout.trim() : (await runOk(run, ["git", "rev-parse", "HEAD"], cwd)).trim();
+  await runOk(run, ["git", "checkout", "--quiet", "--detach", opts.ref], cwd);
+  try {
+    return await dryRunHere(cwd, args, opts, run);
+  } finally {
+    await runOk(run, ["git", "checkout", "--quiet", back], cwd);
+  }
+}
+
+async function dryRunHere(cwd: string, args: string[], opts: { pending?: PendingPush[]; timeoutS?: number }, run: typeof exec): Promise<DryRunResult> {
   const command = ["./mach", "try", ...args];
   // Right after the selector, so nothing can turn it into a path or an option value.
   const noPush = ["./mach", "try", args[0], "--no-push", ...args.slice(1)];
@@ -896,7 +911,7 @@ async function main(): Promise<void> {
       },
       "dry-run": async (args, values) => {
         const pending = typeof values.pending === "string" ? (JSON.parse(readFileSync(values.pending, "utf8")) as PendingPush[]) : undefined;
-        return dryRun(requireCwd(values), args, { pending });
+        return dryRun(requireCwd(values), args, { pending, ...(typeof values.ref === "string" ? { ref: values.ref } : {}) });
       },
       push: async (args, values) => {
         const cwd = requireCwd(values);
@@ -930,6 +945,7 @@ async function main(): Promise<void> {
       base: { type: "string" },
       branch: { type: "string" },
       pending: { type: "string" },
+      ref: { type: "string" },
       "lando-timeout": { type: "string" },
       "no-wait": { type: "boolean" },
       "expect-commits": { type: "string" },

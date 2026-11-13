@@ -148,6 +148,17 @@ test("dryRun puts --no-push right after the selector and reports the stack", asy
   assert.equal(r.duplicateOf, undefined);
 });
 
+test("dryRun with a ref runs on it, whatever is checked out, and puts the worktree back", async () => {
+  const fake = fakeExec(text("dry-run-rebuild.txt"));
+  const run = async (cmd: string[], opts: { input?: string } = {}): Promise<ExecResult> =>
+    cmd[1] === "symbolic-ref" ? (fake.calls.push({ cmd }), { code: 0, stdout: "the-stack\n", stderr: "" }) : fake.run(cmd, opts);
+  await dryRun("/wt", ["fuzzy", "-q", "x"], { exec: run, ref: "the-stack-try-abc" });
+  const order = fake.calls.map((c) => (c.cmd[0] === "timeout" ? "mach" : c.cmd.slice(1, 4).join(" ")));
+  assert.deepEqual(order.slice(0, 3), ["symbolic-ref --quiet --short", "checkout --quiet --detach", "mach"]);
+  assert.deepEqual(fake.calls.find((c) => c.cmd.includes("--detach"))!.cmd.at(-1), "the-stack-try-abc");
+  assert.deepEqual(fake.calls.at(-1)!.cmd, ["git", "checkout", "--quiet", "the-stack"]);
+});
+
 // The chunk patterns dry run, with the labels of a mochitest-plain push.
 function mochitestDryRun(tasks: string[]): string {
   return text("dry-run-chunk-patterns.txt").replace('"test-linux2404-64/opt-xpcshell-*"', tasks.map((t) => JSON.stringify(t)).join(", "));
