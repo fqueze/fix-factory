@@ -2780,6 +2780,19 @@ describe("a stack partly landed", () => {
   });
 });
 
+describe("a group landed before the stack's bugs are all filed", () => {
+  it("is landed, out of the stack: rebuilt on a base that has it, its empty commit doesn't go back to its author", () => {
+    const sc = verified({ bugDraft });
+    assert.equal(sc.state().step, "meta bug");
+    const { deps: _d, review: _r, replyDrafts: _rd, id, ...fields } = sc.state().patches["p-test-a"];
+    sc.add({ type: "patch", request: ID, patch: id, ...fields, revision: 201 });
+    sc.add({ type: "review-status", request: ID, patch: id, revision: 201, status: "published", reviewers: [], comments: [], author: "me" } as EventInput);
+    sc.settle();
+    assert.equal(sc.state().items["i-test-a"].state, "landed");
+    assert.ok(!sc.view().jobs.some((j) => j.purpose.key.startsWith("author:i-test-a:") && j.purpose.reason === "covered"));
+  });
+});
+
 describe("a bug you give a patch", () => {
   it("replaces the one its author put in its commit's message", () => {
     const sc = stacked();

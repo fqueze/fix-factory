@@ -3259,18 +3259,19 @@ class Planner {
   // 10. Landing
 
   private landing(): void {
-    if (this.s.step !== "review comments" && this.s.step !== "landing") {
-      this.partlySubmitted();
-      return;
-    }
     const patches = Object.values(this.s.patches).filter((p) => p.revision !== undefined);
     const landed = (p: PatchView) => landingState(this.s, p).landed;
     const accepted = (p: PatchView) => landingState(this.s, p).accepted;
+    // At any step: a stack partly submitted (bugs still to file) has groups that landed.
     for (const item of Object.values(this.s.items)) {
       const own = patches.filter((p) => p.item === item.id);
       if (own.length > 0 && own.every(landed) && item.state !== "landed") this.setItem(item.id, "landed");
       // Backed out: it waits again.
       else if (item.state === "landed" && !own.every(landed)) this.setItem(item.id, "waiting for review");
+    }
+    if (this.s.step !== "review comments" && this.s.step !== "landing") {
+      this.partlySubmitted();
+      return;
     }
     if (patches.length > 0 && patches.every(landed)) {
       this.setStep("done");
