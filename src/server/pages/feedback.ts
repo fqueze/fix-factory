@@ -5,6 +5,7 @@ import type { Feedback, RequestState } from "../../types.ts";
 import { html, type Html } from "../html.ts";
 import { requestName, requestUrl } from "./common.ts";
 import { md } from "./md.ts";
+import { similarMessages } from "../../orchestrator/next.ts";
 
 const TARGETS: Feedback["target"][] = ["factory", "inputs", "fx-tests", "profiler-cli", "searchfox-cli"];
 
@@ -39,12 +40,27 @@ export function feedbackCount(stateDir: string): number {
   return Object.values(readFeedback(stateDir)).reduce((n, e) => n + e.length, 0);
 }
 
+// An agent's session says it again in each report it ends with (a retry, a later round): its newest wording of a point
+// stands for all, with how many reports said it.
+function collapsed(entries: FeedbackEntry[], sessionOf: (job: string) => string): { e: FeedbackEntry; times: number }[] {
+  const out: { e: FeedbackEntry; times: number; session: string }[] = [];
+  for (const e of entries) {
+    const session = sessionOf(e.job);
+    const newer = out.find((x) => x.session === session && (x.e.text === e.text || similarMessages(x.e.text, e.text)));
+    if (newer) newer.times++;
+    else out.push({ e, times: 1, session });
+  }
+  return out;
+}
+
 export function renderFeedback(byTarget: Record<Feedback["target"], FeedbackEntry[]>, requests: RequestState[], target: Feedback["target"] = "factory"): string {
   const requestOf = new Map(requests.flatMap((r) => Object.keys(r.jobs).map((j) => [j, r] as const)));
-  const entry = (e: FeedbackEntry): Html => {
+  const sessionOf = (job: string) => requestOf.get(job)?.jobs[job].sessionId ?? job;
+  const lists = Object.fromEntries(TARGETS.map((t) => [t, collapsed(byTarget[t], sessionOf)])) as Record<Feedback["target"], { e: FeedbackEntry; times: number }[]>;
+  const entry = ({ e, times }: { e: FeedbackEntry; times: number }): Html => {
     const r = requestOf.get(e.job);
     const job = r?.jobs[e.job];
-    return html`<li class="fb"><div class="sub">${e.at.slice(0, 16).replace("T", " ")} · ${r ? html`<a href="${requestUrl(r.id)}">${requestName(r)}</a>` : "unknown request"}${job ? html` · ${job.name}${job.item ? ` (${job.item})` : ""}` : null} · <code>${e.job}</code></div>${md(e.text)}</li>`;
+    return html`<li class="fb"><div class="sub">${e.at.slice(0, 16).replace("T", " ")} · ${r ? html`<a href="${requestUrl(r.id)}">${requestName(r)}</a>` : "unknown request"}${job ? html` · ${job.name}${job.item ? ` (${job.item})` : ""}` : null} · <code>${e.job}</code>${times > 1 ? html` · in ${times} of its reports` : null}</div>${md(e.text)}</li>`;
   };
   return html`<!doctype html>
 <html lang="en">
@@ -57,10 +73,10 @@ export function renderFeedback(byTarget: Record<Feedback["target"], FeedbackEntr
 <body>
 <header><div class="hwrap">
   <h1><a href="/">🏭 Fix factory</a> · Agents' feedback</h1>
-  <nav class="fbtabs">${TARGETS.map((t) => html`<a href="/feedback?target=${t}" class="${t === target ? "current" : ""}">${t} <b>${byTarget[t].length}</b></a>`)}</nav>
+  <nav class="fbtabs">${TARGETS.map((t) => html`<a href="/feedback?target=${t}" class="${t === target ? "current" : ""}">${t} <b>${lists[t].length}</b></a>`)}</nav>
 </div></header>
 <main>
-<ul class="fblist">${byTarget[target].map(entry)}</ul>
+<ul class="fblist">${lists[target].map(entry)}</ul>
 </main>
 </body>
 </html>

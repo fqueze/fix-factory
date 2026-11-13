@@ -13,3 +13,17 @@ test("feedback files parse into entries, rendered newest first with their reques
   assert.match(page, /<b>one<\/b>/);
   assert.match(page, /factory <b>2<\/b>/);
 });
+
+test("a session's point said again in its later reports shows once, in its newest wording", () => {
+  const entries = parseFeedback(
+    "## 2026-10-15T10:00:00.000Z — job j-1\n\nThe made no change notice pointed at the stack branch, but the patch had landed.\n\n" +
+      "## 2026-10-15T11:00:00.000Z — job j-2\n\nThe made no change notice pointed at the stack branch, but this patch had already landed.\n\n" +
+      "## 2026-10-15T12:00:00.000Z — job j-3\n\nSomething else entirely about profiles.\n",
+  ).reverse();
+  const r = { id: "r-1", text: "t", title: "t", jobs: { "j-1": { job: "j-1", name: "investigate-and-fix", sessionId: "s" }, "j-2": { job: "j-2", name: "investigate-and-fix", sessionId: "s" }, "j-3": { job: "j-3", name: "investigate-and-fix", sessionId: "s" } } } as unknown as Parameters<typeof renderFeedback>[1][number];
+  const page = renderFeedback({ factory: entries, inputs: [], "fx-tests": [], "profiler-cli": [], "searchfox-cli": [] }, [r]);
+  assert.match(page, /factory <b>2<\/b>/);
+  assert.match(page, /this patch had already landed/);
+  assert.doesNotMatch(page, /but the patch had landed/);
+  assert.match(page, /in 2 of its reports/);
+});
