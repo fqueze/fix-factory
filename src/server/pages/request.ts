@@ -12,6 +12,7 @@ import {
   bugUrl,
   commandFields,
   elapsed,
+  descriptionLeftOut,
   enterBugUrl,
   metaBugUrl,
   foldContent,
@@ -253,7 +254,7 @@ function metaBugLine(r: RequestState, back: string, ctx: RenderContext): Html {
       ? html`· <span class="sub">to file once the stack's ${plural(unfiled, "other bug")} ${unfiled === 1 ? "is" : "are"} filed</span>`
       : html`· <a class="bug tofile" data-patch="meta" href="${metaBugUrl(r, m.draft, ctx)}" target="_blank" rel="noopener">Bug to file</a>`;
   return html`<div class="box"><h4>Meta bug${required ? null : html` <span class="sub">(optional)</span>`} ${link} ${m.draft ? html`· “${m.draft.summary}”` : null}</h4>${
-    m.draft ? html`<details data-fold="desc-meta"><summary>Description</summary><div class="desc">${md(m.draft.description)}</div></details>${revisions(r, "meta")}` : null
+    m.draft ? html`${description("meta", m.draft.description, !unfiled && descriptionLeftOut(metaBugUrl(r, m.draft, ctx)))}${revisions(r, "meta")}` : null
   }${bugBox(r.id, "meta", back, "row")}</div>`;
 }
 
@@ -646,7 +647,7 @@ function patchParts(r: RequestState, p: PatchView, ctx: RenderContext) {
     ].filter((x) => x !== null),
     flag: own.some(onLine) ? html`${own.filter(onLine).map((n) => html`<span class="flagitem" data-key="${n.key}"><b>${n.action}</b>${n.detail ? html` <span class="sub">${n.detail}</span>` : null}${flagControls(r, n, ctx)}</span>`)}` : null,
     rest: own.filter((n) => !onLine(n)).map((n) => renderAction(r, n, ctx)),
-    under: bugBoxShown ? bugDraftBox(r, p, back) : null,
+    under: bugBoxShown ? bugDraftBox(r, p, back, ctx) : null,
     body: () => html`${testPlanSection(r, p, back)}${yourComments(r, p)}${p.deps.map((d) => depLine(r, d))}${reviewBox(r, p, p.interdiffFile === undefined ? undefined : ctx.interdiff?.(p))}${leftFindings(r, p, ctx)}`,
   };
 }
@@ -914,11 +915,18 @@ function requestJobs(r: RequestState, ctx: RenderContext): Html | null {
   return jobs.length ? html`<details class="fold" data-fold="jobs"><summary>${plural(jobs.length, "task")}</summary>${foldContent(r, ctx, "jobs", () => html`<div class="jobs">${jobs.map((j) => jobLine(r, j, ctx))}</div>`)}</details>` : null;
 }
 
-function bugDraftBox(r: RequestState, p: PatchView, back: string): Html {
+// A bug draft's description, its markdown to copy: to paste in the form when it's too long for the form's URL.
+function description(id: string, text: string, leftOut: boolean): Html {
+  return html`<details data-fold="desc-${id}"><summary>Description <textarea hidden id="desc-text-${id}">${text}</textarea><button type="button" class="btn small" data-copy="desc-text-${id}">Copy</button>${
+    leftOut ? html` <span class="sub">not in the form: too long for its URL, paste it there</span>` : null
+  }</summary><div class="desc">${md(text)}</div></details>`;
+}
+
+function bugDraftBox(r: RequestState, p: PatchView, back: string, ctx: RenderContext): Html {
   const d = p.bugDraft!;
   return html`<div class="box tofile">
     <h4>${d.product}::${d.component} · “${d.summary}”</h4>
-    <details data-fold="desc-${p.id}"><summary>Description</summary><div class="desc">${md(d.description)}</div></details>
+    ${description(p.id, d.description, descriptionLeftOut(enterBugUrl(d, ctx)))}
     ${revisions(r, p.id)}${bugBox(r.id, p.id, back, "row")}
   </div>`;
 }

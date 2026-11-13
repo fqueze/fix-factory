@@ -118,7 +118,20 @@ export function enterBugUrl(d: BugDraft, ctx: RenderContext): string {
   if (d.keywords?.length) {
     p.set("keywords", d.keywords.join(","));
   }
+  // Bugzilla refuses a request line over 8192 bytes (414 URI Too Long): a description too long for it is left out,
+  // for you to paste (its Description line has a Copy button).
+  if (tooLong(p)) p.delete("comment");
   return `${BUGZILLA}/enter_bug.cgi?${p}`;
+}
+
+const MAX_PATH_AND_QUERY = 8000;
+function tooLong(p: URLSearchParams): boolean {
+  return `/enter_bug.cgi?${p}`.length > MAX_PATH_AND_QUERY;
+}
+
+// Whether its form opens without its description, too long for a URL.
+export function descriptionLeftOut(url: string): boolean {
+  return !new URL(url).searchParams.has("comment");
 }
 
 // The commit title without its "Bug N - " prefix, which the bug column shows.
