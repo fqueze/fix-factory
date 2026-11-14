@@ -4141,6 +4141,24 @@ describe("10. landing: what's still checked on Phabricator", () => {
     assert.notEqual(key(), k0);
   });
 
+  it("tries again a minute after a poll that couldn't reach Phabricator (no network yet), then doubling", () => {
+    const sc = inReview();
+    const key = () => sc.view().jobs.findLast((j) => j.purpose.key.startsWith("poll:"))?.purpose.key;
+    const k0 = key()!;
+    sc.complete(k0, { exitCode: 1, error: "fetch failed" });
+    sc.now += 61_000;
+    sc.settle();
+    const k1 = key()!;
+    assert.notEqual(k1, k0);
+    sc.complete(k1, { exitCode: 1, error: "curl: (6) Could not resolve host: phabricator.services.mozilla.com" });
+    sc.now += 61_000;
+    sc.settle();
+    assert.equal(key(), k1, "2 minutes after the second");
+    sc.now += 60_000;
+    sc.settle();
+    assert.notEqual(key(), k1);
+  });
+
   it("stops checking a revision a day after it landed: no backout comes that late", () => {
     const sc = inReview();
     const [d100, d101] = polled("accepted");

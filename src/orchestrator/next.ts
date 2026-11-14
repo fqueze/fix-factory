@@ -21,7 +21,7 @@ import type { BugInfo, BugLandings } from "../cli/bugzilla.ts";
 import { keptDir } from "../lib/kept.ts";
 import { REQUEST_STEPS } from "../server/commands.ts";
 import { isReviewComment, landingState, unpostedReplies } from "../state/landing.ts";
-import { BRANCH_MOVED, COMMITS_CHANGED } from "../state/flags.ts";
+import { BRANCH_MOVED, COMMITS_CHANGED, unreachable } from "../state/flags.ts";
 import { ANNOTATIONS_ITEM, lacksBug, needsMetaBug, sameBugDraft } from "../state/meta-bug.ts";
 import type { EventInput } from "../state/events.ts";
 import type {
@@ -2941,6 +2941,8 @@ class Planner {
     if (!last) return true;
     // Refused (Phabricator's rate limit): each failed poll in a row doubles the wait, up to an hour.
     const failed = polls.length - 1 - polls.findLastIndex((j) => succeeded(j));
+    // Unreachable (no network yet, after the computer woke up): a minute later, doubling up to the usual wait.
+    if (failed > 0 && unreachable(last.end!.error)) return this.ctx.now - last.startedAt >= Math.min((this.config.phabPollMinutes ?? 10) * 60_000, 60_000 * 2 ** (failed - 1));
     if (failed > 0) return this.ctx.now - last.startedAt >= Math.min(HOUR, (this.config.phabPollMinutes ?? 10) * 60_000 * 2 ** failed);
     // Every few minutes while you're at the page, every few hours while you're away; every 2 minutes for 10 after you
     // copied a moz-phab command (you're resubmitting).

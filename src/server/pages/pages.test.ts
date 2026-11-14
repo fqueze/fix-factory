@@ -827,6 +827,9 @@ describe("one fixture per step of docs/MVP.md", () => {
     r.jobs["j-poll"].error = "differential.revision.search: HTTP 429";
     // A warning line with the flags, its button there.
     assert.match(renderRequest(r, ctx, true).value, /<div class="action warn"><span class="flag">Phabricator refused the last check, <span data-since="2026-10-16T07:31:00.000Z">[^<]*<\/span> ago: rate limited<\/span><form[^]*?Check Phabricator now<\/button><\/form><span class="why[^"]*" data-expand title="differential.revision.search: HTTP 429">/);
+    // Unreachable (no network yet): said quietly, not as a refusal.
+    r.jobs["j-poll"].error = "fetch failed";
+    assert.match(renderRequest(r, ctx, true).value, /<div class="action quiet"><span class="flag">Phabricator unreachable \(no network\?\) <span data-since="2026-10-16T07:31:00.000Z">[^<]*<\/span> ago: trying again soon<\/span>/);
     delete r.jobs["j-poll"];
     r.step = "landing";
     assert.ok(renderRequest(r, ctx, true).value.includes(button));

@@ -23,6 +23,12 @@ export const COMMITS_CHANGED = "not pushed: commits changed";
 // revisions): nothing was rewritten; the branch is read, and the rewrite made again from it.
 export const BRANCH_MOVED = "the branch changed since the factory read it";
 
+// A request that never reached the server (no network yet, e.g. just after the computer woke up): Node's fetch says
+// "fetch failed", curl names the step (6: resolving the host, 7: connecting, 28: timed out, 35: TLS, 56: receiving).
+export function unreachable(error: string | undefined): boolean {
+  return error !== undefined && /\bfetch failed\b|\bcurl: \((6|7|28|35|56)\)|\b(ENOTFOUND|EAI_AGAIN|ENETUNREACH|EHOSTUNREACH|ECONNREFUSED|ECONNRESET|ETIMEDOUT)\b/.test(error);
+}
+
 // You can retry any job but a push that may have been made: a refused one only while its push isn't made,
 // declined, or being (or already) pushed by another job.
 export function canRetry(r: RequestState, job: Pick<JobView, "job" | "name" | "purpose" | "error">): boolean {

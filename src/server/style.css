@@ -494,3 +494,6 @@ form.bugpaste input { font: inherit; font-size: 13px; width: 8em; padding: 1px 6
 
 /* Looks like a one-line box, keeps the lines of what you paste, and grows with them (client.js). */
 textarea.oneline { width: auto; resize: none; overflow-y: auto; max-height: 12em; box-sizing: border-box; }
+.action.quiet { background: none; color: var(--text-secondary); }
+.action.quiet .flag { font-weight: normal; }
+.action.quiet .flag::before { content: ""; }

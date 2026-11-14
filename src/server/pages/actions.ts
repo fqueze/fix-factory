@@ -1,6 +1,6 @@
 import type { JobView, NeedsUser, PlannedCommand, PushView, RefusedCommand, RequestState, StackView } from "../../types.ts";
 import { md } from "./md.ts";
-import { canDismiss, canRetry, reviewLimitFlag } from "../../state/flags.ts";
+import { canDismiss, canRetry, reviewLimitFlag, unreachable } from "../../state/flags.ts";
 import { html, join, type Html } from "../html.ts";
 import { actionKind, COMMAND_LABELS, isLanded, linkify, commandFields, enterBugUrl, metaBugUrl, groupLabel, jobLabel, pushName, jobNoun, refusedOf, needsMetaBug, plural, requestUrl, elapsed, stackOfPatch, submitChecks, regressionStatus, type RenderContext } from "./common.ts";
 
@@ -417,6 +417,7 @@ function phabRefused(r: RequestState, ctx: RenderContext): Html | null {
   if (polls.some((j) => j.endedAt === undefined)) return null;
   const last = polls.sort((a, b) => a.endedAt!.localeCompare(b.endedAt!)).at(-1);
   if (!last || last.exitCode === 0 || !last.error) return null;
+  if (unreachable(last.error)) return html`<div class="action quiet"><span class="flag">Phabricator unreachable (no network?) ${elapsed(last.endedAt!, ctx)} ago: trying again soon</span>${pollPhabButton(r.id, requestUrl(r.id))}${why(last.error)}</div>`;
   return html`<div class="action warn"><span class="flag">Phabricator refused the last check, ${elapsed(last.endedAt!, ctx)} ago${/\b429\b/.test(last.error) ? ": rate limited" : null}</span>${pollPhabButton(r.id, requestUrl(r.id))}${why(last.error)}</div>`;
 }
 
