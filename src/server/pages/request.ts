@@ -388,7 +388,11 @@ function askBlock(r: RequestState, i: ItemView, ctx: RenderContext, patches: Pat
     return undefined;
   }
   const controls = (c: Html | null) => (c ? html`<div class="jobctl">${c}</div>` : null);
-  return html`${withFirst ? html`${s.ask}${patches.length ? html`<p>${patches.map((p) => html`“${patchTitle(p)}” ${viewLink(r, p, "View the patch")} `)}</p>` : null}${controls(s.controls)}` : null}${more.map(
+  // Its commits not imported yet (what "Go ahead with its patch" takes): as its author's latest report has them.
+  const commits = (i.lastReport?.report as { commits?: string[] } | undefined)?.commits ?? [];
+  const unimported = !patches.length && commits.length && !Object.values(r.patches).some((p) => p.item === i.id) && i.lastReport?.prompt === "investigate-and-fix";
+  const view = unimported ? html`<p><a href="/requests/${encodeURIComponent(r.id)}/items/${encodeURIComponent(i.id)}/debug" target="_blank" rel="noopener">View its ${commits.length === 1 ? "commit" : `${commits.length} commits`}</a> (what “Go ahead with its patch” takes)</p>` : null;
+  return html`${withFirst ? html`${s.ask}${patches.length ? html`<p>${patches.map((p) => html`“${patchTitle(p)}” ${viewLink(r, p, "View the patch")} `)}</p>` : view}${controls(s.controls)}` : null}${more.map(
     (n) => html`<div class="ask-more" data-key="${n.key}"><p><b>Also: ${flagText(r, n)}</b></p>${flagAsk(r, i, n)}${controls(flagControls(r, n, ctx))}</div>`,
   )}`;
 }

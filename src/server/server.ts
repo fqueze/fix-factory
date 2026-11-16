@@ -479,7 +479,8 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
       }
       return send(res, 200, "text/html; charset=utf-8", page);
     }
-    // A group's DEBUG commits, waiting to go to try on top of the stack.
+    // A group's commits as its author's latest report has them: DEBUG ones waiting to go to try on top of the stack, or a
+    // fix not imported yet (it waits for your answer).
     if ((m = path.match(/^\/requests\/([^/]+)\/items\/([^/]+)\/debug$/))) {
       const request = opts.state.getRequest(decodeURIComponent(m[1]));
       const item = request?.items[decodeURIComponent(m[2])];
