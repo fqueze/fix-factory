@@ -2271,6 +2271,25 @@ describe("6. verify on try, early then final", () => {
   });
 });
 
+describe("6. verify on try, the patches a push carried", () => {
+  it("a failure is triaged against the patches the push carried, not one made since", () => {
+    const sc = stacked();
+    const planKey = sc.view().jobs.find((j) => j.purpose.what === "plan-pushes")!.purpose.key;
+    sc.complete(planKey, { report: { pushes: [{ purpose: "verify", tryArgs: ["fuzzy", "-q", "x"], rebuild: 5 }], feedback: [] } });
+    const [dry] = sc.settle();
+    const push = sc.purpose(dry).push!;
+    // It carried p-test-b's commit only (p-test-a's came after it).
+    sc.complete(dry, { output: { command: ["./mach", "try", "fuzzy"], taskCount: 5, tasks: [], tryTaskConfig: {}, commits: [sc.state().patches["p-test-b"].sha], warnings: [] } });
+    sc.add({ type: "user-done", request: ID, key: `approve-push:${push}` });
+    sc.add({ type: "try-pushed", request: ID, push, rev: "fed", url: "u" });
+    sc.add({ type: "try-progress", request: ID, push, done: 2, total: 9, failures: 1, tests: { done: 3, total: 5 } });
+    sc.settle();
+    sc.complete(`try-table:${push}:early`, { output: table([{ test: "z/test_z.js", config: "linux", result: "fail", failures: ["zap"], taskIds: ["T2"] }]) });
+    const triage = sc.settle().find((k) => k.startsWith(`triage:${push}:early`))!;
+    assert.deepEqual(JSON.parse(sc.plan(triage).files![0].content).patches.map((p: { id: string }) => p.id), ["p-test-b"]);
+  });
+});
+
 describe("6. verify on try, an author's answer", () => {
   it("the final run's triage reads what an author answered about a failure the early one pinned on its patch", () => {
     const sc = stacked();

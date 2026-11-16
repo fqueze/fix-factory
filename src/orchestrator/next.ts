@@ -2389,7 +2389,8 @@ class Planner {
       const stack = this.view.byKey.get(`dry-run:${push.id}`)?.[0].purpose.stack;
       // Pushes made before this request (a split copies them) are evidence, routed already where they were made.
       if ((this.view.pushedAt.get(push.id) ?? Infinity) < Date.parse(this.s.createdAt)) continue;
-      if (stack && this.s.stacks[stack] && push.rev) this.routeTryFailures(push.id, this.s.stacks[stack].order.map((pid) => this.s.patches[pid]));
+      // Only the patches it carried: one made since can't be what broke it.
+      if (stack && this.s.stacks[stack] && push.rev) this.routeTryFailures(push.id, this.s.stacks[stack].order.filter((pid) => this.pushed(push.id, pid)).map((pid) => this.s.patches[pid]));
     }
     if (this.s.step !== "verify on try") {
       // The pushes asked since it was verified done (none approved and not made, none made and not finished): no
@@ -2491,6 +2492,16 @@ class Planner {
 
   // Whether a push had a patch's fix for what try found: one of the commits it has been since, or the one it is (asked
   // after the fact, it has no others).
+  // Whether the push had this patch, under any sha it has had (rebases since change it). Without the dry run's commits
+  // (pushes from before dry runs listed them), it's taken as having it.
+  private pushed(push: PushId, pid: PatchId): boolean {
+    const d = this.view.byKey.get(`dry-run:${push}`)?.find(succeeded);
+    const commits = d && this.out<DryRunResult>(d).commits;
+    if (!commits?.length) return true;
+    const shas = [...(this.s.patchShas[pid] ?? []), this.s.patches[pid].sha];
+    return commits.some((c) => shas.some((sha) => sha.startsWith(c) || c.startsWith(sha)));
+  }
+
   private carries(push: PushId, pid: PatchId): boolean {
     const d = this.view.byKey.get(`dry-run:${push}`)?.find(succeeded);
     // Every commit it has been from the one its author reported on (rebases and rewrites since keep the fix).
