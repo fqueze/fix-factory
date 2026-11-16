@@ -282,6 +282,7 @@ export const COMMAND_LABELS: Record<Command["cmd"], string> = {
   shell: "shell command",
   "hand-off": "hand-off to your session",
   "split-request": "split of the request",
+  "split-off": "work items split off to a new request",
   "move-groups": "move of work items to another request",
   "fix-tests": "tests to fix too",
   "verify-stack": "try push of the stack",

@@ -44,12 +44,19 @@ export function moveProblem(s: RequestState, target: RequestState | undefined, i
   if (target.step === "done") return `${target.id} is done`;
   const related = (a: RequestState, b: RequestState) => a.splitFrom !== undefined && a.splitFrom === b.splitFrom;
   if (!related(s, target)) return `${target.id} isn't from the same split: only groups of one split move between its requests`;
+  const taken = items.find((i) => target.items[i] && !TERMINAL_STATES.includes(target.items[i].state));
+  if (taken) return `${target.id} has a group ${taken} already`;
+  return movingProblem(s, items);
+}
+
+// Groups leaving a request, to a new one (split-off) or another of its split: none running, none on Phabricator, none
+// needing a patch that stays.
+export function movingProblem(s: RequestState, items: ItemId[]): string | undefined {
+  if (items.length === 0) return "no groups to move";
   const unknown = items.find((i) => !s.items[i]);
   if (unknown) return `unknown group ${unknown}`;
   const running = Object.values(s.jobs).find((j) => j.endedAt === undefined && j.item !== undefined && items.includes(j.item));
   if (running) return `${running.name} of ${running.item} is running: move it once it's done`;
-  const taken = items.find((i) => target.items[i] && !TERMINAL_STATES.includes(target.items[i].state));
-  if (taken) return `${target.id} has a group ${taken} already`;
   const moving = new Set(items);
   for (const p of Object.values(s.patches)) {
     if (p.revision !== undefined && p.item !== undefined && moving.has(p.item)) return `${p.title} is on Phabricator already`;

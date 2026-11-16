@@ -92,6 +92,7 @@ const SPECS: Record<Command["cmd"], Record<string, Field>> = {
   shell: { cwd: "string", command: "string", reason: "string" },
   "hand-off": { items: "string[]", reason: "string" },
   "split-request": { parts: "parts", reason: "string" },
+  "split-off": { title: "string", groups: "groups", reason: "string" },
   "move-groups": { to: "string", groups: "groups", reason: "string" },
   "fix-tests": { tests: "string[]", reason: "string" },
   "verify-stack": { reason: "string" },

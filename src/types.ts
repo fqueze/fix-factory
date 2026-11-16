@@ -280,6 +280,7 @@ export type PlannedCommand =
   | { cmd: "shell"; cwd: string; command: string; reason: string }
   | { cmd: "hand-off"; items: ItemId[]; reason: string }
   | { cmd: "split-request"; parts: { title: string; groups: { item: ItemId; why: string }[] }[]; reason: string }
+  | { cmd: "split-off"; title: string; groups: { item: ItemId; why: string }[]; reason: string } // those groups to a new request of their own, this one going on
   | { cmd: "move-groups"; to: RequestId; groups: { item: ItemId; why: string }[]; reason: string } // to another request of the same split, with their history
   | { cmd: "fix-tests"; tests: string[]; reason: string }
   | { cmd: "verify-stack"; reason: string }; // a try push of the stack as it stands, without going back a step // a group for each, from the try pushes' failures, even ones already on central // new requests taking these groups, with their history; this one archived // you take them over in a session of your own: the factory writes its prompt

@@ -9,7 +9,7 @@ import type { Command, Event, FactoryConfig, ItemId, JobId, PlannedCommand, Requ
 import { REQUEST_STEPS } from "../server/commands.ts";
 import { ANNOTATIONS_ITEM, authorJobsOf, CANCELLED, itemEpochOf, SETTLED, TERMINAL, resumeAuthorPlan, removedWorktree } from "./next.ts";
 import { handOffReferences } from "./hand-off.ts";
-import { moveProblem, partEvents, splitProblem } from "./split.ts";
+import { moveProblem, movingProblem, partEvents, splitProblem } from "./split.ts";
 import { dataPath, requestDir, sessionIdFor, slug, type JobPlan } from "./plan.ts";
 import type { View } from "./view.ts";
 
@@ -640,6 +640,38 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
       done(true, c.reason);
       break;
     }
+    case "split-off": {
+      // Like a split's part, but this request goes on with the rest: its landed and submitted patches stay its own.
+      const items = c.groups.map((g) => g.item);
+      const problem = movingProblem(s, items);
+      if (problem) {
+        done(false, problem);
+        break;
+      }
+      const to = newRequestId({ t: c.t, text: c.title }, ctx.exists);
+      const at = (e: RequestEvent): Effect => ({ type: "event", event: { ...e, request: to } as EventInput });
+      effects.push(
+        at({ type: "request-created", kind: s.kind, text: c.title, ...(s.folder !== undefined ? { folder: s.folder } : {}), ...(s.rev !== undefined ? { rev: s.rev } : {}), command: c.id }),
+        at({ type: "split-from", from: s.id }),
+        at({ type: "config-set", config: s.config }),
+        // Not this request's try pushes: they tested its stack, which goes on here.
+        ...partEvents(ctx.events!(s.id), s, items, to, { pushes: false }).flatMap((event): Effect[] => [
+          { type: "event", event },
+          ...(event.type === "job-started" && event.kind === "agent" ? [{ type: "copy-report", job: event.job, from: s.id, to } as const] : []),
+        ]),
+        at({ type: "note", text: `Split off ${s.id}: ${c.reason}` }),
+        at({ type: "step", step: items.every((i) => SETTLED.includes(s.items[i].state)) ? "stack" : "investigate and fix" }),
+      );
+      // Out of this stack, their worktrees the new request's.
+      for (const item of items) {
+        ev({ type: "item-state", item, state: "taken over", detail: `moved to ${to}` });
+        for (const n of s.needsUser.filter((x) => x.item === item || (x.job !== undefined && s.jobs[x.job]?.item === item))) ev({ type: "user-done", key: n.key, byFactory: true });
+      }
+      ev({ type: "groups-moved", to, items });
+      ev({ type: "note", text: `Split off to ${to}: ${c.reason}` });
+      done(true, c.reason);
+      break;
+    }
     case "shell":
       effects.push({ type: "start", plan: { purpose: { key: `shell:${c.id}`, what: "shell" }, kind: "script", name: "shell", cwd: c.cwd, cmd: ["sh", "-c", c.command] } });
       done(true, c.reason);
@@ -648,7 +680,7 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
   return effects;
 }
 
-const PLANNED = new Set<string>(["retry-job", "cancel-job", "resume-agent", "start-agent", "set-state", "redo-step", "edit-config", "shell", "hand-off", "split-request", "move-groups", "fix-tests", "verify-stack"] satisfies PlannedCommand["cmd"][]);
+const PLANNED = new Set<string>(["retry-job", "cancel-job", "resume-agent", "start-agent", "set-state", "redo-step", "edit-config", "shell", "hand-off", "split-request", "split-off", "move-groups", "fix-tests", "verify-stack"] satisfies PlannedCommand["cmd"][]);
 
 export const STOPPED = "stopped by you";
 

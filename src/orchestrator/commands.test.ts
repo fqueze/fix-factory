@@ -316,6 +316,28 @@ describe("commands", () => {
     assert.deepEqual(sc.state().handOffs.map((h) => [h.items, h.text]), [[["i-a"], "Take over test_a.js."]]);
   });
 
+  it("split-off moves some groups to a new request of their own, this one going on with the rest, unarchived", () => {
+    const sc = withPatch();
+    sc.add({ type: "item-created", request: ID, item: "i-b", folder: "b", group: { message: "bang", tests: ["b/test_b.js"], configs: ["linux"] } });
+    sc.startJob({ purpose: { key: "author:i-b:initial", what: "author", item: "i-b", reason: "initial" }, kind: "agent", name: "investigate-and-fix", item: "i-b", cwd: "/wt/b", agent: { sessionId: "s-2", resume: false, vars: { test: "b/test_b.js", worktree: "/wt/b", failureSummary: "bang", request: "r" } } });
+    sc.complete("author:i-b:initial", { report: { state: "fix verified locally", summary: "s", cause: "c", verification: "v", commits: [sha("2")], landsAfter: [], feedback: [] } });
+    sc.add({ type: "patch", request: ID, patch: "p-b", item: "i-b", sha: sha("2"), worktree: "/wt/b", title: "Bug 5 - Fix b", bug: 5 });
+    sc.add({ type: "review-status", request: ID, patch: "p-a", revision: 100, status: "published", reviewers: [], comments: [] } as never);
+    for (const item of ["i-a", "i-b"]) sc.add({ type: "item-state", request: ID, item, state: "in stack" });
+    const off = commandEffects(cmd({ cmd: "split-off", title: "Wayland failures", groups: [{ item: "i-b", why: "Wayland only" }], reason: "out of scope" }), { config, state: sc.state(), view: sc.view(), exists: () => false, plan: () => undefined, events: () => sc.events });
+    const byRequest = new Map<string, Event[]>();
+    for (const e of off) if (e.type === "event") byRequest.set(e.event.request, [...(byRequest.get(e.event.request) ?? []), { v: 1, t: "2026-10-27T10:00:00.000Z", ...e.event } as Event]);
+    const [id] = [...byRequest.keys()].filter((x) => x !== ID);
+    const made = foldEvents(byRequest.get(id)!);
+    assert.deepEqual([made.text, made.splitFrom, Object.keys(made.items), Object.keys(made.patches)], ["Wayland failures", ID, ["i-b"], ["p-b"]]);
+    const original = foldEvents([...sc.events, ...byRequest.get(ID)!]);
+    assert.notEqual(original.step, "done", "not archived");
+    assert.equal(original.splitInto, undefined);
+    assert.equal(original.items["i-b"].state, "taken over");
+    assert.equal(original.items["i-a"].state, "in stack", "its own, landed patch stays");
+    assert.deepEqual(original.movedTo, { "i-b": id });
+  });
+
   it("split-request makes a request per part with its groups' history and the pushes made, and archives this one", () => {
     const sc = withPatch();
     sc.add({ type: "item-created", request: ID, item: "i-b", folder: "b", group: { message: "bang", tests: ["b/test_b.js"], configs: ["linux"] } });
