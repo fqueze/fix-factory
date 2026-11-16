@@ -218,7 +218,7 @@ export type Event =
   | (EventBase & { type: "review-status"; patch: PatchId; revision: number; status: string; reviewers: ReviewerStatus[]; comments: InlineComment[]; diff?: PhabDiff; author?: string; reopenedAt?: Iso; parent?: number })
   | (EventBase & { type: "reply-draft"; patch: PatchId; commentId: number; text: string })
   | (EventBase & { type: "needs-user"; key: string; action: string; detail: string; item?: ItemId; patch?: PatchId; push?: PushId; stack?: string; job?: JobId })
-  | (EventBase & { type: "user-done"; key: string; byFactory?: true; reorg?: true }) // clears a needs-user with the same key; byFactory: the factory found it moot, not your answer; reorg: you copied the moz-phab reorg command
+  | (EventBase & { type: "user-done"; key: string; byFactory?: true; reorg?: true; text?: string }) // clears a needs-user with the same key; byFactory: the factory found it moot, not your answer; reorg: you copied the moz-phab reorg command; text: what you said with your answer
   | (EventBase & { type: "command-executed"; command: string; ok: boolean; detail?: string; cmd?: Command["cmd"]; item?: ItemId; job?: JobId })
   | (EventBase & { type: "recovery-plan"; job: JobId; text: string; answer?: string; plan: PlannedCommand[]; cannotDo: string[]; questions: string[] })
   | (EventBase & { type: "note"; text: string });
@@ -245,7 +245,8 @@ export type Command =
   | (CommandBase & { cmd: "set-bug"; patch: PatchId; bug: number })
   | (CommandBase & { cmd: "comment-bug-draft"; patch: PatchId | "meta"; text: string })
   | (CommandBase & { cmd: "stack-comments"; stack: string; comments: { patch: PatchId; text: string }[] })
-  | (CommandBase & { cmd: "take-it" | "hand-back"; item: ItemId })
+  | (CommandBase & { cmd: "take-it"; item: ItemId; text?: string }) // text: what its author should do about the other fix
+  | (CommandBase & { cmd: "hand-back"; item: ItemId })
   | (CommandBase & { cmd: "comment-fix"; patch: PatchId; text: string })
   | (CommandBase & { cmd: "follow-up"; push: PushId; patch: PatchId }) // a failure that push pinned on that patch is left as a follow-up
   | (CommandBase & { cmd: "set-test-plan"; patch: PatchId; text: string }) // on its revision
@@ -491,6 +492,7 @@ export interface RequestState {
   verifyAsked?: string[];
   reopened: Record<PatchId, Iso>; // when its revision went from closed (landed) back to open: a backout
   landedAt: Record<PatchId, Iso>; // when a poll first saw its revision closed (landed), until a backout reopens it
+  answers: Record<string, string>; // what you said with your answer to a ⚑, by its key (take-it: what its author should do)
   followUps: string[]; // "<push> <item>": failures you left as follow-ups, which neither go to its author nor hold its patch back
   // Your messages to running agents, with when each got it; one it never got (its run ended first) resumes its session.
   agentMessages: { msg: string; item: ItemId; job: JobId; session: string; text: string; t: Iso; delivered?: Iso }[];

@@ -71,7 +71,7 @@ const SPECS: Record<Command["cmd"], Record<string, Field>> = {
   "stack-comments": { stack: "string", comments: "comments" },
   "redo-annotations": {},
   "poll-phab": {},
-  "take-it": { item: "string" },
+  "take-it": { item: "string", text: "string?" },
   "hand-back": { item: "string" },
   "comment-fix": { patch: "string", text: "string" },
   "follow-up": { push: "string", patch: "string" },

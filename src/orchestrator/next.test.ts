@@ -702,6 +702,19 @@ describe("4. investigate and fix", () => {
     assert.deepEqual(wt.cli?.args, ["create", `${ID}-i-test-a`, "--base", "origin/main", "--build", "artifact"]);
   });
 
+  it("someone active: what you say with take-it goes to its author, with what the other fix is", () => {
+    const sc = workList([group("ka", "a/test_a.js", "boom")]);
+    sc.complete("prior-art:i-test-a", { output: { bugs: [] } });
+    sc.settle();
+    sc.complete("prior-art-verdict:i-test-a", { report: { verdict: "active", quote: "revision in review by janv", feedback: [] } });
+    sc.settle();
+    sc.add({ type: "user-done", request: ID, key: "take-it:i-test-a", text: "Check whether their patch fixes the repeat failure." });
+    sc.settle();
+    sc.complete("wt:i-test-a", { output: { name: `${ID}-i-test-a`, path: `/wt/${ID}-i-test-a`, branch: `${ID}-i-test-a` } });
+    sc.settle();
+    assert.match(String(sc.plan("author:i-test-a:initial").agent?.vars?.failureSummary), /Someone else may be fixing this test \(revision in review by janv\)\. The user asked you to work on it anyway, saying: “Check whether their patch fixes the repeat failure\.”\.$/);
+  });
+
   it("two groups of one test that haven't started are one: the first gets both failures, the second closes", () => {
     const sc = workList([group("ka", "a/test_a.js", "boom"), { ...group("kb", "a/test_a.js", "bang"), configs: ["mac/opt-xpcshell"], taskIds: ["T2"] }]);
     assert.equal(sc.state().items["i-test-a-2"].state, "left as-is");

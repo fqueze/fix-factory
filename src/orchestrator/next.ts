@@ -1255,11 +1255,16 @@ class Planner {
       const withPush = pushCommits
         ? ` The failures come from a try push whose own commits (the jobs and harness changes it tests) aren't in your tree: they're branch ${pushCommits.branch} (\`git log ${this.config.baseRef}..${pushCommits.branch}\`). To run the tests as that push did, apply them uncommitted, \`git diff ${this.config.baseRef} ${pushCommits.branch} | git apply\`, and take them out (\`git diff ${this.config.baseRef} ${pushCommits.branch} | git apply -R\`) before you commit: they are never part of your fix.`
         : "";
+      // Someone else may be fixing it, and you said what to do about it.
+      const first = Object.values(this.s.items).find((i) => i.group.tests[0] === test)!;
+      const told = this.s.answers[`take-it:${first.id}`];
+      const priorBug = v.verdict === "active" ? this.out<{ bugs: PriorArtBug[] }>(prior).bugs.find((b) => b.id === v.bug) : undefined;
+      const others = told ? ` Someone else may be fixing this test (${priorBug ? describePriorArt(priorBug) : v.quote.slice(0, 500)}). The user asked you to work on it anyway, saying: “${told}”.` : "";
       this.want(`${prefix}:initial`, () =>
         this.agent(
           "author",
           "investigate-and-fix",
-          { test: tests, worktree: path, failureSummary: `"${item.group.message}" on ${item.group.configs.length} configs${rate}; the full group, with its configs and task ids, is in ${groupFile}.${reuse}${before}${withPush}`, request: this.s.text.trim() },
+          { test: tests, worktree: path, failureSummary: `"${item.group.message}" on ${item.group.configs.length} configs${rate}; the full group, with its configs and task ids, is in ${groupFile}.${reuse}${before}${withPush}${others}`, request: this.s.text.trim() },
           {
             key: `${prefix}:initial`,
             item: item.id,

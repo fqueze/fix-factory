@@ -46,6 +46,7 @@ export function folder(first: Event): { apply(events: readonly Event[]): void; s
     tryNeeded: {},
     followUps: [],
     agentMessages: [],
+    answers: {},
     patchShas: {},
     pushChanges: {},
     jobs: {},
@@ -421,6 +422,7 @@ export function folder(first: Event): { apply(events: readonly Event[]): void; s
           if (reorg && s.stacks[reorg]) s.stacks[reorg].submittedOrder = [...s.stacks[reorg].order];
           s.needsUser = s.needsUser.filter((n) => n.key !== e.key);
           refused = refused.filter((x) => x.key !== e.key);
+          if (e.text !== undefined) s.answers[e.key] = e.text;
           break;
         }
         case "command-executed":

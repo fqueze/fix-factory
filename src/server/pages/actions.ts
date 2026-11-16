@@ -74,7 +74,7 @@ export function flagControls(r: RequestState, n: NeedsUser, ctx: RenderContext):
       controls =
         item === undefined
           ? null
-          : html`<form class="inline cmd" method="post" action="/api/commands">${commandFields([{ cmd: "take-it", request: r.id, item }], back)}<button class="btn small primary">Fix it anyway</button></form><form class="inline cmd" method="post" action="/api/commands">${commandFields([{ cmd: "hand-back", request: r.id, item }], back)}<button class="btn small">Leave it to them</button></form>`;
+          : html`<form class="inline cmd" method="post" action="/api/commands">${commandFields([{ cmd: "take-it", request: r.id, item }], back)}<button class="btn small primary">Fix it anyway</button></form><form class="inline cmd" method="post" action="/api/commands">${commandFields([{ cmd: "hand-back", request: r.id, item }], back)}<button class="btn small">Leave it to them</button></form><form class="inline cmd joined" method="post" action="/api/commands">${commandFields([{ cmd: "take-it", request: r.id, item }], back)}<textarea class="oneline" name="text" required rows="1" placeholder="Or tell its author what to do about it (e.g. check whether their patch fixes it)…"></textarea><button class="btn small" title="Works on it, telling its author this">Send</button></form>`;
       break;
     }
     case "reviewers":

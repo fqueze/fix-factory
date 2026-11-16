@@ -359,7 +359,7 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
       done(true);
       break;
     case "take-it":
-      ev({ type: "user-done", key: `take-it:${c.item}` });
+      ev({ type: "user-done", key: `take-it:${c.item}`, ...(c.text?.trim() ? { text: c.text.trim() } : {}) });
       done(true);
       break;
     case "hand-back":
