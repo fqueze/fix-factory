@@ -45,6 +45,7 @@ export function folder(first: Event): { apply(events: readonly Event[]): void; s
     backouts: {},
     tryNeeded: {},
     followUps: [],
+    agentMessages: [],
     patchShas: {},
     pushChanges: {},
     jobs: {},
@@ -150,6 +151,14 @@ export function folder(first: Event): { apply(events: readonly Event[]): void; s
         case "item-group":
           if (s.items[e.item]) s.items[e.item].group = e.group;
           break;
+        case "agent-message":
+          s.agentMessages.push({ msg: e.msg, item: e.item, job: e.job, session: e.session, text: e.text, t: e.t });
+          break;
+        case "agent-message-delivered": {
+          const m = s.agentMessages.find((x) => x.msg === e.msg);
+          if (m) m.delivered = e.at;
+          break;
+        }
         case "item-removed":
           delete s.items[e.item];
           break;

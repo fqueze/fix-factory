@@ -768,6 +768,23 @@ describe("4. investigate and fix", () => {
     assert.ok(sc.settle().includes(`import:${next}`), "told once");
   });
 
+  it("a message to a running author that ended before getting it resumes its session with it, once", () => {
+    const sc = workList([group("ka", "a/test_a.js", "boom")]);
+    investigating(sc, "i-test-a");
+    const run = sc.view().byKey.get("author:i-test-a:initial")![0];
+    sc.add({ type: "agent-message", request: ID, item: "i-test-a", job: run.job, session: run.sessionId!, msg: "c1", text: "Also check macOS." });
+    sc.add({ type: "agent-message", request: ID, item: "i-test-a", job: run.job, session: run.sessionId!, msg: "c2", text: "It got this one." });
+    sc.add({ type: "agent-message-delivered", request: ID, msg: "c2", at: "2026-10-15T09:00:00.000Z" });
+    sc.complete("author:i-test-a:initial", { report: fixed(["c1"]) });
+    const started = sc.settle();
+    const key = started.find((k) => k.includes(":message:"))!;
+    assert.equal(key, "author:i-test-a:message:c1");
+    assert.equal(sc.plan(key).agent?.sessionId, run.sessionId);
+    assert.match(sc.plan(key).agent?.message ?? "", /^A message from the user, sent while you were working, that reached you only now:\nAlso check macOS\.\n\nDo what it says/);
+    sc.complete(key, { report: fixed(["c1"]) });
+    assert.ok(!sc.settle().some((k) => k.includes(":message:")), "once");
+  });
+
   it("gives each bug draft to the commits it's for: 3 patches, 2 bugs; filing one sets it on all the patches it's for", () => {
     const sc = workList([group("ka", "a/test_a.js", "boom", 2)]);
     investigating(sc, "i-test-a");

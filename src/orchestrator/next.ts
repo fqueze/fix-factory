@@ -322,6 +322,7 @@ class Planner {
     this.askedTests();
     // Your messages to authors whose worktree is being restored.
     for (const q of this.s.queuedAuthors ?? []) this.resumeAuthor(q.item, q.key, q.reason, q.message);
+    this.undeliveredMessages();
     this.skipRemoval();
     this.metaDraft();
     this.metaBug();
@@ -1097,6 +1098,24 @@ class Planner {
     const jobs = this.authorJobs(item);
     const start = jobs.findLastIndex((j) => j.purpose.reason === "initial" || j.purpose.reason === "start" || j.purpose.reason === "continue" || j.name === "address-review");
     return jobs.slice(start + 1).filter((j) => j.purpose.reason === reason).length;
+  }
+
+  // Your messages to a running author that ended before its next tool call (inbox.ts): its session, resumed with
+  // them. Those to the runs before the last such resume went with it.
+  private undeliveredMessages(): void {
+    const jobOf = (m: { job: JobId }) => this.view.jobs.find((j) => j.job === m.job);
+    for (const item of new Set(this.s.agentMessages.map((m) => m.item))) {
+      const last = this.view.jobs.findLast((j) => j.item === item && j.purpose.key.includes(":message:"));
+      const pending = this.s.agentMessages.filter((m) => m.item === item && !m.delivered && jobOf(m)?.end && (!last || jobOf(m)!.startedAt >= last.startedAt));
+      if (!pending.length) continue;
+      const one = pending.length === 1;
+      this.resumeAuthor(
+        item,
+        `author:${item}${this.itemEpoch(item)}:message:${pending[0].msg}`,
+        "continue",
+        `${one ? "A message" : "Messages"} from the user, sent while you were working, that reached you only now:\n${pending.map((m) => m.text).join("\n\n")}\n\nDo what ${one ? "it says" : "they say"}, amending your commit if your fix changes, then end with the JSON report again. If you think ${one ? "it is" : "they are"} wrong, don't do it: leave your commits as they are and say why in \`disagreement\`.`,
+      );
+    }
   }
 
   resumeAuthor(item: ItemId, key: string, reason: string, message: string, state: ItemState = "investigating"): JobRecord | undefined {

@@ -209,6 +209,8 @@ export type Event =
   | (EventBase & { type: "try-pushed"; push: PushId; rev: string; url: string })
   | (EventBase & { type: "poll-requested" })
   | (EventBase & { type: "item-group"; item: ItemId; group: FailureGroup }) // its group, corrected
+  | (EventBase & { type: "agent-message"; item: ItemId; job: JobId; session: string; msg: string; text: string }) // your message to a running agent, in its session's inbox (msg: the command's id)
+  | (EventBase & { type: "agent-message-delivered"; msg: string; at: Iso }) // the agent got it, after a tool call
   | (EventBase & { type: "item-removed"; item: ItemId; reason: string }) // one the factory made by mistake (a duplicate), never worked on: gone
   | (EventBase & { type: "try-progress"; push: PushId; done: number; total: number; failures: number; tests?: { done: number; total: number } })
   | (EventBase & { type: "try-job-failed"; push: PushId; taskId: string; retryId?: number; jobName: string; platform: string; tier?: number; result: string })
@@ -490,6 +492,8 @@ export interface RequestState {
   reopened: Record<PatchId, Iso>; // when its revision went from closed (landed) back to open: a backout
   landedAt: Record<PatchId, Iso>; // when a poll first saw its revision closed (landed), until a backout reopens it
   followUps: string[]; // "<push> <item>": failures you left as follow-ups, which neither go to its author nor hold its patch back
+  // Your messages to running agents, with when each got it; one it never got (its run ended first) resumes its session.
+  agentMessages: { msg: string; item: ItemId; job: JobId; session: string; text: string; t: Iso; delivered?: Iso }[];
   tryNeeded: Record<PatchId, { why: string; ask: string; job: JobId; at: Iso; after?: Iso; shas: string[]; verified?: boolean }>; // shas: the commits it has been since // fixes for what try found, until a push of them is green
   backouts: Record<PatchId, { at: Iso; reason: string; culprit: boolean; verified?: boolean }>; // patches whose landing was backed out // each time you asked for a try push of the stack as it stands, why
   splitFrom?: RequestId; // made by splitting that one

@@ -12,6 +12,7 @@ import { delimiter, dirname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { toolsBin } from "../cli/tools.ts";
 import { loadConfig } from "../config.ts";
+import { delivered, sendToInbox } from "../agents/inbox.ts";
 import { freeDiskGB } from "../lib/disk.ts";
 import { execOk } from "../lib/exec.ts";
 import { processNewCommands, readCommands } from "../state/commands.ts";
@@ -243,6 +244,9 @@ export class Orchestrator {
           mkdirSync(join(this.config.stateDir, "allow-push"), { recursive: true });
           writeFileSync(join(this.config.stateDir, "allow-push", e.sessionId), new Date(this.now()).toISOString() + "\n");
           break;
+        case "inbox":
+          sendToInbox(this.config.stateDir, e.session, e.message);
+          break;
         case "copy-report": {
           // Only agents that succeeded have one.
           const from = reportPath(this.config, e.from, e.job);
@@ -261,6 +265,11 @@ export class Orchestrator {
 
   private async collect(): Promise<void> {
     for (const id of this.requests()) {
+      // Your messages its agents got since (inbox.ts): before their runs' ends, which resume them with the others.
+      for (const m of this.load(id).s.agentMessages.filter((x) => x.delivered === undefined)) {
+        const at = delivered(this.config.stateDir, m.session).get(m.msg);
+        if (at) appendEventSafe(this.config.stateDir, { type: "agent-message-delivered", request: id, msg: m.msg, at });
+      }
       const running = Object.values(this.load(id).s.jobs).filter((j) => j.endedAt === undefined);
       for (const j of running) {
         const status = jobStatus(this.config.stateDir, j.job, j);

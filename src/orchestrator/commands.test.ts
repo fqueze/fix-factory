@@ -509,7 +509,7 @@ describe("commands", () => {
     assert.deepEqual(sc.open(), []);
   });
 
-  it("continue resumes the item's author with your message and answers its ⚑s; refused while it runs", () => {
+  it("continue resumes the item's author with your message and answers its ⚑s; while it runs, goes to its inbox", () => {
     const sc = withPatch();
     sc.add({ type: "item-state", request: ID, item: "i-a", state: "left as-is" });
     sc.add({ type: "needs-user", request: ID, key: "failed:j-rev", action: "No ok", detail: "d", job: "j-rev", item: "i-a" });
@@ -521,8 +521,11 @@ describe("commands", () => {
     assert.match(String(plan.agent?.message), /keep it and answer the reviewer/);
     assert.equal(sc.state().items["i-a"].state, "investigating", "a closed item reopens");
     assert.deepEqual(sc.open(), []);
-    run(sc, cmd({ cmd: "continue", item: "i-a", text: "more" }));
-    assert.match(executed(sc).at(-1)!.detail!, /is running/);
+    const more = cmd({ cmd: "continue", item: "i-a", text: "more" });
+    const effects = run(sc, more);
+    assert.deepEqual(effects.find((e) => e.type === "inbox"), { type: "inbox", session: "s-1", message: { id: more.id, text: "more", t: more.t } });
+    assert.deepEqual(sc.state().agentMessages.map((m) => [m.session, m.text, m.delivered]), [["s-1", "more", undefined]]);
+    assert.equal(executed(sc).at(-1)!.ok, true);
   });
 
   it("retry is retry-job without a reason, never for a try push", () => {

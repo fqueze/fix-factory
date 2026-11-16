@@ -45,6 +45,7 @@ export type AgentCommandOptions = {
 // refuses any push: an instruction alone isn't enough. Agents never need ssh: without your ssh-agent, Claude
 // Code's own ssh probes (ssh -T -o BatchMode=yes…) can't make your keyring ask for the key.
 // It reads the one-push allowances you give (allow-push/<session> in the state directory).
+// The PostToolUse hook hands it the messages you send it while it runs (inbox.ts).
 // The SessionStart hook puts the factory's own tools (tools.ts update) first on the PATH of the agent's commands.
 // The hook command is a shell line; paths may have spaces.
 const shellQuote = (s: string) => `'${s.replaceAll("'", "'\\''")}'`;
@@ -54,6 +55,8 @@ const agentSettings = (stateDir: string) =>
     hooks: {
       PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: [process.execPath, join(import.meta.dirname, "no-push.ts"), stateDir].map(shellQuote).join(" ") }] }],
       SessionStart: [{ hooks: [{ type: "command", command: `echo ${shellQuote(`export PATH=${shellQuote(toolsBin(stateDir))}:"$PATH"`)} >> "$CLAUDE_ENV_FILE"` }] }],
+      // Your messages to it while it runs (inbox.ts): after each tool call.
+      PostToolUse: [{ hooks: [{ type: "command", command: [process.execPath, join(import.meta.dirname, "inbox.ts"), stateDir].map(shellQuote).join(" ") }] }],
     },
   });
 

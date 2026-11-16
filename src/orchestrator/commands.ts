@@ -1,5 +1,6 @@
 // What each command does, as effects the loop carries out. Pure. Jobs a command starts skip the
 // caps: you asked for them. Recovery commands come from an approved plan and run exactly as written.
+import type { InboxMessage } from "../agents/inbox.ts";
 import { isDeepStrictEqual } from "node:util";
 import type { EventInput } from "../state/events.ts";
 import { sameBugDraft } from "../state/meta-bug.ts";
@@ -21,7 +22,8 @@ export type Effect =
   | { type: "cancel"; job: JobId; request: RequestId; detail: string } // then job-finished with error CANCELLED
   | { type: "start-now"; request: RequestId }
   | { type: "allow-push"; sessionId: string } // no-push.ts lets that session make one push
-  | { type: "copy-report"; job: JobId; from: RequestId; to: RequestId }; // a split's: its agent's report, if it has one
+  | { type: "copy-report"; job: JobId; from: RequestId; to: RequestId } // a split's: its agent's report, if it has one
+  | { type: "inbox"; session: string; message: InboxMessage }; // a message for a running agent (inbox.ts)
 
 export interface CommandContext {
   config: FactoryConfig;
@@ -474,6 +476,14 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
       break;
     }
     case "continue": {
+      // Its author running: told now, after its current tool call (inbox.ts).
+      const running = authorJobsOf(view!, c.item).at(-1);
+      if (running && running.end === undefined && running.sessionId) {
+        ev({ type: "agent-message", item: c.item, job: running.job, session: running.sessionId, msg: c.id, text: c.text });
+        effects.push({ type: "inbox", session: running.sessionId, message: { id: c.id, text: c.text, t: c.t } });
+        done(true);
+        break;
+      }
       const error = resume(c.item, "continue", `A message from the user:\n${c.text}\n\nDo what it says, amending your commit if your fix changes, then end with the JSON report again. If you think it is wrong, don't do it: leave your commits as they are and say why in \`disagreement\`.${draftsNote(s, c.item)}`);
       if (!error) {
         clearItemFlags(c.item);
