@@ -2336,11 +2336,12 @@ class Planner {
       const o = this.out<{ conflict?: { sha: string; files: string[] }; remaining?: string[] }>(cur);
       if (!o.conflict) return { branch };
       const { sha, files } = o.conflict;
-      const owner = groups.find((g) => g.commits.includes(sha));
+      // Authors may report short shas; the stack scripts answer with full ones.
+      const owner = groups.find((g) => g.commits.some((c) => sha.startsWith(c) || c.startsWith(sha)));
       if (!owner) {
         // Not left in progress: the stack's other jobs run in its worktree.
         if (!this.want(`abort:${cur.job}`, () => this.cli("abort", "sh", ["-c", ABORT_CHERRY_PICK], { cwd: info.wt, purpose: { stack: info.id } }))) return undefined;
-        this.raise(`failed:${cur.job}`, { action: `The commits of try push ${tryWith?.slice(0, 12)} don't apply on top of the stack`, detail: `${sha.slice(0, 12)} conflicts in ${files.join(", ")}`, job: cur.job });
+        this.raise(`failed:${cur.job}`, { action: tryWith ? `The commits of try push ${tryWith.slice(0, 12)} don't apply on top of the stack` : `${sha.slice(0, 12)} doesn't apply on top of the stack`, detail: `${sha.slice(0, 12)} conflicts in ${files.join(", ")}`, job: cur.job });
         return undefined;
       }
       const res = this.wantAgent(`resolve:${info.id}:try-${h}:${sha}`, "resolve", "resolve-conflict", { sha, base: branch, files: files.join(", ") }, { cwd: info.wt, purpose: { stack: info.id, sha } });

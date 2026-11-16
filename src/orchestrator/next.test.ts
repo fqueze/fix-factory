@@ -1597,6 +1597,13 @@ describe("4b. try repro", () => {
     }
   });
 
+  it("a DEBUG commit conflicting on the try branch is its author's however short a sha either side names it by", () => {
+    const sc = waitingStack(true);
+    const tb = keyOf(sc, "try-branch:root:");
+    sc.complete(tb, { output: { commits: [], conflict: { sha: sha("d").slice(0, 12), files: ["a/head.js"] }, remaining: [sha("e")] } });
+    assert.deepEqual(sc.settle(), [`resolve:root:try-${tb.split(":")[2]}:${sha("d").slice(0, 12)}`]);
+  });
+
   it("a conflict on the try branch goes to resolve-conflict, then the rest is assembled; an unresolvable one asks you on the group's row and the push waits", () => {
     const conflicted = () => {
       const sc = waitingStack(true);
