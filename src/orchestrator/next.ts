@@ -3302,6 +3302,18 @@ class Planner {
         const r = this.rep<ResolveConflictReport>(res);
         if (r.state !== "resolved" || !r.commit) {
           if (!this.want(`abort:${res.job}`, () => this.cli("abort", "sh", ["-c", ABORT_CHERRY_PICK], { cwd: st.worktree, purpose: { stack: st.id } }))) continue;
+          // What it fixes the stack does already: its author keeps only what isn't covered, or drops it, as in an assembly.
+          const item = fresh.find((p) => conflict.sha.startsWith(p.sha.slice(0, 12)) || p.sha.startsWith(conflict.sha.slice(0, 12)))?.item;
+          if (r.state === "already fixed" && item) {
+            this.clear(`failed:${res.job}`);
+            this.resumeAuthor(
+              item,
+              `author:${item}${this.itemEpoch(item)}:covered:${res.job}`,
+              "covered",
+              `Adding your commit ${conflict.sha.slice(0, 12)} on top of the stack, it conflicted with a change that already does what it does: ${r.explanation}\n\nThat commit is in this repository (\`git show\` it). Rebase your commits on top of it and keep only what it doesn't already do (each part you keep has to be needed on its own). If nothing is left, drop your commits and report "left as-is", with that commit's sha in \`coveredBy\`. Then end with the JSON report again.`,
+            );
+            continue;
+          }
           this.raise(`failed:${res.job}`, { action: "Conflict while adding new patches on top of the stack", detail: r.explanation.slice(0, 1500), job: res.job, stack: st.id });
           continue;
         }

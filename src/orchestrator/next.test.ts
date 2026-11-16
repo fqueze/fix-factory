@@ -3596,6 +3596,23 @@ describe("9. a try push of a submitted stack", () => {
     assert.deepEqual(flags.map((n) => n.action), ["Submit 2 new patches"]);
   });
 
+  it("a new patch on top of a submitted stack that another patch of it already covers goes back to its author", () => {
+    const sc = inReview();
+    sc.complete("poll:0", { output: polled("needs-review", [], "pending") });
+    sc.settle();
+    sc.add({ type: "item-created", request: ID, item: "i-test-c", folder: "a", group: { message: "crash", tests: ["a/test_c.js"], configs: [] } });
+    investigating(sc, "i-test-c");
+    reviewed(sc, "i-test-c", sha("3"), "a/test_c.js", { title: "Bug 33 - Fix test_c, r=smaug.", bug: 33 });
+    const append = sc.view().jobs.find((j) => j.purpose.key.startsWith("append:root:"))!.purpose.key;
+    sc.complete(append, { output: { mapping: {}, conflict: { sha: sha("3"), files: ["a/head.js"] }, conflictLeft: true } });
+    const resolve = sc.settle().find((k) => k.startsWith("resolve:root:append-"))!;
+    const job = sc.complete(resolve, { report: { state: "already fixed", explanation: "D100 makes the same change", feedback: [] } });
+    sc.complete(sc.settle().find((k) => k === `abort:${job}`)!, { output: "" });
+    const started = sc.settle();
+    assert.ok(started.includes(`author:i-test-c:covered:${job}`), String(started));
+    assert.ok(!sc.open().some((k) => k.startsWith("failed:")), "nothing asked of you");
+  });
+
   it("a fix made after submission goes on top of the stack once reviewed, for you to submit, without the step going back", () => {
     const sc = inReview();
     sc.complete("poll:0", { output: polled("needs-review", [], "pending") });
