@@ -4395,6 +4395,21 @@ describe("10. landing: adapting a soft dependency", () => {
   });
 });
 
+describe("10. landing: worktrees", () => {
+  it("a landed item's worktree goes a day after it landed, while the request goes on", () => {
+    const sc = inReview();
+    const [d100, d101] = polled("accepted");
+    sc.complete("poll:0", { output: [{ ...d100, status: "needs-review", reviewers: [{ name: "smaug", status: "pending" }] }, { ...d101, status: "published" }] });
+    sc.settle();
+    assert.equal(sc.state().items["i-test-a"].state, "landed");
+    assert.ok(!sc.view().byKey.has(`remove:${ID}-i-test-a`), "not while a backout may still come");
+    sc.now += 25 * HOUR;
+    sc.settle();
+    assert.ok(sc.view().byKey.has(`remove:${ID}-i-test-a`));
+    assert.ok(!sc.view().byKey.has(`remove:${ID}-i-test-b`), "its sibling still in review keeps its own");
+  });
+});
+
 describe("10. landing: a landed patch with nothing landable", () => {
   it("still leaves the stack: rebuilt without it, nothing asked of you", () => {
     const sc = inReview();
