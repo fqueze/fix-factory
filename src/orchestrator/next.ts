@@ -330,6 +330,7 @@ class Planner {
     this.submit();
     this.submitted();
     this.reviewComments();
+    this.leftPatches();
     this.newPatches();
     this.backouts();
     this.landing();
@@ -3256,6 +3257,49 @@ class Planner {
       patch: p.id,
     });
     this.setItem(item.id, "waiting for review");
+  }
+
+  // Once submitted, a stack isn't assembled again: patches of items that left the request (split off, moved, handed
+  // back or closed) and never reached Phabricator leave it by a rewrite, and the ⚑ asking to submit new ones is counted
+  // again.
+  private leftPatches(): void {
+    if (this.s.step !== "review comments" && this.s.step !== "landing") return;
+    const gone = (pid: PatchId) => {
+      const p = this.s.patches[pid];
+      const item = p.item ? this.s.items[p.item] : undefined;
+      return p.revision === undefined && item !== undefined && ["taken over", "handed back", "left as-is"].includes(item.state);
+    };
+    for (const st of this.liveStacks()) {
+      const left = st.order.filter(gone);
+      if (!left.length) continue;
+      const order = st.order.filter((pid) => !gone(pid));
+      const h = shortHash(left).slice(0, 10);
+      const e = this.rewriteEdits(`left-${st.id}-${h}`, order.map((pid) => this.s.patches[pid]));
+      const rw = this.want(`left:${st.id}:${h}`, () =>
+        this.cli("rewrite", "stack.ts", ["rewrite", "--cwd", st.worktree, "--base", st.base ?? this.config.baseRef, "--branch", st.branch, "--order", order.map((pid) => this.s.patches[pid].sha).join(","), ...e.args], {
+          cwd: st.worktree,
+          files: e.files,
+          purpose: { stack: st.id, reason: "patches that left the request", patches: Object.fromEntries(order.map((pid) => [this.s.patches[pid].sha.slice(0, 12), pid])) },
+        }),
+      );
+      if (!rw) continue;
+      if (this.out<{ conflict?: unknown }>(rw).conflict) {
+        this.raise(`failed:${rw.job}`, { action: "Conflict while taking patches that left the request out of the stack", detail: `${left.map((pid) => this.s.patches[pid].title).join("; ")}: a patch that stays needs them`.slice(0, 1000), job: rw.job, stack: st.id });
+        continue;
+      }
+      const { id, ...rest } = st;
+      this.event(this.ev("stack", { stack: id, ...rest, order }));
+      const unsent = order.map((pid) => this.s.patches[pid]).filter((p) => p.revision === undefined);
+      for (const n of this.s.needsUser) if (n.key.startsWith(`submit-new:${st.id}:`)) this.clear(n.key);
+      if (unsent.length) {
+        const unfiled = unsent.some((p) => p.bug === null && p.bugDraft);
+        this.raise(`submit-new:${st.id}:${shortHash(unsent.map((p) => p.id)).slice(0, 10)}`, {
+          action: `Submit ${unsent.length} new ${unsent.length === 1 ? "patch" : "patches"}`,
+          detail: `${unsent.map((p) => p.title.replace(/,\s*r=.*$/, "")).join("; ")}: on top of the stack, reviewed. ${unfiled ? "File their bugs (the drafts on their rows), then copy" : "Copy"} the moz-phab submit command.`.slice(0, 1000),
+          stack: st.id,
+        });
+      }
+    }
   }
 
   // After submission, fixes made since (tests you asked to fix, failures a push found) go on top of the stack once

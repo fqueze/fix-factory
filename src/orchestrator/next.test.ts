@@ -3596,6 +3596,28 @@ describe("9. a try push of a submitted stack", () => {
     assert.deepEqual(flags.map((n) => n.action), ["Submit 2 new patches"]);
   });
 
+  it("a new patch on top of a submitted stack whose item left the request leaves the stack, and its submit flag with it", () => {
+    const sc = inReview();
+    sc.complete("poll:0", { output: polled("needs-review", [], "pending") });
+    sc.settle();
+    const st = sc.state().stacks.root;
+    sc.add({ type: "item-created", request: ID, item: "i-test-c", folder: "a", group: { message: "crash", tests: ["a/test_c.js"], configs: [] } });
+    investigating(sc, "i-test-c");
+    reviewed(sc, "i-test-c", sha("3"), "a/test_c.js", { title: "Bug 33 - Fix test_c, r=smaug.", bug: 33 });
+    sc.complete(sc.view().jobs.find((j) => j.purpose.key.startsWith("append:root:"))!.purpose.key, { output: { mapping: { [sha("3")]: sha("9") } } });
+    sc.settle();
+    assert.ok(sc.open().some((k) => k.startsWith("submit-new:root:")));
+    // Split off to a request of its own.
+    sc.add({ type: "item-state", request: ID, item: "i-test-c", state: "taken over", detail: "moved to r-x" });
+    const left = sc.settle().find((k) => k.startsWith("left:root:"))!;
+    const args = sc.plan(left).cli!.args;
+    assert.equal(args[args.indexOf("--order") + 1], st.order.map((pid) => sc.state().patches[pid].sha).join(","));
+    sc.complete(left, { output: { mapping: {} } });
+    sc.settle();
+    assert.deepEqual(sc.state().stacks.root.order, st.order);
+    assert.ok(!sc.open().some((k) => k.startsWith("submit-new:")), "nothing new left to submit");
+  });
+
   it("a new patch on top of a submitted stack that another patch of it already covers goes back to its author", () => {
     const sc = inReview();
     sc.complete("poll:0", { output: polled("needs-review", [], "pending") });
