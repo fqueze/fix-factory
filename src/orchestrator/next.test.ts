@@ -3810,11 +3810,14 @@ describe("9. review comments", () => {
     const key = `interdiff:p-test-a:${job}:${sha("f").slice(0, 12)}`;
     assert.deepEqual(sc.settle(), [key]);
     assert.deepEqual(sc.plan(key).cli?.args, ["interdiff", "--cwd", `/wt/${ID}-root`, sha("f"), sha("8")]);
+    // An earlier answer's reply-only flag: moot once this one is raised.
+    sc.add({ type: "needs-user", request: ID, key: "reply:resubmit:root:jx", action: "Post 1 reply on D101", detail: "", stack: "root", patch: "p-test-a" });
     const inter = sc.complete(key, { output: { diff: "-a\n+b\n", method: "same-parent" } });
     assert.equal(sc.state().patches["p-test-a"].interdiffFile, `requests/${ID}/data/interdiff-p-test-a-${inter}.diff`);
     sc.settle();
     const n = sc.state().needsUser.find((x) => x.key.startsWith("resubmit:"))!;
     assert.equal(n.action, "Post 1 reply, then resubmit D101");
+    assert.ok(!sc.open().includes("reply:resubmit:root:jx"));
     assert.equal(n.stack, "root");
     assert.equal(sc.state().items["i-test-a"].state, "waiting for review");
     // It stays until Phabricator has a newer diff, however many polls go by.

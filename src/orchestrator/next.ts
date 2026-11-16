@@ -118,6 +118,8 @@ const TEST_PLAN_STATES = new Set<ItemState>(["reviewed", "in stack", "in try", "
 // A fix of its own, not in the stack yet.
 const FIXING: ItemState[] = ["fix verified locally", "in critical review", "review findings", "reviewed"];
 // The cherry-pick a conflict left in progress, if there's one: a rewrite may have left none.
+// A finding that corrects the patch may correct what a draft reply to its reviewers says.
+const REPLIES_TOO = " If your report has draft replies (`replies`), make each one still true of the amended patch: they're posted as they are.";
 const ABORT_CHERRY_PICK = 'test ! -e "$(git rev-parse --git-path CHERRY_PICK_HEAD)" || git cherry-pick --abort';
 const PRE_SUBMIT: ItemState[] = ["in stack", "in try"];
 const STACKED: ItemState[] = ["in stack", "in try", "waiting for review", "addressing review comments", "fixed", "landed"];
@@ -1530,7 +1532,7 @@ class Planner {
       return;
     }
     if (mustFix.length === 0) {
-      this.resumeAuthor(item.id, `author:${item.id}${e}:nits:${author.job}`, "nits", `A critical reviewer left these nits on your patch:\n${list}\n\nThey're nits: address each one by amending your commit, or say in one line in the report's summary why not.${keep} Then end with the JSON report again.`, "review findings");
+      this.resumeAuthor(item.id, `author:${item.id}${e}:nits:${author.job}`, "nits", `A critical reviewer left these nits on your patch:\n${list}\n\nThey're nits: address each one by amending your commit, or say in one line in the report's summary why not.${keep}${REPLIES_TOO} Then end with the JSON report again.`, "review findings");
       return;
     }
     const key = `author:${item.id}${e}:review:${author.job}`;
@@ -1547,7 +1549,7 @@ class Planner {
       reviewed();
       return;
     }
-    this.resumeAuthor(item.id, key, "review", `A critical reviewer found these problems in your patch:\n${list}\n\nAddress them by amending your commit, then end with the JSON report again. Must-fix findings have to be fixed; where you disagree with one, say why in the report's summary. For nits, address them or say in one line why not.${keep}`, "review findings");
+    this.resumeAuthor(item.id, key, "review", `A critical reviewer found these problems in your patch:\n${list}\n\nAddress them by amending your commit, then end with the JSON report again. Must-fix findings have to be fixed; where you disagree with one, say why in the report's summary. For nits, address them or say in one line why not.${keep}${REPLIES_TOO}`, "review findings");
   }
 
   // -------------------------------------------------------------------------
@@ -3182,7 +3184,8 @@ class Planner {
     }
     const replies = unpostedReplies(this.s.patches[p.id]);
     // The latest answer's flag stands for the patch: earlier ones are moot.
-    for (const n of this.s.needsUser) if (n.patch === p.id && n.key.startsWith("resubmit:") && n.key !== `resubmit:${st.id}:${author.job.job}`) this.clear(n.key);
+    // An earlier reply-only answer's too: this one may have changed its code, and its replies are this one's.
+    for (const n of this.s.needsUser) if (n.patch === p.id && (n.key.startsWith("resubmit:") || n.key.startsWith("reply:")) && n.key !== `resubmit:${st.id}:${author.job.job}`) this.clear(n.key);
     this.raise(`resubmit:${st.id}:${author.job.job}`, {
       action: `${replies ? `Post ${replies} ${replies === 1 ? "reply" : "replies"}, then resubmit` : "Resubmit"} D${p.revision}`,
       detail: `${answer.name === "address-review" ? "comments addressed" : "changed by its author since you submitted it"} and re-reviewed (Opus) · interdiff below`,
