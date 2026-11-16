@@ -426,7 +426,7 @@ function closedSection(...parts: (Html | null)[]): Html | null {
 }
 
 function closedFold(r: RequestState, closed: ItemView[], ctx: RenderContext): Html | null {
-  return closed.length ? html`<details class="fold" data-fold="closed-groups"><summary>${plural(closed.length, "closed work item")}</summary>${foldContent(r, ctx, "closed-groups", () => html`<div class="rows compact-rows">${closed.map((i) => itemRows(r, i, ctx))}</div>`)}</details>` : null;
+  return closed.length ? html`<details class="fold" data-fold="closed-groups"><summary>${plural(closed.length, "closed work item")}${foldCost(costOf(r, closed.flatMap((i) => i.jobs.map((j) => r.jobs[j])), ctx))}</summary>${foldContent(r, ctx, "closed-groups", () => html`<div class="rows compact-rows">${closed.map((i) => itemRows(r, i, ctx))}</div>`)}</details>` : null;
 }
 
 // Once a group has a reviewed patch, the patch's row replaces the group's.
@@ -436,6 +436,11 @@ function itemRows(r: RequestState, i: ItemView, ctx: RenderContext): Html {
   const own = Object.values(r.patches).filter((p) => p.item === i.id && !isDraft(r, p) && !isDropped(r, p));
   const live = own.some((p) => stacked.has(p.id)) ? own.filter((p) => stacked.has(p.id)) : own;
   return live.length ? patchRows(r, live, ctx) : groupRow(r, i, ctx);
+}
+
+// What the rows a fold hides cost, on its summary.
+function foldCost(c: { usd: number; running: boolean }): Html | null {
+  return c.usd > 0 ? html`<span class="sub"> · ${shownCost(c)}</span>` : null;
 }
 
 // A work item's cost opens its own profile.
@@ -938,7 +943,7 @@ function requestJobs(r: RequestState, ctx: RenderContext): Html | null {
   const jobs = Object.values(r.jobs)
     .filter((j) => j.item === undefined && j.endedAt !== undefined)
     .sort((a, b) => b.startedAt.localeCompare(a.startedAt));
-  return jobs.length ? html`<details class="fold" data-fold="jobs"><summary>${plural(jobs.length, "task")}</summary>${foldContent(r, ctx, "jobs", () => html`<div class="jobs">${jobs.map((j) => jobLine(r, j, ctx))}</div>`)}</details>` : null;
+  return jobs.length ? html`<details class="fold" data-fold="jobs"><summary>${plural(jobs.length, "task")}${foldCost(costOf(r, jobs, ctx))}</summary>${foldContent(r, ctx, "jobs", () => html`<div class="jobs">${jobs.map((j) => jobLine(r, j, ctx))}</div>`)}</details>` : null;
 }
 
 // A bug draft's description, its markdown to copy: to paste in the form when it's too long for the form's URL.

@@ -731,7 +731,7 @@ describe("one fixture per step of docs/MVP.md", () => {
     const h = expanded("r-20261015-enterprisepolicies");
     assert.match(h, /<div class="closed-section"><details class="fold" data-fold="closed-groups">/, "one grey edge down the section, its header included");
     const fold = h.slice(h.indexOf('data-fold="closed-groups"'));
-    assert.match(fold, /^data-fold="closed-groups"><summary>\d+ closed work items?<\/summary><div class="rows compact-rows">/);
+    assert.match(fold, /^data-fold="closed-groups"><summary>\d+ closed work items?(<span class="sub"> · \$[\d.]+<\/span>)?<\/summary><div class="rows compact-rows">/);
     assert.match(fold, /<details class="row b-closed"[^>]*><summary><span class="st abandoned" title="Left as-is[^"]*">/);
   });
 
@@ -1156,7 +1156,8 @@ describe("a burndown with closed groups, running agents and a dropped patch", ()
   });
   it("puts the running groups first, then the others, and folds the closed ones with their full reasons", () => {
     const at = (item: string) => h.indexOf(`data-item="${item}"`);
-    const fold = h.indexOf('<details class="fold" data-fold="closed-groups"><summary>4 closed work items</summary>');
+    const fold = h.indexOf('<details class="fold" data-fold="closed-groups"><summary>4 closed work items');
+    assert.match(h, /<summary>4 closed work items<span class="sub"> · \$\d+\.\d\d<\/span><\/summary>/);
     assert.ok(fold > 0);
     assert.ok(at("i-browser-policy-trackingprotection") < fold);
     for (const closed of ["i-annotations", "i-browser-policy-firefoxhome", "i-browser-policy-firefoxhome-2", "i-browser-policy-sitepolicies-jit"]) {
@@ -1169,7 +1170,7 @@ describe("a burndown with closed groups, running agents and a dropped patch", ()
     r.items["i-browser-policy-firefoxhome"].state = "handed back";
     const h2 = renderRequest(r, ctx, true).value;
     assert.ok(h2.indexOf('data-item="i-browser-policy-trackingprotection"') < h2.indexOf('data-item="i-browser-policy-sitepolicies-serviceworke-2"'), "not started after running");
-    assert.match(h2, /<summary>4 closed work items<\/summary>/);
+    assert.match(h2, /<summary>4 closed work items<span class="sub"> · /);
   });
   it("offers to redo the skip-ifs group with today's skip-ifs, and only that group", () => {
     assert.ok(rowOf(h, "item-i-annotations").includes(cmd({ cmd: "redo-annotations", request: ID })));
