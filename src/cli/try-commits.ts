@@ -52,16 +52,27 @@ export async function pushPatches(rev: string, fetchFn: typeof fetch = fetch): P
 }
 
 // The push's commits on `base`, as `branch` (replaced if it exists), made in a worktree of its own that goes after.
-export async function importPush(repo: string, rev: string, base: string, branch: string, fetchFn: typeof fetch = fetch): Promise<{ branch: string; shas: string[] }> {
+// A commit's title without its reviewers: what it lands as, whatever its review gave it.
+const titleOf = (message: string) => message.split("\n")[0].replace(/^WIP:\s*/i, "").replace(/,?\s*r[=?][^ ]*\.?$/, "").trim();
+
+// A commit of the push that landed since (the push came before its landing): left out, base has it.
+export async function importPush(repo: string, rev: string, base: string, branch: string, fetchFn: typeof fetch = fetch): Promise<{ branch: string; shas: string[]; landed: string[] }> {
   const patches = await pushPatches(rev, fetchFn);
   const dir = mkdtempSync(join(tmpdir(), "try-import-"));
   const wt = join(dir, "wt");
   await execOk(["git", "worktree", "add", "--detach", wt, base], { cwd: repo });
   try {
     const shas: string[] = [];
+    const landed: string[] = [];
+    const oldest = Math.min(...patches.map((p) => Number(p.date.split(" ")[0])));
+    const baseTitles = patches.length ? new Set((await execOk(["git", "log", "--format=%s", `--since=@${oldest}`, "HEAD"], { cwd: wt })).split("\n").map(titleOf)) : new Set<string>();
     for (const p of patches) {
       const file = join(dir, `${p.node}.diff`);
       writeFileSync(file, p.diff.endsWith("\n") ? p.diff : p.diff + "\n");
+      if (baseTitles.has(titleOf(p.message))) {
+        landed.push(p.node);
+        continue;
+      }
       await execOk(["git", "apply", "--index", "--3way", file], { cwd: wt });
       const [, name, email] = /^(.*?)\s*<([^>]*)>$/.exec(p.user) ?? [, p.user, ""];
       const when = p.date.split(" ")[0];
@@ -72,7 +83,7 @@ export async function importPush(repo: string, rev: string, base: string, branch
       shas.push((await execOk(["git", "rev-parse", "HEAD"], { cwd: wt })).trim());
     }
     await execOk(["git", "branch", "-f", branch, "HEAD"], { cwd: wt });
-    return { branch, shas };
+    return { branch, shas, landed };
   } finally {
     await execOk(["git", "worktree", "remove", "--force", wt], { cwd: repo });
     rmSync(dir, { recursive: true, force: true });

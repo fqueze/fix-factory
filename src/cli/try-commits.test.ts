@@ -1,6 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseHgPatch, pushPatches } from "./try-commits.ts";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { execOk } from "../lib/exec.ts";
+import { importPush, parseHgPatch, pushPatches } from "./try-commits.ts";
 
 const patch = (node: string, file: string, message: string) =>
   `# HG changeset patch\n# User Florian Quèze <florian@queze.net>\n# Date 1794177261 0\n# Node ID ${node}\n# Parent  0000\n${message}\n\ndiff --git a/${file} b/${file}\n--- a/${file}\n+++ b/${file}\n@@ -1 +1 @@\n-a\n+b\n`;
@@ -18,4 +22,30 @@ test("pushPatches gives a try push's commits oldest first, without its try selec
     return new Response(node === "ccc" ? patch("ccc", "try_task_config.json", "Fuzzy query=x") : patch(node, `f-${node}`, `Bug 1 - ${node}`));
   }) as typeof fetch;
   assert.deepEqual((await pushPatches("ccc", fake)).map((p) => p.node), ["aaa", "bbb"]);
+});
+
+test("importPush leaves out the push's commits that landed since, under their reviewed title", async () => {
+  const repo = mkdtempSync(join(tmpdir(), "import-push-"));
+  try {
+    const git = (...args: string[]) => execOk(["git", "-c", "user.name=t", "-c", "user.email=t@t", ...args], { cwd: repo });
+    await git("init", "-q", "-b", "main");
+    writeFileSync(join(repo, "f-aaa"), "a\n");
+    writeFileSync(join(repo, "f-bbb"), "a\n");
+    await git("add", ".");
+    await git("commit", "-q", "-m", "base");
+    // aaa landed, its reviewers in its title.
+    writeFileSync(join(repo, "f-aaa"), "b\n");
+    await git("commit", "-q", "-am", "Bug 1 - aaa, r=ahal,mozbase-reviewers.");
+    const fake = (async (url: string) => {
+      if (url.includes("treeherder")) return new Response(JSON.stringify({ results: [{ revisions: [{ revision: "bbb" }, { revision: "aaa" }] }] }));
+      const node = url.split("/").pop()!;
+      return new Response(patch(node, `f-${node}`, node === "aaa" ? "WIP: Bug 1 - aaa" : "Bug 1 - bbb"));
+    }) as typeof fetch;
+    const r = await importPush(repo, "bbb", "main", "try-with", fake);
+    assert.deepEqual(r.landed, ["aaa"]);
+    assert.equal(r.shas.length, 1);
+    assert.equal((await git("log", "-1", "--format=%s", "try-with")).trim(), "Bug 1 - bbb");
+  } finally {
+    rmSync(repo, { recursive: true, force: true });
+  }
 });
