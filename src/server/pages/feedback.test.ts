@@ -20,7 +20,7 @@ test("a session's point said again in its later reports shows once, in its newes
       "## 2026-10-15T11:00:00.000Z — job j-2\n\nThe made no change notice pointed at the stack branch, but this patch had already landed.\n\n" +
       "## 2026-10-15T12:00:00.000Z — job j-3\n\nSomething else entirely about profiles.\n",
   ).reverse();
-  const r = { id: "r-1", text: "t", title: "t", jobs: { "j-1": { job: "j-1", name: "investigate-and-fix", sessionId: "s" }, "j-2": { job: "j-2", name: "investigate-and-fix", sessionId: "s" }, "j-3": { job: "j-3", name: "investigate-and-fix", sessionId: "s" } } } as unknown as Parameters<typeof renderFeedback>[1][number];
+  const r = { id: "r-1", text: "t", title: "t", items: {}, jobs: { "j-1": { job: "j-1", name: "investigate-and-fix", sessionId: "s" }, "j-2": { job: "j-2", name: "investigate-and-fix", sessionId: "s" }, "j-3": { job: "j-3", name: "investigate-and-fix", sessionId: "s" } } } as unknown as Parameters<typeof renderFeedback>[1][number];
   const page = renderFeedback({ factory: entries, inputs: [], "fx-tests": [], "profiler-cli": [], "searchfox-cli": [] }, [r]);
   assert.match(page, /factory <b>2<\/b>/);
   assert.match(page, /this patch had already landed/);
@@ -28,9 +28,9 @@ test("a session's point said again in its later reports shows once, in its newes
   assert.match(page, /in 2 of its reports/);
 });
 
-test("the tab's list copies as Markdown: a heading, then each point under where it comes from", () => {
+test("the tab's list copies as Markdown: a heading, then one point per item, what it comes from after it", () => {
   const entries = parseFeedback("## 2026-10-15T10:00:00.000Z — job j-1\n\nThe notice pointed at the wrong branch.\n").reverse();
-  const r = { id: "r-1", text: "t", title: "Burn down a", jobs: { "j-1": { job: "j-1", name: "investigate-and-fix", item: "i-a", sessionId: "s" } } } as unknown as Parameters<typeof renderFeedback>[1][number];
+  const r = { id: "r-1", text: "t", title: "Burn down a", items: { "i-a": { group: { tests: ["a/test_a.js"] } } }, jobs: { "j-1": { job: "j-1", name: "investigate-and-fix", item: "i-a", sessionId: "s" } } } as unknown as Parameters<typeof renderFeedback>[1][number];
   const page = renderFeedback({ factory: entries, inputs: [], "fx-tests": [], "profiler-cli": [], "searchfox-cli": [] }, [r]);
-  assert.match(page, /<textarea hidden id="fb-markdown"># Agents&#39; feedback: factory \(1\)\n\n## 2026-10-15 10:00 · Burn down a · investigate-and-fix \(i-a\) · `j-1`\n\nThe notice pointed at the wrong branch\.\n<\/textarea><button type="button" class="btn small" id="fb-copy">Copy as Markdown<\/button>/);
+  assert.match(page, /<textarea hidden id="fb-markdown"># Agents&#39; feedback: factory \(1\)\n\n- The notice pointed at the wrong branch\. \*\(Burn down a · test_a\.js · Oct 15\)\*\n<\/textarea><button type="button" class="btn small" id="fb-copy">Copy as Markdown<\/button>/);
 });

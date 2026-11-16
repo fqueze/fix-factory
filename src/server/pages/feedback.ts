@@ -65,12 +65,17 @@ export function renderFeedback(byTarget: Record<Feedback["target"], FeedbackEntr
   // The tab's list as Markdown, for the Copy button.
   const markdown = [
     `# Agents' feedback: ${target} (${lists[target].length})`,
-    ...lists[target].map(({ e, times }) => {
-      const r = requestOf.get(e.job);
-      const job = r?.jobs[e.job];
-      const where = [e.at.slice(0, 16).replace("T", " "), r ? requestName(r) : "unknown request", ...(job ? [`${job.name}${job.item ? ` (${job.item})` : ""}`] : []), `\`${e.job}\``, ...(times > 1 ? [`in ${times} of its reports`] : [])];
-      return `## ${where.join(" · ")}\n\n${e.text}`;
-    }),
+    // One point per item, what it comes from after it: how many reports said it, the request, the test, the day.
+    lists[target]
+      .map(({ e, times }) => {
+        const r = requestOf.get(e.job);
+        const item = r?.items[r.jobs[e.job]?.item ?? ""];
+        const test = item?.group.tests[0]?.split("/").pop();
+        const day = e.at ? new Date(e.at).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" }) : undefined;
+        const where = [...(times > 1 ? [`${times} reports`] : []), r ? requestName(r) : "unknown request", ...(test ? [test] : []), ...(day ? [day] : [])];
+        return `- ${e.text.replace(/\n+/g, " ")} *(${where.join(" · ")})*`;
+      })
+      .join("\n"),
   ].join("\n\n") + "\n";
   return html`<!doctype html>
 <html lang="en">
