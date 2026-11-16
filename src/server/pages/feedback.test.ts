@@ -28,9 +28,9 @@ test("a session's point said again in its later reports shows once, in its newes
   assert.match(page, /in 2 of its reports/);
 });
 
-test("the tab's list copies as Markdown: a heading, then one point per item, what it comes from after it", () => {
+test("the tab's list copies as Markdown: a heading, then under each day, one point per item, what it comes from after it", () => {
   const entries = parseFeedback("## 2026-10-15T10:00:00.000Z — job j-1\n\nThe notice pointed at the wrong branch.\n").reverse();
   const r = { id: "r-1", text: "t", title: "Burn down a", items: { "i-a": { group: { tests: ["a/test_a.js"] } } }, jobs: { "j-1": { job: "j-1", name: "investigate-and-fix", item: "i-a", sessionId: "s" } } } as unknown as Parameters<typeof renderFeedback>[1][number];
   const page = renderFeedback({ factory: entries, inputs: [], "fx-tests": [], "profiler-cli": [], "searchfox-cli": [] }, [r]);
-  assert.match(page, /<textarea hidden id="fb-markdown"># Agents&#39; feedback: factory \(1\)\n\n- The notice pointed at the wrong branch\. \*\(Burn down a · test_a\.js · Oct 15\)\*\n<\/textarea><button type="button" class="btn small" id="fb-copy">Copy as Markdown<\/button>/);
+  assert.match(page, /<textarea hidden id="fb-markdown"># Agents&#39; feedback: factory \(1\)\n\n## Oct 15\n\n- The notice pointed at the wrong branch\. \*\(Burn down a · test_a\.js\)\*\n<\/textarea><button type="button" class="btn small" id="fb-copy">Copy as Markdown<\/button>/);
 });
