@@ -61,6 +61,11 @@ test("unknown event types are ignored, and don't move updatedAt", () => {
   assert.deepEqual(s.notes, [{ t: note.t, text: "n" }]);
 });
 
+test("item-removed: a group made by mistake is gone", () => {
+  const s = fold(ev({ type: "item-created", item: "i-a", folder: "f", group }), ev({ type: "item-created", item: "i-a-2", folder: "f", group }), ev({ type: "item-removed", item: "i-a-2", reason: "duplicate" }));
+  assert.deepEqual(Object.keys(s.items), ["i-a"]);
+});
+
 test("items: created, state changes, detail cleared, unknown items ignored", () => {
   const s = fold(
     ev({ type: "item-created", item: "i1", folder: "f", group }),

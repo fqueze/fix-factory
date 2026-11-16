@@ -84,6 +84,7 @@ export function partEvents(events: Event[], s: RequestState, items: ItemId[], to
       case "item-created":
       case "item-state":
       case "item-group":
+      case "item-removed":
         return own.has(e.item);
       case "job-started":
       case "job-finished":

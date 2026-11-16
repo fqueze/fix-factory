@@ -150,6 +150,9 @@ export function folder(first: Event): { apply(events: readonly Event[]): void; s
         case "item-group":
           if (s.items[e.item]) s.items[e.item].group = e.group;
           break;
+        case "item-removed":
+          delete s.items[e.item];
+          break;
         case "item-state": {
           const item = s.items[e.item];
           if (!item) continue;
