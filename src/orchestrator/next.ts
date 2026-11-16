@@ -3529,7 +3529,8 @@ class Planner {
       // What makes patches landable, not their order or shas: the reorder below changes those. And the ordering's rules:
       // a stack ordered by earlier ones is ordered again (fixes-v1: one fix's patches together; met-v1: deps outside it that
       // landed).
-      const h = shortHash([...ps.map((p) => `${p.id}:${JSON.stringify(landingState(this.s, p))}`).sort(), "fixes-v1", "met-v1"]) + this.stepEpoch("landing");
+      // Its hard deps too: one removed (met) lets its patch land.
+      const h = shortHash([...ps.map((p) => `${p.id}:${JSON.stringify(landingState(this.s, p))}:${p.deps.filter((d) => d.kind === "hard").map((d) => d.needs).join(",")}`).sort(), "fixes-v1", "met-v1"]) + this.stepEpoch("landing");
       const file = dataPath(this.config, this.s.id, `landable-${st.id}-${h}.json`);
       const ord = this.want(`order-landable:${st.id}:${h}`, () =>
         this.cli("order", "stack.ts", ["order", file, "--cwd", st.worktree, "--base", st.base ?? this.config.baseRef], {
