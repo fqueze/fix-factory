@@ -1,5 +1,6 @@
 // What each group is doing, in plain words, and what a request (or the whole factory) is doing: working,
 // waiting for you, or done. No internal state names.
+import { MIN_FREE_GB, WORKTREE_GB } from "../../lib/disk.ts";
 import { md } from "./md.ts";
 import { canRetry, reviewLimitFlag } from "../../state/flags.ts";
 import type { ItemState, ItemView, JobView, NeedsUser, RequestState, ReviewPatchReport } from "../../types.ts";
@@ -122,9 +123,14 @@ export function itemSentence(r: RequestState, i: ItemView, ctx: RenderContext): 
     // next(): a test's later group waits for its first one's fix; the others for one of the groups investigating.
     const all = Object.values(r.items);
     const first = all.slice(0, all.indexOf(i)).find((x) => x.group.tests[0] === i.group.tests[0] && UNSETTLED.includes(x.state));
+    // Each fix in progress has a worktree of its own: as many as the disk has room for (next()), or maxWorktrees.
     const text = first
-      ? `not started yet: waits for the fix of its test's first group, which may fix this failure too`
-      : `not started yet: a request works on ${ctx.maxWorktrees ?? ctx.maxAgents ?? "a few"} groups at once, each in a worktree of its own (about 6 GB); it starts when one of them is done or reviewed`;
+      ? `not started yet: waits for the fix of this test's first failure, which may fix this one too`
+      : ctx.freeDiskGB !== undefined && ctx.freeDiskGB - WORKTREE_GB < MIN_FREE_GB
+        ? `not started yet: waits for disk space. Each fix in progress has a Firefox checkout of its own (about ${WORKTREE_GB} GB), and the factory keeps ${MIN_FREE_GB} GB free (${Math.floor(ctx.freeDiskGB)} GB now)`
+        : ctx.maxWorktrees !== undefined
+          ? `not started yet: starts when one of the ${ctx.maxWorktrees} fixes in progress here is done or reviewed (maxWorktrees in the config)`
+          : `not started yet`;
     return { text: html`${text}`, cls: "wait", controls: null, detail: i.detail };
   }
   const builds = ctx.runningBuilds ?? Object.values(r.jobs).filter((j) => j.kind === "build" && j.endedAt === undefined).length;

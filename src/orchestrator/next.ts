@@ -8,6 +8,7 @@
 // Keys carry what makes the work different: an author round names the job it answers, a stack
 // assembly names a hash of the commits it assembles. redo-step bumps an epoch that ends up in the
 // keys of that step (step events per step) or of that item (item-state "not started" events).
+import { MIN_FREE_GB, WORKTREE_GB } from "../lib/disk.ts";
 import { basename, dirname, resolve } from "node:path";
 import type { Annotation } from "../cli/annotations.ts";
 import { describePriorArt, type PriorArtBug } from "../cli/bugzilla.ts";
@@ -81,6 +82,7 @@ export interface Ctx {
   output: (job: JobId) => string; // out.log of a finished job
   report: (job: JobId) => unknown; // the validated report of a finished agent job
   activeRequests: () => { id: RequestId; summary: string }[]; // routed and not done, for route-request
+  freeDiskGB?: number; // where the worktrees go; absent (tests): as many worktrees as agents
 }
 
 // One line for route-request's list of active requests.
@@ -1203,14 +1205,17 @@ class Planner {
       // Groups failing the same test go one at a time: the first one's fix often fixes the others' failures too.
       const all = Object.values(this.s.items);
       const earlier = all.slice(0, all.indexOf(item)).filter((i) => i.group.tests[0] === test);
-      // Each worktree is ~6 GB: a request has no more than it can run agents in, the others wait for one to close.
+      // Each worktree is ~6 GB: as many as the disk has room for, those being made counted (worktree.ts refuses under
+      // MIN_FREE_GB), or maxWorktrees; the others wait for room.
       if (!this.view.byKey.has(`wt:${item.id}${e}`)) {
         if (earlier.some((i) => !SETTLED.includes(i.state))) return;
         // Groups being investigated in a worktree: reviewed ones keep theirs, but no agent runs in it; the disk
         // check in worktree.ts covers those.
         const open = Object.values(this.s.items).filter((i) => i.id !== item.id && !SETTLED.includes(i.state) && this.view.byKey.get(`wt:${i.id}${this.itemEpoch(i.id)}`)?.some((j) => !j.end || succeeded(j)));
         const planned = [...this.startedKeys].filter((k) => k.startsWith("wt:i-")).length;
-        if (open.length + planned >= (this.config.maxWorktrees ?? this.config.maxAgents)) return;
+        if (open.length + planned >= (this.config.maxWorktrees ?? (this.ctx.freeDiskGB === undefined ? this.config.maxAgents : Infinity))) return;
+        const making = this.view.jobs.filter((j) => j.purpose.key.startsWith("wt:i-") && !j.end).length + planned;
+        if (this.ctx.freeDiskGB !== undefined && this.ctx.freeDiskGB - (making + 1) * WORKTREE_GB < MIN_FREE_GB) return;
       }
       const wt = this.want(`wt:${item.id}${e}`, () => this.worktree(`${this.s.id}-${item.id}${e.replace("@", "-")}`, { item: item.id }));
       if (!wt) return;

@@ -735,6 +735,19 @@ describe("4. investigate and fix", () => {
     assert.ok(!sc.view().byKey.has("wt:i-test-f"));
   });
 
+  it("with the free disk known, as many groups get a worktree as it has room for, 6 GB each over 20 GB, not as many as agents", () => {
+    const tests = ["a", "b", "c", "d", "e", "f"];
+    const sc = workList(tests.map((t) => group(`k${t}`, `a/test_${t}.js`, "boom")));
+    sc.freeDiskGB = 39;
+    for (const t of tests) sc.complete(`prior-art:i-test-${t}`, { output: { bugs: [] } });
+    sc.settle();
+    for (const t of tests) sc.complete(`prior-art-verdict:i-test-${t}`, { report: none });
+    assert.deepEqual(sc.settle().sort(), ["wt:i-test-a", "wt:i-test-b", "wt:i-test-c"], "39 GB: room for 3 over 20 GB");
+    sc.freeDiskGB = 1000;
+    sc.complete("wt:i-test-a", { output: { name: `${ID}-i-test-a`, path: `/wt/${ID}-i-test-a`, branch: `${ID}-i-test-a` } });
+    assert.deepEqual(sc.settle().filter((k) => k.startsWith("wt:")).sort(), ["wt:i-test-d", "wt:i-test-e", "wt:i-test-f"], "more than the 4 agents");
+  });
+
   it("a test's group found after its first group started joins it, and the first group's author is told once its run ends", () => {
     const sc = workList([group("ka", "a/test_a.js", "boom")]);
     investigating(sc, "i-test-a");

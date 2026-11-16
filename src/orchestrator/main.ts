@@ -12,6 +12,7 @@ import { delimiter, dirname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { toolsBin } from "../cli/tools.ts";
 import { loadConfig } from "../config.ts";
+import { freeDiskGB } from "../lib/disk.ts";
 import { execOk } from "../lib/exec.ts";
 import { processNewCommands, readCommands } from "../state/commands.ts";
 import { eventsPath, listRequests, readEvents, readEventsFrom } from "../state/events.ts";
@@ -123,6 +124,7 @@ export class Orchestrator {
       view,
       output: (job) => readOut(this.config, job),
       report: (job) => readReport(this.config, s.id, job),
+      freeDiskGB: freeDiskGB(this.config.worktreesDir),
       activeRequests: () =>
         this.requests()
           .map((id) => this.load(id).s)

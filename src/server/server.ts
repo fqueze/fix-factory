@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync, realpathSync, statfsSync } from "node:fs";
+import { freeDiskGB as diskFree } from "../lib/disk.ts";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { createRequire } from "node:module";
 import { homedir } from "node:os";
@@ -227,14 +228,9 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
     return profiler;
   }
 
-  // Free space where the worktrees go: the factory stops creating them below 20 GB.
+  // Free space where the worktrees go: the factory stops creating them below MIN_FREE_GB.
   function freeDiskGB(): number | undefined {
-    const dir = opts.config.worktreesDir;
-    if (!existsSync(dir)) {
-      return undefined;
-    }
-    const fs = statfsSync(dir);
-    return (fs.bavail * fs.bsize) / 1e9;
+    return existsSync(opts.config.worktreesDir) ? diskFree(opts.config.worktreesDir) : undefined;
   }
 
   // The factory's profiler front end, on the host the page was opened with: plain http like the page, so it

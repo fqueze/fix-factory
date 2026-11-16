@@ -42,6 +42,7 @@ export class Scenario {
   private n = 0;
   lastActions: Action[] = [];
   activeRequests: { id: RequestId; summary: string }[] = []; // the other requests, for route-request
+  freeDiskGB?: number; // where the worktrees go: absent, as many as agents
   readonly commands: CommandInput[] = []; // what the handlers appended to commands.jsonl
 
   constructor(kind: RequestKind, fields: { folder?: string; rev?: string; text?: string } = {}) {
@@ -74,6 +75,7 @@ export class Scenario {
       output: (job) => this.outputs.get(job) ?? "",
       report: (job) => this.reports.get(job),
       activeRequests: () => this.activeRequests,
+      ...(this.freeDiskGB !== undefined ? { freeDiskGB: this.freeDiskGB } : {}),
     });
   }
 
