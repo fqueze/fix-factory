@@ -252,6 +252,14 @@ export function requestProgress(r: RequestState, ctx: RenderContext): Progress {
   return p;
 }
 
+// What needs you when it's the request's own ⚑s (a recovery plan, a refused command), which no row shows: their boxes
+// are at the bottom of its body.
+export function needsYouDetail(r: RequestState, p: Progress): string {
+  const own = r.needsUser.filter((n) => flagItemOf(r, n) === undefined).map((n) => n.action.charAt(0).toLowerCase() + n.action.slice(1));
+  const all = [...own, ...refusedOf(r).map(() => "a command it refused")];
+  return all.length && all.length === p["needs you"] ? `${[...new Set(all)].join(", ")}, below` : "";
+}
+
 // Where the submitted (not landable) patches stand on Phabricator: "4 waiting for review, 1 accepted".
 export function submittedDetail(r: RequestState, ctx: RenderContext): string {
   const label = (status: string) => ({ "needs-review": "waiting for review", accepted: "accepted", "needs-revision": "changes requested" })[status] ?? status;
@@ -279,14 +287,14 @@ const BAR: Bucket[] = ["landed", "landable", "submitted", "ready", "waiting for 
 
 // A bar with one segment per bucket, then "2 need you · 1 working · 3 ready · 4 pending · 5 closed".
 // Closed groups aren't progress: never counted. Handed over ones only on a request's line (withHandedOver).
-export function progressLine(p: Progress, submitted = "", withHandedOver = true): Html {
+export function progressLine(p: Progress, submitted = "", withHandedOver = true, needsYou = ""): Html {
   const shown = BUCKETS.filter((b) => p[b] > 0 && b !== "closed" && (withHandedOver || b !== "handed over"));
   if (!shown.length) {
     return html`<span class="sub">nothing to work on yet</span>`;
   }
   const cls = (b: Bucket) => b.replaceAll(" ", "-");
   return html`<span class="pbar">${BAR.filter((b) => p[b] > 0 && (withHandedOver || b !== "handed over")).map((b) => html`<span class="${cls(b)}" style="flex-grow:${p[b]}"></span>`)}</span>${join(
-    shown.map((b) => html`<span class="${cls(b)}">${p[b]} ${b === "needs you" && p[b] === 1 ? "needs you" : b === "needs you" ? "need you" : b}${b === "submitted" && submitted ? `: ${submitted}` : ""}</span>`),
+    shown.map((b) => html`<span class="${cls(b)}">${p[b]} ${b === "needs you" && p[b] === 1 ? "needs you" : b === "needs you" ? "need you" : b}${b === "submitted" && submitted ? `: ${submitted}` : b === "needs you" && needsYou ? `: ${needsYou}` : ""}</span>`),
     " · ",
   )}`;
 }

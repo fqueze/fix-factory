@@ -6,7 +6,7 @@ import { FixtureStateSource } from "../state-source.ts";
 import type { RequestState } from "../../types.ts";
 import { jobLabel, linkify, pushStatus, requestName, type RenderContext } from "./common.ts";
 import { renderOverview, renderRecentPushes, renderStrip } from "./overview.ts";
-import { IDLE, itemBucket, progressLine, requestProgress, runningSentence } from "./progress.ts";
+import { IDLE, itemBucket, needsYouDetail, progressLine, requestProgress, runningSentence } from "./progress.ts";
 import { configTable, parseConfig, renderRequest, requestSummary } from "./request.ts";
 import { flagText } from "./actions.ts";
 import { conversationOf, renderActivity } from "./activity.ts";
@@ -257,6 +257,16 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.match(h, /<details class="fold" data-fold="cannot-j-recover"><summary>1 thing it can't do<\/summary><ul class="plan-notes"><li>Read the profile/);
     assert.match(h, /<li>❓ Should the next attempt use a debug build\?<\/li>/);
     assert.match(h, /placeholder="Answer it, or say what to change…"/);
+  });
+  it("4. investigate and fix: a request whose only ⚑ is its own says on its line what it is, its box being at the bottom", () => {
+    const r = structuredClone(get("r-20261013-tab-failures"));
+    const own = r.needsUser.find((n) => n.key.startsWith("recovery:"))!;
+    own.action = "Its answer to you";
+    const p = requestProgress(r, ctx);
+    assert.equal(needsYouDetail(r, p), "", "not when items need you too: their rows say why");
+    r.needsUser = [own];
+    assert.equal(needsYouDetail(r, { ...p, "needs you": 1 }), "its answer to you, below");
+    assert.match(progressLine({ ...p, "needs you": 1 }, "", true, "its answer to you, below").value, /<span class="needs-you">1 needs you: its answer to you, below<\/span>/);
   });
   it("4. investigate and fix: a split's parts, each with its groups and why they go there", () => {
     const r = structuredClone(get("r-20261013-tab-failures"));

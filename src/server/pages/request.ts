@@ -6,7 +6,7 @@ import { isAnswered } from "../../state/landing.ts";
 import { escapeHtml, html, join, raw, type Html } from "../html.ts";
 import { actionsSummary, flagPlaceOf, renderAction, recoveryAnswers, pollPhabButton, verifyStackButton, redoAnnotationsButton, approvePushControls, bugBox, continueBox, copyButton, handBackButton, flagControls, flagItemOf, flagText, plannedLabel, recoveryPlanFor, hasAuthorSession, stackViewerLink, submitControls, summaryId } from "./actions.ts";
 import { groupJobs, jobLine } from "./activity.ts";
-import { flagAsk, itemBucket, itemSentence, progressLine, requestProgress, submittedDetail, type Bucket } from "./progress.ts";
+import { flagAsk, itemBucket, itemSentence, needsYouDetail, progressLine, requestProgress, submittedDetail, type Bucket } from "./progress.ts";
 import {
   actionKind,
   bugUrl,
@@ -56,6 +56,7 @@ export function renderRequest(r: RequestState, ctx: RenderContext, open = ctx.op
   const needs = needsYou(r);
   const cost = requestCost(r, ctx);
   const summary = requestSummary(r);
+  const progress = requestProgress(r, ctx);
   // One stack: its buttons are the request's, at the top right, and its meta bug, once filed, names the request.
   const stacks = liveStacks(r);
   const one = stacks.length === 1 ? stacks[0] : undefined;
@@ -63,7 +64,7 @@ export function renderRequest(r: RequestState, ctx: RenderContext, open = ctx.op
   return html`<details class="req${needs ? " needs" : ""}" id="req-${r.id}" data-request="${r.id}" data-section="${sectionOf(r)}"${open ? html` open` : null}>
     <summary>
       <span class="rname">${meta ? html`<a class="bug" href="${bugUrl(meta.bug!)}" target="_blank" rel="noopener">Bug ${meta.bug}</a> ${r.metaBug!.draft?.summary ?? requestName(r)}` : requestName(r)}</span>
-      <span class="rsum"><span class="rprog">${progressLine(requestProgress(r, ctx), submittedDetail(r, ctx))}</span>${summary ? ` · ${summary}` : null}</span>
+      <span class="rsum"><span class="rprog">${progressLine(progress, submittedDetail(r, ctx), true, needsYouDetail(r, progress))}</span>${summary ? ` · ${summary}` : null}</span>
       ${r.title && r.text.trim() ? html`<span class="rprompt" title="${r.text}">${r.text}</span>` : null}
       <span class="rright">${cost > 0 ? html`<a class="cost hide-sm" href="${profileUrl(ctx, r.id)}" target="_blank" rel="noopener" title="What the agents of this request cost so far: its profile">${formatCost(cost)}</a>` : null}${
         one ? html`${stackViewerLink(r, one)}${stackMenu(r, one, ctx)}` : null
