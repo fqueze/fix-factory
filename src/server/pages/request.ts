@@ -128,7 +128,9 @@ export function renderRequestBody(r: RequestState, ctx: RenderContext): Html {
   // The abandoned groups come last, after what landed.
   const own = (i: ItemView) => Object.values(r.patches).filter((p) => p.item === i.id && !isDropped(r, p));
   // Groups whose patches landed have left their stack.
-  // As Phabricator lists them: by their place in its stack (how many revisions are under them there), its top first.
+  // The last landed first; patches that landed together as Phabricator lists them: by their place in its stack (how many
+  // revisions are under them there), its top first. Not by that place alone: a patch whose parent there is still in
+  // review starts a chain of its own.
   const byRevision = new Map(Object.values(r.patches).filter((p) => p.revision !== undefined).map((p) => [p.revision!, p]));
   const depth = (p: PatchView, seen = new Set<number>()): number => {
     const parent = p.review?.parent;
@@ -136,11 +138,17 @@ export function renderRequestBody(r: RequestState, ctx: RenderContext): Html {
     return 1 + depth(byRevision.get(parent)!, seen.add(parent));
   };
   const rank = (i: ItemView) => Math.max(-1, ...own(i).map((p) => depth(p)));
-  const landed = unstacked.filter((i) => i.state === "landed" || (own(i).length > 0 && own(i).every((p) => isLanded(r, p)))).sort((a, b) => rank(b) - rank(a));
+  const when = (ps: PatchView[]) => ps.map((p) => r.landedAt[p.id] ?? "").sort().at(-1) ?? "";
+  const newest = (a: { when: string; at: number }, b: { when: string; at: number }) => b.when.localeCompare(a.when) || b.at - a.at;
+  const landed = unstacked
+    .filter((i) => i.state === "landed" || (own(i).length > 0 && own(i).every((p) => isLanded(r, p))))
+    .map((i) => ({ i, when: when(own(i)), at: rank(i) }))
+    .sort(newest)
+    .map((x) => x.i);
   const items = unstacked.filter((i) => !landed.includes(i));
   // A group's landed patch while another of its patches is still in review: listed with what landed, in its place.
   const partly = Object.values(r.patches).filter((p) => p.item !== undefined && !landed.some((i) => i.id === p.item) && !isDropped(r, p) && isLanded(r, p));
-  const landedRows = [...landed.map((i) => ({ at: rank(i), row: itemRows(r, i, ctx) })), ...partly.map((p) => ({ at: depth(p), row: patchRow(r, p, ctx) }))].sort((a, b) => b.at - a.at);
+  const landedRows = [...landed.map((i) => ({ when: when(own(i)), at: rank(i), row: itemRows(r, i, ctx) })), ...partly.map((p) => ({ when: when([p]), at: depth(p), row: patchRow(r, p, ctx) }))].sort(newest);
   // Newest first, as on Treeherder; those waiting for you are the newest anyway.
   const pushes = Object.values(r.pushes).reverse();
   const planned = pushes.filter((p) => isWaiting(r, p));

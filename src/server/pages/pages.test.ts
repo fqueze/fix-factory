@@ -1030,6 +1030,23 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.ok(at.every((x) => x > 0) && at[0] < at[2] && at[2] < at[1], String(at));
   });
 
+  it("the last landed patches come first, even when their parent on Phabricator is still in review", () => {
+    const r = structuredClone(get("r-20261005-newtab"));
+    const ids = Object.values(r.patches).filter((p) => p.item).map((p) => p.id).slice(0, 3);
+    // ids[0] under ids[1], landed first; ids[2] landed later, its parent (D200) not landed.
+    ids.forEach((id, n) => {
+      const p = r.patches[id];
+      p.revision = 101 + n;
+      r.items[p.item!].state = "landed";
+      p.review = { revision: 101 + n, status: "published", reviewers: [], comments: [], ...(n === 1 ? { parent: 101 } : n === 2 ? { parent: 200 } : {}) };
+      r.landedAt[id] = n === 2 ? "2026-10-16T08:00:00.000Z" : "2026-10-12T08:00:00.000Z";
+    });
+    for (const st of Object.values(r.stacks)) st.order = st.order.filter((x) => !ids.includes(x));
+    const h = renderRequest(r, ctx, true).value;
+    const at = ids.map((id) => h.indexOf(`data-patch="${id}"`));
+    assert.ok(at.every((x) => x > 0) && at[2] < at[1] && at[1] < at[0], String(at));
+  });
+
   it("a group's landed patch is listed with what landed while its other patch is still in review", () => {
     const r = structuredClone(get("r-20261005-newtab"));
     const first = r.patches["p-nimbus"];
