@@ -3602,6 +3602,22 @@ describe("9. a try push of a submitted stack", () => {
     assert.equal(sc.state().needsUser.find((n) => n.key === "reply:resubmit:root:jx")?.action, "Post 1 reply on D101");
   });
 
+  it("a commit message whose only change is reviewers Phabricator already has asks for no resubmit; another reviewer does", () => {
+    const run = (added: string) => {
+      const sc = inReview();
+      sc.complete("poll:0", { output: polled("needs-review", [], "pending") });
+      const p = sc.state().patches["p-test-a"];
+      sc.add({ type: "needs-user", request: ID, key: "resubmit:root:jx", action: "Resubmit D101", detail: "", stack: "root", patch: "p-test-a" });
+      sc.add({ type: "review-status", request: ID, patch: "p-test-a", ...p.review!, reviewers: [{ name: "smaug", status: "pending" }, { name: "#omc-reviewers", status: "pending" }], diff: { id: 1, commit: p.pastShas![0], created: "2026-01-01T00:00:00.000Z" } });
+      const inter = sc.settle().find((k) => k.startsWith("interdiff:p-test-a:phab-"))!;
+      sc.complete(inter, { output: { diff: `diff --git a/COMMIT_MSG b/COMMIT_MSG\n--- a/COMMIT_MSG\n+++ b/COMMIT_MSG\n@@ -1,3 +1,3 @@\n-Bug 999 - Fix a, r=smaug.\n+Bug 999 - Fix a, r=smaug,${added}.\n \n Body.\n`, method: "same-parent" } });
+      sc.settle();
+      return sc.open().includes("resubmit:root:jx");
+    };
+    assert.equal(run("#omc-reviewers"), false, "Phabricator has it: nothing to send");
+    assert.equal(run("#dom-core-reviewers"), true, "a reviewer it doesn't have");
+  });
+
   it("a waiting patch that differs from what Phabricator has asks to be resubmitted, flag or not", () => {
     const sc = inReview();
     const past = sc.state().patches["p-test-a"].pastShas![0];

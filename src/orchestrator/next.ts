@@ -1100,6 +1100,21 @@ class Planner {
     return jobs.slice(start + 1).filter((j) => j.purpose.reason === reason).length;
   }
 
+  // Whether an interdiff against what Phabricator has holds anything a resubmit would send: not a commit message whose
+  // only change is reviewers Phabricator already has (one added there by hand).
+  private unsent(p: PatchView, diff: string): boolean {
+    if (!diff.trim()) return false;
+    const files = diff.split(/^(?=diff --git )/m).filter((f) => f.trim());
+    if (files.length !== 1 || !files[0].startsWith("diff --git a/COMMIT_MSG ")) return true;
+    const changed = files[0].split("\n").filter((l) => /^[-+](?![-+]{2} )/.test(l));
+    const [old, neu] = [changed.filter((l) => l.startsWith("-")), changed.filter((l) => l.startsWith("+"))];
+    const reviewers = (l: string) => /,?\s*r=(\S+?)\.?$/.exec(l)?.[1].split(",").filter(Boolean);
+    const strip = (l: string) => l.slice(1).replace(/,?\s*r=\S+$/, "");
+    if (old.length !== 1 || neu.length !== 1 || strip(old[0]) !== strip(neu[0])) return true;
+    const onPhab = new Set((p.review?.reviewers ?? []).map((r) => r.name));
+    return !(reviewers(neu[0]) ?? []).every((r) => onPhab.has(r));
+  }
+
   // Your messages to a running author that ended before its next tool call (inbox.ts): its session, resumed with
   // them. Those to the runs before the last such resume went with it.
   private undeliveredMessages(): void {
@@ -3084,7 +3099,7 @@ class Planner {
       const dismissed = Math.max(0, ...[...this.view.dismissed].filter(([k]) => k.startsWith("resubmit:") && this.view.flagPatch.get(k) === p.id).map(([, t]) => t));
       const seen = this.view.jobs.filter((j) => j.purpose.what === "interdiff" && j.purpose.patch === p.id && succeeded(j) && j.end!.at <= dismissed).at(-1);
       if (inter && seen && this.out<{ diff: string }>(seen).diff === this.out<{ diff: string }>(inter).diff) continue;
-      if (inter && this.out<{ diff: string }>(inter).diff.trim()) {
+      if (inter && this.unsent(p, this.out<{ diff: string }>(inter).diff)) {
         this.raise(`resubmit:${st.id}:phab-${p.review!.diff!.id}:${p.sha.slice(0, 12)}`, { action: `Resubmit D${p.revision}`, detail: "it differs from what Phabricator has · interdiff below", stack: st.id, patch: p.id });
       }
     }
@@ -3098,7 +3113,7 @@ class Planner {
         this.cli("interdiff", "stack.ts", ["interdiff", "--cwd", st.worktree, base, p.sha], { cwd: st.worktree, priority: REVIEW_PRIORITY, purpose: { patch: p.id, stack: st.id } }),
       );
       // Phabricator has that code already: nothing to resubmit, only its replies to post (an answer that changed no code).
-      if (inter && !this.out<{ diff: string }>(inter).diff.trim()) {
+      if (inter && !this.unsent(p, this.out<{ diff: string }>(inter).diff)) {
         if (n.action.startsWith("Post ")) this.raise(`reply:${n.key}`, { action: n.action.replace(", then resubmit", " on"), detail: "an answer that changes no code: the draft replies are on its row", stack: n.stack, patch: p.id });
         this.clear(n.key);
       }
