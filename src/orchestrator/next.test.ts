@@ -781,6 +781,17 @@ describe("4. investigate and fix", () => {
     assert.ok(sc.settle().includes(`import:${next}`), "told once");
   });
 
+  it("failures of other tests an author reports become work items of their own, once", () => {
+    const sc = workList([group("ka", "a/test_a.js", "boom")]);
+    investigating(sc, "i-test-a");
+    sc.complete("author:i-test-a:initial", { report: fixed([sha("1")], { otherFailures: [{ test: "a/test_c.js", message: "reads Fluent text before translation", configs: ["linux/opt"] }, { test: "a/test_a.js", message: "its own", configs: [] }] }) });
+    sc.settle();
+    const made = Object.values(sc.state().items).filter((i) => i.group.tests[0] === "a/test_c.js");
+    assert.deepEqual(made.map((i) => [i.id, i.group.message, i.group.configs]), [["i-test-c", "reads Fluent text before translation", ["linux/opt"]]]);
+    sc.settle();
+    assert.equal(Object.values(sc.state().items).filter((i) => i.group.tests[0] === "a/test_c.js").length, 1);
+  });
+
   it("a message to a running author that ended before getting it resumes its session with it, once", () => {
     const sc = workList([group("ka", "a/test_a.js", "boom")]);
     investigating(sc, "i-test-a");

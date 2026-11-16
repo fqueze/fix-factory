@@ -298,6 +298,7 @@ export interface InvestigateReport {
   summary: string; // one line, shown on the status page
   disagreement?: string; // why it didn't follow your message: the factory stops and asks you
   question?: string; // a decision it leaves to you: a ⚑ on its group
+  otherFailures?: { test: string; message: string; configs: string[] }[]; // other tests' failures the request covers: work items of their own
   cause: string;
   evidence?: { source: "profile" | "log" | "local run" | "code reading"; ref?: string; finding: string }[]; // absent from reports older than it; ref: in the first ones
   verification: string;

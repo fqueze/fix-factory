@@ -320,6 +320,7 @@ class Planner {
     this.bugEdits();
     this.verify();
     this.askedTests();
+    this.reportedFailures();
     // Your messages to authors whose worktree is being restored.
     for (const q of this.s.queuedAuthors ?? []) this.resumeAuthor(q.item, q.key, q.reason, q.message);
     this.undeliveredMessages();
@@ -1062,6 +1063,24 @@ class Planner {
       }
     }
     // Once on Phabricator, the request stays where it is: their patches go on top of the stack (newPatches).
+    const submitted = Object.values(this.s.patches).some((p) => p.revision !== undefined);
+    if (created && !submitted && at(this.s.step) > at("investigate and fix")) this.setStep("investigate and fix");
+  }
+
+  // Failures of other tests an author came across that the request covers: work items of their own, the request going
+  // back to fixing, as for those you ask about.
+  private reportedFailures(): void {
+    if (this.s.step === "done" || at(this.s.step) < at("investigate and fix")) return;
+    const tests = this.knownTests();
+    let created = false;
+    for (const j of this.view.jobs.filter((x) => x.purpose.what === "author" && succeeded(x) && x.name === "investigate-and-fix")) {
+      for (const f of this.rep<InvestigateReport>(j).otherFailures ?? []) {
+        if (tests.has(f.test)) continue;
+        tests.add(f.test);
+        created = true;
+        this.createItem({ message: f.message.slice(0, 300), tests: [f.test], configs: f.configs });
+      }
+    }
     const submitted = Object.values(this.s.patches).some((p) => p.revision !== undefined);
     if (created && !submitted && at(this.s.step) > at("investigate and fix")) this.setStep("investigate and fix");
   }

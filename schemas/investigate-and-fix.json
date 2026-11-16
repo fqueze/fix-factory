@@ -22,7 +22,37 @@
     },
     "question": {
       "type": "string",
-      "description": "A decision you leave to the user (something you found but didn't do, that's theirs to choose): the question, with the choices and what each means. The factory shows it to them as a flag on your group and resumes you with their answer. Not for anything you can decide yourself."
+      "description": "A decision you leave to the user (something you found but didn't do, that's theirs to choose): the question, with the choices and what each means. The factory shows it to them as a flag on your group and resumes you with their answer. Not for anything you can decide yourself, nor for failures of other tests: those go in otherFailures."
+    },
+    "otherFailures": {
+      "type": "array",
+      "description": "Failures of other tests you came across (in a try push, a run of the folder) that the request covers, as its text says: the factory makes each a work item of its own, investigated like the others. Never a question to the user.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "test": {
+            "type": "string",
+            "description": "its path from the repository root"
+          },
+          "message": {
+            "type": "string",
+            "description": "the failure, as the log gives it"
+          },
+          "configs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "where it failed (try job names)"
+          }
+        },
+        "required": [
+          "test",
+          "message",
+          "configs"
+        ],
+        "additionalProperties": false
+      }
     },
     "cause": {
       "type": "string"
