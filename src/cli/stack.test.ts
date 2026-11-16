@@ -272,16 +272,28 @@ test("interdiff of a rebase over a conflicting upstream change shows how the con
   const repo = await makeRepo();
   t.after(() => repo.cleanup());
   const base = await repo.commit({ "a.txt": lines(20) }, "base");
-  const old = await repo.commit({ "a.txt": lines(20, { 2: "old" }) }, "old");
+  const old = await repo.commit({ "a.txt": lines(20, { 2: "old" }) }, "Bug 1 - A, r=x.");
   await repo.git(["checkout", "-q", "--detach", base]);
   await repo.commit({ "a.txt": lines(20, { 2: "upstream", 18: "elsewhere" }) }, "upstream");
-  const neu = await repo.commit({ "a.txt": lines(20, { 2: "resolved", 18: "elsewhere" }) }, "new");
+  const neu = await repo.commit({ "a.txt": lines(20, { 2: "resolved", 18: "elsewhere" }) }, "Bug 1 - A, r=x.");
   const r = await interdiff(repo.dir, old, neu);
   assert.equal(r.method, "conflicts-resolved");
   assert.match(r.diff, /^# a\.txt conflicted with the new base/);
   assert.match(r.diff, /^-old$\n^\+resolved$/m);
   assert.doesNotMatch(r.diff, /<<<<<<<|=======|>>>>>>>/);
   assert.doesNotMatch(r.diff, /elsewhere/);
+});
+
+test("interdiff starts with the commit message's changes, as a COMMIT_MSG file, its Differential Revision line aside", async (t) => {
+  const repo = await makeRepo();
+  t.after(() => repo.cleanup());
+  await repo.commit({ "a.txt": lines(5) }, "base");
+  const old = await repo.commit({ "a.txt": lines(5, { 1: "x" }) }, "Bug 1 - A, r=x.\n\nSays it badly.\n\nDifferential Revision: https://phabricator.services.mozilla.com/D1");
+  const neu = await repo.commit({ "a.txt": lines(5, { 1: "x", 3: "y" }) }, "Bug 1 - A, r=x.\n\nSays it well.");
+  const r = await interdiff(repo.dir, old, neu);
+  assert.match(r.diff, /^diff --git a\/COMMIT_MSG b\/COMMIT_MSG\n--- a\/COMMIT_MSG\n\+\+\+ b\/COMMIT_MSG\n@@[^\n]*\n Bug 1 - A, r=x\.\n \n-Says it badly\.\n\+Says it well\.\ndiff --git a\/a\.txt b\/a\.txt\n/);
+  assert.doesNotMatch(r.diff, /Differential Revision/);
+  assert.equal((await interdiff(repo.dir, old, old)).diff, "", "the same commit: nothing");
 });
 
 test("since matches an earlier push's commits with the patches: same, changed (with its interdiff), new, removed", async (t) => {

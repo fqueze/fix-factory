@@ -3807,7 +3807,7 @@ describe("9. review comments", () => {
     });
     sc.complete(`rewrite-review:root:${job}:v2`, { output: { mapping: { [sha("e")]: sha("e"), [sha("7")]: sha("8") } } });
     // Against what Phabricator has (the commit D101 showed up on), not the author's previous commit.
-    const key = `interdiff:p-test-a:${job}:${sha("f").slice(0, 12)}`;
+    const key = `interdiff:p-test-a:${job}:${sha("f").slice(0, 12)}:msg`;
     assert.deepEqual(sc.settle(), [key]);
     assert.deepEqual(sc.plan(key).cli?.args, ["interdiff", "--cwd", `/wt/${ID}-root`, sha("f"), sha("8")]);
     // An earlier answer's reply-only flag: moot once this one is raised.
@@ -3829,7 +3829,7 @@ describe("9. review comments", () => {
     };
     pollWith("2026-10-01T00:00:00.000Z");
     assert.ok(sc.open().includes(n.key), "an older diff: not resubmitted yet");
-    const phabInter = `interdiff:p-test-a:phab-${sha("f").slice(0, 12)}:${sha("8").slice(0, 12)}`;
+    const phabInter = `interdiff:p-test-a:phab-${sha("f").slice(0, 12)}:${sha("8").slice(0, 12)}:msg`;
     assert.ok(sc.view().byKey.has(phabInter), "what a resubmit sends, against what Phabricator has");
     sc.complete(phabInter, { output: { diff: "-a\n+b\n", method: "same-parent" } });
     sc.settle();
@@ -4055,7 +4055,7 @@ describe("9. changes after submission", () => {
       assert.deepEqual(JSON.parse(rw.files![0].content)[sha("7")], { revision: "https://phabricator.services.mozilla.com/D101" });
       sc.complete(`rewrite-review:root:${job}:v2`, { output: { mapping: { [sha("e")]: sha("e"), [sha("7")]: sha("8") } } });
       const [inter] = sc.settle();
-      assert.equal(inter, `interdiff:p-test-a:${job}:${sha("f").slice(0, 12)}`);
+      assert.equal(inter, `interdiff:p-test-a:${job}:${sha("f").slice(0, 12)}:msg`);
       assert.deepEqual(sc.plan(inter).cli?.args.slice(-2), [sha("f"), sha("8")]);
       sc.complete(inter, { output: { diff: "-a\n+b\n", method: "same-parent" } });
       sc.settle();
@@ -4075,7 +4075,7 @@ describe("9. changes after submission", () => {
     sc.settle();
     sc.complete(`rewrite-review:root:${job}:v2`, { output: { mapping: { [sha("e")]: sha("e"), [sha("7")]: sha("8") } } });
     sc.settle();
-    sc.complete(`interdiff:p-test-a:${job}:${sha("f").slice(0, 12)}`, { output: { diff: "-a\n+b\n", method: "same-parent" } });
+    sc.complete(`interdiff:p-test-a:${job}:${sha("f").slice(0, 12)}:msg`, { output: { diff: "-a\n+b\n", method: "same-parent" } });
     sc.settle();
     sc.add({ type: "submit-copied", request: ID, stack: "root" });
     const review = sc.state().patches["p-test-a"].review!;
@@ -4103,7 +4103,7 @@ describe("9. changes after submission", () => {
     sc.settle();
     sc.complete(`rewrite-review:root:${job}:v2`, { output: { mapping: { [sha("e")]: sha("e"), [sha("7")]: sha("8") } } });
     sc.settle();
-    sc.complete(`interdiff:p-test-a:${job}:${sha("f").slice(0, 12)}`, { output: { diff: "-a\n+b\n", method: "same-parent" } });
+    sc.complete(`interdiff:p-test-a:${job}:${sha("f").slice(0, 12)}:msg`, { output: { diff: "-a\n+b\n", method: "same-parent" } });
     sc.settle();
     sc.add({ type: "submit-copied", request: ID, stack: "root" });
     assert.equal(sc.state().patches["p-test-a"].sentSha, sha("8"));
@@ -4129,7 +4129,7 @@ describe("9. changes after submission", () => {
     sc.complete(`review:p-test-a:${again}`, { report: ok });
     assert.deepEqual(sc.settle(), [`rewrite-review:root:${again}:v2`]);
     sc.complete(`rewrite-review:root:${again}:v2`, { output: { mapping: { [sha("e")]: sha("e"), [sha("9")]: sha("a") } } });
-    const inter = `interdiff:p-test-a:${again}:${sha("8").slice(0, 12)}`;
+    const inter = `interdiff:p-test-a:${again}:${sha("8").slice(0, 12)}:msg`;
     assert.deepEqual(sc.settle(), [inter]);
     assert.deepEqual(sc.plan(inter).cli?.args.slice(-2), [sha("8"), sha("a")]);
   });

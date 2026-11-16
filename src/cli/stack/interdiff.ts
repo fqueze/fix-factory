@@ -1,4 +1,7 @@
-import { git, mergeTree, readCommit } from "./git.ts";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { git, gitTry, mergeTree, readCommit } from "./git.ts";
 
 export interface InterdiffResult {
   diff: string; // unified diff from the old version of the patch to the new one
@@ -7,9 +10,30 @@ export interface InterdiffResult {
   method: "same-parent" | "old-rebased" | "new-rebased" | "conflicts-resolved";
 }
 
+// Its commit message, when it changed, first, as a file COMMIT_MSG: resubmitting sends it too. Without the Differential
+// Revision line, which only one of them may have.
+async function messageDiff(cwd: string, oldMessage: string, newMessage: string): Promise<string> {
+  const bare = (m: string) => m.replace(/^Differential Revision: \S+\n?/m, "").trimEnd() + "\n";
+  if (bare(oldMessage) === bare(newMessage)) return "";
+  const dir = mkdtempSync(join(tmpdir(), "interdiff-msg-"));
+  try {
+    writeFileSync(join(dir, "a"), bare(oldMessage));
+    writeFileSync(join(dir, "b"), bare(newMessage));
+    const r = await gitTry(dir, ["diff", "--no-index", "--no-color", "--no-ext-diff", "a", "b"]);
+    return r.stdout.replace(/^diff --git a\/a b\/b\n/, "diff --git a/COMMIT_MSG b/COMMIT_MSG\n").replace(/^--- a\/a$/m, "--- a/COMMIT_MSG").replace(/^\+\+\+ b\/b$/m, "+++ b/COMMIT_MSG").replace(/^index .*\n/m, "");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
 // What changed in a patch between two versions, ignoring what the base contributed.
 export async function interdiff(cwd: string, oldRef: string, newRef: string): Promise<InterdiffResult> {
   const [oldC, newC] = [await readCommit(cwd, oldRef), await readCommit(cwd, newRef)];
+  const r = await codeInterdiff(cwd, oldC, newC);
+  return { ...r, diff: (await messageDiff(cwd, oldC.message, newC.message)) + r.diff };
+}
+
+async function codeInterdiff(cwd: string, oldC: Awaited<ReturnType<typeof readCommit>>, newC: Awaited<ReturnType<typeof readCommit>>): Promise<InterdiffResult> {
   const diff = (a: string, b: string) => git(cwd, ["diff", "--no-color", "--no-ext-diff", a, b]);
   if (oldC.parents[0] === newC.parents[0]) {
     return { diff: await diff(oldC.sha, newC.sha), method: "same-parent" };

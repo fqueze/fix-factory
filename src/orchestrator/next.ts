@@ -3058,13 +3058,13 @@ class Planner {
         this.raise(`resubmit:${st.id}:phab-${p.review!.diff!.id}:${p.sha.slice(0, 12)}`, { action: `Resubmit D${p.revision}`, detail: "it differs from what Phabricator has · interdiff below", stack: st.id, patch: p.id });
       }
     }
-    // What a resubmit would send: the patch as it is against what Phabricator has.
+    // What a resubmit would send: the patch as it is against what Phabricator has, its commit message too (msg).
     for (const n of this.s.needsUser.filter((x) => x.key.startsWith("resubmit:") && x.patch !== undefined)) {
       const p = this.s.patches[n.patch!];
       const st = Object.values(this.s.stacks).find((x) => x.order.includes(p.id));
       const base = this.phabBase(p);
       if (!st || !base || base === p.sha) continue;
-      const inter = this.want(`interdiff:${p.id}:phab-${base.slice(0, 12)}:${p.sha.slice(0, 12)}`, () =>
+      const inter = this.want(`interdiff:${p.id}:phab-${base.slice(0, 12)}:${p.sha.slice(0, 12)}:msg`, () =>
         this.cli("interdiff", "stack.ts", ["interdiff", "--cwd", st.worktree, base, p.sha], { cwd: st.worktree, priority: REVIEW_PRIORITY, purpose: { patch: p.id, stack: st.id } }),
       );
       // Phabricator has that code already: nothing to resubmit, only its replies to post (an answer that changed no code).
@@ -3177,7 +3177,7 @@ class Planner {
     }
     if (p.worktree !== st.worktree) return;
     if (oldSha) {
-      const inter = this.want(`interdiff:${p.id}:${author.job.job}:${oldSha.slice(0, 12)}`, () =>
+      const inter = this.want(`interdiff:${p.id}:${author.job.job}:${oldSha.slice(0, 12)}:msg`, () =>
         this.cli("interdiff", "stack.ts", ["interdiff", "--cwd", st.worktree, oldSha, p.sha], { cwd: st.worktree, priority: REVIEW_PRIORITY, purpose: { patch: p.id, stack: st.id } }),
       );
       if (!inter) return;
