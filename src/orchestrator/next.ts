@@ -3275,26 +3275,54 @@ class Planner {
       const all = [...st.order.map((pid) => this.s.patches[pid]), ...fresh];
       // By their authors' runs, not their shas, which the rewrite changes.
       const h = shortHash(fresh.map((p) => `${p.id}:${p.item ? this.latestAuthor(p.item)?.job : ""}`)).slice(0, 10);
-      const e = this.rewriteEdits(`append-${st.id}-${h}`, all);
-      const rw = this.want(`append:${st.id}:${h}`, () =>
-        this.cli("rewrite", "stack.ts", ["rewrite", "--cwd", st.worktree, "--base", st.base ?? this.config.baseRef, "--branch", st.branch, "--order", all.map((p) => p.sha).join(","), ...e.args], {
-          cwd: st.worktree,
-          files: e.files,
-          purpose: { stack: st.id, reason: "new patches on top", patches: Object.fromEntries(all.map((p) => [p.sha.slice(0, 12), p.id])) },
-        }),
-      );
+      // An earlier attempt's conflict: this one, with the new patches since, stands for it.
+      const conflicted = (n: NeedsUser) => n.stack === st.id && n.key.startsWith("failed:") && n.action === "Conflict while adding new patches on top of the stack";
+      const key = `append:${st.id}:${h}:v2`;
+      for (const n of this.s.needsUser) if (conflicted(n) && !this.view.jobs.find((j) => j.job === n.job)?.purpose.key.includes(h)) this.clear(n.key);
+      // As in a review answer's rebuild: a conflict goes to resolve-conflict, then the rebuild is made again.
+      const rewrite = (k: string) => {
+        const e = this.rewriteEdits(`append-${st.id}-${h}`, all.map((p) => this.s.patches[p.id]));
+        return this.want(k, () =>
+          this.cli("rewrite", "stack.ts", ["rewrite", "--cwd", st.worktree, "--base", st.base ?? this.config.baseRef, "--branch", st.branch, "--order", all.map((p) => this.s.patches[p.id].sha).join(","), "--leave-conflict", ...e.args], {
+            cwd: st.worktree,
+            files: e.files,
+            purpose: { stack: st.id, reason: "new patches on top", patches: Object.fromEntries(all.map((p) => [this.s.patches[p.id].sha.slice(0, 12), p.id])) },
+          }),
+        );
+      };
+      let rw = rewrite(key);
       if (!rw) continue;
-      if (this.out<{ conflict?: unknown }>(rw).conflict) {
-        this.raise(`failed:${rw.job}`, { action: "Conflict while adding new patches on top of the stack", detail: "stack.ts rewrite stopped on a conflict", job: rw.job, stack: st.id });
-        continue;
+      const conflict = this.out<{ conflict?: { sha: string; files: string[] } }>(rw).conflict;
+      if (conflict) {
+        const res = this.wantAgent(`resolve:${st.id}:append-${h}:${conflict.sha}`, "resolve", "resolve-conflict", { sha: conflict.sha, base: st.branch, files: conflict.files.join(", ") }, {
+          cwd: st.worktree,
+          purpose: { stack: st.id, sha: conflict.sha, patches: Object.fromEntries(Object.entries(rw.purpose.patches ?? {}).filter(([sha]) => conflict.sha.startsWith(sha))) },
+        });
+        if (!res) continue;
+        const r = this.rep<ResolveConflictReport>(res);
+        if (r.state !== "resolved" || !r.commit) {
+          if (!this.want(`abort:${res.job}`, () => this.cli("abort", "sh", ["-c", ABORT_CHERRY_PICK], { cwd: st.worktree, purpose: { stack: st.id } }))) continue;
+          this.raise(`failed:${res.job}`, { action: "Conflict while adding new patches on top of the stack", detail: r.explanation.slice(0, 1500), job: res.job, stack: st.id });
+          continue;
+        }
+        // Once more, for the Differential Revision lines and the patches after it.
+        rw = rewrite(`${key}:resolved`);
+        if (!rw) continue;
+        if (this.out<{ conflict?: unknown }>(rw).conflict) {
+          this.raise(`failed:${rw.job}`, { action: "Conflict while adding new patches on top of the stack", detail: "stack.ts rewrite stopped on another conflict", job: rw.job, stack: st.id });
+          continue;
+        }
       }
       const { id, ...rest } = st;
       this.event(this.ev("stack", { stack: id, ...rest, order: all.map((p) => p.id) }));
       for (const i of new Set(fresh.map((p) => p.item!))) this.setItem(i, "in stack");
-      const unfiled = fresh.some((p) => p.bug === null && p.bugDraft);
+      // One flag for every patch of the stack not on Phabricator yet: those an earlier one asked for too.
+      const unsent = all.filter((p) => this.s.patches[p.id].revision === undefined);
+      for (const n of this.s.needsUser) if (n.key.startsWith(`submit-new:${st.id}:`) && n.key !== `submit-new:${st.id}:${h}`) this.clear(n.key);
+      const unfiled = unsent.some((p) => p.bug === null && p.bugDraft);
       this.raise(`submit-new:${st.id}:${h}`, {
-        action: `Submit ${fresh.length} new ${fresh.length === 1 ? "patch" : "patches"}`,
-        detail: `${fresh.map((p) => p.title.replace(/,\s*r=.*$/, "")).join("; ")}: on top of the stack, reviewed. ${unfiled ? "File its bug (the draft on its row), then copy" : "Copy"} the moz-phab submit command.`.slice(0, 500),
+        action: `Submit ${unsent.length} new ${unsent.length === 1 ? "patch" : "patches"}`,
+        detail: `${unsent.map((p) => p.title.replace(/,\s*r=.*$/, "")).join("; ")}: on top of the stack, reviewed. ${unfiled ? "File their bugs (the drafts on their rows), then copy" : "Copy"} the moz-phab submit command.`.slice(0, 1000),
         stack: st.id,
       });
     }

@@ -3563,6 +3563,39 @@ describe("9. a try push of a submitted stack", () => {
     assert.equal(landingState(sc.state(), sc.state().patches["p-test-a"]).accepted, sc.state().patches["p-test-a"].review!.reviewers.every((r) => r.status === "accepted"));
   });
 
+  it("new patches on top of a submitted stack: a conflict goes to resolve-conflict, and one flag asks to submit them all", () => {
+    const sc = inReview();
+    sc.complete("poll:0", { output: polled("needs-review", [], "pending") });
+    sc.settle();
+    const st = sc.state().stacks.root;
+    // A first new patch, added.
+    sc.add({ type: "item-created", request: ID, item: "i-test-c", folder: "a", group: { message: "crash", tests: ["a/test_c.js"], configs: [] } });
+    investigating(sc, "i-test-c");
+    reviewed(sc, "i-test-c", sha("3"), "a/test_c.js", { title: "Bug 33 - Fix test_c, r=smaug.", bug: 33 });
+    const first = sc.view().jobs.find((j) => j.purpose.key.startsWith("append:root:"))!.purpose.key;
+    assert.match(first, /:v2$/);
+    assert.ok(sc.plan(first).cli!.args.includes("--leave-conflict"));
+    sc.complete(first, { output: { mapping: { [sha("3")]: sha("9") } } });
+    sc.settle();
+    // A second one, conflicting with it.
+    sc.add({ type: "item-created", request: ID, item: "i-test-d", folder: "a", group: { message: "hang", tests: ["a/test_d.js"], configs: [] } });
+    investigating(sc, "i-test-d");
+    reviewed(sc, "i-test-d", sha("4"), "a/test_d.js", { title: "Bug 44 - Fix test_d, r=smaug.", bug: 44 });
+    const second = sc.view().jobs.findLast((j) => j.purpose.key.startsWith("append:root:"))!.purpose.key;
+    assert.notEqual(second, first);
+    sc.complete(second, { output: { mapping: {}, conflict: { sha: sha("4"), files: ["a/head.js"] }, conflictLeft: true } });
+    const resolve = sc.settle().find((k) => k.startsWith("resolve:root:append-"))!;
+    assert.ok(resolve, "to resolve-conflict, not to you");
+    sc.complete(resolve, { report: { state: "resolved", commit: sha("5"), explanation: "kept both helpers", feedback: [] } });
+    const again = sc.settle().find((k) => k === `${second}:resolved`)!;
+    assert.ok(again);
+    sc.complete(again, { output: { mapping: { [sha("5")]: sha("6") } } });
+    sc.settle();
+    assert.deepEqual(sc.state().stacks.root.order, [...st.order, "p-test-c", "p-test-d"]);
+    const flags = sc.state().needsUser.filter((n) => n.key.startsWith("submit-new:root:"));
+    assert.deepEqual(flags.map((n) => n.action), ["Submit 2 new patches"]);
+  });
+
   it("a fix made after submission goes on top of the stack once reviewed, for you to submit, without the step going back", () => {
     const sc = inReview();
     sc.complete("poll:0", { output: polled("needs-review", [], "pending") });
