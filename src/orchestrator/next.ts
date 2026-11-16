@@ -1071,16 +1071,12 @@ class Planner {
   // back to fixing, as for those you ask about.
   private reportedFailures(): void {
     if (this.s.step === "done" || at(this.s.step) < at("investigate and fix")) return;
-    const tests = this.knownTests();
-    let created = false;
+    // Known by their test and message, as the work list's: a test of a cluster can fail otherwise too.
+    const before = this.newItems.size;
     for (const j of this.view.jobs.filter((x) => x.purpose.what === "author" && succeeded(x) && x.name === "investigate-and-fix")) {
-      for (const f of this.rep<InvestigateReport>(j).otherFailures ?? []) {
-        if (tests.has(f.test)) continue;
-        tests.add(f.test);
-        created = true;
-        this.createItem({ message: f.message.slice(0, 300), tests: [f.test], configs: f.configs });
-      }
+      this.createItems((this.rep<InvestigateReport>(j).otherFailures ?? []).map((f) => ({ message: f.message.slice(0, 300), tests: [f.test], configs: f.configs })));
     }
+    const created = this.newItems.size > before;
     const submitted = Object.values(this.s.patches).some((p) => p.revision !== undefined);
     if (created && !submitted && at(this.s.step) > at("investigate and fix")) this.setStep("investigate and fix");
   }
