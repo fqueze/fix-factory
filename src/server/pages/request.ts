@@ -35,7 +35,9 @@ import {
   profileUrl,
   pushName,
   pushStatus,
+  costOf,
   requestCost,
+  shownCost,
   requestName,
   requestUrl,
   routeOutcome,
@@ -52,7 +54,7 @@ import {
 // One line per request; the body only when expanded, so the overview stays small.
 export function renderRequest(r: RequestState, ctx: RenderContext, open = ctx.open?.includes(r.id) ?? false): Html {
   const needs = needsYou(r);
-  const cost = requestCost(r);
+  const cost = requestCost(r, ctx);
   const summary = requestSummary(r);
   // One stack: its buttons are the request's, at the top right, and its meta bug, once filed, names the request.
   const stacks = liveStacks(r);
@@ -431,14 +433,10 @@ function itemRows(r: RequestState, i: ItemView, ctx: RenderContext): Html {
   return live.length ? patchRows(r, live, ctx) : groupRow(r, i, ctx);
 }
 
-function itemCost(r: RequestState, i: ItemView): number {
-  return i.jobs.reduce((sum, j) => sum + (r.jobs[j].costUsd ?? 0), 0);
-}
-
-// A group's cost opens its own profile.
+// A work item's cost opens its own profile.
 function costLabel(r: RequestState, i: ItemView, ctx: RenderContext): Html | null {
-  const usd = itemCost(r, i);
-  return usd > 0 ? html`<a class="cost" href="${profileUrl(ctx, r.id, i.id)}" target="_blank" rel="noopener" title="Agent cost of this item so far: its profile">${formatCost(usd)}</a>` : null;
+  const c = costOf(r, i.jobs.map((j) => r.jobs[j]), ctx);
+  return c.usd > 0 ? html`<a class="cost" href="${profileUrl(ctx, r.id, i.id)}" target="_blank" rel="noopener" title="Agent cost of this item so far${c.running ? ", with an estimate for its running agent" : ""}: its profile">${shownCost(c)}</a>` : null;
 }
 
 function stateText(r: RequestState, i: ItemView, ctx: RenderContext): Html {

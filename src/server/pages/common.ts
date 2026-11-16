@@ -32,6 +32,8 @@ export interface RenderContext {
   readData?: (rel: string) => string | undefined;
   // An agent's conversation, as its job's activity URL gives it: rendered in the page when its job is open.
   activity?: (request: RequestId, job: JobView) => Html;
+  // What a running agent's session cost so far (claude-profiler's sessionCost of its transcript).
+  sessionCost?: (job: JobView) => number | undefined;
   freeDiskGB?: number; // where the worktrees go
 }
 
@@ -435,8 +437,28 @@ export function formatCost(usd: number): string {
   return `$${usd < 10 ? usd.toFixed(2) : Math.round(usd)}`;
 }
 
-export function requestCost(r: RequestState): number {
-  return Object.values(r.jobs).reduce((sum, j) => sum + (j.costUsd ?? 0), 0);
+// A job's cost; a running agent's so far, an estimate (claude-profiler prices its session's transcript, less its
+// session's earlier runs): its exact cost comes with its end.
+export function jobCost(r: RequestState, j: JobView, ctx?: RenderContext): { usd: number; running: boolean } {
+  if (j.costUsd !== undefined || j.endedAt !== undefined || j.kind !== "agent") return { usd: j.costUsd ?? 0, running: false };
+  const session = ctx?.sessionCost?.(j);
+  if (session === undefined) return { usd: 0, running: false };
+  const earlier = Object.values(r.jobs).filter((x) => x.sessionId === j.sessionId && x.job !== j.job).reduce((sum, x) => sum + (x.costUsd ?? 0), 0);
+  return { usd: Math.max(0, session - earlier), running: true };
+}
+
+// The sum of these jobs' costs, ≈ when one is still running.
+export function costOf(r: RequestState, jobs: JobView[], ctx?: RenderContext): { usd: number; running: boolean } {
+  const costs = jobs.map((j) => jobCost(r, j, ctx));
+  return { usd: costs.reduce((sum, c) => sum + c.usd, 0), running: costs.some((c) => c.running) };
+}
+
+export function shownCost(c: { usd: number; running: boolean }): string {
+  return `${c.running ? "≈" : ""}${formatCost(c.usd)}`;
+}
+
+export function requestCost(r: RequestState, ctx?: RenderContext): number {
+  return costOf(r, Object.values(r.jobs), ctx).usd;
 }
 
 // Test paths are long and share the request's folder: show what follows it.

@@ -1338,6 +1338,14 @@ describe("a group's jobs", () => {
     assert.match(fold, /build worktree/, "the failed build that ran again since is in the fold");
     // Its author running: what you send reaches it after its current command, from the bottom of its panel.
     assert.match(before, /data-fold="job-j-a2"[^]*?<div class="talk">[^]*?title="Its author gets your message after its current command, and goes on with it">Send</);
+    // Its cost so far: its session's, less its session's earlier runs.
+    const session = run.jobs["j-a2"].sessionId!;
+    const earlier = Object.values(run.jobs).filter((j) => j.sessionId === session && j.job !== "j-a2").reduce((n, j) => n + (j.costUsd ?? 0), 0);
+    const unpriced = structuredClone(run);
+    delete unpriced.jobs["j-a2"].costUsd;
+    const priced = rowOf(renderRequest(unpriced, { ...ctx, sessionCost: () => earlier + 2 }, true).value, "item-i-spinner");
+    assert.match(priced, /title="Its cost so far, estimated from its transcript: its profile">≈\$2\.00<\/a>/);
+    assert.match(priced, /title="Agent cost of this item so far, with an estimate for its running agent: its profile">≈\$/);
     run.agentMessages = [{ msg: "c1", item: "i-spinner", job: "j-a2", session: run.jobs["j-a2"].sessionId!, text: "Also check macOS.", t: "2026-10-15T08:00:00.000Z" }];
     const sent = rowOf(renderRequest(run, ctx, true).value, "item-i-spinner");
     assert.match(sent, /<div class="talk"><ul class="sent"><li><span class="sub">you, <span data-since="2026-10-15T08:00:00.000Z"><\/span> ago:<\/span> Also check macOS\. <span class="sub">· it gets it after its current command<\/span><\/li><\/ul><form/);

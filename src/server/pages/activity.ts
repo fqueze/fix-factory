@@ -4,7 +4,7 @@ import { isPushJob } from "../../state/flags.ts";
 import type { ItemView, JobView, RequestId, RequestState } from "../../types.ts";
 import { html, type Html } from "../html.ts";
 import { continueBox, stopButton } from "./actions.ts";
-import { elapsed, foldContent, formatCost, formatDuration, jobLabel, modelLabel, plural, profileUrl, requestUrl, stateClass, type RenderContext } from "./common.ts";
+import { elapsed, foldContent, formatCost, formatDuration, jobCost, jobLabel, modelLabel, plural, profileUrl, requestUrl, shownCost, stateClass, type RenderContext } from "./common.ts";
 import { runningSentence, workLabel } from "./progress.ts";
 
 export function jobUrl(request: RequestId, job: string, what: "activity" | "transcript" | "profile" | "log" | `mach-profile-${number}`): string {
@@ -27,9 +27,12 @@ export function jobLine(r: RequestState, j: JobView, ctx: RenderContext): Html {
   });
   // An agent's cost opens its profile; while it runs (no cost yet), its time does.
   const agentProfile = `${ctx.profilerOrigin}/from-url/${encodeURIComponent(`${ctx.baseUrl}${jobUrl(r.id, j.job, "profile")}`)}?thread=0`;
+  const sofar = jobCost(r, j, ctx);
   const cost =
     j.costUsd === undefined
-      ? null
+      ? sofar.running
+        ? html` · <a class="cost" href="${agentProfile}" target="_blank" rel="noopener" title="Its cost so far, estimated from its transcript: its profile">${shownCost(sofar)}</a>`
+        : null
       : j.kind === "agent"
         ? html` · <a class="cost" href="${agentProfile}" target="_blank" rel="noopener" title="Its profile">${formatCost(j.costUsd)}</a>`
         : html` · ${formatCost(j.costUsd)}`;

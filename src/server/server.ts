@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { freeDiskGB as diskFree } from "../lib/disk.ts";
-import { existsSync, readFileSync, realpathSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { createRequire } from "node:module";
 import { homedir } from "node:os";
@@ -41,6 +41,7 @@ export interface ServerOptions {
 interface Profiler {
   readJsonlFile(path: string): unknown[];
   createFirefoxProfile(entries: unknown[]): unknown;
+  sessionCost?(entries: unknown[]): number; // in versions since f0a2267
 }
 
 // The factory's claude-profiler (tools.ts update): its command is a link to its main module. Missing until the
@@ -228,6 +229,20 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
     return profiler;
   }
 
+  // A running agent's session cost so far, read again when its transcript grew.
+  const costs = new Map<string, { size: number; usd: number }>();
+  function sessionCost(job: JobView): number | undefined {
+    const file = transcriptOf(job);
+    const profiler = loadProfiler();
+    if (!file || !profiler?.sessionCost) return undefined;
+    const size = statSync(file).size;
+    const known = costs.get(file);
+    if (known && known.size === size) return known.usd;
+    const usd = profiler.sessionCost(profiler.readJsonlFile(file));
+    costs.set(file, { size, usd });
+    return usd;
+  }
+
   // Free space where the worktrees go: the factory stops creating them below MIN_FREE_GB.
   function freeDiskGB(): number | undefined {
     return existsSync(opts.config.worktreesDir) ? diskFree(opts.config.worktreesDir) : undefined;
@@ -270,6 +285,7 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
       mozPhab: opts.config.mozPhabCommand,
       interdiff: readInterdiff,
       activity: (request, job) => renderActivity(request, job, activity(request, job, req), ctx(req)),
+      sessionCost,
       diffStat,
       landoUrl,
       readData,
