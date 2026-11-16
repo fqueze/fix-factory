@@ -254,6 +254,12 @@ interface StackInfo {
   ready: boolean; // assembled, ordered, reviewed and summarized for this hash
 }
 
+// A group's messages, merged ones joined by " | ": whether it has `message`, itself possibly with " | " in it
+// ("monitorConsole | number of messages…").
+function hasMessage(merged: string, message: string): boolean {
+  return ` | ${merged} | `.includes(` | ${message} | `);
+}
+
 class Planner {
   readonly actions: Action[] = [];
   private readonly startedKeys = new Set<string>();
@@ -1018,12 +1024,11 @@ class Planner {
   // singles of different tests share generic messages such as "Test timed out". A merged group's messages are
   // " | "-separated.
   private createItems(groups: FailureGroup[]): void {
-    const pair = (message: string, test: string) => `${message}\n${test}`;
-    const known = new Set([...Object.values(this.s.items).map((i) => i.group), ...this.newItems.values()].flatMap((g) => g.message.split(" | ").flatMap((m) => g.tests.map((t) => pair(m, t)))));
+    const known = [...Object.values(this.s.items).map((i) => i.group), ...this.newItems.values()];
     for (const group of groups) {
-      if (group.tests.length === 0 || group.tests.some((t) => known.has(pair(group.message, t)))) continue;
+      if (group.tests.length === 0 || known.some((g) => hasMessage(g.message, group.message) && group.tests.some((t) => g.tests.includes(t)))) continue;
       this.createItem(group);
-      for (const t of group.tests) known.add(pair(group.message, t));
+      known.push(group);
     }
   }
 
@@ -1143,7 +1148,7 @@ class Planner {
   // Its failures join `into`'s; told: `into`'s author started, and hears about the new ones once its run ends.
   private merge(i: ItemView, into: ItemView, told: boolean, why: string): void {
     const g = into.group;
-    const known = g.message.split(" | ").includes(i.group.message);
+    const known = hasMessage(g.message, i.group.message);
     const group = {
       ...g,
       ...(told && !known ? { late: [...(g.late ?? []), i.group.message] } : {}),

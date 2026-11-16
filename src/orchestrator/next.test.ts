@@ -712,6 +712,15 @@ describe("4. investigate and fix", () => {
     assert.deepEqual(sc.view().jobs.filter((j) => !j.end && !j.purpose.key.startsWith("test-plan:")).map((j) => j.purpose.key), ["prior-art:i-test-a"]);
   });
 
+  it("messages with \" | \" in them merge once: the next run doesn't find them as new groups", () => {
+    const sc = workList([group("ka", "a/test_a.js", "monitorConsole | boom"), group("kb", "a/test_a.js", "monitorConsole | bang")]);
+    assert.equal(sc.state().items["i-test-a"].group.message, "monitorConsole | boom | monitorConsole | bang");
+    const before = sc.of("item-created").length;
+    // Planned again: the same push's failures.
+    sc.settle();
+    assert.equal(sc.of("item-created").length, before);
+  });
+
   it("a request has as many groups investigating in worktrees as it can run agents (4 here); reviewed ones don't count", () => {
     const tests = ["a", "b", "c", "d", "e", "f"];
     const sc = workList(tests.map((t) => group(`k${t}`, `a/test_${t}.js`, "boom")));
