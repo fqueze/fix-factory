@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { freeDiskGB as diskFree } from "../lib/disk.ts";
-import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { createRequire } from "node:module";
 import { homedir } from "node:os";
@@ -293,6 +293,7 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
       landoUrl,
       readData,
       freeDiskGB: freeDiskGB(),
+      worktrees: existsSync(opts.config.worktreesDir) ? readdirSync(opts.config.worktreesDir) : undefined,
     };
   }
 

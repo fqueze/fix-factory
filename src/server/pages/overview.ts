@@ -43,6 +43,7 @@ export function renderStrip(requests: RequestState[], ctx: RenderContext): Html 
     ${running("builds", builds, ctx.maxBuilds, ctx)}
     ${totalCost(requests, ctx)}
     ${ctx.freeDiskGB === undefined ? null : html`<span class="${ctx.freeDiskGB < 100 ? "disk-low" : ""}" title="Free space for worktrees; none is created below 20 GB">disk <b>${diskSize(ctx.freeDiskGB)}</b> free</span>`}
+    ${worktreeCount(requests, ctx)}
     <a href="/feedback" target="_blank">agents' feedback</a>
     <span class="progress">${progressLine(progress, "", false)}</span>
   </div>`;
@@ -60,6 +61,24 @@ function running(what: string, jobs: { r: RequestState; j: JobView }[], max: num
     return html`<a href="#${target}"><b>${jobLabel(j.name)}</b> ${subject}${item ? html` <span class="sub">· ${requestName(r)}</span>` : null} <span class="sub">· ${elapsed(j.startedAt, ctx)}</span></a>`;
   };
   return html`<span class="running" tabindex="0">${count}<span class="running-list">${jobs.sort((a, b) => a.j.startedAt.localeCompare(b.j.startedAt)).map(line)}</span></span>`;
+}
+
+// The worktrees on the disk, by request in the title (the longest request id a name starts with), and those that are
+// no request's (yours).
+function worktreeCount(requests: RequestState[], ctx: RenderContext): Html | null {
+  if (!ctx.worktrees) return null;
+  const ids = requests.map((r) => r.id).sort((a, b) => b.length - a.length);
+  const by = new Map<string, number>();
+  let yours = 0;
+  for (const name of ctx.worktrees) {
+    const id = ids.find((x) => name === x || name.startsWith(`${x}-`));
+    if (id === undefined) yours++;
+    else by.set(id, (by.get(id) ?? 0) + 1);
+  }
+  const named = new Map(requests.map((r) => [r.id, requestName(r)]));
+  const lines = [...by].sort((a, b) => b[1] - a[1]).map(([id, n]) => `${n} · ${named.get(id)}${requests.find((r) => r.id === id)?.step === "done" ? " (finished)" : ""}`);
+  if (yours) lines.push(`${yours} · not the factory's`);
+  return html`<span title="${lines.join("\n")}">worktrees <b>${ctx.worktrees.length}</b></span>`;
 }
 
 // What all its agents cost, the active requests' share in the title.

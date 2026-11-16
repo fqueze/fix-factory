@@ -35,6 +35,7 @@ export interface RenderContext {
   // What a running agent's session cost so far (claude-profiler's sessionCost of its transcript).
   sessionCost?: (job: JobView) => number | undefined;
   freeDiskGB?: number; // where the worktrees go
+  worktrees?: string[]; // the directories there: the factory's are named after their request
 }
 
 export const PHABRICATOR = "https://phabricator.services.mozilla.com";

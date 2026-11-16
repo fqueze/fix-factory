@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import { describe, it } from "node:test";
 import { FixtureStateSource } from "../state-source.ts";
 import type { RequestState } from "../../types.ts";
-import { jobLabel, linkify, pushStatus, type RenderContext } from "./common.ts";
+import { jobLabel, linkify, pushStatus, requestName, type RenderContext } from "./common.ts";
 import { renderOverview, renderRecentPushes, renderStrip } from "./overview.ts";
 import { IDLE, itemBucket, progressLine, requestProgress, runningSentence } from "./progress.ts";
 import { configTable, parseConfig, renderRequest, requestSummary } from "./request.ts";
@@ -81,6 +81,12 @@ describe("overview", () => {
     assert.match(page, /<a class="cost hide-sm" href="[^"]*" target="_blank" rel="noopener" title="[^"]*">\$[\d.]+<\/a>/);
     const url = encodeURIComponent("http://factory:4300/api/requests/r-20261005-newtab/profile");
     assert.ok(page.includes(`href="http://localhost:4242/from-url/${url}?thread=0"`));
+  });
+
+  it("the header strip counts the worktrees, by request in its tooltip, and those that are no request's", () => {
+    const r = get("r-20261005-newtab");
+    const strip = String(renderStrip([r], { ...ctx, worktrees: [`${r.id}-root`, `${r.id}-i-a`, "my-own-checkout"] }));
+    assert.match(strip, new RegExp(`<span title="2 · ${requestName(r).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\n1 · not the factory&#39;s">worktrees <b>3</b></span>`));
   });
 
   it("has the header strip and the global Tell the factory box", () => {
