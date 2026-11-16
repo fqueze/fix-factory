@@ -816,6 +816,15 @@ describe("4. investigate and fix", () => {
     assert.equal(Object.values(sc.state().items).filter((i) => i.group.tests[0] === "a/test_c.js").length, 1);
   });
 
+  it("failures reported by the author of an item moved to another request aren't this request's", () => {
+    const sc = workList([group("ka", "a/test_a.js", "boom")]);
+    investigating(sc, "i-test-a");
+    sc.add({ type: "groups-moved", request: ID, to: "r-other", items: ["i-test-a"] });
+    sc.complete("author:i-test-a:initial", { report: fixed([sha("1")], { otherFailures: [{ test: "a/test_c.js", message: "boom", configs: [] }] }) });
+    sc.settle();
+    assert.ok(!Object.values(sc.state().items).some((i) => i.group.tests[0] === "a/test_c.js"));
+  });
+
   it("a message to a running author that ended before getting it resumes its session with it, once", () => {
     const sc = workList([group("ka", "a/test_a.js", "boom")]);
     investigating(sc, "i-test-a");

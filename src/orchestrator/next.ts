@@ -1076,7 +1076,8 @@ class Planner {
     if (this.s.step === "done" || at(this.s.step) < at("investigate and fix")) return;
     // Known by their test and message, as the work list's: a test of a cluster can fail otherwise too.
     const before = this.newItems.size;
-    for (const j of this.view.jobs.filter((x) => x.purpose.what === "author" && succeeded(x) && x.name === "investigate-and-fix")) {
+    // Not those of an item moved to another request: its report went with it, and that request makes them its own.
+    for (const j of this.view.jobs.filter((x) => x.purpose.what === "author" && succeeded(x) && x.name === "investigate-and-fix" && !(x.item && this.s.movedTo?.[x.item]))) {
       this.createItems((this.rep<InvestigateReport>(j).otherFailures ?? []).map((f) => ({ message: f.message.slice(0, 300), tests: [f.test], configs: f.configs })));
     }
     const created = this.newItems.size > before;
