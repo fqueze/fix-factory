@@ -1691,6 +1691,40 @@ describe("5. stack", () => {
     assert.equal(s.step, "verify on try");
   });
 
+  it("a stack review finding its author answered without changing its patch comes to you; dismissed, the stack goes on", () => {
+    const sc = twoReviewed();
+    sc.complete("wt:root", { output: { name: `${ID}-root`, path: `/wt/${ID}-root`, branch: `${ID}-root` } });
+    sc.settle();
+    const key = sc.view().jobs.find((j) => j.purpose.what === "assemble")!.purpose.key;
+    sc.complete(key, { output: { branch: `${ID}-root`, commits: [{ sha: sha("1"), newSha: sha("a") }, { sha: sha("2"), newSha: sha("b") }], skipped: [], empty: [] } });
+    sc.settle();
+    const hash = key.split(":")[2];
+    sc.complete(`deps:root:${hash}`, { output: [] });
+    sc.complete(`effort:p-test-a:${sha("1")}`, { report: { effort: 2, reason: "r", feedback: [] } });
+    sc.complete(`effort:p-test-b:${sha("2")}`, { report: { effort: 1, reason: "r", feedback: [] } });
+    sc.settle();
+    sc.complete(keyOf(sc, `order:root:${hash}:`), { output: { order: ["p-test-a", "p-test-b"], flippedSoftDeps: [] } });
+    sc.settle();
+    const review = sc.complete(keyOf(sc, `review-stack:root:${hash}:`), { report: { findings: [{ patch: sha("a"), severity: "must-fix", text: "file its bug" }], addDeps: [], removeDeps: [], feedback: [] } });
+    const author = `author:i-test-a:stack-review:${review}`;
+    assert.ok(sc.settle().includes(author));
+    // It can't: its commit stays as it is, so does the review.
+    const answer = sc.complete(author, { report: fixed([sha("1")]) });
+    sc.settle();
+    sc.complete(`import:${answer}`, { output: imported(sha("1"), "Bug XXXXXXX - Fix a/test_a.js, r=smaug.", ["a/test_a.js"]) });
+    for (const k of sc.settle()) {
+      if (k.startsWith("lint")) sc.complete(k, { output: lintOk });
+      else if (k.startsWith("review:")) sc.complete(k, { report: ok });
+      else if (k.startsWith("msg:")) sc.complete(k, { output: "m" });
+    }
+    for (const k of sc.settle()) if (k.startsWith("review:")) sc.complete(k, { report: ok });
+    const flag = sc.state().needsUser.find((n) => n.key === `stack-review:i-test-a:${review}`)!;
+    assert.equal(flag.action, "The stack review still flags its patch after its author's answer");
+    assert.ok(!sc.view().byKey.has(`summary:root:${hash}`));
+    sc.add({ type: "user-done", request: ID, key: flag.key });
+    assert.ok(sc.settle().includes(`summary:root:${hash}`));
+  });
+
   it("assembles a stack again when it comes back to patches it had before: its branch was rewritten since", () => {
     const sc = twoReviewed();
     sc.complete("wt:root", { output: { name: `${ID}-root`, path: `/wt/${ID}-root`, branch: `${ID}-root` } });

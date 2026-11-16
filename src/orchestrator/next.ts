@@ -1872,22 +1872,28 @@ class Planner {
         const item = p?.item ?? inStack[0].item;
         byItem.set(item, [...(byItem.get(item) ?? []), `- ${p ? `${p.title}: ` : ""}${f.text}`]);
       }
+      let waiting = false;
       for (const [item, lines] of byItem) {
-        // An author that already answered stack reviews of its patch this many times, and is still flagged, comes to
-        // you on its group's row, where you can tell it what to do or close it.
+        const flag = `stack-review:${item}:${review.job}`;
+        // You dismissed its ⚑: its patch goes on as it is.
+        if (this.view.done.has(flag)) continue;
+        waiting = true;
+        const key = `author:${item}${this.itemEpoch(item)}:stack-review:${review.job}`;
+        // An author that already answered stack reviews of its patch this many times, or this one without changing it,
+        // and is still flagged, comes to you on its item's row, where you can tell it what to do, close it or dismiss it.
         const asked = this.view.jobs.filter((j) => j.item === item && j.purpose.key.startsWith(`author:${item}${this.itemEpoch(item)}:stack-review:`) && j.end).length;
-        if (asked >= STACK_REVIEW_ROUNDS) {
-          this.raise(`stack-review:${item}:${review.job}`, { action: `The stack review still flags its patch after ${asked} rounds with its author`, detail: lines.join("\n").slice(0, 1000), job: review.job, item });
+        if (asked >= STACK_REVIEW_ROUNDS || this.view.byKey.get(key)?.some((j) => j.end)) {
+          this.raise(flag, { action: asked >= STACK_REVIEW_ROUNDS ? `The stack review still flags its patch after ${asked} rounds with its author` : "The stack review still flags its patch after its author's answer", detail: lines.join("\n").slice(0, 1000), job: review.job, item });
           continue;
         }
         this.resumeAuthor(
           item,
-          `author:${item}${this.itemEpoch(item)}:stack-review:${review.job}`,
+          key,
           "stack review",
           `The review of the whole stack found problems with your patch:\n${lines.join("\n")}\n\nAddress them by amending your commit. If another patch of the stack already does what yours does, drop your commits and report "left as-is", with that commit's sha in \`coveredBy\`. Then end with the JSON report again.`,
         );
       }
-      return;
+      if (waiting) return;
     }
     const summaryFile = dataPath(this.config, this.s.id, `summary-${id}-${hash}.json`);
     this.want(`summary:${id}:${hash}`, () =>

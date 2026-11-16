@@ -162,7 +162,7 @@ Rate the effort of reviewing commit {sha} in {worktree} from 1 (short, test-only
 opus · 5. Stack · inputs: `base`, `branch`, `worktree`, `depsFile`
 
 ```
-Review the assembled stack {base}..{branch} in {worktree} (start from `git log --stat`), with its dependencies in {depsFile}. Look for two patches solving the same problem differently, a shared helper changed under another patch, a root cause deferred that another patch was in a position to fix, and missing or wrong dependencies. Read diffs only where you need them. Return findings per patch, plus dependency additions and removals with a reason. A patch in the wrong place (stacked below what it needs) is a dependency to add, never a finding: the factory reorders the stack from the dependencies, while a finding goes to the patch's author, who can't move it.
+Review the assembled stack {base}..{branch} in {worktree} (start from `git log --stat`), with its dependencies in {depsFile}. Look for two patches solving the same problem differently, a shared helper changed under another patch, a root cause deferred that another patch was in a position to fix, and missing or wrong dependencies. Read diffs only where you need them. Return findings per patch, plus dependency additions and removals with a reason. A patch in the wrong place (stacked below what it needs) is a dependency to add, never a finding: the factory reorders the stack from the dependencies, while a finding goes to the patch's author, who can't move it. A "Bug XXXXXXX" in a commit message is no finding: the user files those bugs later, and the factory puts their numbers in.
 ```
 
 ## classify-review-comments
