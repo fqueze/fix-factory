@@ -537,6 +537,10 @@ describe("commands", () => {
     sc.add({ type: "needs-user", request: ID, key: "question:j-q2", action: "Its author asks you", detail: "d", job: "j-q2", item: "i-a" });
     run(sc, cmd({ cmd: "set-state", item: "i-a", state: "fixed", reason: "covered by the harness fix" } as never));
     assert.deepEqual(sc.open(), []);
+    assert.equal(sc.state().items["i-a"].state, "fixed", "its own patch is in the stack");
+    sc.add({ type: "item-created", request: ID, item: "i-b", folder: "a", group: { message: "boom", tests: ["a/test_b.js"], configs: ["linux"] } });
+    run(sc, cmd({ cmd: "set-state", item: "i-b", state: "fixed", reason: "covered by i-a's fix" } as never));
+    assert.equal(sc.state().items["i-b"].state, "left as-is", "no patch of its own: closed");
   });
 
   it("retry is retry-job without a reason, never for a try push", () => {

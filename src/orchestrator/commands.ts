@@ -536,11 +536,14 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
       done(true, c.reason);
       break;
     }
-    case "set-state":
-      ev({ type: "item-state", item: c.item, state: c.state, detail: c.reason.slice(0, 300) });
+    case "set-state": {
+      // "fixed" is an item with patches of its own in the stack: one with none (another item's fix covers it) is closed.
+      const own = Object.values(s.patches).some((p) => p.item === c.item);
+      ev({ type: "item-state", item: c.item, state: c.state === "fixed" && !own ? "left as-is" : c.state, detail: c.reason.slice(0, 300) });
       clearItemFlags(c.item);
       done(true);
       break;
+    }
     case "redo-step":
       // A stack on Phabricator doesn't go back: a try push of it is verify-stack, more fixes fix-tests.
       if (!c.item && REQUEST_STEPS.indexOf(c.step) < REQUEST_STEPS.indexOf("review comments") && Object.values(s.patches).some((p) => p.revision !== undefined)) {
