@@ -3104,9 +3104,17 @@ class Planner {
         }),
       );
     };
-    const rw = rewrite(key);
+    let rw = rewrite(key);
     if (!rw) return;
-    const conflict = this.out<{ conflict?: { sha: string; files: string[] } }>(rw).conflict;
+    let conflict = this.out<{ conflict?: { sha: string; files: string[] } }>(rw).conflict;
+    // The patch it conflicted on left the stack since (it landed): rebuilt without it, what that conflict raised moot.
+    const conflicted = conflict && rw.purpose.patches?.[conflict.sha.slice(0, 12)];
+    if (conflict && conflicted && !st.order.includes(conflicted)) {
+      for (const j of this.view.byKey.get(`resolve:${st.id}:review-${author.job.job}:${conflict.sha}`) ?? []) this.clear(`failed:${j.job}`);
+      rw = rewrite(`${key}:without-${conflict.sha.slice(0, 12)}`);
+      if (!rw) return;
+      conflict = this.out<{ conflict?: { sha: string; files: string[] } }>(rw).conflict;
+    }
     if (conflict) {
       const res = this.wantAgent(`resolve:${st.id}:review-${author.job.job}:${conflict.sha}`, "resolve", "resolve-conflict", { sha: conflict.sha, base: st.branch, files: conflict.files.join(", ") }, {
         cwd: st.worktree,
@@ -3116,7 +3124,8 @@ class Planner {
       if (!res) return;
       const r = this.rep<ResolveConflictReport>(res);
       if (r.state !== "resolved" || !r.commit) {
-        this.raise(`failed:${res.job}`, { action: "Its amended commit doesn't apply on today's central", detail: r.explanation.slice(0, 500), job: res.job, item: item.id });
+        const on = conflicted ? this.s.patches[conflicted] : undefined;
+        this.raise(`failed:${res.job}`, { action: `Rebuilding the stack on today's central, ${on && on.id !== p.id ? `${on.revision !== undefined ? `D${on.revision}` : on.title} ` : "its commit "}doesn't apply`, detail: r.explanation.slice(0, 1500), job: res.job, item: item.id });
         return;
       }
       // Once more, for the Differential Revision line the resolution's commit lacks.
@@ -3342,9 +3351,10 @@ class Planner {
       // Keyed by Phabricator's order too: the same order asked for again after a reorg elsewhere is a new question.
       const landKey = `land:${st.id}:${shortHash([...st.order, "|", ...(this.phabOrder(st) ?? [])]).slice(0, 10)}`;
       for (const n of this.s.needsUser) if (n.key.startsWith(`land:${st.id}:`) && n.key !== landKey) this.clear(n.key);
+      // Nothing to land: its landed patches still leave it.
       if (!o.landable.length) {
         this.clear(landKey);
-        continue;
+        if (o.order.join() === st.order.join()) continue;
       }
       // v2: earlier versions gave landed patches an edit, which the rewrite refused.
       if (o.order.join() !== st.order.join() || this.view.byKey.has(`rewrite-land:${st.id}:${h}:v2`)) {

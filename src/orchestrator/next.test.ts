@@ -4211,6 +4211,25 @@ describe("10. landing: adapting a soft dependency", () => {
   });
 });
 
+describe("10. landing: a landed patch with nothing landable", () => {
+  it("still leaves the stack: rebuilt without it, nothing asked of you", () => {
+    const sc = inReview();
+    const [d100, d101] = polled("accepted");
+    // D101 landed, D100 accepted but can't land (a hard dep on one in review, say).
+    sc.complete("poll:0", { output: [d100, { ...d101, status: "published" }] });
+    sc.settle();
+    const key = sc.view().jobs.find((j) => j.purpose.key.startsWith("order-landable:"))!.purpose.key;
+    sc.complete(key, { output: { order: ["p-test-b"], flippedSoftDeps: [], landable: [] } });
+    const rewrite = sc.settle().find((k) => k.startsWith("rewrite-land:"))!;
+    assert.ok(rewrite);
+    assert.deepEqual(sc.plan(rewrite).cli!.args.slice(sc.plan(rewrite).cli!.args.indexOf("--order") + 1)[0], sha("e"));
+    sc.complete(rewrite, { output: { mapping: { [sha("e")]: sha("6") } } });
+    sc.settle();
+    assert.deepEqual(sc.state().stacks.root.order, ["p-test-b"]);
+    assert.deepEqual(sc.open().filter((k) => k.startsWith("land:")), []);
+  });
+});
+
 describe("10. landing: the reorg flag", () => {
   const accepted = () => {
     const sc = inReview();
