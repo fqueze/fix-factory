@@ -17,13 +17,10 @@ function recordedConduit(): Conduit {
   };
 }
 
-test("poll: a revision Phabricator hasn't modified since the previous poll keeps its result, unread", async () => {
-  const first = await poll([333041, 329684], recordedConduit());
-  const methods: string[] = [];
+// The recorded calls, for a search of only some of the revisions: the recorded search of both (phids), filtered.
+function subsetConduit(phids: string[]): Conduit {
   const recorded = recordedConduit();
-  // A search of only some of the revisions: the recorded search of both, filtered.
-  const phids = first.map((r) => r.phid);
-  const subset: Conduit = async (method, params) => {
+  return async (method, params) => {
     const p = params as { sourcePHIDs?: string[]; constraints?: { revisionPHIDs?: string[] } };
     if (method === "edge.search" && p.sourcePHIDs?.length === 1) {
       const all = (await recorded(method, { ...p, sourcePHIDs: phids })) as { data: { sourcePHID: string }[] };
@@ -39,8 +36,25 @@ test("poll: a revision Phabricator hasn't modified since the previous poll keeps
       const all = calls.find((c) => c.method === method && want.every((x) => c.params.constraints?.phids?.includes(x)))!.result;
       return { ...all, data: all.data.filter((x) => want.includes(x.phid)) };
     }
+    if (method === "differential.revision.search" && (params as { constraints?: { phids?: string[] } }).constraints?.phids) {
+      const want = (params as { constraints: { phids: string[] } }).constraints.phids;
+      const both = (await recorded(method, { constraints: { ids: [333041, 329684] }, attachments: { reviewers: true } })) as { data: { phid: string }[] };
+      return { ...both, data: both.data.filter((r) => want.includes(r.phid)) };
+    }
+    if (method === "differential.revision.search" && (params as { constraints: { ids: number[] } }).constraints.ids.length === 1) {
+      const ids = (params as { constraints: { ids: number[] } }).constraints.ids;
+      const both = (await recorded(method, { ...params, constraints: { ids: [333041, 329684] } })) as { data: { id: number }[] };
+      return { ...both, data: both.data.filter((r) => ids.includes(r.id)) };
+    }
     return recorded(method, params);
   };
+}
+
+test("poll: a revision Phabricator hasn't modified since the previous poll keeps its result, unread", async () => {
+  const first = await poll([333041, 329684], recordedConduit());
+  const methods: string[] = [];
+  const recorded = recordedConduit();
+  const subset = subsetConduit(first.map((r) => r.phid));
   const counting: Conduit = (method, params) => (methods.push(method), subset(method, params));
   // Nothing modified: one call.
   assert.deepEqual(await poll([333041, 329684], counting, first), first);
@@ -50,6 +64,15 @@ test("poll: a revision Phabricator hasn't modified since the previous poll keeps
   const again = await poll([333041, 329684], counting, [{ ...first[0], modified: 1 }, first[1]]);
   assert.deepEqual(again, first);
   assert.equal(methods.filter((m) => m === "transaction.search").length, 1);
+});
+
+test("poll: a parent the poll doesn't read (landed days ago) is still named, its id read from Phabricator", async () => {
+  const phids = (await poll([333041, 329684], recordedConduit())).map((r) => r.phid);
+  const methods: string[] = [];
+  const subset = subsetConduit(phids);
+  const [d333041] = await poll([333041], (method, params) => (methods.push(method), subset(method, params)));
+  assert.equal(d333041.parent, 329684);
+  assert.equal(methods.filter((m) => m === "differential.revision.search").length, 2);
 });
 
 test("poll: reviewers, inline comments, suggested edits, replies", async () => {

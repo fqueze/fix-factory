@@ -235,6 +235,9 @@ async function pollChanged(revisions: number[], revs: any[], all: any[], conduit
   const parentOf = new Map<string, string>();
   for (const e of await searchAll(conduit, "edge.search", { sourcePHIDs: revs.map((r) => r.phid), types: ["revision.parent"] })) parentOf.set(e.sourcePHID, e.destinationPHID);
   const idOfRev = new Map<string, number>(all.map((r) => [r.phid as string, r.id as number]));
+  // A parent this poll doesn't read (one that landed days ago, say): its id from Phabricator.
+  const unknown = [...new Set(parentOf.values())].filter((phid) => !idOfRev.has(phid));
+  if (unknown.length) for (const r of await searchAll(conduit, "differential.revision.search", { constraints: { phids: unknown } })) idOfRev.set(r.phid, r.id);
 
   const txnsByRev = new Map<number, any[]>();
   for (const id of revisions) {
