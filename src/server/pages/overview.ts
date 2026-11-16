@@ -20,7 +20,7 @@ export function renderOverview(requests: RequestState[], ctx: RenderContext): st
 <body>
 ${PHAB_SYMBOL}
 <header><div class="hwrap">
-  <h1>🏭 Fix factory</h1>
+  <h1><a href="https://github.com/fqueze/fix-factory" target="_blank" rel="noopener" title="Its source">🏭 Fix factory</a></h1>
   ${renderStrip(requests, ctx)}
 </div></header>
 <main id="main">
