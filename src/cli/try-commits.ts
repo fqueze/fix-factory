@@ -73,7 +73,22 @@ export async function importPush(repo: string, rev: string, base: string, branch
         landed.push(p.node);
         continue;
       }
-      await execOk(["git", "apply", "--index", "--3way", file], { cwd: wt });
+      try {
+        await execOk(["git", "apply", "--index", "--3way", file], { cwd: wt });
+      } catch (e) {
+        // Landed since under another title: central has its change already (it applies in reverse). An earlier version of
+        // what landed isn't left out: what it does beyond it may be what the push needs.
+        await execOk(["git", "reset", "-q", "--hard"], { cwd: wt });
+        if (!(await execOk(["git", "apply", "-R", "--check", file], { cwd: wt }).then(() => true, () => false))) {
+          const files = /error: patch failed: (\S+?):\d+/g;
+          const failed = [...String(e instanceof Error ? e.message : e).matchAll(files)].map((m) => m[1]);
+          throw new Error(
+            `${p.node.slice(0, 12)} "${p.message.split("\n")[0]}" of try push ${rev.slice(0, 12)} doesn't apply on today's ${base}${failed.length ? ` (${[...new Set(failed)].join(", ")})` : ""}, which doesn't have its change: a version of it may have landed since, changed. Push again with commits that apply on today's ${base}, or drop the request's tryWith if what they add has landed.`,
+          );
+        }
+        landed.push(p.node);
+        continue;
+      }
       const [, name, email] = /^(.*?)\s*<([^>]*)>$/.exec(p.user) ?? [, p.user, ""];
       const when = p.date.split(" ")[0];
       await execOk(["git", "-c", `user.name=${name}`, "-c", `user.email=${email}`, "commit", "-q", "-m", p.message], {

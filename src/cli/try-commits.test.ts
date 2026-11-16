@@ -49,3 +49,28 @@ test("importPush leaves out the push's commits that landed since, under their re
     rmSync(repo, { recursive: true, force: true });
   }
 });
+
+test("importPush leaves out a commit whose change central already has under another title, and says which one doesn't apply", async () => {
+  const repo = mkdtempSync(join(tmpdir(), "import-push-"));
+  try {
+    const git = (...args: string[]) => execOk(["git", "-c", "user.name=t", "-c", "user.email=t@t", ...args], { cwd: repo });
+    await git("init", "-q", "-b", "main");
+    writeFileSync(join(repo, "f-aaa"), "b\n");
+    writeFileSync(join(repo, "f-bbb"), "c\n");
+    await git("add", ".");
+    await git("commit", "-q", "-m", "Bug 2 - Something else entirely, r=x.");
+    const fake = (async (url: string) => {
+      if (url.includes("treeherder")) return new Response(JSON.stringify({ results: [{ revisions: [{ revision: "bbb" }, { revision: "aaa" }] }] }));
+      const node = url.split("/").pop()!;
+      return new Response(patch(node, `f-${node}`, `WIP: ${node}`));
+    }) as typeof fetch;
+    // aaa (a to b) is there; bbb (a to b) doesn't apply: f-bbb is c.
+    await assert.rejects(importPush(repo, "bbb", "main", "try-with", fake), /^Error: bbb "WIP: bbb" of try push bbb doesn't apply on today's main \(f-bbb\), which doesn't have its change/);
+    writeFileSync(join(repo, "f-bbb"), "a\n");
+    await git("commit", "-q", "-am", "Bug 3 - Reset bbb, r=x.");
+    const r = await importPush(repo, "bbb", "main", "try-with", fake);
+    assert.deepEqual([r.landed, r.shas.length], [["aaa"], 1]);
+  } finally {
+    rmSync(repo, { recursive: true, force: true });
+  }
+});
