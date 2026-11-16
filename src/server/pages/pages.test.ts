@@ -1037,6 +1037,21 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.ok(at.every((x) => x > 0) && at[0] < at[2] && at[2] < at[1], String(at));
   });
 
+  it("a fix of two patches shows its least advanced one's icon: one accepted, the other waiting for review, waits for review", () => {
+    const r = structuredClone(get("r-20261005-newtab"));
+    const st = Object.values(r.stacks)[0];
+    const first = r.patches[st.order[0]];
+    const second = { ...structuredClone(first), id: `${first.id}-2`, sha: "f".repeat(40), revision: 902 };
+    r.patches[second.id] = second;
+    st.order.splice(1, 0, second.id);
+    r.items[first.item!].state = "waiting for review";
+    first.revision = 901;
+    first.review = { revision: 901, status: "accepted", reviewers: [{ name: "smaug", status: "accepted" }], comments: [] };
+    second.review = { revision: 902, status: "needs-review", reviewers: [{ name: "smaug", status: "pending" }], comments: [] };
+    const row = rowOf(renderRequest(r, ctx, true).value, `fix-${first.item}`);
+    assert.match(row, /<span class="st review"/);
+  });
+
   it("a work item moved to another request is with the closed ones, not under Taken over by you", () => {
     const r = structuredClone(get("r-20261005-newtab"));
     const [moved, yours] = Object.values(r.items).filter((i) => i.id !== "i-annotations").slice(0, 2);

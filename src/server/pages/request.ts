@@ -491,6 +491,13 @@ function phabClass(p: PatchView, cls: StateClass): StateClass {
   return ({ published: "landed", accepted: "accepted", "needs-review": "review", draft: "review" } as const)[p.review?.status as "published" | "accepted" | "needs-review" | "draft"] ?? (p.review === undefined ? "review" : cls);
 }
 
+// A fix's row: its least advanced patch's (one accepted while another waits for review waits for review).
+function fixClass(ps: PatchView[], cls: StateClass): StateClass {
+  const rank: StateClass[] = ["draft", "review", "accepted", "landed"];
+  const classes = ps.map((p) => phabClass(p, cls));
+  return classes.reduce((a, b) => (rank.includes(a) && rank.includes(b) && rank.indexOf(b) < rank.indexOf(a) ? b : a));
+}
+
 function rowClass(r: RequestState, i: ItemView, ctx: RenderContext): StateClass {
   // Closed: ✈ handed over to someone else (moved, taken over by you), ✕ dropped by you or closed.
   if (i.state === "taken over" || r.movedTo?.[i.id]) return "handedover";
@@ -747,8 +754,8 @@ function fixRow(r: RequestState, ps: PatchView[], ctx: RenderContext): Html {
     anchor: html`id="fix-${item.id}" data-item="${item.id}"`,
     fold: `fix-${item.id}`,
     bucket: landable && itemBucket(r, item, ctx) === "ready" ? "landable" : itemBucket(r, item, ctx),
-    cls: phabClass(ps[0], rowClass(r, item, ctx)),
-    tip: closedTip(r, item) ?? (phabClass(ps[0], rowClass(r, item, ctx)) === "wait" ? waitTip(r, item, ctx) : undefined),
+    cls: fixClass(ps, rowClass(r, item, ctx)),
+    tip: closedTip(r, item) ?? (fixClass(ps, rowClass(r, item, ctx)) === "wait" ? waitTip(r, item, ctx) : undefined),
     name: html`<span class="patchlines">${names}</span>`,
     title: ps.map((p) => p.title).join("\n"),
     end: costLabel(r, item, ctx),
