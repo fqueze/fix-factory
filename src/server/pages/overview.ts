@@ -86,9 +86,6 @@ export function renderMain(requests: RequestState[], ctx: RenderContext): Html {
   const finished = byCreation.filter((r) => sectionOf(r) === "finished").sort((a, b) => (b.finishedAt ?? b.updatedAt).localeCompare(a.finishedAt ?? a.updatedAt));
   return html`<form class="ask cmd joined" method="post" action="/api/commands">${commandFields([{ cmd: "tell-factory" }], "/")}<textarea class="oneline" name="text" required rows="1" placeholder="Tell the factory… (e.g. “burn down dom/base/test”, or “Lando was down this morning, re-push what failed”)"></textarea><button class="btn">Send</button></form>
 
-  <h2>Active <span class="count">${active.length}</span></h2>
-  <div id="section-active">${active.map((r) => renderRequest(r, ctx))}</div>
-
   ${queued.length ? html`<h2>Queued <span class="count">${queued.length}</span></h2>
   <div class="simple" id="section-queued">${queued.map(
     (r) =>
@@ -97,6 +94,9 @@ export function renderMain(requests: RequestState[], ctx: RenderContext): Html {
         "/",
       )}<button class="btn small">Start now</button></form></div>`,
   )}</div>` : null}
+
+  <h2>Active <span class="count">${active.length}</span></h2>
+  <div id="section-active">${active.map((r) => renderRequest(r, ctx))}</div>
 
   ${renderRecentPushes(requests)}
 

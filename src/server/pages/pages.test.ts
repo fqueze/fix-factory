@@ -67,11 +67,11 @@ describe("overview", () => {
     const active = page.indexOf("<h2>Active");
     const queued = page.indexOf("<h2>Queued");
     const finished = page.indexOf("<h2>Finished");
-    assert.ok(active >= 0 && active < queued && queued < finished);
+    assert.ok(queued >= 0 && queued < active && active < finished, "queued first: in sight under the box");
     assert.match(page, /<h2>Finished <span class="count">3<\/span><\/h2>\n  <div id="section-finished">/, "not folded");
     assert.doesNotMatch(page, /class="archive"/);
     assert.ok(page.indexOf("r-20260930-errorsummary") > finished, "done requests are under Finished");
-    assert.ok(page.indexOf("r-20261016-popups") > queued && page.indexOf("r-20261016-popups") < finished);
+    assert.ok(page.indexOf("r-20261016-popups") > queued && page.indexOf("r-20261016-popups") < active);
     assert.ok(page.includes(cmd({ cmd: "start-now", request: "r-20261016-popups" })));
   });
 
