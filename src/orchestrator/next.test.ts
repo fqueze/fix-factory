@@ -3865,6 +3865,26 @@ describe("9. review comments", () => {
     assert.deepEqual(pushesOf("p-test-b"), [], "that push didn't have test_b's patch");
   });
 
+  it("links a test plan's push to the jobs where its tests failed, the other failed jobs left out", () => {
+    const sc = stacked();
+    const planKey = sc.view().jobs.find((j) => j.purpose.what === "plan-pushes")!.purpose.key;
+    sc.complete(planKey, { report: { pushes: [{ purpose: "verify", tryArgs: ["fuzzy", "-q", "x"], rebuild: 5 }], feedback: [] } });
+    const [dry] = sc.settle();
+    const push = sc.purpose(dry).push!;
+    sc.complete(dry, { output: { command: ["./mach", "try", "fuzzy"], taskCount: 5, tasks: [], tryTaskConfig: {}, commits: [sha("d")], warnings: [] } });
+    sc.testRuns.set("a/test_a.js", [{ jobName: "test-linux2404-64/opt-mochitest-plain-1", jobs: 2, passed: 1, passedOnRetry: 0, failed: 1 }]);
+    sc.add({ type: "user-done", request: ID, key: `approve-push:${push}` });
+    sc.add({ type: "try-pushed", request: ID, push, rev: "fed", url: "u" });
+    sc.add({ type: "try-job-failed", request: ID, push, taskId: "T1", retryId: 1, jobName: "test-linux2404-64/opt-mochitest-plain-1", platform: "linux2404-64/opt", result: "testfailed" });
+    sc.add({ type: "try-job-failed", request: ID, push, taskId: "T2", jobName: "test-linux2404-64/opt-mochitest-plain-2", platform: "linux2404-64/opt", result: "testfailed" });
+    sc.add({ type: "try-finished", request: ID, push, result: "failures", summary: "2 failed jobs" });
+    sc.settle();
+    sc.complete(`try-table:${push}:final`, { output: table() });
+    sc.settle();
+    const pushes = JSON.parse(sc.plan(sc.view().jobs.findLast((j) => j.purpose.key.startsWith("test-plan:p-test-a:"))!.purpose.key).files![1].content);
+    assert.deepEqual(pushes[0].failedJobs, [{ jobName: "test-linux2404-64/opt-mochitest-plain-1", url: "https://treeherder.mozilla.org/jobs?repo=try&revision=fed&selectedTaskRun=T1.1" }]);
+  });
+
   it("writes each accepted patch's test plan, which you set on its revision with a click", () => {
     const sc = inReview();
     const key = sc.view().jobs.find((j) => !j.end && j.purpose.key.startsWith("test-plan:p-test-a:"))!.purpose.key;

@@ -384,6 +384,13 @@ class Planner {
         thisVersion: commits.some((c) => ownShas.some((x) => same(c, x))),
         ...(runsOf[i] ? { runs: this.out<TestRuns[]>(runsOf[i]!) } : {}),
       }));
+      // The Treeherder link of each job where its tests failed: a plan names the job a failure is in. Outside the key: a
+      // plan isn't rewritten for them.
+      const withFailedJobs = (x: (typeof results)[number], push: string) => {
+        const failed = new Set((x.runs ?? []).flatMap((t) => t.configs.filter((c) => c.failed > 0).map((c) => c.jobName)));
+        const jobs = this.view.tryFailures.filter((f) => f.push === push && failed.has(f.jobName));
+        return jobs.length ? { ...x, failedJobs: jobs.map((f) => ({ jobName: f.jobName, url: `https://treeherder.mozilla.org/jobs?repo=try&revision=${x.rev}&selectedTaskRun=${f.taskId}.${f.retryId ?? 0}` })) } : x;
+      };
       // The version changes with the prompt: an earlier version's session isn't resumed.
       const version = `test-plan:${p.id}:${TEST_PLAN_VERSION}:`;
       // passes-v1: plans written before told to confirm a push's runs with fx-tests --test are rewritten in their session;
@@ -401,7 +408,7 @@ class Planner {
       const dir = author?.cwd ?? p.worktree;
       const files = [
         { path: investigationFile, content: JSON.stringify({ tests: item.group.tests, failure: item.group.message, ...inv, ...(alsoFixes.length ? { alsoFixes } : {}) }, null, 2) + "\n" },
-        { path: pushesFile, content: JSON.stringify(results, null, 2) + "\n" },
+        { path: pushesFile, content: JSON.stringify(results.map((x, i) => withFailedJobs(x, had[i].push.id)), null, 2) + "\n" },
       ];
       // New results go to the session that wrote it, which keeps what you asked of it.
       const last = this.view.jobs.findLast((j) => j.purpose.what === "test-plan" && j.purpose.patch === p.id && j.purpose.key.startsWith(version) && j.sessionId && succeeded(j));

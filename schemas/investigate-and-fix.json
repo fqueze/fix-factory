@@ -280,6 +280,11 @@
           },
           "finding": {
             "type": "string"
+          },
+          "permalinks": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "For a CI profile: the profiler.firefox.com link of each marker that shows the finding, from `profiler-cli marker info <m> --permalink` (its Permalink line), the profile loaded from its artifact URL."
           }
         },
         "required": [
