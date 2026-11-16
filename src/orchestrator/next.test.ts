@@ -301,7 +301,22 @@ describe("2. first signal", () => {
     const sc = burndown();
     signalWorktree(sc);
     sc.complete("annotations", { output: [ann("debug", "fail-if")] });
-    assert.deepEqual(sc.settle(), ["collect:folder:folder"]);
+    // First a push of test-verify-path tasks on the folder: what fails test-verify before anything is fixed.
+    assert.deepEqual(sc.settle(), ["plan:verifypath"]);
+    assert.match(String(sc.plan("plan:verifypath").agent!.vars!.goal), /'test-verify-path"` with dom\/base\/test as its only path and no `--rebuild`/);
+    sc.complete("plan:verifypath", { report: { pushes: [{ purpose: "test-verify", tryArgs: ["fuzzy", "-q", "'test-verify-path", "dom/base/test"], rebuild: 1 }], feedback: [] } });
+    sc.settle();
+    sc.complete("dry-run:verifypath", { output: { command: ["./mach", "try", "fuzzy"], taskCount: 9, tasks: [], tryTaskConfig: {}, commits: [], warnings: [] } });
+    sc.settle();
+    assert.deepEqual(sc.open(), ["approve-push:verifypath"]);
+    assert.equal(sc.state().step, "first signal");
+    sc.add({ type: "user-done", request: ID, key: "approve-push:verifypath" });
+    sc.settle();
+    sc.complete("push:verifypath", { output: { landoJobId: 7, landoUrl: "l", treeherderUrl: "t" } });
+    sc.settle();
+    sc.add({ type: "try-pushed", request: ID, push: "verifypath", rev: "def", url: "u" });
+    // Then the work list, from the folder's history on central too.
+    assert.ok(sc.settle().includes("collect:folder:folder"));
     assert.equal(sc.state().step, "work list");
     assert.deepEqual(sc.plan("collect:folder:folder").cli?.args, ["collect", "dom/base/test"]);
   });
@@ -315,6 +330,8 @@ describe("2. first signal", () => {
     assert.deepEqual(sc.settle(), ["author:i-annotations:initial"]);
     // No DEBUG commit: the group closes and the work list comes from central.
     sc.complete("author:i-annotations:initial", { report: { summary: "the skip-if was already gone", feedback: [] } });
+    sc.settle();
+    sc.complete("plan:verifypath", { report: { pushes: [], feedback: [] } });
     sc.settle();
     assert.equal(sc.state().step, "work list");
     sc.complete("collect:folder:folder", { output: [failure("dom/base/test/test_b.html", "boom")] });
@@ -4378,6 +4395,8 @@ describe("burndown stack", () => {
     sc.complete("wt:signal", { output: { name: `${ID}-signal`, path: `/wt/${ID}-signal`, branch: `${ID}-signal` } });
     sc.settle();
     sc.complete("annotations", { output: [] });
+    sc.settle();
+    sc.complete("plan:verifypath", { report: { pushes: [], feedback: [] } });
     sc.settle();
     sc.complete("collect:folder:folder", { output: [failure("a/test_a.js", "boom"), failure("a/sub/test_b.js", "bang")] });
     sc.settle();

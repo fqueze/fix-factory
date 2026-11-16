@@ -663,7 +663,8 @@ class Planner {
     const skips = this.skipIfs(wt.path);
     if (!skips) return;
     if (skips.length === 0) {
-      this.note(`No skip-if in ${this.s.folder}: the work list comes from its failures on central.`);
+      if (!redone && !this.verifyPathPush(wt)) return;
+      this.note(`No skip-if in ${this.s.folder}: the work list comes from its failures on central and a test-verify-path push.`);
       setStep("work list");
       if (redone && !TERMINAL.includes(this.s.items[ANNOTATIONS_ITEM].state)) this.event(this.ev("item-state", { item: ANNOTATIONS_ITEM, state: "left as-is" }));
       return;
@@ -674,7 +675,8 @@ class Planner {
     });
     if (classified.some((c) => !c)) return;
     if (!classified.some((c) => c!.classification.kind !== "unclear")) {
-      this.note("Every skip-if is unclear: the work list comes from the folder's failures on central.");
+      if (!redone && !this.verifyPathPush(wt)) return;
+      this.note("Every skip-if is unclear: the work list comes from the folder's failures on central and a test-verify-path push.");
       setStep("work list");
       if (redone && !TERMINAL.includes(this.s.items[ANNOTATIONS_ITEM].state)) this.event(this.ev("item-state", { item: ANNOTATIONS_ITEM, state: "left as-is" }));
       return;
@@ -695,7 +697,8 @@ class Planner {
     if (!debug) {
       const author = this.authorJobs(ANNOTATIONS_ITEM).filter(succeeded).at(-1);
       const why = author ? this.rep<WriteAnnotationPatchesReport>(author).summary : `the group was ${item.state}`;
-      this.note(`No DEBUG commit removing flakiness skips (${why}): the work list comes from the folder's failures on central.`);
+      if (!redone && !this.verifyPathPush(wt)) return;
+      this.note(`No DEBUG commit removing flakiness skips (${why}): the work list comes from the folder's failures on central and a test-verify-path push.`);
       setStep("work list");
       return;
     }
@@ -745,6 +748,29 @@ class Planner {
   }
 
   // Plans pushes and dry-runs them. A push you declined stays out; the plan's others don't depend on it.
+  // No un-skip push: one of test-verify-path tasks (bug 2086055) on the folder, so what fails test-verify there is known
+  // before anything is fixed. Done once it's made, or declined.
+  private verifyPathPush(wt: { path: string; branch: string }): boolean {
+    const e = this.annotationsEpoch();
+    const file = dataPath(this.config, this.s.id, "no-push-yet.json");
+    const planned = this.planPushes(
+      `plan:verifypath${e}`,
+      {
+        goal: `find the tests of ${this.s.folder} that fail test-verify, before anything is fixed: one push of \`-q "'test-verify-path"\` with ${this.s.folder} as its only path and no \`--rebuild\` (each test-verify-path task verifies every test under the path, in chunks sized to it; it needs no \`--full\`)`,
+        failuresFile: file,
+        initialPushFile: file,
+        branch: wt.branch,
+        worktree: wt.path,
+        base: this.config.baseRef,
+        since: "",
+      },
+      { cwd: wt.path, files: [{ path: file, content: '{"note": "none: this is the first push"}\n' }] },
+      (i, count) => `verifypath${e.replaceAll("@", "-")}${count === 1 ? "" : `-${i + 1}`}`,
+      wt.path,
+    );
+    return planned !== undefined && planned.made.every((id) => this.s.pushes[id]?.rev);
+  }
+
   private planPushes(
     key: string,
     vars: Record<string, string>,
@@ -897,7 +923,7 @@ class Planner {
 
   private signalPushes(): PushId[] {
     // A declined un-skip push gives no signal: the work list then comes from the folder's history.
-    return Object.keys(this.s.pushes).filter((id) => (id === "initial" || id.startsWith("unskip")) && this.s.pushes[id].declined === undefined);
+    return Object.keys(this.s.pushes).filter((id) => (id === "initial" || id.startsWith("unskip") || id.startsWith("verifypath")) && this.s.pushes[id].declined === undefined);
   }
 
   private workList(): void {
@@ -907,7 +933,8 @@ class Planner {
     const goal = this.s.text.trim() || "find the failures to fix";
     const e = this.stepEpoch("work list");
     let firstRunDone = false;
-    if (pushes.length === 0 && this.s.kind === "burndown") {
+    // Without an un-skip push, from the folder's failures on central too.
+    if (pushes.every((id) => id.startsWith("verifypath")) && this.s.kind === "burndown") {
       const groups = this.groups("folder", `folder${e}`, this.s.folder ?? "");
       if (groups) {
         this.createItems(groups);
