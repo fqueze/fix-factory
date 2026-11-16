@@ -1444,6 +1444,10 @@ describe("4b. try repro", () => {
     assert.deepEqual(sc.plan("try-with:164da8583219").cli?.args, ["import-push", "164da8583219", "--cwd", config.firefoxRepo, "--base", config.baseRef, "--branch", `${ID}-try-with`]);
     sc.complete("try-with:164da8583219", { output: { branch: `${ID}-try-with`, shas: [sha("7"), sha("8")] } });
     sc.settle();
+    // Imported again for the stack: those that landed since are left out.
+    const fresh = keyOf(sc, "try-with:164da8583219:");
+    sc.complete(fresh, { output: { branch: `${ID}-try-with`, shas: [sha("7"), sha("8")] } });
+    sc.settle();
     const tb = keyOf(sc, "try-branch:root:");
     assert.deepEqual(sc.plan(tb).cli?.args.slice(-2), [sha("7"), sha("8")]);
     sc.complete(tb, { output: { branch: `${ID}-root-try-${tb.split(":")[2]}`, head: sha("f"), commits: [] } });
@@ -1456,6 +1460,22 @@ describe("4b. try repro", () => {
     for (const s of [sc, without]) s.complete(s === sc ? planKey : withoutKey, { report: { pushes: [{ purpose: "p", tryArgs: ["fuzzy", "-q", "x"], rebuild: 1 }], feedback: [] } });
     const ids = [sc, without].map((s) => s.purpose(s.settle().find((k) => k.startsWith("dry-run:"))!).push);
     assert.notEqual(ids[0], ids[1]);
+  });
+
+  it("a push commit that conflicts on top of the stack isn't left in progress in its worktree, and asks you", () => {
+    const sc = stacked(undefined, { tryWith: "164da8583219" });
+    sc.complete("try-with:164da8583219", { output: { branch: `${ID}-try-with`, shas: [sha("7")] } });
+    sc.settle();
+    sc.complete(keyOf(sc, "try-with:164da8583219:"), { output: { branch: `${ID}-try-with`, shas: [sha("7")] } });
+    sc.settle();
+    const tb = keyOf(sc, "try-branch:root:");
+    const job = sc.complete(tb, { output: { branch: "b", head: sha("f"), commits: [], conflict: { sha: sha("7"), files: ["taskcluster/config.yml"] }, conflictLeft: true } });
+    const [abort] = sc.settle();
+    assert.equal(abort, `abort:${job}`);
+    assert.equal(sc.plan(abort).cwd, `/wt/${ID}-root`);
+    sc.complete(abort, { output: "" });
+    sc.settle();
+    assert.ok(sc.open().includes(`failed:${job}`));
   });
 
   it("puts a waiting group's DEBUG commits on top of the stack's verify push, then gives its author the results", () => {

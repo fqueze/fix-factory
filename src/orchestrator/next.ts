@@ -2244,19 +2244,20 @@ class Planner {
 
   // Like the stack's assembly: a conflict goes to resolve-conflict, then the rest is assembled. One it can't resolve
   // (the approach doesn't fit) asks you on the group's row, and the push waits.
-  // The commits of the try push the request was asked with (config tryWith), imported once as a branch: undefined
-  // without one, null while it's imported.
-  private tryWithBranch(): { branch: string; shas: string[] } | undefined | null {
+  // The commits of the try push the request was asked with (config tryWith), imported as a branch: undefined without
+  // one, null while it's imported. Imported again for each new stack (`fresh`, its hash): those that landed on central
+  // since are left out.
+  private tryWithBranch(fresh?: string): { branch: string; shas: string[] } | undefined | null {
     const tryWith = typeof this.s.config.tryWith === "string" ? this.s.config.tryWith : undefined;
     if (!tryWith) return undefined;
-    const imported = this.want(`try-with:${tryWith}`, () => this.cli("try-with", "try.ts", ["import-push", tryWith, "--cwd", this.config.firefoxRepo, "--base", this.config.baseRef, "--branch", `${this.s.id}-try-with`], { cwd: this.config.firefoxRepo }));
+    const imported = this.want(`try-with:${tryWith}${fresh ? `:${fresh}` : ""}`, () => this.cli("try-with", "try.ts", ["import-push", tryWith, "--cwd", this.config.firefoxRepo, "--base", this.config.baseRef, "--branch", `${this.s.id}-try-with`], { cwd: this.config.firefoxRepo }));
     return imported ? this.out<{ branch: string; shas: string[] }>(imported) : null;
   }
 
   private tryBranch(info: StackInfo, base: string, e: string): { branch: string } | undefined {
     const groups = this.debugGroups();
     // A try push whose own commits the fixes need (the jobs they add): on top of the stack, in every push of it.
-    const pushCommits = this.tryWithBranch();
+    const pushCommits = this.tryWithBranch(info.hash);
     if (pushCommits === null) return undefined;
     const tryWith = this.s.config.tryWith as string | undefined;
     const withShas = pushCommits?.shas ?? [];
@@ -2273,6 +2274,8 @@ class Planner {
       const { sha, files } = o.conflict;
       const owner = groups.find((g) => g.commits.includes(sha));
       if (!owner) {
+        // Not left in progress: the stack's other jobs run in its worktree.
+        if (!this.want(`abort:${cur.job}`, () => this.cli("abort", "sh", ["-c", ABORT_CHERRY_PICK], { cwd: info.wt, purpose: { stack: info.id } }))) return undefined;
         this.raise(`failed:${cur.job}`, { action: `The commits of try push ${tryWith?.slice(0, 12)} don't apply on top of the stack`, detail: `${sha.slice(0, 12)} conflicts in ${files.join(", ")}`, job: cur.job });
         return undefined;
       }
