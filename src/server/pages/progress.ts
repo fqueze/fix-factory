@@ -147,7 +147,7 @@ export function flagAsk(r: RequestState, i: ItemView, n: NeedsUser): Html {
   if (reviewLimitFlag(r, i.id) === n) {
     const report = i.lastReport?.prompt === "review-patch" ? (i.lastReport.report as ReviewPatchReport) : undefined;
     const findings = report?.findings.filter((f) => f.severity === "must-fix").map((f) => `${f.file ? `${f.file}${f.line ? `:${f.line}` : ""}: ` : ""}${f.text}`) ?? n.detail.split("; ");
-    return html`<p>Its critical reviews still find problems they say must be fixed. Read them and the patch, then accept the patch as it is, or tell its author what to change.</p><ul class="findings">${findings.map((f) => html`<li>${linkify(f, i.group.tests)}</li>`)}</ul>`;
+    return html`<p>Its critical reviews still find problems they say must be fixed. Read them and the patch, then accept the patch as it is, or tell its author what to change below. Answer this before resubmitting: a change makes a new version to resubmit.</p><ul class="findings">${findings.map((f) => html`<li>${linkify(f, i.group.tests)}</li>`)}</ul>`;
   }
   switch (actionKind(n, r)) {
     case "stopped":

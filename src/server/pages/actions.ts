@@ -125,7 +125,8 @@ export function flagControls(r: RequestState, n: NeedsUser, ctx: RenderContext):
       const accept = item !== undefined && reviewLimitFlag(r, item) === n;
       controls = buttons(
         accept ? commandButton(r.id, { cmd: "accept-review", item }, "Accept the patch as it is", back, true, "Takes the patch without another critical review") : retry,
-        job?.kind === "agent" && !isAuthorJob(job) ? null : talk,
+        // Its findings are its author's to address: what you tell it goes to that author, as on its row.
+        job?.kind === "agent" && !isAuthorJob(job) && !accept ? null : talk,
         accept ? null : handBack,
         // A script of the request's own (a try dry run, say) that later work made moot: a note, not a question.
         item === undefined && job?.kind !== "agent" ? dismissButton(r.id, n.key, back) : null,

@@ -400,6 +400,7 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.match(rowOf(h, "item-i-race"), /<\/details><div class="ask-you"><p>Its critical reviews still find problems[^<]*<\/p><ul class="findings"><li>[^<]+<\/li>/, "the question in sight, without opening the row");
     assert.match(rowOf(h, "item-i-race"), /<span class="st find" title="Needs you"><\/span>/);
     assert.match(rowOf(h, "item-i-race"), />Accept the patch as it is</);
+    assert.ok(rowOf(h, "item-i-race").includes(cmd({ cmd: "continue", request: "r-20261015-downloads-stuck", item: "i-race" })), "or tell its author what to change");
     assert.equal(state("i-idle"), "stalled: nothing running");
     assert.match(rowOf(h, "item-i-idle"), /title="Resumes its author(?:'|&#39;)s session with your message; its patch then goes through lint and critical review again">Send</);
     assert.ok(rowOf(h, "item-i-idle").includes(cmd({ cmd: "continue", request: "r-20261015-downloads-stuck", item: "i-idle" })));
