@@ -42,7 +42,8 @@ export function splitProblem(s: RequestState, parts: SplitPart[]): string | unde
 export function moveProblem(s: RequestState, target: RequestState | undefined, items: ItemId[]): string | undefined {
   if (!target) return "no such request";
   if (target.step === "done") return `${target.id} is done`;
-  const related = (a: RequestState, b: RequestState) => a.splitFrom !== undefined && a.splitFrom === b.splitFrom;
+  // Requests of one split, or one and a request split off from it (split-off).
+  const related = (a: RequestState, b: RequestState) => (a.splitFrom !== undefined && a.splitFrom === b.splitFrom) || a.splitFrom === b.id || b.splitFrom === a.id;
   if (!related(s, target)) return `${target.id} isn't from the same split: only groups of one split move between its requests`;
   const taken = items.find((i) => target.items[i] && !TERMINAL_STATES.includes(target.items[i].state));
   if (taken) return `${target.id} has a group ${taken} already`;

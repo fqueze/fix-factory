@@ -336,6 +336,13 @@ describe("commands", () => {
     assert.equal(original.items["i-b"].state, "taken over");
     assert.equal(original.items["i-a"].state, "in stack", "its own, landed patch stays");
     assert.deepEqual(original.movedTo, { "i-b": id });
+    // A group left behind moves there afterwards.
+    sc.add({ type: "item-created", request: ID, item: "i-c", folder: "c", group: { message: "boom", tests: ["c/test_c.js"], configs: ["linux"] } });
+    const all = [...sc.events, ...byRequest.get(ID)!];
+    const move = commandEffects(cmd({ cmd: "move-groups", to: id, groups: [{ item: "i-c", why: "Wayland only too" }], reason: "left behind" }), {
+      config, state: foldEvents(all), view: buildView(all), exists: () => true, plan: () => undefined, events: (x) => (x === ID ? all : byRequest.get(x)!), other: () => made,
+    });
+    assert.ok(move.some((e) => e.type === "event" && e.event.type === "groups-moved"), JSON.stringify(move.find((e) => e.type === "event" && e.event.type === "command-executed")));
   });
 
   it("split-request makes a request per part with its groups' history and the pushes made, and archives this one", () => {
