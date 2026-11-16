@@ -507,6 +507,8 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
       break;
     case "resume-agent": {
       const error = resume(c.item, "recovery", c.message);
+      // Its ⚑s are answered by what you approved, as by a message of yours.
+      if (!error) clearItemFlags(c.item);
       done(!error, error ?? c.reason);
       break;
     }
@@ -536,6 +538,7 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
     }
     case "set-state":
       ev({ type: "item-state", item: c.item, state: c.state, detail: c.reason.slice(0, 300) });
+      clearItemFlags(c.item);
       done(true);
       break;
     case "redo-step":

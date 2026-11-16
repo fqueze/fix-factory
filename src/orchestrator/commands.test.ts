@@ -528,6 +528,17 @@ describe("commands", () => {
     assert.equal(executed(sc).at(-1)!.ok, true);
   });
 
+  it("a recovery plan's set-state and resume-agent answer the item's questions, as your message would", () => {
+    const sc = withPatch();
+    sc.add({ type: "item-state", request: ID, item: "i-a", state: "left as-is" });
+    sc.add({ type: "needs-user", request: ID, key: "question:j-q", action: "Its author asks you", detail: "d", job: "j-q", item: "i-a" });
+    run(sc, cmd({ cmd: "resume-agent", item: "i-a", message: "Do the harness fix.", reason: "r" } as never));
+    assert.deepEqual(sc.open(), []);
+    sc.add({ type: "needs-user", request: ID, key: "question:j-q2", action: "Its author asks you", detail: "d", job: "j-q2", item: "i-a" });
+    run(sc, cmd({ cmd: "set-state", item: "i-a", state: "fixed", reason: "covered by the harness fix" } as never));
+    assert.deepEqual(sc.open(), []);
+  });
+
   it("retry is retry-job without a reason, never for a try push", () => {
     const sc = withPatch();
     sc.startJob({ purpose: { key: "prior-art:i-a", what: "prior-art", item: "i-a" }, kind: "script", name: "bugzilla.ts prior-art", item: "i-a", cwd: "/r", cli: { tool: "bugzilla.ts", args: ["prior-art"] } });
