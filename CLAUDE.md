@@ -27,6 +27,12 @@ patches on Phabricator. Node 24 + TypeScript, no frameworks, no dependencies bey
   broken edit keeps the running version). Every edit goes live: check it on live data, not only in tests.
 - Commits: one per change, its message a sentence saying what the factory now does. Fold fixes into the commit they
   fix rather than adding "fix" commits.
+- Words on the page (what the UI shows; code, comments and prompts keep their own names): a **request** is what
+  you asked the factory to do (one box); a **work item**, or **item** once the context says it, is a piece of
+  it, usually one test's failures, with its patches (the code's "group", "item"); a **job** is something the factory
+  runs (an agent, a build, a try push); a **test failure** is what a test reported. Never "group" on the page, nor
+  "failure" alone for a job that failed. A message says what it waits for or what went wrong, not a list of what it
+  might be.
 - Planner tests use the `Scenario` testkit (`src/orchestrator/testkit.ts`): `settle()` returns the keys of the jobs
   it starts, `complete(key, { output | report })` finishes one.
 
