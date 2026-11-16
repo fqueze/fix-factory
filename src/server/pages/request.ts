@@ -195,7 +195,7 @@ export function renderRequestBody(r: RequestState, ctx: RenderContext): Html {
     }
     ${toStack.some((i) => itemBucket(r, i, ctx) !== "closed") ? html`${stacks.length || loose.length ? html`<h3>Not in a stack yet</h3>` : null}${groupRows(r, toStack, ctx, false)}` : null}
     ${landedRows.length ? html`<div class="landed-section"><h3 class="landed-head">Landed</h3><div class="landed-rows compact-rows"><div class="rows">${landedRows.map((x) => x.row)}</div></div></div>` : null}
-    ${closedSection(handOffs(r, ctx), closedFold(r, items.filter((i) => itemBucket(r, i, ctx) === "closed" && i.state !== "taken over"), ctx))}
+    ${closedSection(handOffs(r, ctx), closedFold(r, items.filter((i) => (itemBucket(r, i, ctx) === "closed" && i.state !== "taken over") || r.movedTo?.[i.id] !== undefined), ctx))}
     ${stacks.length || loose.length || items.length || landed.length ? html`<hr class="part">` : null}
     ${requestJobs(r, ctx)}
     ${notesFold(r, plans)}
@@ -403,9 +403,10 @@ function groupRows(r: RequestState, items: ItemView[], ctx: RenderContext, withC
   }</div>`;
 }
 
-// The groups you took over, with their patches, and the prompt for your session to copy (folded below).
+// The groups you took over, with their patches, and the prompt for your session to copy (folded below). Those moved to
+// another request are with the closed ones: the other request works on them.
 function handOffs(r: RequestState, ctx: RenderContext): Html | null {
-  const taken = Object.values(r.items).filter((i) => i.state === "taken over");
+  const taken = Object.values(r.items).filter((i) => i.state === "taken over" && r.movedTo?.[i.id] === undefined);
   if (!taken.length) {
     return null;
   }

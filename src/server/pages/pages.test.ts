@@ -1037,6 +1037,19 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.ok(at.every((x) => x > 0) && at[0] < at[2] && at[2] < at[1], String(at));
   });
 
+  it("a work item moved to another request is with the closed ones, not under Taken over by you", () => {
+    const r = structuredClone(get("r-20261005-newtab"));
+    const [moved, yours] = Object.values(r.items).filter((i) => i.id !== "i-annotations").slice(0, 2);
+    for (const i of [moved, yours]) i.state = "taken over";
+    r.movedTo = { [moved.id]: "r-20261116-other" };
+    // Out of the stack, as the rewrite once they left leaves them.
+    for (const st of Object.values(r.stacks)) st.order = st.order.filter((pid) => ![moved.id, yours.id].includes(r.patches[pid].item ?? ""));
+    const h = renderRequest(r, ctx, true).value;
+    const taken = h.slice(h.indexOf("<h3>Taken over by you</h3>"), h.indexOf('data-fold="closed-groups"'));
+    assert.ok(taken.length > 0 && !taken.includes("r-20261116-other"), "yours only");
+    assert.ok(h.slice(h.indexOf('data-fold="closed-groups"')).includes("r-20261116-other"), "the moved one with the closed ones");
+  });
+
   it("the last landed patches come first, even when their parent on Phabricator is still in review", () => {
     const r = structuredClone(get("r-20261005-newtab"));
     const ids = Object.values(r.patches).filter((p) => p.item).map((p) => p.id).slice(0, 3);
