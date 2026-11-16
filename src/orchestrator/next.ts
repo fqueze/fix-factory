@@ -884,7 +884,9 @@ class Planner {
         if (!pushed) continue;
         const o = this.out<{ rev?: string; landoJobId?: number; dryRun?: boolean }>(pushed);
         if (o.landoJobId !== undefined && !o.rev) {
-          this.want(`watch:${push.id}`, () => this.watch(push.id, ["--lando", String(o.landoJobId)]));
+          // A push made again (you asked, its landing failed on Lando's side) is watched anew: its first one's watch is done.
+          const first = this.view.byKey.get(`push:${push.id}`)!.find(succeeded)!;
+          this.want(first.job === pushed.job ? `watch:${push.id}` : `watch:${push.id}:${pushed.job}`, () => this.watch(push.id, ["--lando", String(o.landoJobId)]));
         }
         continue;
       }

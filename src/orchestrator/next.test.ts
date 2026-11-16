@@ -297,6 +297,30 @@ describe("2. first signal", () => {
     });
   });
 
+  it("a push made again after its Lando landing failed is watched anew", () => {
+    const sc = burndown();
+    signalWorktree(sc);
+    sc.complete("annotations", { output: [ann("debug", "fail-if")] });
+    sc.settle();
+    sc.complete("plan:verifypath", { report: { pushes: [{ purpose: "test-verify", tryArgs: ["fuzzy", "-q", "'test-verify-path", "dom/base/test"], rebuild: 1 }], feedback: [] } });
+    sc.settle();
+    sc.complete("dry-run:verifypath", { output: { command: ["./mach", "try", "fuzzy"], taskCount: 9, tasks: [], tryTaskConfig: {}, commits: [], warnings: [] } });
+    sc.settle();
+    sc.add({ type: "user-done", request: ID, key: "approve-push:verifypath" });
+    sc.settle();
+    sc.complete("push:verifypath", { output: { landoJobId: 7, landoUrl: "l", treeherderUrl: "t" } });
+    assert.deepEqual(sc.settle(), ["watch:verifypath"]);
+    sc.complete("watch:verifypath", { exitCode: 1, error: "Lando job 7 failed: hg push: Connection closed" });
+    sc.settle();
+    sc.complete("watch:verifypath", { exitCode: 1, error: "Lando job 7 failed: hg push: Connection closed" });
+    sc.settle();
+    // You asked for it again (a recovery plan's retry-job): another landing.
+    sc.startJob(sc.plan("push:verifypath"));
+    const again = sc.complete("push:verifypath", { output: { landoJobId: 8, landoUrl: "l", treeherderUrl: "t" } });
+    assert.deepEqual(sc.settle(), [`watch:verifypath:${again}`]);
+    assert.deepEqual(sc.plan(`watch:verifypath:${again}`).cli?.args.slice(0, 3), ["watch", "--lando", "8"]);
+  });
+
   it("without skip-ifs, the work list comes from the folder's history on central", () => {
     const sc = burndown();
     signalWorktree(sc);
