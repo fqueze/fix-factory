@@ -910,7 +910,7 @@ describe("one fixture per step of docs/MVP.md", () => {
   it("7. meta bug: a description too long for enter_bug.cgi's URL is left out of it, to copy from its Description line", () => {
     const r = structuredClone(get("r-20261008-permissions"));
     const short = renderRequest(r, ctx, true).value;
-    assert.match(short, /data-copy="desc-text-meta">Copy</);
+    assert.match(short, /<textarea hidden id="desc-text-r-20261008-permissions-meta">[^<]+<\/textarea><button type="button" class="btn small" data-copy="desc-text-r-20261008-permissions-meta">Copy</, "its id has its request's: a page shows several requests' meta bugs");
     assert.doesNotMatch(short, /too long for its URL/);
     r.metaBug!.draft!.description = "x".repeat(9000);
     const long = renderRequest(r, ctx, true).value;

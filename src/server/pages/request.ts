@@ -264,7 +264,7 @@ function metaBugLine(r: RequestState, back: string, ctx: RenderContext): Html {
       ? html`· <span class="sub">to file once the stack's ${plural(unfiled, "other bug")} ${unfiled === 1 ? "is" : "are"} filed</span>`
       : html`· <a class="bug tofile" data-patch="meta" href="${metaBugUrl(r, m.draft, ctx)}" target="_blank" rel="noopener">Bug to file</a>`;
   return html`<div class="box"><h4>Meta bug${required ? null : html` <span class="sub">(optional)</span>`} ${link} ${m.draft ? html`· “${m.draft.summary}”` : null}</h4>${
-    m.draft ? html`${description("meta", m.draft.description, !unfiled && descriptionLeftOut(metaBugUrl(r, m.draft, ctx)))}${revisions(r, "meta")}` : null
+    m.draft ? html`${description(r, "meta", m.draft.description, !unfiled && descriptionLeftOut(metaBugUrl(r, m.draft, ctx)))}${revisions(r, "meta")}` : null
   }${bugBox(r.id, "meta", back, "row")}</div>`;
 }
 
@@ -946,8 +946,10 @@ function requestJobs(r: RequestState, ctx: RenderContext): Html | null {
   return jobs.length ? html`<details class="fold" data-fold="jobs"><summary>${plural(jobs.length, "task")}${foldCost(costOf(r, jobs, ctx))}</summary>${foldContent(r, ctx, "jobs", () => html`<div class="jobs">${jobs.map((j) => jobLine(r, j, ctx))}</div>`)}</details>` : null;
 }
 
-// A bug draft's description, its markdown to copy: to paste in the form when it's too long for the form's URL.
-function description(id: string, text: string, leftOut: boolean): Html {
+// A bug draft's description, its markdown to copy: to paste in the form when it's too long for the form's URL. Its id
+// has its request's: a page shows several requests' meta bugs, and a split-off request keeps its patches' ids.
+function description(r: RequestState, patch: string, text: string, leftOut: boolean): Html {
+  const id = `${r.id}-${patch}`;
   return html`<details data-fold="desc-${id}"><summary>Description <textarea hidden id="desc-text-${id}">${text}</textarea><button type="button" class="btn small" data-copy="desc-text-${id}">Copy</button>${
     leftOut ? html` <span class="sub">not in the form: too long for its URL, paste it there</span>` : null
   }</summary><div class="desc">${md(text)}</div></details>`;
@@ -957,7 +959,7 @@ function bugDraftBox(r: RequestState, p: PatchView, back: string, ctx: RenderCon
   const d = p.bugDraft!;
   return html`<div class="box tofile">
     <h4>${d.product}::${d.component} · “${d.summary}”</h4>
-    ${description(p.id, d.description, descriptionLeftOut(enterBugUrl(d, ctx)))}
+    ${description(r, p.id, d.description, descriptionLeftOut(enterBugUrl(d, ctx)))}
     ${revisions(r, p.id)}${bugBox(r.id, p.id, back, "row")}
   </div>`;
 }
