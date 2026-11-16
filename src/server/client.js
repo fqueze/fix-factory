@@ -187,6 +187,10 @@
         });
         el.replaceWith(fresh);
         reopenFolds(fresh);
+        // One that came open without its conversation on the page yet.
+        fresh.querySelectorAll("details[data-watch][open]").forEach(function (d) {
+          if (!d.querySelector(".activity").dataset.text) loadActivity(d);
+        });
       })
       .catch(function (e) {
         if (e.status === 404) el.remove();
@@ -235,10 +239,7 @@
 
   // An agent's conversation: loaded when its job line opens, then reloaded while it runs and stays open.
   function loadActivity(d) {
-    fetch(d.dataset.watch)
-      .then(function (r) {
-        return r.text();
-      })
+    fetchText(d.dataset.watch)
       .then(function (text) {
         var box = d.querySelector(".activity");
         // Unchanged: left alone (replacing it would reset its scrollbars and selection).
@@ -255,48 +256,60 @@
         });
         if (expanded) box.querySelector("[data-expand]").classList.add("open");
       })
-      .catch(function () {});
+      .catch(function () {
+        // The server restarting: again a moment later, while it's still open.
+        setTimeout(function () {
+          if (d.isConnected && d.open && !d.querySelector(".activity").dataset.text) loadActivity(d);
+        }, 3000);
+      });
+  }
+  // What a fold shows once it's open, fetched when it opens.
+  function foldOpened(d) {
+    // A fold's contents, rendered by the server only once it's open.
+    if (d.matches && d.matches("details") && d.open) {
+      Array.prototype.forEach.call(d.querySelectorAll(".lazy[data-src]"), function (box) {
+        if (box.closest("details") !== d || box.dataset.loading) return;
+        box.dataset.loading = "1";
+        fetchText(box.dataset.src).then(
+          function (text) {
+            if (!box.isConnected) return;
+            var fresh = parse(text);
+            var parent = box.parentNode;
+            box.replaceWith(fresh);
+            reopenFolds(parent);
+            // Those it came with open fire no toggle event.
+            parent.querySelectorAll("details[open]").forEach(foldOpened);
+          },
+          function () {
+            delete box.dataset.loading;
+          }
+        );
+      });
+    }
+    if (d.matches && d.matches("details[data-watch]") && d.open) loadActivity(d);
+    // A try push's jobs, once: its dry run doesn't change.
+    if (d.matches && d.matches("details[data-tasks]") && d.open) {
+      var box = d.querySelector(".ptasks");
+      if (box.dataset.loaded) return;
+      fetchText(d.dataset.tasks)
+        .then(function (text) {
+          box.innerHTML = text;
+          box.dataset.loaded = "1";
+        })
+        .catch(function (e) {
+          box.textContent = "Couldn't load the jobs (" + e.message + "): reopen to try again.";
+        });
+    }
   }
   document.addEventListener(
     "toggle",
     function (event) {
-      var d = event.target;
-      // A fold's contents, rendered by the server only once it's open: fetched when it opens.
-      if (d.matches && d.matches("details") && d.open) {
-        Array.prototype.forEach.call(d.querySelectorAll(".lazy[data-src]"), function (box) {
-          if (box.closest("details") !== d || box.dataset.loading) return;
-          box.dataset.loading = "1";
-          fetchText(box.dataset.src).then(
-            function (text) {
-              if (!box.isConnected) return;
-              var fresh = parse(text);
-              var parent = box.parentNode;
-              box.replaceWith(fresh);
-              reopenFolds(parent);
-            },
-            function () {
-              delete box.dataset.loading;
-            }
-          );
-        });
-      }
-      if (d.matches && d.matches("details[data-watch]") && d.open) loadActivity(d);
-      // A try push's jobs, once: its dry run doesn't change.
-      if (d.matches && d.matches("details[data-tasks]") && d.open) {
-        var box = d.querySelector(".ptasks");
-        if (box.dataset.loaded) return;
-        fetchText(d.dataset.tasks)
-          .then(function (text) {
-            box.innerHTML = text;
-            box.dataset.loaded = "1";
-          })
-          .catch(function (e) {
-            box.textContent = "Couldn't load the jobs (" + e.message + "): reopen to try again.";
-          });
-      }
+      foldOpened(event.target);
     },
     true
   );
+  // A page that comes with folds open (a reload) may have fired their toggle events before this script listened.
+  document.querySelectorAll("details[open]").forEach(foldOpened);
   setInterval(function () {
     if (document.visibilityState === "visible") document.querySelectorAll("details[data-watch][data-live][open]").forEach(loadActivity);
   }, 3000);

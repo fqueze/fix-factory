@@ -1,5 +1,5 @@
 import { basename } from "node:path";
-import type { BugDraft, Command, ItemState, ItemView, JobView, NeedsUser, PatchView, PushView, RefusedCommand, Regression, RequestState, StackView } from "../../types.ts";
+import type { BugDraft, Command, ItemState, ItemView, JobView, NeedsUser, PatchView, PushView, RefusedCommand, Regression, RequestId, RequestState, StackView } from "../../types.ts";
 import { REQUEST_STEPS } from "../commands.ts";
 import { html, join, type Html } from "../html.ts";
 import { needsMetaBug as stackNeedsMetaBug } from "../../state/meta-bug.ts";
@@ -29,6 +29,8 @@ export interface RenderContext {
   insideFold?: boolean; // while onlyFold's contents render
   // A file the factory wrote, by its path relative to stateDir (an interdiff since a push).
   readData?: (rel: string) => string | undefined;
+  // An agent's conversation, as its job's activity URL gives it: rendered in the page when its job is open.
+  activity?: (request: RequestId, job: JobView) => Html;
   freeDiskGB?: number; // where the worktrees go
 }
 

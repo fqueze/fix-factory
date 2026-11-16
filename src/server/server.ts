@@ -272,6 +272,7 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
       bugzillaEmail: opts.config.bugzillaEmail,
       mozPhab: opts.config.mozPhabCommand,
       interdiff: readInterdiff,
+      activity: (request, job) => renderActivity(request, job, activity(request, job, req), ctx(req)),
       diffStat,
       landoUrl,
       readData,

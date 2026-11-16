@@ -40,7 +40,7 @@ export function jobLine(r: RequestState, j: JobView, ctx: RenderContext): Html {
   const title = j.error ? html` title="${j.error}"` : null;
   // The box to answer is outside the reloaded part, so what you type stays.
   return j.kind === "agent"
-    ? html`<details class="job" data-fold="job-${j.job}" data-watch="${jobUrl(r.id, j.job, "activity")}"${running ? html` data-live` : null}><summary${title}>${line}</summary><div class="activity">Loading…</div>${
+    ? html`<details class="job" data-fold="job-${j.job}" data-watch="${jobUrl(r.id, j.job, "activity")}"${running ? html` data-live` : null}><summary${title}>${line}</summary><div class="activity">${(ctx.activity && ctx.openFolds?.get(r.id)?.has(`job-${j.job}`) && ctx.activity(r.id, j)) || "Loading…"}</div>${
         talkable(r, j) ? html`<div class="talk">${continueBox(r.id, j.item!, requestUrl(r.id))}</div>` : null
       }</details>`
     : html`<div class="job"${title}>${line}</div>`;
