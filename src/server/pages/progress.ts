@@ -124,7 +124,7 @@ export function itemSentence(r: RequestState, i: ItemView, ctx: RenderContext): 
     const first = all.slice(0, all.indexOf(i)).find((x) => x.group.tests[0] === i.group.tests[0] && UNSETTLED.includes(x.state));
     const text = first
       ? `not started yet: waits for the fix of its test's first group, which may fix this failure too`
-      : `not started yet: a request investigates ${ctx.maxAgents ?? "a few"} groups at a time`;
+      : `not started yet: a request works on ${ctx.maxWorktrees ?? ctx.maxAgents ?? "a few"} groups at once, each in a worktree of its own (about 6 GB); it starts when one of them is done or reviewed`;
     return { text: html`${text}`, cls: "wait", controls: null, detail: i.detail };
   }
   const builds = ctx.runningBuilds ?? Object.values(r.jobs).filter((j) => j.kind === "build" && j.endedAt === undefined).length;

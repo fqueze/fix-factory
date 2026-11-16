@@ -11,6 +11,7 @@ export interface RenderContext {
   baseUrl: string; // how the browser reaches this server, e.g. "http://host:4300"
   now: number; // ms, for running durations
   maxAgents?: number;
+  maxWorktrees?: number; // a request's groups in a worktree at once (maxAgents when absent)
   maxBuilds?: number;
   runningBuilds?: number; // across requests, for "waiting for a build slot (N builds running)"
   runningAgents?: number; // across requests, for "waiting for an agent (N/M running)"

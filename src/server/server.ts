@@ -26,7 +26,7 @@ import type { CommandInput } from "../state/commands.ts";
 import type { CommandSink, StateSource } from "./state-source.ts";
 
 export interface ServerOptions {
-  config: Pick<FactoryConfig, "port" | "profilerOrigin" | "profilerPort" | "stackViewerCommand" | "mozPhabCommand" | "mdViewerCommand" | "diffViewerCommand" | "stateDir" | "maxAgents" | "maxBuilds" | "allowedHosts" | "bugzillaEmail" | "worktreesDir" | "firefoxRepo">;
+  config: Pick<FactoryConfig, "port" | "profilerOrigin" | "profilerPort" | "stackViewerCommand" | "mozPhabCommand" | "mdViewerCommand" | "diffViewerCommand" | "stateDir" | "maxAgents" | "maxWorktrees" | "maxBuilds" | "allowedHosts" | "bugzillaEmail" | "worktreesDir" | "firefoxRepo">;
   state: StateSource;
   sink: CommandSink;
   now?: () => number;
@@ -265,6 +265,7 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
       baseUrl: `http://${req.headers.host ?? `localhost:${opts.config.port}`}`,
       now: now(),
       maxAgents: opts.config.maxAgents,
+      maxWorktrees: opts.config.maxWorktrees,
       maxBuilds: opts.config.maxBuilds,
       runningBuilds: opts.state.listRequests().reduce((n, r) => n + Object.values(r.jobs).filter((j) => j.kind === "build" && j.endedAt === undefined).length, 0),
       runningAgents: opts.state.listRequests().reduce((n, r) => n + Object.values(r.jobs).filter((j) => j.kind === "agent" && j.endedAt === undefined).length, 0),
