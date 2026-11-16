@@ -500,3 +500,4 @@ textarea.oneline { width: auto; resize: none; overflow-y: auto; max-height: 12em
 .talk .sent { list-style: none; margin: 4px 0; padding: 0; font-size: 12px; }
 form.plan-reply { flex: 1 1 300px; min-width: 0; }
 form.plan-reply textarea.oneline { font: inherit; font-size: 13px; padding: 2px 6px; border: 1px solid var(--border); background: var(--surface-1); color: var(--text-primary); }
+.plan-actions { display: flex; gap: 8px; align-items: center; flex: 1 1 100%; }

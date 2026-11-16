@@ -246,7 +246,7 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.equal(boxes.length, 8);
     assert.match(boxes[0], / checked>$/);
     assert.doesNotMatch(boxes[7], /checked/, "shell commands are opt-in");
-    assert.match(h, /<button class="btn small primary">Do these<\/button>/);
+    assert.match(h, /<button class="btn small primary" form="plan-[^"]+">Do these<\/button>/);
     assert.ok(h.includes(cmd({ cmd: "reply-recovery", request: "r-20261013-tab-failures", job: "j-recover" })));
     assert.match(h, /<details class="fold" data-fold="cannot-j-recover"><summary>1 thing it can't do<\/summary><ul class="plan-notes"><li>Read the profile/);
     assert.match(h, /<li>❓ Should the next attempt use a debug build\?<\/li>/);
@@ -296,7 +296,7 @@ describe("one fixture per step of docs/MVP.md", () => {
     plan.cannotDo = [];
     let h = renderRequest(r, ctx, true).value;
     assert.match(h, /“the browser_tabSpinner agent has been at it for 6 hours”<\/span><div class="answer"><div class="md"><p>I&#39;ll stop the &lt;spinner&gt; agent &amp; restart it\.<\/p><\/div><\/div><form/);
-    assert.match(h, /<button class="btn small primary">Do it<\/button>/);
+    assert.match(h, /<button class="btn small primary" form="plan-[^"]+">Do it<\/button>/);
     assert.doesNotMatch(h, /plan-notes|it can't do/);
     assert.match(h, /placeholder="Say what to change…"/);
 

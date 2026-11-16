@@ -363,17 +363,17 @@ function itemLabel(r: RequestState, item: string): string {
 export function recoveryPlan(r: RequestState, plan: RequestState["recoveryPlans"][number], back: string): Html {
   return html`${plan.answer ? html`<div class="answer">${md(plan.answer)}</div>` : null}${
     plan.plan.length
-      ? html`<form class="inline cmd" method="post" action="/api/commands"><input type="hidden" name="back" value="${back}"><ul class="plan">${plan.plan.map(
+      ? html`<form class="inline cmd" id="plan-${plan.job}" method="post" action="/api/commands"><input type="hidden" name="back" value="${back}"><ul class="plan">${plan.plan.map(
           (c, i) =>
             // The shell escape hatch is opt-in; everything else is checked. An agent's instructions are folded.
             html`<li><label><input type="checkbox" name="command" value="${JSON.stringify({ ...c, request: r.id })}"${c.cmd === "shell" ? null : html` checked`}> ${shortLabel(c, r)}</label> <span class="reason">${c.reason}</span>${splitParts(c, r)}${
               instructions(c, r) ? html`<details class="fold" data-fold="plan-${plan.job}-${i}"><summary>its instructions</summary><div class="sub">${instructions(c, r)}</div></details>` : null
             }</li>`,
-        )}</ul><button class="btn small primary">${plan.plan.length === 1 ? "Do it" : "Do these"}</button></form>`
+        )}</ul></form>`
       : null
   }${plan.questions.length ? html`<ul class="plan-notes">${plan.questions.map((t) => html`<li>❓ ${t}</li>`)}</ul>` : null}${
     plan.cannotDo.length ? html`<details class="fold" data-fold="cannot-${plan.job}"><summary>${plural(plan.cannotDo.length, "thing")} it can't do</summary><ul class="plan-notes">${plan.cannotDo.map((t) => html`<li>${t}</li>`)}</ul></details>` : null
-  }<form class="inline cmd joined plan-reply" method="post" action="/api/commands">${commandFields([{ cmd: "reply-recovery", request: r.id, job: plan.job }], back)}<textarea class="oneline" name="text" required rows="1" placeholder="${plan.questions.length ? "Answer it, or say what to change…" : "Say what to change…"}"></textarea><button class="btn small">Reply</button></form>`;
+  }<div class="plan-actions">${plan.plan.length ? html`<button class="btn small primary" form="plan-${plan.job}">${plan.plan.length === 1 ? "Do it" : "Do these"}</button>` : null}<form class="inline cmd joined plan-reply" method="post" action="/api/commands">${commandFields([{ cmd: "reply-recovery", request: r.id, job: plan.job }], back)}<textarea class="oneline" name="text" required rows="1" placeholder="${plan.questions.length ? "Answer it, or say what to change…" : "Say what to change…"}"></textarea><button class="btn small">Reply</button></form></div>`;
 }
 
 // What a command does, without the text it hands an agent.
