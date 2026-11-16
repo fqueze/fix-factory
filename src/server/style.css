@@ -505,3 +505,4 @@ form.plan-reply textarea.oneline { font: inherit; font-size: 13px; padding: 2px 
 header .strip { display: contents; }
 header .strip > * { font-size: 12px; }
 header .strip > .progress { flex-basis: 100%; }
+.fbcopy { margin: 8px 0; }

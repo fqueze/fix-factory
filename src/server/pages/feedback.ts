@@ -62,6 +62,16 @@ export function renderFeedback(byTarget: Record<Feedback["target"], FeedbackEntr
     const job = r?.jobs[e.job];
     return html`<li class="fb"><div class="sub">${e.at.slice(0, 16).replace("T", " ")} · ${r ? html`<a href="${requestUrl(r.id)}">${requestName(r)}</a>` : "unknown request"}${job ? html` · ${job.name}${job.item ? ` (${job.item})` : ""}` : null} · <code>${e.job}</code>${times > 1 ? html` · in ${times} of its reports` : null}</div>${md(e.text)}</li>`;
   };
+  // The tab's list as Markdown, for the Copy button.
+  const markdown = [
+    `# Agents' feedback: ${target} (${lists[target].length})`,
+    ...lists[target].map(({ e, times }) => {
+      const r = requestOf.get(e.job);
+      const job = r?.jobs[e.job];
+      const where = [e.at.slice(0, 16).replace("T", " "), r ? requestName(r) : "unknown request", ...(job ? [`${job.name}${job.item ? ` (${job.item})` : ""}`] : []), `\`${e.job}\``, ...(times > 1 ? [`in ${times} of its reports`] : [])];
+      return `## ${where.join(" · ")}\n\n${e.text}`;
+    }),
+  ].join("\n\n") + "\n";
   return html`<!doctype html>
 <html lang="en">
 <head>
@@ -76,8 +86,17 @@ export function renderFeedback(byTarget: Record<Feedback["target"], FeedbackEntr
   <nav class="fbtabs">${TARGETS.map((t) => html`<a href="/feedback?target=${t}" class="${t === target ? "current" : ""}">${t} <b>${lists[t].length}</b></a>`)}</nav>
 </div></header>
 <main>
+<div class="fbcopy"><textarea hidden id="fb-markdown">${markdown}</textarea><button type="button" class="btn small" id="fb-copy">Copy as Markdown</button></div>
 <ul class="fblist">${lists[target].map(entry)}</ul>
 </main>
+<script>
+document.getElementById("fb-copy").addEventListener("click", function () {
+  var text = document.getElementById("fb-markdown").value, button = this;
+  var done = function () { button.textContent = "Copied"; setTimeout(function () { button.textContent = "Copy as Markdown"; }, 1500); };
+  if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(text).then(done);
+  else { var a = document.createElement("textarea"); a.value = text; document.body.appendChild(a); a.select(); document.execCommand("copy"); a.remove(); done(); }
+});
+</script>
 </body>
 </html>
 `.value;
