@@ -704,7 +704,7 @@ class Planner {
     const debug = this.debugCommit();
     if (!debug) {
       const author = this.authorJobs(ANNOTATIONS_ITEM).filter(succeeded).at(-1);
-      const why = author ? this.rep<WriteAnnotationPatchesReport>(author).summary : `the group was ${item.state}`;
+      const why = author ? this.rep<WriteAnnotationPatchesReport>(author).summary : `the item was ${item.state}`;
       if (!redone && !this.verifyPathPush(wt)) return;
       this.note(`No DEBUG commit removing flakiness skips (${why}): the work list comes from the folder's failures on central and a test-verify-path push.`);
       setStep("work list");
@@ -1136,7 +1136,7 @@ class Planner {
         continue;
       }
       if (started(i) || STACKED.includes(first.state)) continue;
-      this.merge(i, first, started(first), `merged into the first group of ${basename(test)}`);
+      this.merge(i, first, started(first), `merged into ${basename(test)}'s first item`);
     }
     // A group only waiting for its DEBUG commits to go to try, when another group of its test has a fix: that fix may
     // well cover it, and its author checks.

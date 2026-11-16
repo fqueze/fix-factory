@@ -403,7 +403,7 @@ describe("commands", () => {
     const refused = sc.state().refused!;
     assert.equal(refused.length, 1);
     assert.equal(refused[0].cmd, "start-agent");
-    assert.equal(refused[0].detail, "the investigation of this group can only be restarted after a first one");
+    assert.equal(refused[0].detail, "the investigation of this item can only be restarted after a first one");
     run(sc, cmd({ cmd: "dismiss", key: refused[0].key }));
     assert.deepEqual(sc.state().refused, []);
   });

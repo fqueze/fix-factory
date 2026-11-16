@@ -55,7 +55,7 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
   // Refusals are read on the page: a group by its test, not its id.
   const itemName = (item: ItemId): string => {
     const tests = s!.items[item]?.group.tests ?? [];
-    return tests.length === 1 ? tests[0].split("/").pop()! : tests.length > 1 ? `the group of ${tests.length} tests` : "this group";
+    return tests.length === 1 ? tests[0].split("/").pop()! : tests.length > 1 ? `the item of ${tests.length} tests` : "this item";
   };
   const resume = (item: ItemId, reason: string, message: string): string | undefined => {
     const plan = resumeAuthorPlan(s!.id, view!, item, reason, { message }, "investigating");
@@ -350,7 +350,7 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
     case "redo-annotations":
       ev({ type: "item-state", item: ANNOTATIONS_ITEM, state: "not started", detail: "redone with today's skip-ifs" });
       for (const n of s.needsUser.filter((x) => x.key.startsWith("approve-push:unskip"))) {
-        ev({ type: "try-declined", push: n.key.slice("approve-push:".length), text: "not needed anymore: the skip-ifs group was redone", by: "factory" });
+        ev({ type: "try-declined", push: n.key.slice("approve-push:".length), text: "not needed anymore: the skip-if annotations item was redone", by: "factory" });
       }
       // What the earlier run asked you is moot.
       for (const n of s.needsUser.filter((x) => x.item === ANNOTATIONS_ITEM || (x.job !== undefined && s.jobs[x.job]?.item === ANNOTATIONS_ITEM))) ev({ type: "user-done", key: n.key });

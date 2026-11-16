@@ -68,7 +68,7 @@ describe("overview", () => {
     const queued = page.indexOf("<h2>Queued");
     const finished = page.indexOf("<h2>Finished");
     assert.ok(queued >= 0 && queued < active && active < finished, "queued first: in sight under the box");
-    assert.match(page, /<h2>Finished <span class="count">3<\/span><\/h2>\n  <div id="section-finished">/, "not folded");
+    assert.match(page, /<h2>Finished requests <span class="count">3<\/span><\/h2>\n  <div id="section-finished">/, "not folded");
     assert.doesNotMatch(page, /class="archive"/);
     assert.ok(page.indexOf("r-20260930-errorsummary") > finished, "done requests are under Finished");
     assert.ok(page.indexOf("r-20261016-popups") > queued && page.indexOf("r-20261016-popups") < active);
@@ -90,7 +90,7 @@ describe("overview", () => {
     assert.match(page, /<span class="running" tabindex="0">agents <b>10\/10<\/b><span class="running-list"><a href="#(patch|item|req)-[^"]+"><b>[^<]+<\/b> /);
     assert.match(page, /<span class="progress"><span class="pbar">(<span class="[a-z-]+" style="flex-grow:\d+"><\/span>){7}<\/span><span class="needs-you">19 need you<\/span> · <span class="working">8 working<\/span> · <span class="landable">2 landable<\/span> · <span class="submitted">2 submitted<\/span> · <span class="ready">8 ready<\/span> · <span class="pending">3 pending<\/span> · <span class="landed">3 landed<\/span><\/span>/, "landed: the finished requests' too; closed ones aren't progress");
     assert.ok(page.includes(cmd({ cmd: "tell-factory" })));
-    assert.doesNotMatch(page, /New request|new-request/);
+    assert.match(page, /placeholder="New request, or more for an active one: tell the factory…/, "what it's for: a new request, or more for an active one");
     assert.match(page, /<link rel="icon" href="data:image\/svg\+xml,[^"]*🏭/);
   });
   it("archives text from the main box that was forwarded, or rephrased after it couldn't be routed, with what became of it", () => {
@@ -141,7 +141,7 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.match(h, /<span class="rname">Burn down browser\/components\/sessionstore\/test, skip the mac pools for now<\/span>/);
     assert.match(h, /not routed yet/);
     assert.match(h, /<span class="res run">route request<\/span>/);
-    assert.match(h, /<span class="rsum"><span class="rprog"><span class="sub">nothing to work on yet<\/span><\/span> · not routed yet: a new request, or about an existing one\? · route request<\/span>/, "its own job isn't a group");
+    assert.match(h, /<span class="rsum"><span class="rprog"><span class="sub">nothing to work on yet<\/span><\/span> · not routed yet: a new request, or more for an active one\? · route request<\/span>/, "its own job isn't a group");
   });
   it("1. request: once routed, its title, your prompt under it, and try's counts without the failed jobs' list", () => {
     const r = structuredClone(source.getRequest("r-20261010-xpcshell-cwd")!);
@@ -428,7 +428,7 @@ describe("one fixture per step of docs/MVP.md", () => {
     );
     const row = rowOf(renderRequest(r, ctx, true).value, "item-i-idle");
     const ask = row.slice(row.indexOf('<div class="ask-you">'));
-    assert.match(ask, /^<div class="ask-you"><p>Critical review failed:<\/p><div class="md"><p>API error<\/p><\/div><p>Retry it, or drop the group \(🗑\)\.<\/p>/);
+    assert.match(ask, /^<div class="ask-you"><p>Critical review failed:<\/p><div class="md"><p>API error<\/p><\/div><p>Retry it, or drop this item \(🗑\)\.<\/p>/);
     assert.match(ask, /title="Runs critical review again">Retry</);
     assert.doesNotMatch(ask, /Its author|Resume/);
     assert.ok(!ask.includes(cmd({ cmd: "continue", request: D, item: "i-idle" })), "its author has nothing to do with it");
@@ -724,7 +724,7 @@ describe("one fixture per step of docs/MVP.md", () => {
     const h = expanded("r-20261015-enterprisepolicies");
     assert.match(h, /<div class="closed-section"><details class="fold" data-fold="closed-groups">/, "one grey edge down the section, its header included");
     const fold = h.slice(h.indexOf('data-fold="closed-groups"'));
-    assert.match(fold, /^data-fold="closed-groups"><summary>\d+ closed<\/summary><div class="rows compact-rows">/);
+    assert.match(fold, /^data-fold="closed-groups"><summary>\d+ closed work items?<\/summary><div class="rows compact-rows">/);
     assert.match(fold, /<details class="row b-closed"[^>]*><summary><span class="st abandoned" title="Left as-is[^"]*">/);
   });
 
@@ -1107,27 +1107,34 @@ describe("a burndown with closed groups, running agents and a dropped patch", ()
     assert.match(h, />browser_policy_sitepolicies_jit\.js<\/span>/);
     assert.match(row, /<div class="rowbody"><h4 class="part">The failure<\/h4><div class="failure">leaked 1 window\(s\) until shutdown \[url = about:preferences#etp\]<\/div>/);
   });
+  it("a waiting row's icon says what it waits for", () => {
+    const r = structuredClone(get(ID));
+    const i = Object.values(r.items).find((x) => x.state === "investigating")!;
+    i.state = "not started";
+    for (const j of Object.values(r.jobs)) if (j.item === i.id) j.endedAt ??= "2026-10-15T08:00:00.000Z";
+    assert.match(rowOf(renderRequest(r, ctx, true).value, `item-${i.id}`), /<span class="st wait" title="Not started yet[^"]*">/);
+  });
   it("shows running work in the group rows, with the group's cost at the end of its line", () => {
-    assert.match(h, /<span class="end"><a class="cost" href="[^"]*%3Fitem%3Di-[^"]*" target="_blank" rel="noopener" title="Agent cost of this group so far: its profile">\$0\.40<\/a><\/span><span class="state"><span class="working">investigating · <span data-since="2026-10-15T08:53:00.000Z">7 min<\/span><\/span><\/span>/);
+    assert.match(h, /<span class="end"><a class="cost" href="[^"]*%3Fitem%3Di-[^"]*" target="_blank" rel="noopener" title="Agent cost of this item so far: its profile">\$0\.40<\/a><\/span><span class="state"><span class="working">investigating · <span data-since="2026-10-15T08:53:00.000Z">7 min<\/span><\/span><\/span>/);
     assert.match(h, /<span class="state"><span class="working">investigating · <span data-since="2026-10-15T08:54:00.000Z">6 min<\/span><\/span><\/span>/);
     assert.match(h, /<span class="state"><span class="working">building its worktree · <span data-since/);
   });
   it("puts the running groups first, then the others, and folds the closed ones with their full reasons", () => {
     const at = (item: string) => h.indexOf(`data-item="${item}"`);
-    const fold = h.indexOf('<details class="fold" data-fold="closed-groups"><summary>4 closed</summary>');
+    const fold = h.indexOf('<details class="fold" data-fold="closed-groups"><summary>4 closed work items</summary>');
     assert.ok(fold > 0);
     assert.ok(at("i-browser-policy-trackingprotection") < fold);
     for (const closed of ["i-annotations", "i-browser-policy-firefoxhome", "i-browser-policy-firefoxhome-2", "i-browser-policy-sitepolicies-jit"]) {
       assert.ok(at(closed) > fold, closed);
     }
-    assert.match(rowOf(h, "item-i-annotations"), /<a class="cost" href="[^"]*" target="_blank" rel="noopener" title="Agent cost of this group so far: its profile">\$0\.62<\/a><\/span><span class="state">closed: Dropped the run-if commit per review;[^<]*nothing left to convert and the DEBUG un-skip push showed no failures to fix\.<\/span>/);
+    assert.match(rowOf(h, "item-i-annotations"), /<a class="cost" href="[^"]*" target="_blank" rel="noopener" title="Agent cost of this item so far: its profile">\$0\.62<\/a><\/span><span class="state">closed: Dropped the run-if commit per review;[^<]*nothing left to convert and the DEBUG un-skip push showed no failures to fix\.<\/span>/);
 
     const r = structuredClone(get(ID));
     r.jobs["j-wt-sw2"].endedAt = "2026-10-15T09:00:00.000Z";
     r.items["i-browser-policy-firefoxhome"].state = "handed back";
     const h2 = renderRequest(r, ctx, true).value;
     assert.ok(h2.indexOf('data-item="i-browser-policy-trackingprotection"') < h2.indexOf('data-item="i-browser-policy-sitepolicies-serviceworke-2"'), "not started after running");
-    assert.match(h2, /<summary>4 closed<\/summary>/);
+    assert.match(h2, /<summary>4 closed work items<\/summary>/);
   });
   it("offers to redo the skip-ifs group with today's skip-ifs, and only that group", () => {
     assert.ok(rowOf(h, "item-i-annotations").includes(cmd({ cmd: "redo-annotations", request: ID })));

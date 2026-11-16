@@ -1,3 +1,4 @@
+import { basename } from "node:path";
 // What each group is doing, in plain words, and what a request (or the whole factory) is doing: working,
 // waiting for you, or done. No internal state names.
 import { MIN_FREE_GB, WORKTREE_GB } from "../../lib/disk.ts";
@@ -125,7 +126,7 @@ export function itemSentence(r: RequestState, i: ItemView, ctx: RenderContext): 
     const first = all.slice(0, all.indexOf(i)).find((x) => x.group.tests[0] === i.group.tests[0] && UNSETTLED.includes(x.state));
     // Each fix in progress has a worktree of its own: as many as the disk has room for (next()), or maxWorktrees.
     const text = first
-      ? `not started yet: waits for the fix of this test's first failure, which may fix this one too`
+      ? `not started yet: ${basename(i.group.tests[0])} has another item, started first: this one waits for its fix, which may also fix these test failures`
       : ctx.freeDiskGB !== undefined && ctx.freeDiskGB - WORKTREE_GB < MIN_FREE_GB
         ? `not started yet: waits for disk space. Each fix in progress has a Firefox checkout of its own (about ${WORKTREE_GB} GB), and the factory keeps ${MIN_FREE_GB} GB free (${Math.floor(ctx.freeDiskGB)} GB now)`
         : ctx.maxWorktrees !== undefined
@@ -153,15 +154,15 @@ export function flagAsk(r: RequestState, i: ItemView, n: NeedsUser): Html {
       return html`<p>You stopped ${job ? jobNoun(job.name) : "its job"}. Resume it, tell its author what to do instead, or dismiss this.</p>`;
     case "failed":
       if (job?.kind !== "agent") {
-        return html`${detail}<p>Retry it, tell its author what to do, or drop the group (🗑).</p>`;
+        return html`${detail}<p>Retry it, tell its author what to do, or drop this item (🗑).</p>`;
       }
       return isAuthorJob(job)
-        ? html`<p>Its author stopped without a fix:</p>${detail}<p>Resume it where it stopped, tell it what to do, or drop the group (🗑).</p>`
-        : html`<p>${jobNoun(job.name).replace(/^./, (c) => c.toUpperCase())} failed:</p>${detail}<p>Retry it, or drop the group (🗑).</p>`;
+        ? html`<p>Its author stopped without a fix:</p>${detail}<p>Resume it where it stopped, tell it what to do, or drop this item (🗑).</p>`
+        : html`<p>${jobNoun(job.name).replace(/^./, (c) => c.toUpperCase())} failed:</p>${detail}<p>Retry it, or drop this item (🗑).</p>`;
     case "question":
-      return html`<p>Its author leaves this to you:</p>${detail}<p>Answer it (its author gets your answer), go ahead with its patch as it is, or drop the group (🗑).</p>`;
+      return html`<p>Its author leaves this to you:</p>${detail}<p>Answer it (its author gets your answer), go ahead with its patch as it is, or drop this item (🗑).</p>`;
     case "disagrees":
-      return html`<p>Its author didn't do what you asked:</p>${detail}<p>Tell it again, go ahead with its patch as it is, or drop the group (🗑).</p>`;
+      return html`<p>Its author didn't do what you asked:</p>${detail}<p>Tell it again, go ahead with its patch as it is, or drop this item (🗑).</p>`;
     case "take-it":
       return html`${detail}<p>Fix it anyway, or leave it to them: the factory then stops working on this test.</p>`;
     default:

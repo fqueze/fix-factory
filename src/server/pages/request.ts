@@ -80,7 +80,7 @@ export function renderRequest(r: RequestState, ctx: RenderContext, open = ctx.op
 export function requestSummary(r: RequestState): string {
   const parts: string[] = [];
   if (r.kind === "unrouted") {
-    parts.push(r.step === "done" ? routeOutcome(r) : "not routed yet: a new request, or about an existing one?");
+    parts.push(r.step === "done" ? routeOutcome(r) : "not routed yet: a new request, or more for an active one?");
   } else if (r.step === "request") {
     const keys = configEntries(r).map(([k]) => k);
     parts.push(keys.length ? `config: ${keys.join(", ")}` : "turning the request into a config");
@@ -232,7 +232,7 @@ function inWords(v: unknown): string {
 function splitLine(r: RequestState): Html | null {
   const link = (id: string) => html`<a href="${requestUrl(id)}">${id}</a>`;
   if (r.splitInto) {
-    return html`<div class="sub" style="margin-top:6px">Split into ${join(r.splitInto.map(link), ", ")}: its groups, patches and pushes went there.</div>`;
+    return html`<div class="sub" style="margin-top:6px">Split into ${join(r.splitInto.map(link), ", ")}: its work items, patches and pushes went there.</div>`;
   }
   return r.splitFrom ? html`<div class="sub" style="margin-top:6px">Split from ${link(r.splitFrom)}, whose try pushes it keeps.</div>` : null;
 }
@@ -419,7 +419,7 @@ function closedSection(...parts: (Html | null)[]): Html | null {
 }
 
 function closedFold(r: RequestState, closed: ItemView[], ctx: RenderContext): Html | null {
-  return closed.length ? html`<details class="fold" data-fold="closed-groups"><summary>${closed.length} closed</summary>${foldContent(r, ctx, "closed-groups", () => html`<div class="rows compact-rows">${closed.map((i) => itemRows(r, i, ctx))}</div>`)}</details>` : null;
+  return closed.length ? html`<details class="fold" data-fold="closed-groups"><summary>${plural(closed.length, "closed work item")}</summary>${foldContent(r, ctx, "closed-groups", () => html`<div class="rows compact-rows">${closed.map((i) => itemRows(r, i, ctx))}</div>`)}</details>` : null;
 }
 
 // Once a group has a reviewed patch, the patch's row replaces the group's.
@@ -438,7 +438,7 @@ function itemCost(r: RequestState, i: ItemView): number {
 // A group's cost opens its own profile.
 function costLabel(r: RequestState, i: ItemView, ctx: RenderContext): Html | null {
   const usd = itemCost(r, i);
-  return usd > 0 ? html`<a class="cost" href="${profileUrl(ctx, r.id, i.id)}" target="_blank" rel="noopener" title="Agent cost of this group so far: its profile">${formatCost(usd)}</a>` : null;
+  return usd > 0 ? html`<a class="cost" href="${profileUrl(ctx, r.id, i.id)}" target="_blank" rel="noopener" title="Agent cost of this item so far: its profile">${formatCost(usd)}</a>` : null;
 }
 
 function stateText(r: RequestState, i: ItemView, ctx: RenderContext): Html {
@@ -456,10 +456,18 @@ function closedTip(r: RequestState, i: ItemView): string | undefined {
   return undefined;
 }
 
-// What a group's or patch's icon means.
+// A waiting row's icon says what it waits for: its own sentence, as plain text for the tooltip.
+function waitTip(r: RequestState, i: ItemView, ctx: RenderContext): string | undefined {
+  const s = itemSentence(r, i, ctx);
+  if (s.cls !== "wait") return undefined;
+  const text = s.text.value.replace(/<[^>]*>/g, "").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+  return text.replace(/^./, (c) => c.toUpperCase());
+}
+
+// What a work item's or patch's icon means.
 const ICON_TIPS: Record<StateClass, string> = {
   run: "The factory is working on it",
-  wait: "Waiting: for try, another group, or a free slot",
+  wait: "Waiting",
   find: "Needs you",
   ok: "Ready: nothing left for the factory to do",
   closed: "Closed: dropped, left as-is or handed back",
@@ -503,7 +511,7 @@ function groupRow(r: RequestState, i: ItemView, ctx: RenderContext): Html {
     fold: `item-${i.id}`,
     bucket: itemBucket(r, i, ctx),
     cls: rowClass(r, i, ctx),
-    tip: closedTip(r, i) ?? (rowClass(r, i, ctx) === "abandoned" ? "Closed without a fix" : undefined),
+    tip: closedTip(r, i) ?? (rowClass(r, i, ctx) === "abandoned" ? "Closed without a fix" : waitTip(r, i, ctx)),
     name: html`${groupLabel(r, i)}`,
     title: [...i.group.tests, i.group.configs.join(", ")].join("\n"),
     // Redo is on the top line: the group's patches are in its folded body, and it's what you'd want of it.
@@ -680,7 +688,7 @@ function patchRow(r: RequestState, p: PatchView, ctx: RenderContext): Html {
     fold: `patch-${p.id}`,
     bucket: item ? (landable && itemBucket(r, item, ctx) === "ready" ? "landable" : itemBucket(r, item, ctx)) : landable ? "landable" : undefined,
     cls: parts.cls,
-    tip: item && p.review?.status !== "abandoned" ? closedTip(r, item) : undefined,
+    tip: item && p.review?.status !== "abandoned" ? (closedTip(r, item) ?? (parts.cls === "wait" ? waitTip(r, item, ctx) : undefined)) : undefined,
     name: parts.name,
     title: p.title,
     end: html`${parts.end}${item ? costLabel(r, item, ctx) : null}`,
@@ -741,7 +749,7 @@ function fixRow(r: RequestState, ps: PatchView[], ctx: RenderContext): Html {
     fold: `fix-${item.id}`,
     bucket: landable && itemBucket(r, item, ctx) === "ready" ? "landable" : itemBucket(r, item, ctx),
     cls: phabClass(ps[0], rowClass(r, item, ctx)),
-    tip: closedTip(r, item),
+    tip: closedTip(r, item) ?? (phabClass(ps[0], rowClass(r, item, ctx)) === "wait" ? waitTip(r, item, ctx) : undefined),
     name: html`<span class="patchlines">${names}</span>`,
     title: ps.map((p) => p.title).join("\n"),
     end: costLabel(r, item, ctx),

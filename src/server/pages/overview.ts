@@ -84,9 +84,9 @@ export function renderMain(requests: RequestState[], ctx: RenderContext): Html {
   const queued = byCreation.filter((r) => sectionOf(r) === "queued").reverse();
   // Finished requests open like the active ones; text that was forwarded or rephrased is one line.
   const finished = byCreation.filter((r) => sectionOf(r) === "finished").sort((a, b) => (b.finishedAt ?? b.updatedAt).localeCompare(a.finishedAt ?? a.updatedAt));
-  return html`<form class="ask cmd joined" method="post" action="/api/commands">${commandFields([{ cmd: "tell-factory" }], "/")}<textarea class="oneline" name="text" required rows="1" placeholder="Tell the factory… (e.g. “burn down dom/base/test”, or “Lando was down this morning, re-push what failed”)"></textarea><button class="btn">Send</button></form>
+  return html`<form class="ask cmd joined" method="post" action="/api/commands">${commandFields([{ cmd: "tell-factory" }], "/")}<textarea class="oneline" name="text" required rows="1" placeholder="New request, or more for an active one: tell the factory… (e.g. “burn down dom/base/test”, or “Lando was down this morning, re-push what failed”)"></textarea><button class="btn">Send</button></form>
 
-  ${queued.length ? html`<h2>Queued <span class="count">${queued.length}</span></h2>
+  ${queued.length ? html`<h2>Queued requests <span class="count">${queued.length}</span></h2>
   <div class="simple" id="section-queued">${queued.map(
     (r) =>
       html`<div class="row" data-request="${r.id}" data-section="queued"><span class="grow"><b>${requestName(r)}</b> <span class="sub">· ${r.kind === "unrouted" ? "not routed yet, " : ""}waits for an agent slot</span></span><form class="inline cmd" method="post" action="/api/commands">${commandFields(
@@ -95,12 +95,12 @@ export function renderMain(requests: RequestState[], ctx: RenderContext): Html {
       )}<button class="btn small">Start now</button></form></div>`,
   )}</div>` : null}
 
-  <h2>Active <span class="count">${active.length}</span></h2>
+  <h2>Active requests <span class="count">${active.length}</span></h2>
   <div id="section-active">${active.map((r) => renderRequest(r, ctx))}</div>
 
   ${renderRecentPushes(requests)}
 
-  ${finished.length ? html`<h2>Finished <span class="count">${finished.length}</span></h2>
+  ${finished.length ? html`<h2>Finished requests <span class="count">${finished.length}</span></h2>
   <div id="section-finished">${finished.filter((r) => r.kind !== "unrouted").map((r) => renderRequest(r, ctx, ctx.open?.includes(r.id)))}</div>
   ${finished.some((r) => r.kind === "unrouted") ? html`<div class="simple">${finished.filter((r) => r.kind === "unrouted").map(
     (r) =>
