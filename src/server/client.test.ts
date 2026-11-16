@@ -8,7 +8,7 @@ import { runInNewContext } from "node:vm";
 const CLIENT = readFileSync(join(import.meta.dirname, "client.js"), "utf8");
 const MIN = 60 * 1000;
 
-type Field = { value: string; defaultValue: string };
+type Field = { value: string; defaultValue: string; hidden?: boolean };
 
 function loadPage(visibilityState: "visible" | "hidden", fields: Field[] = []) {
   const listeners = new Map<string, (() => void)[]>();
@@ -23,7 +23,7 @@ function loadPage(visibilityState: "visible" | "hidden", fields: Field[] = []) {
     activeElement: null as Field | null,
     querySelectorAll: (selector: string) => {
       selectors.push(selector);
-      return selector === "input[type=text], textarea" ? fields : [];
+      return selector === "input[type=text], textarea:not([hidden])" ? fields.filter((f) => !f.hidden) : [];
     },
     addEventListener(type: string, f: () => void) {
       listeners.set(type, [...(listeners.get(type) ?? []), f]);
@@ -170,6 +170,12 @@ describe("reload after a server restart", () => {
     // Sent: the field is emptied but its form wasn't re-rendered.
     field.value = "";
     mock.timers.tick(5000);
+    assert.equal(page.reloads(), 1);
+  });
+
+  it("doesn't wait for a copy button's hidden text, which a form restore may have changed", () => {
+    const page = loadPage("visible", [{ value: "an older page's description", defaultValue: "this one's", hidden: true }]);
+    page.hello("2");
     assert.equal(page.reloads(), 1);
   });
 

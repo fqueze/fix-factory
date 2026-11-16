@@ -31,7 +31,9 @@
   function busy(el) {
     var a = document.activeElement;
     if (a && el.contains(a) && ((a.tagName === "INPUT" && a.type === "text") || a.tagName === "TEXTAREA") && a.value !== "" && a.value !== a.defaultValue) return true;
-    return Array.prototype.some.call(el.querySelectorAll("input[type=text], textarea"), function (i) {
+    // A hidden textarea is a copy button's text, not yours: Firefox's form restore, after a reload, can refill it
+    // with an older page's text.
+    return Array.prototype.some.call(el.querySelectorAll("input[type=text], textarea:not([hidden])"), function (i) {
       return i.value !== "" && i.value !== i.defaultValue;
     });
   }
@@ -391,7 +393,7 @@
       })
       .then(function () {
         if (form.dataset.key) filing.delete(form.dataset.key);
-        form.querySelectorAll("input[type=text], textarea").forEach(function (i) {
+        form.querySelectorAll("input[type=text], textarea:not([hidden])").forEach(function (i) {
           i.value = "";
         });
         // A ⚑ you dismissed goes away now, not at the next refresh.
@@ -491,6 +493,8 @@
     var done = function () {
       say(button, "Copied", 1500);
     };
+    // What the page was rendered with, whatever a form restore put in it since.
+    if (area.hidden) area.value = area.defaultValue;
     if (navigator.clipboard && window.isSecureContext) {
       navigator.clipboard.writeText(area.value).then(done);
     } else {
@@ -554,7 +558,7 @@
   var bootId = document.body.dataset.boot;
   function typing() {
     // Drafted replies come filled in: only a focused field, or one you changed, counts, and only with text.
-    return Array.prototype.some.call(document.querySelectorAll("input[type=text], textarea"), function (i) {
+    return Array.prototype.some.call(document.querySelectorAll("input[type=text], textarea:not([hidden])"), function (i) {
       return i.value !== "" && (i === document.activeElement || i.value !== i.defaultValue);
     });
   }
