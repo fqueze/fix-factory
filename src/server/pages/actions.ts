@@ -207,8 +207,10 @@ export function stopButton(request: string, job: string, back: string): Html {
 }
 
 // Resumes the item's author with what you type.
-export function continueBox(request: string, item: string, back: string): Html {
-  return html`<form class="inline cmd joined" method="post" action="/api/commands">${commandFields([{ cmd: "continue", request, item }], back)}<textarea class="oneline" name="text" required rows="1" placeholder="Tell its author what to do…"></textarea><button class="btn small" title="Resumes its author's session with your message; its patch then goes through lint and critical review again">Send</button></form>`;
+// running: its author gets it after its current tool call, rather than in a resumed session.
+export function continueBox(request: string, item: string, back: string, running = false): Html {
+  const title = running ? "Its author gets your message after its current command, and goes on with it" : "Resumes its author's session with your message; its patch then goes through lint and critical review again";
+  return html`<form class="inline cmd joined" method="post" action="/api/commands">${commandFields([{ cmd: "continue", request, item }], back)}<textarea class="oneline" name="text" required rows="1" placeholder="Tell its author what to do…"></textarea><button class="btn small" title="${title}">Send</button></form>`;
 }
 
 // The plan a recovery entry asks about: its job's latest plan, or the latest plan

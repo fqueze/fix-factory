@@ -401,7 +401,7 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.match(rowOf(h, "item-i-race"), /<span class="st find" title="Needs you"><\/span>/);
     assert.match(rowOf(h, "item-i-race"), />Accept the patch as it is</);
     assert.equal(state("i-idle"), "stalled: nothing running");
-    assert.match(rowOf(h, "item-i-idle"), /title="Resumes its author's session with your message; its patch then goes through lint and critical review again">Send</);
+    assert.match(rowOf(h, "item-i-idle"), /title="Resumes its author(?:'|&#39;)s session with your message; its patch then goes through lint and critical review again">Send</);
     assert.ok(rowOf(h, "item-i-idle").includes(cmd({ cmd: "continue", request: "r-20261015-downloads-stuck", item: "i-idle" })));
     const r = structuredClone(get("r-20261015-downloads-stuck"));
     const atCap = renderRequest(r, { ...ctx, runningAgents: 10, maxAgents: 10 }, true).value;
@@ -1336,14 +1336,18 @@ describe("a group's jobs", () => {
     assert.doesNotMatch(before, /build worktree|data-fold="job-j-a1"|data-fold="job-j-r1"/);
     assert.match(fold, /^<details class="fold ended" data-fold="jobs-i-spinner"><summary>2 agent runs, 1 other job · <a class="cost" href="[^"]*item%3Di-spinner[^"]*" target="_blank" rel="noopener" title="Opus \$1\.50 · Sonnet \$0\.25 · its profile">\$1\.75<\/a><\/summary>/);
     assert.match(fold, /build worktree/, "the failed build that ran again since is in the fold");
-    assert.doesNotMatch(row, /class="talk"/, "its author is running: nothing reaches it");
+    // Its author running: what you send reaches it after its current command, from the bottom of its panel.
+    assert.match(before, /data-fold="job-j-a2"[^]*?<div class="talk">[^]*?title="Its author gets your message after its current command, and goes on with it">Send</);
+    run.agentMessages = [{ msg: "c1", item: "i-spinner", job: "j-a2", session: run.jobs["j-a2"].sessionId!, text: "Also check macOS.", t: "2026-10-15T08:00:00.000Z" }];
+    const sent = rowOf(renderRequest(run, ctx, true).value, "item-i-spinner");
+    assert.match(sent, /<div class="talk"><ul class="sent"><li><span class="sub">you, <span data-since="2026-10-15T08:00:00.000Z"><\/span> ago:<\/span> Also check macOS\. <span class="sub">· it gets it after its current command<\/span><\/li><\/ul><form/);
   });
 
-  it("counts sessions when agents were resumed, and offers a box to talk to the latest author session only", () => {
+  it("counts sessions when agents were resumed, and offers a box to talk to the latest author session's latest run only", () => {
     const row = rowOf(renderRequest(r, ctx, true).value, "item-i-spinner");
     assert.match(row, /<summary>3 agent runs in 2 sessions, 1 other job · /);
     const talk = (id: string) => new RegExp(`data-fold="job-${id}"[^]*?</summary><div class="activity">Loading…</div><div class="talk"><form`).test(row.slice(row.indexOf(`data-fold="job-${id}"`)).split("</details>")[0] + "</details>");
-    assert.ok(talk("j-a1") && talk("j-a2"), "both runs of its session");
+    assert.ok(talk("j-a2") && !talk("j-a1"), "its session's latest run only");
     assert.ok(!talk("j-r1"), "not a reviewer");
     assert.ok(row.includes(cmd({ cmd: "continue", request: r.id, item: "i-spinner" })));
     const closed = structuredClone(r);

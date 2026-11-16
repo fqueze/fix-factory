@@ -41,7 +41,7 @@ export function jobLine(r: RequestState, j: JobView, ctx: RenderContext): Html {
   // The box to answer is outside the reloaded part, so what you type stays.
   return j.kind === "agent"
     ? html`<details class="job" data-fold="job-${j.job}" data-watch="${jobUrl(r.id, j.job, "activity")}"${running ? html` data-live` : null}><summary${title}>${line}</summary><div class="activity">${(ctx.activity && ctx.openFolds?.get(r.id)?.has(`job-${j.job}`) && ctx.activity(r.id, j)) || "Loading…"}</div>${
-        talkable(r, j) ? html`<div class="talk">${continueBox(r.id, j.item!, requestUrl(r.id))}</div>` : null
+        talkable(r, j) ? html`<div class="talk">${sentMessages(r, j)}${continueBox(r.id, j.item!, requestUrl(r.id), running)}</div>` : null
       }</details>`
     : html`<div class="job"${title}>${line}</div>`;
 }
@@ -78,13 +78,21 @@ export function groupJobs(r: RequestState, i: ItemView, jobs: JobView[], ctx: Re
 }
 
 // A message reaches an agent only through continue: to its group's latest author session, once it stopped.
+// What you sent its session while it ran, and whether it got it.
+function sentMessages(r: RequestState, j: JobView): Html | null {
+  const sent = r.agentMessages.filter((m) => m.session === j.sessionId);
+  if (!sent.length) return null;
+  return html`<ul class="sent">${sent.map((m) => html`<li><span class="sub">you, <span data-since="${m.t}"></span> ago:</span> ${m.text} <span class="sub">· ${m.delivered ? "it got it" : r.jobs[m.job]?.endedAt ? "it ended first: sent by resuming it" : "it gets it after its current command"}</span></li>`)}</ul>`;
+}
+
 function talkable(r: RequestState, j: JobView): boolean {
   if (j.item === undefined || !isAuthor(j)) {
     return false;
   }
   const authors = r.items[j.item].jobs.map((x) => r.jobs[x]).filter(isAuthor);
   const session = authors.filter((a) => a.purpose?.reason === undefined || a.purpose.reason === "initial" || a.purpose.reason === "start").at(-1);
-  return j.sessionId !== undefined && j.sessionId === session?.sessionId && authors.at(-1)!.endedAt !== undefined;
+  // The session's latest run, running or not: running, it gets your message after its current tool call.
+  return j.sessionId !== undefined && j.sessionId === session?.sessionId && authors.filter((a) => a.sessionId === j.sessionId).at(-1)!.job === j.job;
 }
 
 // Jobs folded before JobView had a purpose: their name tells.
