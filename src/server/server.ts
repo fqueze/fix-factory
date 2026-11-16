@@ -221,9 +221,12 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
   }
 
   let profiler: Profiler | null | undefined;
+  // Loaded again once tools.ts update installed another version of it.
+  let profilerMain: string | null | undefined;
   function loadProfiler(): Profiler | null {
-    if (profiler === undefined) {
-      const main = opts.claudeProfiler === undefined ? findClaudeProfiler(opts.config.stateDir) : opts.claudeProfiler;
+    const main = opts.claudeProfiler === undefined ? findClaudeProfiler(opts.config.stateDir) : opts.claudeProfiler;
+    if (profiler === undefined || main !== profilerMain) {
+      profilerMain = main;
       profiler = main === null ? null : (createRequire(main)(main) as Profiler);
     }
     return profiler;
