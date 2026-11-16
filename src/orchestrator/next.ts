@@ -703,7 +703,9 @@ class Planner {
     const planned = this.planPushes(
       `plan:unskip${e}`,
       {
-        goal: `reproduce the failures hidden by the flakiness skip-ifs of ${this.s.folder} that the DEBUG commit removes`,
+        // test-verify-path (bug 2086055): test-verify of every test under the path, in chunks sized to it; --rebuild applies
+        // to a whole push, so it goes in one of its own.
+        goal: `reproduce the failures hidden by the flakiness skip-ifs of ${this.s.folder} that the DEBUG commit removes, and find the folder's tests that fail test-verify: besides the push for the skip-ifs' failures, plan a separate push of \`-q "'test-verify-path"\` with ${this.s.folder} as its only path and no \`--rebuild\` (each test-verify-path task verifies every test under the path, the un-skipped ones too; it needs no \`--full\`)`,
         failuresFile: dataPath(this.config, this.s.id, "annotations.json"),
         initialPushFile: dataPath(this.config, this.s.id, "no-initial-push.json"),
         branch: wt.branch,
