@@ -3,7 +3,7 @@ import { unapproved } from "../../state/approval.ts";
 import { md } from "./md.ts";
 import { canDismiss, canRetry, reviewLimitFlag, unreachable } from "../../state/flags.ts";
 import { html, join, type Html } from "../html.ts";
-import { actionKind, COMMAND_LABELS, isLanded, linkify, commandFields, enterBugUrl, metaBugUrl, groupLabel, jobLabel, pushName, jobNoun, refusedOf, needsMetaBug, plural, requestUrl, elapsed, stackOfPatch, submitChecks, regressionStatus, type RenderContext } from "./common.ts";
+import { bugDraftData, actionKind, COMMAND_LABELS, isLanded, linkify, commandFields, enterBugUrl, metaBugUrl, groupLabel, jobLabel, pushName, jobNoun, refusedOf, needsMetaBug, plural, requestUrl, elapsed, stackOfPatch, submitChecks, regressionStatus, type RenderContext } from "./common.ts";
 
 // The ⚑ area of one open needs-user entry: what you're asked, why, and the buttons.
 export function renderAction(r: RequestState, n: NeedsUser, ctx: RenderContext): Html {
@@ -84,14 +84,14 @@ export function flagControls(r: RequestState, n: NeedsUser, ctx: RenderContext):
     case "file-bug": {
       const patch = n.patch === undefined ? undefined : r.patches[n.patch];
       controls = patch?.bugDraft
-        ? html`<a class="btn small" href="${enterBugUrl(patch.bugDraft, ctx)}" target="_blank" rel="noopener">Bug to file ↗</a>${bugBox(r.id, patch.id, back)}`
+        ? html`<a class="btn small" href="${enterBugUrl(patch.bugDraft, ctx)}" data-bug-draft="${bugDraftData(r, patch, patch.bugDraft)}" target="_blank" rel="noopener">Bug to file ↗</a>${bugBox(r.id, patch.id, back)}`
         : null;
       break;
     }
     case "meta-bug": {
       const draft = r.metaBug?.draft;
       const stack = findStack(r, n);
-      controls = html`${draft ? html`<a class="btn small" href="${metaBugUrl(r, draft, ctx)}" target="_blank" rel="noopener">Meta: Bug to file ↗</a>` : null}${bugBox(r.id, "meta", back)}${stack ? submitControls(r, stack, back, ctx) : null}`;
+      controls = html`${draft ? html`<a class="btn small" href="${metaBugUrl(r, draft, ctx)}" data-bug-draft="${bugDraftData(r, "meta", draft)}" target="_blank" rel="noopener">Meta: Bug to file ↗</a>` : null}${bugBox(r.id, "meta", back)}${stack ? submitControls(r, stack, back, ctx) : null}`;
       break;
     }
     // What it asks, in its buttons; the checks are on the stack, below.

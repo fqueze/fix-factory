@@ -9,8 +9,9 @@ const SHA = "a".repeat(40);
 
 function loadPage() {
   const annotations: Annotations = { commits: { [SHA]: { draftKey: "r-1:p-a", status: { kind: "unreviewed", label: "Not approved yet" }, sections: [], titleLinks: [{ text: "Bug XXXXXXX", href: "x" }], actions: [{ id: "approve", label: "Approve", kind: "button", tooltip: "t" }, { id: "set-bug", label: "Bug number", kind: "input", placeholder: "1", tooltip: "t" }], comments: [] } } };
-  const page = injectSendButton("<body></body>", { request: "r-1", stack: "root", shas: { [SHA]: "p-a" }, annotations });
+  const page = injectSendButton("<body></body>", { request: "r-1", stack: "root", shas: { [SHA]: "p-a" }, annotations, bugDrafts: { "p-a": { summary: "Popup left open", title: "Wait for the popup" } } });
   const script = page.match(/<script>([\s\S]*?)<\/script>/)![1];
+  const filing: unknown[] = [];
   const config = page.match(/<script type="application\/json" id="ff-review-config">(.*?)<\/script>/)![1];
   const sent: unknown[] = [];
   const marked: string[][] = [];
@@ -32,6 +33,7 @@ function loadPage() {
   const window: Record<string, unknown> = {
     addEventListener: (type: string, f: (e: unknown) => void) => listeners.set(type, f),
     mdvSetAnnotations: (sha: string, a: (typeof updated)[number][1]) => updated.push([sha, structuredClone(a)]),
+    ffBugWatch: { add: (d: unknown) => filing.push(d) },
   };
   const document = {
     getElementById: (id: string) => (id === "ff-send" ? button : { textContent: config }),
@@ -43,7 +45,7 @@ function loadPage() {
     return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true }) });
   };
   runInNewContext(script, { window, document, fetch, setTimeout: () => 0, JSON, Number, String });
-  return { sent, marked, updated, button, action: (detail: object) => listeners.get("mdv-action")!({ detail }) };
+  return { sent, marked, updated, button, filing, fire: (type: string, detail: object) => listeners.get(type)!({ detail }), action: (detail: object) => listeners.get("mdv-action")!({ detail }) };
 }
 
 const settle = () => new Promise((done) => setImmediate(done));
@@ -77,5 +79,14 @@ describe("the review page's script", () => {
     p.button.click();
     await settle();
     assert.equal(p.sent.length, 1, "nothing new: nothing sent");
+  });
+
+  it("keeps the bug to file whose link you followed for bug-watch.js, and once its bug is recorded drops the link and the field", () => {
+    const p = loadPage();
+    p.fire("mdv-link", { commit: SHA, text: "bug 1234567", href: "x" });
+    p.fire("mdv-link", { commit: SHA.slice(0, 12), text: "Bug XXXXXXX", href: "x" });
+    assert.deepEqual(JSON.parse(JSON.stringify(p.filing)), [{ request: "r-1", patch: "p-a", summary: "Popup left open", title: "Wait for the popup" }]);
+    p.fire("ff-bug-recorded", { request: "r-1", patch: "p-a", bug: 2000001 });
+    assert.deepEqual([p.updated[0][0], p.updated[0][1].actions.map((a) => a.id)], [SHA, ["approve"]]);
   });
 });

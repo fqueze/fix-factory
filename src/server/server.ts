@@ -21,6 +21,7 @@ import type { NetEntry } from "../lib/netlog.ts";
 import { buildPatchView, buildPushView, buildStackReview, isRevName, takesAnnotations } from "./stack-review.ts";
 import { gitIn, type AnnotationIo } from "./review-annotations.ts";
 import { fingerprinter } from "../lib/fingerprint.ts";
+import { filedBugs, matchFiledBugs, settledKeys, type FiledBug, type PendingDraft } from "./bug-match.ts";
 import { AGENT_FILE_CSP, AGENT_FILES, agentFilePath, renderAgentFile, type AgentFile } from "./agent-files.ts";
 import { pushTasks } from "./pages/tasks.ts";
 import type { DryRunResult } from "../cli/try.ts";
@@ -37,6 +38,7 @@ export interface ServerOptions {
   homeDir?: string; // where agent transcripts are, under .claude/projects; os.homedir() by default
   claudeProfiler?: string | null; // its main module, null when not installed; the factory's own by default
   mozbuildStateDir?: string; // where mach caches try task sets; $MOZBUILD_STATE_PATH or ~/.mozbuild by default
+  fetch?: typeof fetch; // for Bugzilla, the bugs you filed; the global fetch by default
 }
 
 // The part of claude-profiler's library API the agent profile uses (see docs/research/tools.md).
@@ -70,6 +72,7 @@ const HEARTBEAT_MS = 30_000;
 const STATIC: Record<string, { file: string; type: string }> = {
   "/client.js": { file: "client.js", type: "text/javascript; charset=utf-8" },
   "/style.css": { file: "style.css", type: "text/css; charset=utf-8" },
+  "/bug-watch.js": { file: "bug-watch.js", type: "text/javascript; charset=utf-8" },
 };
 
 const MAX_BODY = 1 << 20;
@@ -345,6 +348,7 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
     }
 
     if (method === "POST") {
+      if (path === "/api/bugs/filed") return postFiledBugs(req, res);
       if (path !== "/api/commands") {
         throw new HttpError(404, "not found");
       }
@@ -630,6 +634,48 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
       res.writeHead(303, { Location: back });
       res.end();
     }
+  }
+
+  // The bugs you filed from the links you followed (bug-watch.js asks when you come back to a page): one Bugzilla
+  // search, shared by every page asking within 15 s, so tabs coming back together make one.
+  let lastSearch: { since: string; at: number; bugs: Promise<FiledBug[]> } | undefined;
+  async function postFiledBugs(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const origin = req.headers.origin;
+    if (req.headers["sec-fetch-site"] === "cross-site" || (origin !== undefined && hostOf(origin) !== req.headers.host?.toLowerCase())) {
+      throw new HttpError(403, "cross-origin request refused");
+    }
+    let pending: PendingDraft[];
+    try {
+      pending = (JSON.parse(await readBody(req)) as { pending: PendingDraft[] }).pending;
+    } catch {
+      throw new HttpError(400, "invalid JSON");
+    }
+    const field = (v: unknown) => typeof v === "string" && v !== "";
+    if (!Array.isArray(pending) || !pending.every((p) => p && field(p.key) && field(p.request) && field(p.patch) && typeof p.summary === "string" && typeof p.title === "string" && field(p.t) && !Number.isNaN(Date.parse(p.t)))) {
+      throw new HttpError(400, "pending must be a list of {key, request, patch, summary, title, t}");
+    }
+    const getRequest = (id: string) => opts.state.getRequest(id);
+    const settled = settledKeys(pending, getRequest, now());
+    const live = pending.filter((p) => !settled.includes(p.key));
+    const email = opts.config.bugzillaEmail;
+    if (!live.length || !email) {
+      return send(res, 200, "application/json", JSON.stringify({ matches: [], settled }));
+    }
+    const since = new Date(Math.min(...live.map((p) => Date.parse(p.t))) - 5 * 60_000).toISOString();
+    if (!lastSearch || lastSearch.since > since || now() - lastSearch.at > 15_000) {
+      lastSearch = { since, at: now(), bugs: filedBugs(email, since, opts.fetch) };
+      lastSearch.bugs.then(
+        (bugs) => process.stderr.write(`bugs filed since ${since}: ${bugs.map((b) => b.id).join(", ") || "none"}\n`),
+        () => (lastSearch = undefined),
+      );
+    }
+    let bugs: FiledBug[];
+    try {
+      bugs = await lastSearch.bugs;
+    } catch (e) {
+      throw new HttpError(502, errorMessage(e));
+    }
+    send(res, 200, "application/json", JSON.stringify({ matches: matchFiledBugs(live, bugs, getRequest), settled }));
   }
 
   return factoryServer;

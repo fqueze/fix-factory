@@ -504,6 +504,47 @@ describe("GET /requests/:id/items/:item/files/:which", () => {
   });
 });
 
+describe("POST /api/bugs/filed", () => {
+  const asked: string[] = [];
+  const bugzilla = (async (url: string) => {
+    asked.push(url);
+    return new Response(JSON.stringify({ bugs: [{ id: 2079001, summary: "p-perm's", creation_time: "2026-10-15T08:58:00Z" }, { id: 2090001, summary: "Camera permission left set", creation_time: "2026-10-15T08:59:00Z" }] }));
+  }) as typeof fetch;
+  const filing = createFactoryServer({
+    config: { port: 0, profilerOrigin: "", stackViewerCommand: [], stateDir, worktreesDir: stateDir, firefoxRepo: stateDir, maxAgents: 1, maxBuilds: 1, bugzillaEmail: "me@example.com" },
+    state,
+    sink,
+    now: () => Date.parse("2026-10-15T09:00:00Z"),
+    fetch: bugzilla,
+  });
+  let at = "";
+  before(async () => {
+    await new Promise<void>((done) => filing.listen(0, "127.0.0.1", done));
+    at = `http://127.0.0.1:${(filing.address() as AddressInfo).port}`;
+  });
+  after(() => {
+    filing.closeAllConnections();
+    filing.close();
+  });
+  const R = "r-20261008-permissions";
+  const ask = (pending: object[], headers: Record<string, string> = {}) => fetch(`${at}/api/bugs/filed`, { method: "POST", body: JSON.stringify({ pending }), headers: { "Content-Type": "application/json", ...headers } });
+
+  it("matches the bugs filed since the links were followed, in one search shared by pages asking together, and says which are settled", async () => {
+    const pending = [
+      { key: `${R}\np-webrtc`, request: R, patch: "p-webrtc", summary: "Camera permission left set", title: "webrtc", t: "2026-10-15T08:57:00Z" },
+      { key: `${R}\np-perm`, request: R, patch: "p-perm", summary: "x", title: "perm", t: "2026-10-15T08:57:00Z" },
+    ];
+    const body = await (await ask(pending)).json();
+    assert.deepEqual(body, { matches: [{ key: `${R}\np-webrtc`, request: R, patch: "p-webrtc", title: "webrtc", bug: 2090001 }], settled: [`${R}\np-perm`] });
+    assert.equal(asked.length, 1);
+    assert.match(asked[0], /assigned_to=me%40example\.com&creation_time=2026-10-15T08%3A52%3A00\.000Z&include_fields=id%2Csummary%2Ccreation_time$/);
+    await ask(pending);
+    assert.equal(asked.length, 1, "within 15 s: the same search");
+    assert.equal((await ask([{ key: "k" }])).status, 400);
+    assert.equal((await ask(pending, { Origin: "https://evil.example" })).status, 403);
+  });
+});
+
 describe("review pages of a stack-viewer that takes --annotations", () => {
   const annotated = createFactoryServer({
     config: { port: 0, profilerOrigin: "", stackViewerCommand: [process.execPath, join(FIXTURES, "fake-stack-viewer-annotations.js")], stateDir, worktreesDir: stateDir, firefoxRepo: stateDir, maxAgents: 1, maxBuilds: 1 },

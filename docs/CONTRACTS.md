@@ -79,6 +79,13 @@ cache/artifacts/<taskId>/...      # downloaded try logs and profiles; gone a day
   and the page's `RenderContext`, read with git and cached per sha. The submit step raises
   `approve:<stack>:<hash>` instead of `submit:<stack>` until every patch a moz-phab submit would send (not landed,
   not the commit Phabricator has) is approved; the page disables the moz-phab buttons (submit, resubmit) until then.
+- **Bugs you filed** (`src/server/bug-watch.js`, `src/server/bug-match.ts`): following a "Bug to file" link (`data-bug-draft`
+  on the factory's pages; stack-viewer's `mdv-link` on a commit's `Bug XXXXXXX`) keeps `{key, request, patch, summary, title, t}` in
+  the browser's `localStorage` (`ff-bugs-to-file`, 3 h). Coming back to the page (visible, or focused; at most every 15 s)
+  posts them to `POST /api/bugs/filed`, which settles those whose patch has a bug, makes one read-only Bugzilla search
+  (bugs assigned to `bugzillaEmail` created since the oldest, shared for 15 s) and matches: same summary, else one
+  draft and one new bug. The page sends each match as the bug box does (`set-bug`) and says it in a notice where you
+  can give the right number.
 - **Review pages** (`src/server/stack-review.ts`): when the stack-viewer's `--help` mentions `--annotations` (asked
   every 10 min), the page gets an annotations file (`src/server/review-annotations.ts`, the contract in md-viewer's
   README) and a script that sends `approve`, `set-bug` and `review-send` (new comments with `id`, `anchor`, `sha`;

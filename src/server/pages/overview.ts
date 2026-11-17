@@ -16,6 +16,7 @@ export function renderOverview(requests: RequestState[], ctx: RenderContext): st
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏭</text></svg>">
 <link rel="stylesheet" href="/style.css">
 <script src="/client.js" defer></script>
+<script src="/bug-watch.js" defer></script>
 </head>
 <body>
 ${PHAB_SYMBOL}

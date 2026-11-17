@@ -16,6 +16,7 @@ import {
   stackOfPatch,
   descriptionLeftOut,
   enterBugUrl,
+  bugDraftData,
   metaBugUrl,
   foldContent,
   formatCost,
@@ -265,7 +266,7 @@ function metaBugLine(r: RequestState, back: string, ctx: RenderContext): Html {
     ? null
     : unfiled
       ? html`· <span class="sub">to file once the stack's ${plural(unfiled, "other bug")} ${unfiled === 1 ? "is" : "are"} filed</span>`
-      : html`· <a class="bug tofile" data-patch="meta" href="${metaBugUrl(r, m.draft, ctx)}" target="_blank" rel="noopener">Bug to file</a>`;
+      : html`· <a class="bug tofile" data-patch="meta" href="${metaBugUrl(r, m.draft, ctx)}" data-bug-draft="${bugDraftData(r, "meta", m.draft)}" target="_blank" rel="noopener">Bug to file</a>`;
   return html`<div class="box"><h4>Meta bug${required ? null : html` <span class="sub">(optional)</span>`} ${link} ${m.draft ? html`· “${m.draft.summary}”` : null}</h4>${
     m.draft ? html`${description(r, "meta", m.draft.description, !unfiled && descriptionLeftOut(metaBugUrl(r, m.draft, ctx)))}${revisions(r, "meta")}` : null
   }${bugBox(r.id, "meta", back, "row")}</div>`;
@@ -661,10 +662,10 @@ function patchParts(r: RequestState, p: PatchView, ctx: RenderContext) {
     onLine,
     cls: own.some((n) => actionKind(n, r) === "resubmit") ? ("resubmit" as StateClass) : phabClass(p, item ? rowClass(r, item, ctx) : landable ? "ok" : "wait"),
     name: html`${p.revision ? html`<a class="phab" href="${phabUrl(p.revision)}" title="D${p.revision}" target="_blank" rel="noopener">${PHAB_ICON}</a>` : null}${
-      first.id === p.id ? bugLabel(p, ctx) : html`<a class="bug tofile" href="#patch-${first.id}" title="Filed from ${first.title}">same bug</a>`
+      first.id === p.id ? bugLabel(r, p, ctx) : html`<a class="bug tofile" href="#patch-${first.id}" title="Filed from ${first.title}">same bug</a>`
     }<span class="ptitle">${patchTitle(p)}</span>`,
     // On a fix's row: its bug, once for the patches that share it, then its revision and title.
-    bug: first.id === p.id ? bugLabel(p, ctx) : bugLabel(first, ctx),
+    bug: first.id === p.id ? bugLabel(r, p, ctx) : bugLabel(r, first, ctx),
     // A filed bug is on each of its patches' lines; one to file, on the first, its box under it.
     bugKey: hasBug(p) ? `bug ${p.bug} ${p.id}` : `draft ${first.id}`,
     phab: p.revision ? html`<a class="phab" href="${phabUrl(p.revision)}" title="D${p.revision}" target="_blank" rel="noopener">${PHAB_ICON}</a>` : null,
@@ -845,12 +846,12 @@ function testPlanSection(r: RequestState, p: PatchView, back: string): Html | nu
 }
 
 // The bug its commit message starts with; the link of one to file opens Bugzilla's form prefilled with its draft.
-function bugLabel(p: PatchView, ctx: RenderContext): Html | null {
+function bugLabel(r: RequestState, p: PatchView, ctx: RenderContext): Html | null {
   if (hasBug(p)) {
     return html`<a class="bug" href="${bugUrl(p.bug)}" target="_blank" rel="noopener">Bug ${p.bug}</a>`;
   }
   if (p.bugDraft) {
-    return html`<a class="bug tofile" data-patch="${p.id}" href="${enterBugUrl(p.bugDraft, ctx)}" target="_blank" rel="noopener" title="Opens a prefilled enter_bug.cgi; back here, paste its number in the field it leaves in its place">Bug to file</a>`;
+    return html`<a class="bug tofile" data-patch="${p.id}" href="${enterBugUrl(p.bugDraft, ctx)}" data-bug-draft="${bugDraftData(r, p, p.bugDraft)}" target="_blank" rel="noopener" title="Opens a prefilled enter_bug.cgi; back here, paste its number in the field it leaves in its place">Bug to file</a>`;
   }
   return p.item === ANNOTATIONS_ITEM ? html`<span class="bug none" title="Goes under the meta bug">meta bug</span>` : html`<span class="bug missing" title="Its author gives it one: an open bug for this failure, or a draft to file">no bug yet</span>`;
 }

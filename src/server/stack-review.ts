@@ -5,6 +5,8 @@ import { exec } from "../lib/exec.ts";
 import { gitDirFor } from "../lib/kept.ts";
 import type { PatchId, PatchView, RequestState, StackView } from "../types.ts";
 import { buildAnnotations, type Annotations, type AnnotationIo } from "./review-annotations.ts";
+import { sameBugDraft } from "../state/meta-bug.ts";
+import { shortTitle } from "./pages/common.ts";
 
 // A git revision name that can't be taken for an option: a sha, a branch, HEAD~2, sha^.
 export function isRevName(rev: string): boolean {
@@ -77,7 +79,7 @@ export async function buildStackReview(opts: { repo: string; command: string[]; 
   const onPage = shown.length ? Object.fromEntries(shown.filter(([sha]) => shas[sha]).map(([sha]) => [sha, shas[sha]])) : shas;
   const annotations = opts.annotations && buildAnnotations(request, onPage, opts.annotations);
   const page = await runViewer(opts.command, gitDirFor({ firefoxRepo: opts.repo }, stack.worktree), `${base}..${stack.branch}`, annotations);
-  return injectSendButton(page, { request: request.id, stack: stack.id, shas, ...(annotations ? { annotations } : {}) });
+  return injectSendButton(page, { request: request.id, stack: stack.id, shas, ...(annotations ? { annotations, bugDrafts: bugDraftsOf(request, Object.values(shas)) } : {}) });
 }
 
 // One patch (a commit in its author's worktree) in stack-viewer; comments go back to its author.
@@ -89,7 +91,7 @@ export async function buildPatchView(opts: { repo: string; command: string[]; re
   const shas = { [patch.sha]: patch.id };
   const annotations = opts.annotations && buildAnnotations(request, shas, opts.annotations);
   const page = await runViewer(opts.command, gitDirFor({ firefoxRepo: opts.repo }, patch.worktree), `${patch.sha}^..${patch.sha}`, annotations);
-  return injectSendButton(page, { request: request.id, patch: patch.id, shas, ...(annotations ? { annotations } : {}) });
+  return injectSendButton(page, { request: request.id, patch: patch.id, shas, ...(annotations ? { annotations, bugDrafts: bugDraftsOf(request, [patch.id]) } : {}) });
 }
 
 // What a try push would carry (the dry run's commits, newest first, in the worktree it pushes from), read-only.
@@ -229,6 +231,24 @@ const REVIEW_SCRIPT = `
       }).catch(function (err) { flash("Failed: " + err.message); });
     }
   });
+  // Following a commit's "Bug XXXXXXX" link (its bug to file): back here, bug-watch.js looks for the bug you filed.
+  window.addEventListener("mdv-link", function (e) {
+    var sha = fullSha(e.detail.commit);
+    var patch = sha && cfg.shas[sha];
+    var draft = patch && cfg.bugDrafts && cfg.bugDrafts[patch];
+    if (draft && /^Bug X+$/.test(e.detail.text)) window.ffBugWatch.add({ request: cfg.request, patch: patch, summary: draft.summary, title: draft.title });
+  });
+  // bug-watch.js recorded it: its commits have their bug, nothing left to file.
+  window.addEventListener("ff-bug-recorded", function (e) {
+    if (e.detail.request !== cfg.request) return;
+    for (var sha in cfg.shas) {
+      if (cfg.shas[sha] !== e.detail.patch || !cfg.annotations.commits[sha]) continue;
+      update(sha, function (a) {
+        a.actions = a.actions.filter(function (x) { return x.id !== "set-bug"; });
+        a.titleLinks = [];
+      });
+    }
+  });
   // An anchor stack-viewer gave, or one from where an older page says a comment is.
   function anchorOf(c) {
     if (c.anchor) return c.anchor;
@@ -291,11 +311,24 @@ const REVIEW_SCRIPT = `
 })();
 `;
 
-export function injectSendButton(page: string, cfg: { request: string; stack?: string; patch?: string; shas: Record<string, string>; annotations?: Annotations }): string {
+// The bugs to file of a page's patches (the first of those sharing a draft), by patch: what bug-watch.js looks for.
+function bugDraftsOf(request: RequestState, patches: PatchId[]): Record<PatchId, { summary: string; title: string }> {
+  return Object.fromEntries(
+    [...new Set(patches)]
+      .map((id) => request.patches[id])
+      .filter((p) => (p.bug === null || p.bug === 0) && p.bugDraft && sameBugDraft(request, p.id)[0].id === p.id)
+      .map((p) => [p.id, { summary: p.bugDraft!.summary, title: shortTitle(p) }]),
+  );
+}
+
+export function injectSendButton(
+  page: string,
+  cfg: { request: string; stack?: string; patch?: string; shas: Record<string, string>; annotations?: Annotations; bugDrafts?: Record<PatchId, { summary: string; title: string }> },
+): string {
   const snippet =
     `<button id="ff-send" type="button" style="position:fixed;right:12px;bottom:12px;z-index:1000;padding:6px 12px;border-radius:6px;border:1px solid #2a78d6;background:#2a78d6;color:#fff;font:13px system-ui,sans-serif;cursor:pointer">Send comments to the factory</button>` +
     `<script type="application/json" id="ff-review-config">${jsonForScript(cfg)}</script>` +
-    `<script>${cfg.annotations ? REVIEW_SCRIPT : SEND_SCRIPT}</script>`;
+    (cfg.annotations ? `<script src="/bug-watch.js"></script><script>${REVIEW_SCRIPT}</script>` : `<script>${SEND_SCRIPT}</script>`);
   const i = page.lastIndexOf("</body>");
   return i < 0 ? page + snippet : page.slice(0, i) + snippet + page.slice(i);
 }

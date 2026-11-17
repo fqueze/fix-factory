@@ -627,6 +627,10 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.match(row, /<a class="bug tofile" data-patch="[^"]*" href="https:\/\/bugzilla\.mozilla\.org\/enter_bug\.cgi\?product=Core&amp;component=XPCOM&amp;short_desc=CopyDirectoryTo\+leaves/);
     assert.match(row, /blocked=2081200/);
     assert.doesNotMatch(row, /assigned_to/, "no Bugzilla email configured");
+    // Followed, it's what bug-watch.js looks for once you're back.
+    const data = JSON.parse(row.match(/<a class="bug tofile" data-patch="p-copydir" href="[^"]*" data-bug-draft="([^"]*)"/)![1].replaceAll("&quot;", '"').replaceAll("&#39;", "'"));
+    assert.deepEqual(data, { request: "r-20261010-xpcshell-cwd", patch: "p-copydir", summary: "CopyDirectoryTo leaves a read-only source directory's contents behind", title: data.title });
+    assert.doesNotMatch(data.title, /^Bug /);
     const mine = rowOf(renderRequest(source.getRequest("r-20261010-xpcshell-cwd")!, { ...ctx, bugzillaEmail: "me@mozilla.com" }, true).value, "patch-p-copydir");
     assert.match(mine, /&amp;assigned_to=me%40mozilla\.com&amp;bug_status=ASSIGNED/, "yours to attach its patch to");
     assert.match(row, /<\/summary><div class="under"><div class="box tofile">\n    <h4>Core::XPCOM · “CopyDirectoryTo leaves a read-only source directory&#39;s contents behind”/, "first in the body: clicking in it doesn't fold the row");

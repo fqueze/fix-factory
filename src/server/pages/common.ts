@@ -147,6 +147,16 @@ export function patchTitle(p: PatchView): string {
   return p.title.replace(/^Bug (\d+|X+)\s*-\s*/i, "");
 }
 
+// A patch as a notice names it: its title without its bug and reviewers.
+export function shortTitle(p: PatchView): string {
+  return patchTitle(p).replace(/,?\s*r[=?]\S.*$/, "");
+}
+
+// What a "Bug to file" link files, for bug-watch.js: following it, the page looks for that bug when you come back.
+export function bugDraftData(r: RequestState, patch: PatchView | "meta", draft: BugDraft): string {
+  return JSON.stringify({ request: r.id, patch: patch === "meta" ? "meta" : patch.id, summary: draft.summary, title: patch === "meta" ? "the meta bug" : shortTitle(patch) });
+}
+
 export function itemOf(r: RequestState, p: PatchView): ItemView | undefined {
   return p.item ? r.items[p.item] : undefined;
 }
