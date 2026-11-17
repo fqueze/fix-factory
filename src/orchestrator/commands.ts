@@ -59,11 +59,21 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
     const tests = s!.items[item]?.group.tests ?? [];
     return tests.length === 1 ? tests[0].split("/").pop()! : tests.length > 1 ? `the item of ${tests.length} tests` : "this item";
   };
+  // The key of the author run that answers it: the one resumed, or the one running, which gets it in its inbox.
+  let answeredBy = "";
   const resume = (item: ItemId, reason: string, message: string): string | undefined => {
     const plan = resumeAuthorPlan(s!.id, view!, item, reason, { message }, "investigating");
     if (plan === undefined) return `${itemName(item)} has no author session to resume`;
-    if (plan === "busy") return `the author of ${itemName(item)} is running: send it again when it's done`;
+    if (plan === "busy") {
+      const running = authorJobsOf(view!, item).at(-1);
+      if (!running?.sessionId || running.end !== undefined) return `the author of ${itemName(item)} is running: send it again when it's done`;
+      ev({ type: "agent-message", item, job: running.job, session: running.sessionId, msg: c.id, text: message });
+      effects.push({ type: "inbox", session: running.sessionId, message: { id: c.id, text: message, t: c.t } });
+      answeredBy = running.purpose.key;
+      return undefined;
+    }
     plan.purpose.key = `author:${item}${itemEpochOf(view!, item)}:${reason.replace(/\s+/g, "-")}:${c.id}`;
+    answeredBy = plan.purpose.key;
     // Its worktree was removed: the planner restores it, then resumes the author with this.
     if (removedWorktree(view!, plan.cwd)) {
       ev({ type: "author-queued", item, key: plan.purpose.key, reason, message });
@@ -245,18 +255,18 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
         const item = s.patches[x.patch]?.item;
         if (item) byItem.set(item, [...(byItem.get(item) ?? []), `- On ${s.patches[x.patch].title}: ${x.text}`]);
       }
-      const sent = new Set<ItemId>();
+      const sent = new Map<ItemId, string>();
       const errors = [...byItem]
         .map(([item, lines]) => {
           const error = resume(item, "stack comments", `Review comments on your patch, from stack-viewer:\n${lines.join("\n")}\n\nAddress them by amending your commit, then end with the JSON report again. ${ANSWER_EACH} If you think one is wrong, don't do it and say why in \`disagreement\`.${draftsNote(s, item)}`);
-          if (!error) sent.add(item);
+          if (!error) sent.set(item, answeredBy);
           return error;
         })
         .filter((e) => e);
       // Each comment and the run that answers it, shown on its patch.
       for (const x of c.comments) {
         const item = s.patches[x.patch]?.item;
-        if (item && sent.has(item)) ev({ type: "comment-sent", patch: x.patch, text: x.text, key: `author:${item}${itemEpochOf(view, item)}:stack-comments:${c.id}` });
+        if (item && sent.has(item)) ev({ type: "comment-sent", patch: x.patch, text: x.text, key: sent.get(item)! });
       }
       done(errors.length === 0, errors.join("; "));
       break;
@@ -264,7 +274,7 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
     case "comment-fix": {
       const item = s.patches[c.patch]?.item;
       const error = item ? resume(item, "comment", `A comment on your fix:\n${c.text}\n\nAddress it by amending your commit, then end with the JSON report again. ${ANSWER_EACH} If you think it is wrong, don't do it: leave your commits as they are and say why in \`disagreement\`.${draftsNote(s, item)}`) : "this patch has no group, so no author to tell";
-      if (!error) ev({ type: "comment-sent", patch: c.patch, text: c.text, key: `author:${item}${itemEpochOf(view, item!)}:comment:${c.id}` });
+      if (!error) ev({ type: "comment-sent", patch: c.patch, text: c.text, key: answeredBy });
       done(!error, error);
       break;
     }

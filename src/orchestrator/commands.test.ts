@@ -178,7 +178,7 @@ describe("commands", () => {
     assert.deepEqual([draft?.product, draft?.component, draft?.blocks, draft?.description, draft?.summary], ["Testing", "General", [2063593, 1975728], "d2", "[meta] x"]);
   });
 
-  it("comment-fix and stack-comments resume the patch's author, unless it's running", () => {
+  it("comment-fix and stack-comments resume the patch's author; while it runs, go to its inbox", () => {
     const sc = withPatch();
     const c = cmd({ cmd: "comment-fix", patch: "p-a", text: "drop the timeout" });
     run(sc, c);
@@ -190,9 +190,12 @@ describe("commands", () => {
     // It answers each point with what backs it; the page shows the comment with that answer.
     assert.match(plan.agent?.message ?? "", /answering each point of it in a line/);
     assert.deepEqual(sc.state().patches["p-a"].yourComments?.map((x) => [x.text, x.key]), [["drop the timeout", `author:i-a:comment:${c.id}`]]);
-    run(sc, cmd({ cmd: "stack-comments", stack: "a", comments: [{ patch: "p-a", text: "nit" }] }));
-    assert.deepEqual(executed(sc).at(-1), { ok: false, detail: "the author of test_a.js is running: send it again when it's done" });
-    assert.equal(sc.state().patches["p-a"].yourComments?.length, 1, "not sent, not shown");
+    const nit = cmd({ cmd: "stack-comments", stack: "a", comments: [{ patch: "p-a", text: "nit" }] });
+    const effects = run(sc, nit);
+    assert.equal(executed(sc).at(-1)!.ok, true);
+    const inbox = effects.find((e) => e.type === "inbox");
+    assert.ok(inbox?.type === "inbox" && inbox.session === "s-1" && /On .*: nit/.test(inbox.message.text) && inbox.message.id === nit.id);
+    assert.deepEqual(sc.state().patches["p-a"].yourComments?.map((x) => [x.text, x.key]).at(-1), ["nit", `author:i-a:comment:${c.id}`], "answered by the run that has it");
   });
 
   it("a global tell-factory creates a request to route, named from its text; one for an unknown request does nothing", () => {
