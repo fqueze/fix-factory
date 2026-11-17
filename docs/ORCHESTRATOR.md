@@ -40,6 +40,8 @@ A tick runs on any change to `commands.jsonl` or a job file, and at least every 
     - also failing on central → only noted on the page;
     - new and unexplained → a new work item;
     - infra → noted on the page. A retrigger is a push, so it needs your approval.
+- **Approval before submission:** the moz-phab command is offered once you approved, in stack-viewer, every patch it
+  would send; until then the submit step asks for that (a rebase keeps an approval: it is of the code and message).
 - **Submission detected:** after you copy the moz-phab command, `stack.ts import` reads the branch every 20 s for
   10 min, then every 2 min for the rest of the hour, until what you submitted has its `Differential Revision:`
   trailers and the branch is settled. Once every patch has one, the request moves to review comments; patches

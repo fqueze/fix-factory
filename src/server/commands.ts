@@ -53,6 +53,8 @@ type Field =
   | "string[]"
   | "object"
   | "comments"
+  | "reviewComments"
+  | "responses"
   | "parts"
   | "groups"
   | { oneOf: readonly string[]; optional?: boolean };
@@ -75,6 +77,8 @@ const SPECS: Record<Command["cmd"], Record<string, Field>> = {
   "take-patch": { item: "string" },
   "hand-back": { item: "string" },
   "comment-fix": { patch: "string", text: "string" },
+  approve: { patch: "string", sha: "string" },
+  "review-send": { comments: "reviewComments", responses: "responses" },
   "follow-up": { push: "string", patch: "string" },
   "set-test-plan": { patch: "string", text: "string" },
   "revise-test-plan": { patch: "string", text: "string" },
@@ -122,6 +126,8 @@ const NEEDS_REQUEST = new Set<string>([
   "poll-phab",
   "verify-stack",
   "comment-fix",
+  "approve",
+  "review-send",
   "follow-up",
   "set-test-plan",
   "revise-test-plan",
@@ -137,6 +143,14 @@ const NEEDS_REQUEST = new Set<string>([
 
 function isObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+const RESPONSES = ["done", "address", "ignore", "reply", "reopen"];
+
+function isAnchor(a: unknown): boolean {
+  if (!isObject(a) || typeof a.file !== "string") return false;
+  const line = (n: unknown) => Number.isSafeInteger(n) && (n as number) > 0;
+  return (a.line === undefined || line(a.line) || (Array.isArray(a.line) && a.line.length === 2 && a.line.every(line))) && (a.side === undefined || a.side === "new" || a.side === "old");
 }
 
 function checkField(name: string, spec: Field, value: unknown): string | null {
@@ -165,6 +179,15 @@ function checkField(name: string, spec: Field, value: unknown): string | null {
         : `${name} must be two or more {title, groups: [{item, why}]}`;
     case "groups":
       return Array.isArray(value) && value.length > 0 && value.every((g) => isObject(g) && typeof g.item === "string" && typeof g.why === "string") ? null : `${name} must be a non-empty list of {item, why}`;
+    case "reviewComments":
+      return Array.isArray(value) &&
+        value.every((c) => isObject(c) && typeof c.patch === "string" && typeof c.text === "string" && c.text.trim() !== "" && (c.id === undefined || typeof c.id === "string") && (c.sha === undefined || typeof c.sha === "string") && (c.anchor === undefined || isAnchor(c.anchor)))
+        ? null
+        : `${name} must be a list of {patch, text, id?, sha?, anchor?: {file, line?, side?}}`;
+    case "responses":
+      return Array.isArray(value) && value.every((x) => isObject(x) && typeof x.patch === "string" && typeof x.id === "string" && RESPONSES.includes(x.response as string) && (x.text === undefined || typeof x.text === "string"))
+        ? null
+        : `${name} must be a list of {patch, id, response: ${RESPONSES.join(" | ")}, text?}`;
     case "comments":
       return Array.isArray(value) && value.length > 0 && value.every((c) => isObject(c) && typeof c.patch === "string" && typeof c.text === "string" && c.text.trim() !== "")
         ? null
@@ -279,8 +302,11 @@ function checkIds(c: Record<string, unknown>, state: RequestState): string | nul
   if (c.cmd === "accept-review" && !reviewLimitFlag(state, c.item as string)) {
     return `${String(c.item)} isn't waiting for you after its critical review rounds`;
   }
-  if (Array.isArray(c.comments)) {
-    const bad = (c.comments as { patch: string }[]).find((x) => !patchOk(x.patch));
+  if (c.cmd === "review-send" && (c.comments as unknown[]).length === 0 && (c.responses as unknown[]).length === 0) {
+    return "nothing to send";
+  }
+  if (Array.isArray(c.comments) || Array.isArray(c.responses)) {
+    const bad = [...((c.comments as { patch: string }[] | undefined) ?? []), ...((c.responses as { patch: string }[] | undefined) ?? [])].find((x) => !patchOk(x.patch) || (c.cmd === "review-send" && x.patch === "meta"));
     if (bad) {
       return `unknown patch ${bad.patch}`;
     }

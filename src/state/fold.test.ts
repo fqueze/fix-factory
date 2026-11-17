@@ -208,6 +208,31 @@ test("your comments on a patch, and the runs answering them, outlive its commits
   assert.deepEqual(s.patches.p1.yourComments?.map((c) => c.key), ["author:i1:stack-comments:c1"]);
 });
 
+test("your comments get ids (derived for those from before ids) and their commit then; your answers and approval outlive its commits", () => {
+  const s = fold(
+    ev({ type: "patch", patch: "p1", sha: "a", worktree: "/wt", title: "t", bug: 1 }),
+    ev({ type: "comment-sent", patch: "p1", text: "are you sure?", key: "author:i1:stack-comments:c1" }),
+    ev({ type: "patch", patch: "p1", sha: "b", worktree: "/wt", title: "t", bug: 1 }),
+    ev({ type: "comment-sent", patch: "p1", text: "one", key: "author:i1:stack-comments:c2", id: "c-x", anchor: { file: "(commit)", line: 3 }, sha: "b" }),
+    ev({ type: "comment-sent", patch: "p1", text: "two", key: "author:i1:stack-comments:c2", id: "c-y", anchor: { file: "(section:test-plan)", line: 1 }, sha: "b", lines: ["Green."] }),
+    ev({ type: "comment-response", patch: "p1", comment: "phab-4", response: "ignore" }),
+    ev({ type: "comment-response", patch: "p1", comment: "c-x", response: "done" }),
+    ev({ type: "comment-response", patch: "p1", comment: "c-x", response: "reopen" }),
+    ev({ type: "patch-approved", patch: "p1", sha: "b", fingerprint: "fp" }),
+    ev({ type: "patch", patch: "p1", sha: "c", worktree: "/wt", title: "t", bug: 1 }),
+  );
+  const again = fold(
+    ev({ type: "patch", patch: "p1", sha: "a", worktree: "/wt", title: "t", bug: 1 }),
+    ev({ type: "comment-sent", patch: "p1", text: "are you sure?", key: "author:i1:stack-comments:c1" }),
+  );
+  const [old, x, y] = s.patches.p1.yourComments!;
+  assert.match(old.id, /^c-[0-9a-f]{12}$/);
+  assert.equal(old.id, again.patches.p1.yourComments![0].id, "the same id every fold");
+  assert.deepEqual([old.sha, x.id, x.sha, y.lines], ["a", "c-x", "b", ["Green."]]);
+  assert.deepEqual(Object.fromEntries(Object.entries(s.patches.p1.responses!).map(([k, v]) => [k, v.response])), { "phab-4": "ignore", "c-x": "reopen" });
+  assert.deepEqual(s.patches.p1.approved?.fingerprint, "fp");
+});
+
 test("pushes: triage-try reports of a push's jobs are its analysis, a re-triaged cell replacing the earlier one", () => {
   const triage = (job: string, push: string | undefined) =>
     ev({ type: "job-started", job, kind: "agent", name: "triage-try", pid: 1, pidStartTime: 1, cmd: ["claude"], cwd: "/", codeVersion: "sha", purpose: { key: job, what: "triage", ...(push ? { push } : {}) } });

@@ -8,17 +8,19 @@ import { isAbsolute, join, relative, resolve } from "node:path";
 import { parseStreamJson, transcriptPath } from "../agents/run.ts";
 import { toolsBin, viewerCommand } from "../cli/tools.ts";
 import { jobDir } from "../state/jobs.ts";
-import type { FactoryConfig, JobView, PatchView } from "../types.ts";
+import type { FactoryConfig, JobView, PatchView, RequestState } from "../types.ts";
 import { HostCheck } from "./host-check.ts";
 import { commandsFromForm, validateCommand } from "./commands.ts";
 import { conversationOf, jobUrl, renderActivity, type Activity } from "./pages/activity.ts";
-import type { RenderContext } from "./pages/common.ts";
+import { enterBugUrl, type RenderContext } from "./pages/common.ts";
 import { readFeedback, renderFeedback } from "./pages/feedback.ts";
 import { renderMain, renderOverview, renderStrip } from "./pages/overview.ts";
 import { renderRequest } from "./pages/request.ts";
 import { buildRequestProfile } from "./request-profile.ts";
 import type { NetEntry } from "../lib/netlog.ts";
-import { buildPatchView, buildPushView, buildStackReview, isRevName } from "./stack-review.ts";
+import { buildPatchView, buildPushView, buildStackReview, isRevName, takesAnnotations } from "./stack-review.ts";
+import { gitIn, type AnnotationIo } from "./review-annotations.ts";
+import { fingerprinter } from "../lib/fingerprint.ts";
 import { AGENT_FILE_CSP, AGENT_FILES, agentFilePath, renderAgentFile, type AgentFile } from "./agent-files.ts";
 import { pushTasks } from "./pages/tasks.ts";
 import type { DryRunResult } from "../cli/try.ts";
@@ -168,6 +170,25 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
     return undefined;
   }
 
+  // A patch you approved is still approved once rebased: same fingerprint.
+  const fingerprint = fingerprinter(opts.config.firefoxRepo);
+  const git = gitIn(opts.config.firefoxRepo);
+
+  // What a review page's annotations are made from, when its stack-viewer takes them.
+  async function annotationIo(r: RequestState, req: IncomingMessage): Promise<AnnotationIo | undefined> {
+    if (!(await takesAnnotations(stackViewer))) return undefined;
+    const c = ctx(req);
+    return {
+      git,
+      fingerprint,
+      report: (job) => {
+        const text = readData(`requests/${r.id}/reports/${job}.json`);
+        return text === undefined ? undefined : JSON.parse(text);
+      },
+      bugUrl: (d) => enterBugUrl(d, c),
+    };
+  }
+
   function readInterdiff(p: PatchView): string | undefined {
     return p.interdiffFile === undefined ? undefined : readData(p.interdiffFile);
   }
@@ -290,6 +311,7 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
       activity: (request, job) => renderActivity(request, job, activity(request, job, req), ctx(req)),
       sessionCost,
       diffStat,
+      fingerprint,
       landoUrl,
       readData,
       freeDiskGB: freeDiskGB(),
@@ -460,6 +482,7 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
           request: found.request,
           stack: found.stack,
           base,
+          annotations: await annotationIo(found.request, req),
         });
       } catch (e) {
         throw new HttpError(502, errorMessage(e));
@@ -474,7 +497,7 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
       }
       let page: string;
       try {
-        page = await buildPatchView({ repo: opts.config.firefoxRepo, command: stackViewer, request, patch });
+        page = await buildPatchView({ repo: opts.config.firefoxRepo, command: stackViewer, request, patch, annotations: await annotationIo(request, req) });
       } catch (e) {
         throw new HttpError(502, errorMessage(e));
       }

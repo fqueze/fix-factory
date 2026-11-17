@@ -2,6 +2,7 @@ import { ANNOTATIONS_ITEM, needsMetaBug as stackNeedsMetaBug, sameBugDraft } fro
 import { md } from "./md.ts";
 import { REQUEST_STEPS } from "../commands.ts";
 import type { BugDraft, ItemView, JobView, NeedsUser, PatchView, PushView, Regression, RequestState, ReviewPatchReport, ReviewerStatus, StackView } from "../../types.ts";
+import { reviewStatus, unapproved } from "../../state/approval.ts";
 import { isAnswered } from "../../state/landing.ts";
 import { escapeHtml, html, join, raw, type Html } from "../html.ts";
 import { actionsSummary, flagPlaceOf, renderAction, recoveryAnswers, pollPhabButton, verifyStackButton, redoAnnotationsButton, approvePushControls, bugBox, continueBox, copyButton, handBackButton, flagControls, flagItemOf, flagText, plannedLabel, recoveryPlanFor, hasAuthorSession, stackViewerLink, submitControls, summaryId, untakenFix } from "./actions.ts";
@@ -12,6 +13,7 @@ import {
   bugUrl,
   commandFields,
   elapsed,
+  stackOfPatch,
   descriptionLeftOut,
   enterBugUrl,
   metaBugUrl,
@@ -674,6 +676,7 @@ function patchParts(r: RequestState, p: PatchView, ctx: RenderContext) {
       landable ? html`<span class="landable">landable</span>` : null,
       p.review ? html`${reviewText(p)}` : null,
       backoutText(r, p),
+      approvalText(r, p, ctx),
       r.tryNeeded?.[p.id] && !r.tryNeeded[p.id].verified ? html`<span class="bad" title="Not landable yet: it was changed for ${r.tryNeeded[p.id].why}, and no green try push has carried that change since">needs a green try push</span>` : null,
       ...yours.filter((n) => (!own.includes(n) || !onLine(n)) && actionKind(n, r) !== "file-bug").map((n) => html`<b class="you">${n.action}</b>`),
     ].filter((x) => x !== null),
@@ -1239,6 +1242,17 @@ function sinceSection(r: RequestState, p: PushView, ctx: RenderContext): Html | 
       }`
     : null;
   return html`${regressions}${list}`;
+}
+
+// Whether you approved it in stack-viewer: said once you did, and while a submit would send it without (not approved
+// yet: from the submit step on, when it's what the factory waits for).
+function approvalText(r: RequestState, p: PatchView, ctx: RenderContext): Html | null {
+  if (isLanded(r, p) || isDropped(r, p) || !stackOfPatch(r, p.id)) return null;
+  const status = reviewStatus(p, ctx.fingerprint);
+  if (status === "approved") return html`<span class="approved" title="You approved this version in stack-viewer">approved</span>`;
+  if (!unapproved([p], ctx.fingerprint).length) return null;
+  if (status === "changed") return html`<b class="you" title="You approved an earlier version in stack-viewer; it's submitted once you approve this one">changed since you approved it</b>`;
+  return REQUEST_STEPS.indexOf(r.step) >= REQUEST_STEPS.indexOf("submit") ? html`<span class="sub" title="Approve it in stack-viewer: the stack is submitted once you approved every patch">not approved yet</span>` : null;
 }
 
 // Its landing backed out: whether it caused it, and what it waits for.

@@ -3,14 +3,14 @@ import assert from "node:assert/strict";
 import type { Command, Event, PlannedCommand } from "../types.ts";
 import { foldEvents } from "../state/fold.ts";
 import { buildView } from "./view.ts";
-import { commandEffects, newRequestId, type Effect } from "./commands.ts";
+import { commandEffects, newRequestId, type CommandContext, type Effect } from "./commands.ts";
 import { config, ID, Scenario, sha } from "./testkit.ts";
 
 let n = 0;
 const cmd = (c: Record<string, unknown>): Command => ({ v: 1, id: `c-${++n}`, t: "2026-10-15T09:00:00.000Z", request: ID, ...c }) as Command;
 
-function run(sc: Scenario, c: Command): Effect[] {
-  const effects = commandEffects(c, { config, state: sc.state(), view: sc.view(), exists: () => false, plan: (job) => sc.plans.get(job) });
+function run(sc: Scenario, c: Command, more: Partial<CommandContext> = {}): Effect[] {
+  const effects = commandEffects(c, { config, state: sc.state(), view: sc.view(), exists: () => false, fingerprint: () => undefined, report: () => undefined, plan: (job) => sc.plans.get(job), ...more });
   for (const e of effects) {
     if (e.type === "event") sc.add(e.event);
     if (e.type === "start") sc.startJob(e.plan);
@@ -198,11 +198,61 @@ describe("commands", () => {
     assert.deepEqual(sc.state().patches["p-a"].yourComments?.map((x) => [x.text, x.key]).at(-1), ["nit", `author:i-a:comment:${c.id}`], "answered by the run that has it");
   });
 
+  it("approve records the version stack-viewer showed, by its fingerprint; a commit git can't read is refused", () => {
+    const sc = withPatch();
+    run(sc, cmd({ cmd: "approve", patch: "p-a", sha: sha("1") }), { fingerprint: (s) => (s === sha("1") ? "fp-1" : undefined) });
+    assert.deepEqual(sc.state().patches["p-a"].approved, { sha: sha("1"), fingerprint: "fp-1", t: sc.of("patch-approved")[0].t });
+    // Kept when its commit changes.
+    sc.add({ type: "patch", request: ID, patch: "p-a", item: "i-a", sha: sha("2"), worktree: "/wt/a", title: "Bug XXXXXXX - Fix", bug: null });
+    assert.equal(sc.state().patches["p-a"].approved?.sha, sha("1"));
+    run(sc, cmd({ cmd: "approve", patch: "p-a", sha: sha("3") }));
+    assert.deepEqual(executed(sc).at(-1), { ok: false, detail: `git can't read commit ${sha("3").slice(0, 12)}` });
+  });
+
+  it("review-send gives the author your new comments and what you want addressed; done, ignore and replies to post are only recorded", () => {
+    const sc = withPatch();
+    sc.add({ type: "test-plan", request: ID, patch: "p-a", text: "Ran it 20 times.\nGreen on try." });
+    sc.add({ type: "review-status", request: ID, patch: "p-a", revision: 7, status: "needs-review", reviewers: [], comments: [{ id: 41, author: "smaug", file: "a/test_a.js", line: 3, text: "Why a timeout?", done: false }, { id: 42, author: "smaug", text: "nit: typo", done: false }] });
+    sc.startJob({ purpose: { key: "review:p-a:x", what: "review", item: "i-a", patch: "p-a", sha: sha("1").slice(0, 12) }, kind: "agent", name: "review-patch", item: "i-a", cwd: "/wt/a" });
+    sc.complete("review:p-a:x", { report: { verdict: "findings", findings: [{ severity: "nit", file: "a/test_a.js", line: 5, text: "Dead code" }], feedback: [] } });
+    const review = sc.view().byKey.get("review:p-a:x")![0].job;
+    const c = cmd({
+      cmd: "review-send",
+      comments: [
+        { patch: "p-a", id: "c-new1", text: "- a/test_a.js:2 — \"x\"\n\n  Why?", anchor: { file: "a/test_a.js", line: 2 }, sha: sha("1") },
+        { patch: "p-a", id: "c-new2", text: "Say which platform", anchor: { file: "(section:test-plan)", line: 2 } },
+      ],
+      responses: [
+        { patch: "p-a", id: "phab-41", response: "address" },
+        { patch: "p-a", id: "phab-42", response: "reply", text: "Fixed, thanks." },
+        { patch: "p-a", id: `f-${review}-0`, response: "address" },
+        { patch: "p-a", id: "c-old", response: "done" },
+      ],
+    });
+    run(sc, c, { report: (job) => sc.reports.get(job) });
+    assert.deepEqual(executed(sc).at(-1), { ok: true, detail: undefined });
+    const key = `author:i-a:stack-comments:${c.id}`;
+    const message = sc.plan(key).agent?.message ?? "";
+    assert.match(message, /Why\?/);
+    assert.match(message, /\(on its test plan, the Test Plan field reviewers read on Phabricator: [^)]*\) Say which platform/);
+    assert.match(message, /address this comment of smaug on Phabricator \(D7, a\/test_a\.js:3\): Why a timeout\?/);
+    assert.match(message, /address this finding of a critical review \(nit, a\/test_a\.js:5\): Dead code/);
+    assert.doesNotMatch(message, /typo|c-old/, "a reply to post and a done comment aren't the author's");
+    const p = sc.state().patches["p-a"];
+    assert.deepEqual(p.replyDrafts, [{ commentId: 42, text: "Fixed, thanks." }], "shown on the request page to post, like the factory's drafts");
+    assert.deepEqual(Object.fromEntries(Object.entries(p.responses!).map(([id, x]) => [id, [x.response, x.key]])), { "c-old": ["done", undefined], "phab-42": ["reply", undefined], "phab-41": ["address", key], [`f-${review}-0`]: ["address", key] });
+    assert.deepEqual(p.yourComments?.map((x) => [x.id, x.key, x.anchor?.file, x.lines]), [["c-new1", key, "a/test_a.js", undefined], ["c-new2", key, "(section:test-plan)", ["Green on try."]]]);
+    // A reply written, then done ticked: stack-viewer gives the reply with the latest response.
+    run(sc, cmd({ cmd: "review-send", comments: [], responses: [{ patch: "p-a", id: "phab-42", response: "done", text: "Fixed now." }] }));
+    const after = sc.state().patches["p-a"];
+    assert.deepEqual([after.replyDrafts, after.responses?.["phab-42"].response], [[{ commentId: 42, text: "Fixed now." }], "done"]);
+  });
+
   it("a global tell-factory creates a request to route, named from its text; one for an unknown request does nothing", () => {
     const { request: _r, ...global } = cmd({ cmd: "tell-factory", text: "Burn down dom/base/test, skip Android" });
-    const effects = commandEffects(global as Command, { config, exists: () => false, plan: () => undefined });
+    const effects = commandEffects(global as Command, { config, exists: () => false, fingerprint: () => undefined, report: () => undefined, plan: () => undefined });
     assert.deepEqual(effects, [{ type: "event", event: { type: "request-created", request: "r-20261015-burn-down-dom-base-test-skip", kind: "unrouted", text: "Burn down dom/base/test, skip Android", command: global.id } }]);
-    assert.deepEqual(commandEffects(cmd({ cmd: "tell-factory", request: "r-nope", text: "x" }), { config, exists: () => false, plan: () => undefined }), []);
+    assert.deepEqual(commandEffects(cmd({ cmd: "tell-factory", request: "r-nope", text: "x" }), { config, exists: () => false, fingerprint: () => undefined, report: () => undefined, plan: () => undefined }), []);
   });
 
   it("tell-factory starts the recover agent, whose plan comes to you; a reply resumes it", () => {
@@ -340,7 +390,7 @@ describe("commands", () => {
     sc.add({ type: "patch", request: ID, patch: "p-b", item: "i-b", sha: sha("2"), worktree: "/wt/b", title: "Bug 5 - Fix b", bug: 5 });
     sc.add({ type: "review-status", request: ID, patch: "p-a", revision: 100, status: "published", reviewers: [], comments: [] } as never);
     for (const item of ["i-a", "i-b"]) sc.add({ type: "item-state", request: ID, item, state: "in stack" });
-    const off = commandEffects(cmd({ cmd: "split-off", title: "Wayland failures", groups: [{ item: "i-b", why: "Wayland only" }], reason: "out of scope" }), { config, state: sc.state(), view: sc.view(), exists: () => false, plan: () => undefined, events: () => sc.events });
+    const off = commandEffects(cmd({ cmd: "split-off", title: "Wayland failures", groups: [{ item: "i-b", why: "Wayland only" }], reason: "out of scope" }), { config, state: sc.state(), view: sc.view(), exists: () => false, fingerprint: () => undefined, report: () => undefined, plan: () => undefined, events: () => sc.events });
     const byRequest = new Map<string, Event[]>();
     for (const e of off) if (e.type === "event") byRequest.set(e.event.request, [...(byRequest.get(e.event.request) ?? []), { v: 1, t: "2026-10-27T10:00:00.000Z", ...e.event } as Event]);
     const [id] = [...byRequest.keys()].filter((x) => x !== ID);
@@ -356,7 +406,7 @@ describe("commands", () => {
     sc.add({ type: "item-created", request: ID, item: "i-c", folder: "c", group: { message: "boom", tests: ["c/test_c.js"], configs: ["linux"] } });
     const all = [...sc.events, ...byRequest.get(ID)!];
     const move = commandEffects(cmd({ cmd: "move-groups", to: id, groups: [{ item: "i-c", why: "Wayland only too" }], reason: "left behind" }), {
-      config, state: foldEvents(all), view: buildView(all), exists: () => true, plan: () => undefined, events: (x) => (x === ID ? all : byRequest.get(x)!), other: () => made,
+      config, state: foldEvents(all), view: buildView(all), exists: () => true, fingerprint: () => undefined, report: () => undefined, plan: () => undefined, events: (x) => (x === ID ? all : byRequest.get(x)!), other: () => made,
     });
     assert.ok(move.some((e) => e.type === "event" && e.event.type === "groups-moved"), JSON.stringify(move.find((e) => e.type === "event" && e.event.type === "command-executed")));
   });
@@ -375,7 +425,7 @@ describe("commands", () => {
     sc.add({ type: "needs-user", request: ID, key: "file-bug:p-a", action: "file", detail: "d", patch: "p-a", item: "i-a" });
     sc.add({ type: "needs-user", request: ID, key: "approve-push:root-2", action: "approve", detail: "d", push: "root-2" });
     const split = (parts: { title: string; groups: { item: string; why: string }[] }[]) =>
-      commandEffects(cmd({ cmd: "split-request", parts, reason: "two topics" }), { config, state: sc.state(), view: sc.view(), exists: () => false, plan: () => undefined, events: () => sc.events });
+      commandEffects(cmd({ cmd: "split-request", parts, reason: "two topics" }), { config, state: sc.state(), view: sc.view(), exists: () => false, fingerprint: () => undefined, report: () => undefined, plan: () => undefined, events: () => sc.events });
     const parts = [{ title: "Fix the tests failing alone", groups: [{ item: "i-a", why: "removes a standalone skip-if" }] }, { title: "Fix intermittent failures", groups: [{ item: "i-b", why: "no skip-if" }] }];
 
     sc.add({ type: "dep", request: ID, dep: { patch: "p-b", needs: "p-a", kind: "hard", reason: "builds on it", source: "textual" } });
@@ -411,7 +461,7 @@ describe("commands", () => {
     // A group in the wrong part moves to another of the same split, with its history; its pushes are there already.
     const source = byRequest.get(ids[0])!;
     const move = commandEffects(cmd({ cmd: "move-groups", request: ids[0], to: ids[1], groups: [{ item: "i-a", why: "no skip-if" }], reason: "wrong part" }), {
-      config, state: foldEvents(source), view: buildView(source), exists: () => true, plan: () => undefined,
+      config, state: foldEvents(source), view: buildView(source), exists: () => true, plan: () => undefined, fingerprint: () => undefined, report: () => undefined,
       events: (id) => byRequest.get(id)!, other: (id) => foldEvents(byRequest.get(id)!),
     });
     for (const e of move) if (e.type === "event") byRequest.get(e.event.request)!.push({ v: 1, t: "2026-10-27T11:00:00.000Z", ...e.event } as Event);

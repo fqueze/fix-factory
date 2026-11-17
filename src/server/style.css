@@ -294,6 +294,7 @@ div.job { padding-left: 14px; }
 .landable, .rprog > .landable, .progress > .landable { color: var(--good); font-weight: 600; animation: landable-fg 2s ease-in-out infinite; }
 .pbar .landable { background: var(--good); animation: landable-bg 2s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) { .landable, .pbar .landable { animation: none; } }
+.approved { color: var(--good); }
 details.fold.configs > summary { padding: 0; }
 /* What a group needing you asks: in sight under its line, with its buttons. */
 div.asks { border-bottom: 1px solid var(--border); }

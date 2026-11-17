@@ -1,4 +1,5 @@
-import type { JobView, NeedsUser, PlannedCommand, PushView, RefusedCommand, RequestState, StackView } from "../../types.ts";
+import type { JobView, NeedsUser, PatchView, PlannedCommand, PushView, RefusedCommand, RequestState, StackView } from "../../types.ts";
+import { unapproved } from "../../state/approval.ts";
 import { md } from "./md.ts";
 import { canDismiss, canRetry, reviewLimitFlag, unreachable } from "../../state/flags.ts";
 import { html, join, type Html } from "../html.ts";
@@ -94,16 +95,26 @@ export function flagControls(r: RequestState, n: NeedsUser, ctx: RenderContext):
       break;
     }
     // What it asks, in its buttons; the checks are on the stack, below.
+    case "approve": {
+      const stack = findStack(r, n);
+      controls = stack ? stackViewerLink(r, stack, true) : null;
+      break;
+    }
     case "submit": {
       const stack = findStack(r, n);
-      controls = stack ? html`${stackViewerLink(r, stack)}${mozPhabButton(r.id, stack, !submitChecks(r, stack)[0].ok, ctx)}` : null;
+      const blocking = stack ? submitChecks(r, stack, ctx).filter((c) => c.blocks && !c.ok) : [];
+      controls = stack ? html`${stackViewerLink(r, stack)}${mozPhabButton(r.id, stack, blocking.length > 0, ctx)}${blocking.map((c) => html`<span class="sub">${c.text}</span>`)}` : null;
       break;
     }
     case "resubmit": {
       const stack = findStack(r, n);
       const p = n.patch === undefined ? undefined : r.patches[n.patch];
-      // Only its patch: the others stay as their reviewers saw them. Or decide against it (it lands as it is).
-      controls = stack ? html`${mozPhabButton(r.id, stack, false, ctx, p?.sha)}${dismissButton(r.id, n.key, back)}` : null;
+      // Only its patch: the others stay as their reviewers saw them. Or decide against it (it lands as it is). Once you
+      // approved this version of it.
+      const waiting = p !== undefined && unapproved([p], ctx.fingerprint).length > 0;
+      controls = stack
+        ? html`${waiting ? html`<a class="btn small" href="${patchViewUrl(r, p!)}" target="_blank" rel="noopener">Approve it in stack-viewer ↗</a>` : null}${mozPhabButton(r.id, stack, waiting, ctx, p?.sha)}${dismissButton(r.id, n.key, back)}`
+        : null;
       break;
     }
     case "reopen-bug": {
@@ -259,9 +270,9 @@ export function bugBox(request: string, patch: string, back: string, cls = "inli
 // The checks say what isn't ready yet; you decide, but a WIP or DEBUG commit is never submitted.
 // Only the checks that fail, before the command: you decide, but a WIP or DEBUG commit is never submitted.
 export function submitControls(r: RequestState, stack: StackView, back: string, ctx: RenderContext): Html {
-  const checks = submitChecks(r, stack);
+  const checks = submitChecks(r, stack, ctx);
   const failing = checks.filter((c) => !c.ok);
-  return html`${failing.length ? html`<span class="checks">${failing.map((c) => html`<span class="bad">${c.text}</span>`)}</span>` : null}${mozPhabButton(r.id, stack, !checks[0].ok, ctx)}`;
+  return html`${failing.length ? html`<span class="checks">${failing.map((c) => html`<span class="bad">${c.text}</span>`)}</span>` : null}${mozPhabButton(r.id, stack, failing.some((c) => c.blocks), ctx)}`;
 }
 
 export function summaryId(request: string, stack: string): string {
@@ -273,8 +284,12 @@ export function copyButton(id: string, label: string, primary = false): Html {
   return html`<button type="button" class="btn small${primary ? " primary" : ""}" data-copy="${id}">${label}</button>`;
 }
 
-export function stackViewerLink(r: RequestState, stack: StackView): Html {
-  return html`<a class="btn small" href="/requests/${encodeURIComponent(r.id)}/stacks/${encodeURIComponent(stack.id)}/review" target="_blank">Open in stack-viewer ↗</a>`;
+export function stackViewerLink(r: RequestState, stack: StackView, primary = false): Html {
+  return html`<a class="btn small${primary ? " primary" : ""}" href="/requests/${encodeURIComponent(r.id)}/stacks/${encodeURIComponent(stack.id)}/review" target="_blank">Open in stack-viewer ↗</a>`;
+}
+
+export function patchViewUrl(r: RequestState, p: PatchView): string {
+  return `/requests/${encodeURIComponent(r.id)}/patches/${encodeURIComponent(p.id)}/view`;
 }
 
 // The factory never runs moz-phab: you copy the command and run it yourself.

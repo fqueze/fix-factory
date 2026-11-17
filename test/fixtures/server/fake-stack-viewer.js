@@ -4,6 +4,10 @@
 import { writeFileSync } from "node:fs";
 
 const args = process.argv.slice(2);
+if (args.includes("--help")) {
+  process.stdout.write("Usage: stack-viewer [options] [revset]\n");
+  process.exit(0);
+}
 const out = args[args.indexOf("-o") + 1];
 const range = args.at(-1);
 if (range.includes("fail")) {

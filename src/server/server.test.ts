@@ -504,6 +504,41 @@ describe("GET /requests/:id/items/:item/files/:which", () => {
   });
 });
 
+describe("review pages of a stack-viewer that takes --annotations", () => {
+  const annotated = createFactoryServer({
+    config: { port: 0, profilerOrigin: "", stackViewerCommand: [process.execPath, join(FIXTURES, "fake-stack-viewer-annotations.js")], stateDir, worktreesDir: stateDir, firefoxRepo: stateDir, maxAgents: 1, maxBuilds: 1 },
+    state,
+    sink,
+  });
+  let at = "";
+  before(async () => {
+    await new Promise<void>((done) => annotated.listen(0, "127.0.0.1", done));
+    at = `http://127.0.0.1:${(annotated.address() as AddressInfo).port}`;
+  });
+  after(() => {
+    annotated.closeAllConnections();
+    annotated.close();
+  });
+
+  it("passes each commit's annotations, and the script sending approvals, comments and answers", async () => {
+    const page = await (await fetch(`${at}/requests/r-20261010-xpcshell-cwd/stacks/storage-unit/review`)).text();
+    const args = JSON.parse(page.match(/<pre id="args">(.*?)<\/pre>/)![1]);
+    assert.equal(args[args.indexOf("--annotations") + 1].endsWith("annotations.json"), true);
+    const r = state.getRequest("r-20261010-xpcshell-cwd")!;
+    const sha = r.patches["p-prefs"].sha;
+    const annotations = JSON.parse(page.match(/<pre id="annotations">(.*?)<\/pre>/s)![1].replaceAll("&lt;", "<").replaceAll("&amp;", "&"));
+    assert.deepEqual(annotations.commits[sha].status, { kind: "unreviewed", label: "Not approved yet" });
+    assert.equal(annotations.commits[sha].actions[0].id, "approve");
+    const cfg = JSON.parse(page.match(/<script type="application\/json" id="ff-review-config">(.*?)<\/script>/)![1]);
+    assert.deepEqual(cfg.annotations, annotations, "the script updates them in place");
+    assert.match(page, /"mdv-action"/);
+    assert.match(page, /cmd: "review-send"/);
+    assert.match(page, /mdvReviewMarkSent/);
+    const view = await (await fetch(`${at}/requests/r-20261010-xpcshell-cwd/patches/p-prefs/view`)).text();
+    assert.match(view, /--annotations/);
+  });
+});
+
 describe("GET /requests/:id/patches/:patch/view", () => {
   it("runs stack-viewer on the patch alone, in its worktree or the main checkout once that is gone, with a button sending comments to its author", async () => {
     const p = state.getRequest("r-20261010-xpcshell-cwd")!.patches["p-prefs"];

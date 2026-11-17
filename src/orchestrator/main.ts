@@ -15,6 +15,8 @@ import { loadConfig } from "../config.ts";
 import { delivered, sendToInbox } from "../agents/inbox.ts";
 import { freeDiskGB, MIN_FREE_GB, WORKTREE_GB } from "../lib/disk.ts";
 import { execOk } from "../lib/exec.ts";
+import { fingerprinter } from "../lib/fingerprint.ts";
+import type { Fingerprint } from "../state/approval.ts";
 import { processNewCommands, readCommands } from "../state/commands.ts";
 import { eventsPath, listRequests, readEvents, readEventsFrom } from "../state/events.ts";
 import { folder } from "../state/fold.ts";
@@ -57,6 +59,7 @@ export class Orchestrator {
   private readonly config: FactoryConfig;
   private readonly deps: RunnerDeps;
   private readonly now: () => number;
+  private readonly fingerprint: Fingerprint;
   private readonly dryRun: boolean;
   private readonly watchOffsets = new Map<JobId, number>();
   private presenceTimes: number[] = [];
@@ -76,6 +79,7 @@ export class Orchestrator {
   constructor(opts: OrchestratorOptions) {
     this.config = opts.config;
     this.now = opts.now ?? Date.now;
+    this.fingerprint = fingerprinter(opts.config.firefoxRepo);
     this.dryRun = opts.dryRun ?? opts.config.dryRun;
     const factoryRoot = opts.factoryRoot ?? resolve(import.meta.dirname, "..", "..");
     this.deps = {
@@ -189,6 +193,7 @@ export class Orchestrator {
       report: (job) => readReport(this.config, s.id, job),
       freeDiskGB: freeDiskGB(this.config.worktreesDir),
       ...(this.pool ? { claimWorktree: (key: string, build?: WorktreeBuild) => this.pool!.claim(`${s.id} ${key}`, build), evicting: this.evicting } : {}),
+      fingerprint: this.fingerprint,
       activeRequests: () =>
         this.requests()
           .map((id) => this.load(id).s)
@@ -274,6 +279,9 @@ export class Orchestrator {
       state: loaded?.s,
       view: loaded?.view,
       exists: (id) => existsSync(join(this.config.stateDir, "requests", id)),
+      fingerprint: this.fingerprint,
+      // A report the review-send answers may be gone (a job from before reports were kept).
+      report: (job) => (existsSync(reportPath(this.config, request!, job)) ? readReport(this.config, request!, job) : undefined),
       events: (id) => readEvents(this.config.stateDir, id),
       other: (id) => (existsSync(join(this.config.stateDir, "requests", id)) ? this.load(id).s : undefined),
       plan: (job) => {

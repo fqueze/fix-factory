@@ -67,10 +67,30 @@ cache/artifacts/<taskId>/...      # downloaded try logs and profiles; gone a day
   - `stop`: cancels a running job (never a try push: it may already have been made) and raises `stopped:<job>`;
     its item, if any, is blocked until you retry or continue. Nothing restarts a cancelled job on its own.
   - `dismiss`: a `user-done` for an open key, except the keys whose `user-done` is your answer (`approve-push`,
-    `take-it`, `file-bug`, `meta-bug`, `submit`, `resubmit`, `land`).
+    `take-it`, `file-bug`, `meta-bug`, `approve`, `submit`, `resubmit`, `land`).
   - `continue` and `retry` also append a `user-done` with key `reopen:<job>` for each cancelled job of the item: `next()`
     may start those keys again.
   Unlike recovery commands, they don't have to come from a recovery plan.
+- **Approvals** (`src/state/approval.ts`): the `approve` command (stack-viewer's Approve) appends `patch-approved`
+  with the commit shown and its fingerprint (`src/lib/fingerprint.ts`: sha256 of `git patch-id --stable` and the commit
+  message less its bug number, `r=` and `Differential Revision:` line), computed when the orchestrator executes it.
+  `PatchView.approved` keeps the latest; its status is approved (that commit, or one with the same fingerprint: a
+  rebase, a bug number put in), changed, or unreviewed. Fingerprints of current commits come with the planner's `Ctx`
+  and the page's `RenderContext`, read with git and cached per sha. The submit step raises
+  `approve:<stack>:<hash>` instead of `submit:<stack>` until every patch a moz-phab submit would send (not landed,
+  not the commit Phabricator has) is approved; the page disables the moz-phab buttons (submit, resubmit) until then.
+- **Review pages** (`src/server/stack-review.ts`): when the stack-viewer's `--help` mentions `--annotations` (asked
+  every 10 min), the page gets an annotations file (`src/server/review-annotations.ts`, the contract in md-viewer's
+  README) and a script that sends `approve`, `set-bug` and `review-send` (new comments with `id`, `anchor`, `sha`;
+  `responses` to earlier comments). Otherwise the older script sends `stack-comments` / `comment-fix`. Comment ids:
+  yours `c-…` (stack-viewer's; derived from the event's key and text for `comment-sent` events without one, `-<n>`
+  per entry of their text), Phabricator inline comments `phab-<id>`, critical review findings `f-<job>-<index>`.
+  `review-send` records `comment-sent` (with `anchor`, `sha`, and on a section the `lines` it was on) and
+  `comment-response` (done, ignore, reopen; address and reply with the `key` of the author run they went to); a reply
+  to a Phabricator comment is a `reply-draft`, shown on the request page to post (stack-viewer gives a reply written with
+  whichever response was chosen last: done with a text still posts it). Earlier comments are carried to the
+  version shown through `git diff` between the two commits (the message's lines, a section's lines by their text),
+  `outdated` when their lines changed.
 - `events.jsonl` is written only by the orchestrator. `commands.jsonl` is written by the web server and by the
   orchestrator (when it executes an approved recovery plan, it appends that plan's commands; when route-request says
   text from the main box is about an existing request, it appends a `tell-factory` for that request). Readers must ignore

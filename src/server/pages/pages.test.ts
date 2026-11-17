@@ -51,6 +51,13 @@ function rowOf(h: string, id: string): string {
   return h.slice(start);
 }
 
+// Every patch approved, as it is.
+function approvedAll(r: RequestState): RequestState {
+  const out = structuredClone(r);
+  for (const p of Object.values(out.patches)) p.approved = { sha: p.sha, fingerprint: "fp", t: out.createdAt };
+  return out;
+}
+
 function expanded(id: string): string {
   return renderRequest(get(id), ctx, true).value;
 }
@@ -696,7 +703,23 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.match(h, /Meta: Bug to file ↗/);
     assert.ok(h.includes(cmd({ cmd: "set-bug", request: "r-20261008-permissions", patch: "meta" })));
     assert.match(h, /<span class="bad">2 patches still say Bug XXXXXXX<\/span>/);
-    assert.match(h, /data-copy="mozphab-r-20261008-permissions-[^"]*">Copy the moz-phab command<\/button>/, "the checks inform, you decide");
+    assert.match(h, /<span class="bad">waits for you to approve 3 patches in stack-viewer<\/span>/);
+    assert.match(h, /data-copy="mozphab-r-20261008-permissions-[^"]*" disabled>Copy the moz-phab command<\/button>/, "not before you approved them");
+    const r = approvedAll(get("r-20261008-permissions"));
+    assert.match(renderRequest(r, ctx, true).value, /data-copy="mozphab-r-20261008-permissions-[^"]*">Copy the moz-phab command<\/button>/, "the other checks inform, you decide");
+  });
+
+  it("asks you to approve each patch in stack-viewer before submitting, and says which you approved", () => {
+    const r = approvedAll(get("r-20261007-focus"));
+    r.patches["p-focus"].approved = { sha: "1".repeat(40), fingerprint: "fp", t: r.createdAt };
+    assert.match(rowOf(renderRequest(r, { ...ctx, fingerprint: () => "other" }, true).value, "patch-p-focus"), /<b class="you"[^>]*>changed since you approved it<\/b>/);
+    assert.match(renderRequest(r, { ...ctx, fingerprint: () => "other" }, true).value, /<span class="bad">waits for you to approve 1 patch in stack-viewer<\/span>/);
+    assert.match(rowOf(renderRequest(r, { ...ctx, fingerprint: (s) => (s === r.patches["p-focus"].sha ? "fp" : undefined) }, true).value, "patch-p-focus"), /<span class="approved"[^>]*>approved<\/span>/, "rebased, the same fingerprint");
+    delete r.patches["p-focus"].approved;
+    r.needsUser = [{ key: "approve:focus:1234", action: "Review and approve each patch in stack-viewer", detail: "0 of 1 approved", stack: "focus", since: r.createdAt }];
+    const h = renderRequest(r, ctx, true).value;
+    assert.match(rowOf(h, "patch-p-focus"), /not approved yet/);
+    assert.match(h, /<div class="action" data-key="approve:focus:1234"><span class="flag">Review and approve each patch in stack-viewer<\/span><a class="btn small primary" href="\/requests\/r-20261007-focus\/stacks\/focus\/review"/);
   });
 
   it("8. submit: the summary line tells try from the pushes made, not a declined one", () => {
@@ -746,7 +769,7 @@ describe("one fixture per step of docs/MVP.md", () => {
   });
 
   it("8. submit: checks pass, stack-viewer link, moz-phab command to copy", () => {
-    const h = expanded("r-20261007-focus");
+    const h = renderRequest(approvedAll(get("r-20261007-focus")), ctx, true).value;
     assert.doesNotMatch(h, /class="bad"/);
     assert.match(h, /Open in stack-viewer ↗/);
     assert.match(h, /<textarea hidden id="mozphab-r-20261007-focus-focus">cd [^<]+ &amp;&amp; git switch [^<]+ &amp;&amp; moz-phab submit<\/textarea>/);
@@ -1555,7 +1578,7 @@ describe("a blocked group's patch in the stack", () => {
 describe("your comments", () => {
   it("each on its patch, with the answer of the run it started", () => {
     const r = structuredClone(get("r-20261005-newtab"));
-    r.patches["p-panel"].yourComments = [{ text: "why no skip-if?", key: "author:x:comment:c-1", t: "2026-10-28T10:00:00.000Z" }];
+    r.patches["p-panel"].yourComments = [{ text: "why no skip-if?", key: "author:x:comment:c-1", t: "2026-10-28T10:00:00.000Z", id: "c-1", sha: "a".repeat(40) }];
     r.jobs["j-c"] = { job: "j-c", kind: "agent", name: "investigate-and-fix", cmd: [], cwd: "/wt", pid: 1, pidStartTime: 1, startedAt: "2026-10-28T10:00:01.000Z", endedAt: "2026-10-28T10:05:00.000Z", exitCode: 0, outcome: "fix verified locally: No skip-if: browser.toml has...", said: "No skip-if: browser.toml has none for it.", purpose: { key: "author:x:comment:c-1", what: "author" } };
     const row = rowOf(renderRequest(r, ctx, true).value, "patch-p-panel");
     assert.match(row, /<h4 class="part">Your comments<\/h4><div class="yourcomment"><div class="comment-text"><div class="md"><p>why no skip-if\?<\/p><\/div><\/div><div class="answer"><b>Its answer<\/b><div class="md"><p>No skip-if: browser.toml has none for it\.<\/p>/, "the answer in full");

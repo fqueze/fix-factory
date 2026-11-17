@@ -14,6 +14,8 @@ import { handOffReferences } from "./hand-off.ts";
 import { moveProblem, movingProblem, partEvents, splitProblem } from "./split.ts";
 import { dataPath, requestDir, sessionIdFor, slug, type JobPlan } from "./plan.ts";
 import type { View } from "./view.ts";
+import type { Fingerprint } from "../state/approval.ts";
+import { patchFindings } from "../state/findings.ts";
 
 // An event of this command's request, without repeating the request.
 type RequestEvent = EventInput extends infer E ? (E extends unknown ? Omit<E, "request"> : never) : never;
@@ -36,6 +38,8 @@ export interface CommandContext {
   plan: (job: JobId) => JobPlan | undefined; // jobs/<job>/plan.json, what the runner started
   unroutable?: RequestState[]; // for a global tell-factory: open requests whose route-request failed twice
   events?: (request: RequestId) => Event[]; // a request's events, for split-request
+  fingerprint: Fingerprint; // of a commit, for approve (src/lib/fingerprint.ts)
+  report: (job: JobId) => unknown; // an agent's validated report, for the findings review-send answers
 }
 
 // r-20261015-<slug>, from the first words of the text.
@@ -278,6 +282,85 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
       const error = item ? resume(item, "comment", `A comment on your fix:\n${c.text}\n\nAddress it by amending your commit, then end with the JSON report again. ${ANSWER_EACH} If you think it is wrong, don't do it: leave your commits as they are and say why in \`disagreement\`.${draftsNote(s, item)}`) : "this patch has no group, so no author to tell";
       if (!error) ev({ type: "comment-sent", patch: c.patch, text: c.text, key: answeredBy });
       done(!error, error);
+      break;
+    }
+    case "approve": {
+      const fingerprint = ctx.fingerprint(c.sha);
+      if (fingerprint === undefined) {
+        done(false, `git can't read commit ${c.sha.slice(0, 12)}`);
+        break;
+      }
+      ev({ type: "patch-approved", patch: c.patch, sha: c.sha, fingerprint });
+      done(true);
+      break;
+    }
+    case "review-send": {
+      // Your new comments and your answers to earlier ones, a resumed author per item; what needs no author (done,
+      // ignore, reopen, a reply to post on Phabricator) is only recorded.
+      const toAuthor = new Map<ItemId, { lines: string[]; comments: typeof c.comments; responses: typeof c.responses }>();
+      const errors: string[] = [];
+      const forAuthor = (patch: string, line: string, x: { comment?: (typeof c.comments)[number]; response?: (typeof c.responses)[number] }) => {
+        const item = s.patches[patch].item;
+        if (!item) {
+          errors.push(`${s.patches[patch].title} has no work item, so no author to tell`);
+          return;
+        }
+        const e = toAuthor.get(item) ?? { lines: [], comments: [], responses: [] };
+        e.lines.push(`- On ${s.patches[patch].title}: ${line}`);
+        if (x.comment) e.comments.push(x.comment);
+        if (x.response) e.responses.push(x.response);
+        toAuthor.set(item, e);
+      };
+      for (const x of c.comments) {
+        // stack-viewer names and quotes the test plan lines a comment is on; the author is told what that section is.
+        forAuthor(x.patch, x.anchor?.file === "(section:test-plan)" ? `(on its test plan, the Test Plan field reviewers read on Phabricator: say in your summary what it should say instead) ${x.text}` : x.text, { comment: x });
+      }
+      for (const x of c.responses) {
+        const p = s.patches[x.patch];
+        const record = () => ev({ type: "comment-response", patch: x.patch, comment: x.id, response: x.response, ...(x.text !== undefined ? { text: x.text } : {}) });
+        // A reply written goes with whichever response was chosen last: a reply, then done ticked, keeps the reply.
+        const phab = /^phab-(\d+)$/.exec(x.id);
+        const comment = phab ? p.review?.comments.find((k) => k.id === Number(phab[1])) : undefined;
+        if (comment) {
+          // As the factory's own drafts: shown on the request page for you to post.
+          if (x.text !== undefined) ev({ type: "reply-draft", patch: x.patch, commentId: comment.id, text: x.text });
+          if (x.response === "address") {
+            forAuthor(x.patch, `address this comment of ${comment.author} on Phabricator (D${p.review!.revision}${comment.file ? `, ${comment.file}${comment.line ? `:${comment.line}` : ""}` : ""}): ${comment.text}${comment.suggestion ? `\n  Suggested edit:\n${quoted(comment.suggestion.split("\n"))}` : ""}${x.text ? `\n  The user's reply to it, to post: ${x.text}` : ""}`, { response: x });
+          } else record();
+          continue;
+        }
+        const finding = x.id.startsWith("f-") ? patchFindings(s, p, ctx.report).find((f) => f.id === x.id) : undefined;
+        if (finding) {
+          if (x.response === "address") forAuthor(x.patch, `address this finding of a critical review (${finding.severity}${finding.file ? `, ${finding.file}${finding.line ? `:${finding.line}` : ""}` : ""}): ${finding.text}${x.text ? `\n  The user adds: ${x.text}` : ""}`, { response: x });
+          else record();
+          continue;
+        }
+        // Yours, by its id; one from before ids is an entry of its text (<id>-<n>).
+        const yours = p.yourComments?.find((k) => k.id === x.id || x.id.startsWith(`${k.id}-`));
+        if (yours && (x.text !== undefined || x.response === "address" || x.response === "reply")) {
+          forAuthor(x.patch, `about the user's earlier comment:\n${quoted(yours.text.split("\n"))}\nthey now say: ${x.text ?? "address it"}`, { response: x });
+          continue;
+        }
+        if (yours || x.response === "done" || x.response === "ignore" || x.response === "reopen") {
+          record();
+          continue;
+        }
+        errors.push(`no comment ${x.id} on ${p.title}`);
+      }
+      for (const [item, e] of toAuthor) {
+        const error = resume(item, "stack comments", `Review comments on your patch, from stack-viewer:\n${e.lines.join("\n")}\n\nAddress them by amending your commit, then end with the JSON report again. ${ANSWER_EACH} If you think one is wrong, don't do it and say why in \`disagreement\`.${draftsNote(s, item)}`);
+        if (error) {
+          errors.push(error);
+          continue;
+        }
+        const key = `author:${item}${itemEpochOf(view, item)}:stack-comments:${c.id}`;
+        for (const x of e.comments) {
+          const lines = x.anchor?.file === "(section:test-plan)" ? sectionLines(s.patches[x.patch].testPlan, x.anchor.line) : undefined;
+          ev({ type: "comment-sent", patch: x.patch, text: x.text, key, ...(x.id ? { id: x.id } : {}), ...(x.anchor ? { anchor: x.anchor } : {}), sha: x.sha ?? s.patches[x.patch].sha, ...(lines ? { lines } : {}) });
+        }
+        for (const x of e.responses) ev({ type: "comment-response", patch: x.patch, comment: x.id, response: x.response, ...(x.text !== undefined ? { text: x.text } : {}), key });
+      }
+      done(errors.length === 0, errors.join("; "));
       break;
     }
     case "set-test-plan": {
@@ -736,7 +819,19 @@ function draftsNote(s: RequestState, item: ItemId): string {
   return `\n\nYour draft replies to the reviewers, not posted yet:\n${drafts.map(({ d, c }) => `- comment ${d.commentId} (${c!.author}: “${c!.text.slice(0, 300)}”): ${d.text}`).join("\n")}\nIf what you change makes one wrong, give its new text in \`replies\` (by comment id).`;
 }
 
-const ANSWER_EACH = "Start the report's summary by answering each point of it in a line: what you changed, or, for a question or a change you didn't make, the answer and what backs it (the file, command or data you checked; for a shared helper, every test using it).";
+// The lines of a section's text a comment is on (1-based, a line or a range).
+export function sectionLines(text: string | undefined, line: number | [number, number] | undefined): string[] | undefined {
+  if (text === undefined || line === undefined) return undefined;
+  const [a, b] = typeof line === "number" ? [line, line] : line;
+  const lines = text.split("\n").slice(a - 1, b);
+  return lines.length ? lines : undefined;
+}
+
+function quoted(lines: string[]): string {
+  return lines.map((l) => `  > ${l}`).join("\n");
+}
+
+const ANSWER_EACH ="Start the report's summary by answering each point of it in a line: what you changed, or, for a question or a change you didn't make, the answer and what backs it (the file, command or data you checked; for a shared helper, every test using it).";
 
 function startVars(tests: string[], worktree: string): Record<string, string> {
   return { test: tests.length > 1 ? `${tests[0]} (and ${tests.length - 1} other tests)` : tests[0], worktree };

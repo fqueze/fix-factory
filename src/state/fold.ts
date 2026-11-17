@@ -10,6 +10,7 @@
 //   Events for unknown items are ignored, as are unknown event types.
 // - pushes keep creation order as long as push ids aren't integer-like strings
 //   (JavaScript orders those keys first).
+import { createHash } from "node:crypto";
 import type { Dep, Event, InvestigateReport, ItemView, PatchView, PushView, RefusedCommand, RequestState, TriageTryReport } from "../types.ts";
 
 const MAX_REFUSED = 5;
@@ -93,9 +94,24 @@ export function folder(first: Event): { apply(events: readonly Event[]): void; s
         case "split-from":
           s.splitFrom = e.from;
           break;
-        case "comment-sent":
-          // One per answering run: a later event for it corrects the earlier one.
-          if (s.patches[e.patch]) s.patches[e.patch].yourComments = [...(s.patches[e.patch].yourComments ?? []).filter((c) => c.key !== e.key), { text: e.text, key: e.key, t: e.t }];
+        case "comment-sent": {
+          // One per answering run (a later event for it corrects the earlier one), except those with ids: one per id.
+          // Those from before ids get one from their run and text; their commit is the patch's then.
+          const p = s.patches[e.patch];
+          if (!p) break;
+          const id = e.id ?? commentId(e.key, e.text);
+          const same = (c: NonNullable<PatchView["yourComments"]>[number]) => (e.id === undefined ? c.key === e.key : c.id === e.id);
+          p.yourComments = [
+            ...(p.yourComments ?? []).filter((c) => !same(c)),
+            { text: e.text, key: e.key, t: e.t, id, sha: e.sha ?? p.sha, ...(e.anchor ? { anchor: e.anchor } : {}), ...(e.lines ? { lines: e.lines } : {}) },
+          ];
+          break;
+        }
+        case "comment-response":
+          if (s.patches[e.patch]) s.patches[e.patch].responses = { ...s.patches[e.patch].responses, [e.comment]: { response: e.response, ...(e.text !== undefined ? { text: e.text } : {}), ...(e.key ? { key: e.key } : {}), t: e.t } };
+          break;
+        case "patch-approved":
+          if (s.patches[e.patch]) s.patches[e.patch].approved = { sha: e.sha, fingerprint: e.fingerprint, t: e.t };
           break;
         case "author-queued":
           s.queuedAuthors = [...(s.queuedAuthors ?? []), { item: e.item, key: e.key, reason: e.reason, message: e.message }];
@@ -272,6 +288,8 @@ export function folder(first: Event): { apply(events: readonly Event[]): void; s
             replyDrafts: [],
             // Your comments, with the runs answering them, outlive its commits.
             ...(before?.yourComments ? { yourComments: before.yourComments } : {}),
+            ...(before?.responses ? { responses: before.responses } : {}),
+            ...(before?.approved ? { approved: before.approved } : {}),
             ...(before?.testPlan ? { testPlan: before.testPlan } : {}),
             ...(before?.testPlanSent ? { testPlanSent: before.testPlanSent } : {}),
           };
@@ -509,6 +527,11 @@ function stripUndefined<T>(value: T): T {
     return out as T;
   }
   return value;
+}
+
+// The id of a comment from before comment ids: the same for every fold of the same event.
+export function commentId(key: string, text: string): string {
+  return `c-${createHash("sha256").update(`${key}\n${text}`).digest("hex").slice(0, 12)}`;
 }
 
 // What an agent concluded, on one line: its state or verdict, and its summary.

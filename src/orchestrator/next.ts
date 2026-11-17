@@ -10,6 +10,7 @@
 // keys of that step (step events per step) or of that item (item-state "not started" events).
 import { MIN_FREE_GB, WORKTREE_GB } from "../lib/disk.ts";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
+import { unapproved, type Fingerprint } from "../state/approval.ts";
 import type { Annotation } from "../cli/annotations.ts";
 import { describePriorArt, type PriorArtBug } from "../cli/bugzilla.ts";
 import type { ClusterGroup, CollectedFailure, TryRow, TryTable } from "../cli/failures.ts";
@@ -87,6 +88,7 @@ export interface Ctx {
   // now (the loop then frees the idle one unused the longest); and the worktrees the loop picked to free.
   claimWorktree?: (key: string, build?: WorktreeBuild) => boolean;
   evicting?: Set<string>;
+  fingerprint: Fingerprint; // of a commit: an approved patch rebased since is still approved (src/lib/fingerprint.ts)
 }
 
 // An item's worktree no agent of it needs now: nothing runs in it, and its item is past review or closed (its author
@@ -3158,6 +3160,19 @@ class Planner {
       }
       // Earlier checks' failures are answered by this one.
       for (const n of this.s.needsUser) if (n.key.startsWith("failed:") && n.stack === st.id && this.view.jobs.find((j) => j.job === n.job)?.purpose.what === "check") this.clear(n.key);
+      // Submitted only once you approved each patch it sends, in stack-viewer: until then, that's what it asks.
+      const waiting = unapproved(patches, this.ctx.fingerprint);
+      const approveKey = `approve:${st.id}:${shortHash(waiting.map((p) => `${p.id}=${p.sha}`)).slice(0, 8)}`;
+      for (const n of this.s.needsUser) if (n.key.startsWith(`approve:${st.id}:`) && (n.key !== approveKey || !waiting.length)) this.clear(n.key);
+      if (waiting.length) {
+        const approved = patches.length - waiting.length;
+        this.raise(approveKey, {
+          action: "Review and approve each patch in stack-viewer",
+          detail: `${approved} of ${patches.length} approved: the moz-phab command comes once every patch is. Not approved yet: ${waiting.map((p) => p.title.replace(/,\s*r=.*$/, "")).join("; ")}`.slice(0, 500),
+          stack: st.id,
+        });
+        continue;
+      }
       this.raise(`submit:${st.id}`, { action: "Review in stack-viewer, then submit", detail: "", stack: st.id });
     }
     if (submitted && Object.keys(this.s.stacks).length > 0) this.setStep("review comments");

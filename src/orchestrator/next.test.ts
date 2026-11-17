@@ -856,7 +856,7 @@ describe("4. investigate and fix", () => {
     const p = sc.state().patches;
     assert.deepEqual([p["p-test-a"].bugDraft, p["p-test-a-2"].bugDraft, p["p-test-a-3"].bugDraft], [product, product, harness]);
     assert.deepEqual(sc.settle().filter((k) => k.startsWith("lint-bug:")).sort(), [`lint-bug:${job}`, `lint-bug:${job}:1`]);
-    for (const e of commandEffects({ v: 1, id: "c-bug", t: "2026-10-15T09:00:00.000Z", request: ID, cmd: "set-bug", patch: "p-test-a-2", bug: 777 } as Command, { config, state: sc.state(), view: sc.view(), exists: () => false, plan: () => undefined })) {
+    for (const e of commandEffects({ v: 1, id: "c-bug", t: "2026-10-15T09:00:00.000Z", request: ID, cmd: "set-bug", patch: "p-test-a-2", bug: 777 } as Command, { config, state: sc.state(), view: sc.view(), exists: () => false, fingerprint: () => undefined, report: () => undefined, plan: () => undefined })) {
       if (e.type === "event") sc.add(e.event);
     }
     const after = sc.state().patches;
@@ -2869,6 +2869,19 @@ describe("8. submit", () => {
     assert.deepEqual(JSON.parse(sc.plan(check).files![0].content).map((p: { result: string }) => p.result), ["green"]);
     sc.complete(check, { output: { ok: true, failures: [] } });
     assert.deepEqual(sc.settle(), [], "nothing looks for revisions before you copy the moz-phab command");
+    // Not before you approved each patch in stack-viewer: that's what it asks.
+    const [approve] = sc.open();
+    assert.match(approve, /^approve:root:/);
+    assert.match(sc.state().needsUser[0].detail, /^0 of 2 approved: the moz-phab command comes once every patch is/);
+    const p = sc.state().patches;
+    sc.add({ type: "patch-approved", request: ID, patch: "p-test-b", sha: p["p-test-b"].sha, fingerprint: "fp-b" });
+    sc.settle();
+    const [approveA] = sc.open();
+    assert.ok(approveA !== approve && approveA.startsWith("approve:root:"), "one patch left");
+    // An earlier version approved, the same code and message rebased: approved too.
+    sc.fingerprints.set(p["p-test-a"].sha, "fp-a");
+    sc.add({ type: "patch-approved", request: ID, patch: "p-test-a", sha: sha("9"), fingerprint: "fp-a" });
+    sc.settle();
     assert.deepEqual(sc.open(), ["submit:root"]);
     sc.add({ type: "submit-copied", request: ID, stack: "root" });
     assert.deepEqual(sc.settle(), ["import-submit:root:0"]);
@@ -3109,7 +3122,7 @@ const polled = (status: string, comments: unknown[] = [], reviewer = "accepted")
 
 function command(sc: Scenario, c: Record<string, unknown>): void {
   const cmd = { v: 1, id: `c-${sc.events.length}`, t: new Date(sc.now).toISOString(), request: ID, ...c } as Command;
-  for (const e of commandEffects(cmd, { config, state: sc.state(), view: sc.view(), exists: () => false, plan: (j) => sc.plans.get(j) })) {
+  for (const e of commandEffects(cmd, { config, state: sc.state(), view: sc.view(), exists: () => false, fingerprint: () => undefined, report: () => undefined, plan: (j) => sc.plans.get(j) })) {
     if (e.type === "event") sc.add(e.event);
     if (e.type === "start") sc.startJob(e.plan);
   }
@@ -4061,7 +4074,7 @@ describe("9. review comments", () => {
     assert.ok(!sc.settle().some((k) => k.startsWith("test-plan:p-test-a:")), "not written again for a sha the factory gave it");
 
     const command = { v: 1, id: "c-plan", t: "2026-10-15T09:00:00.000Z", request: ID, cmd: "set-test-plan", patch: "p-test-a", text: "  Edited plan.\n" } as Command;
-    const effects = commandEffects(command, { config, state: sc.state(), view: sc.view(), exists: () => false, plan: (j) => sc.plans.get(j) });
+    const effects = commandEffects(command, { config, state: sc.state(), view: sc.view(), exists: () => false, fingerprint: () => undefined, report: () => undefined, plan: (j) => sc.plans.get(j) });
     const start = effects.find((e) => e.type === "start")!;
     assert.ok(start.type === "start");
     assert.deepEqual(start.plan.cli?.args.slice(0, 2), ["set-test-plan", "D101"]);
@@ -4070,11 +4083,11 @@ describe("9. review comments", () => {
     sc.complete("set-test-plan:p-test-a:c-plan", { output: { revision: 101, testPlan: "Edited plan." } });
     assert.deepEqual(sc.state().patches["p-test-a"].testPlanSent && { ...sc.state().patches["p-test-a"].testPlanSent, t: "" }, { revision: 101, text: "Edited plan.", t: "" });
 
-    const refused = commandEffects({ ...command, id: "c-plan-2", patch: "p-nope" } as Command, { config, state: sc.state(), view: sc.view(), exists: () => false, plan: () => undefined });
+    const refused = commandEffects({ ...command, id: "c-plan-2", patch: "p-nope" } as Command, { config, state: sc.state(), view: sc.view(), exists: () => false, fingerprint: () => undefined, report: () => undefined, plan: () => undefined });
     assert.ok(refused.some((e) => e.type === "event" && e.event.type === "command-executed" && !e.event.ok));
 
     // Revised by the agent that wrote it, in its session.
-    const revise = commandEffects({ ...command, id: "c-rev", cmd: "revise-test-plan", text: "Name the platform." } as Command, { config, state: sc.state(), view: sc.view(), exists: () => false, plan: (j) => sc.plans.get(j) });
+    const revise = commandEffects({ ...command, id: "c-rev", cmd: "revise-test-plan", text: "Name the platform." } as Command, { config, state: sc.state(), view: sc.view(), exists: () => false, fingerprint: () => undefined, report: () => undefined, plan: (j) => sc.plans.get(j) });
     const again = revise.find((e) => e.type === "start");
     assert.ok(again?.type === "start");
     assert.equal(again.plan.agent?.resume, true);
@@ -5239,7 +5252,7 @@ describe("burndown verification", () => {
   };
   const runCommand = (sc: Scenario, c: Record<string, unknown>) => {
     const command = { v: 1, id: "c-keep", t: "2026-10-15T09:00:00.000Z", request: ID, ...c } as Command;
-    for (const e of commandEffects(command, { config, state: sc.state(), view: sc.view(), exists: () => false, plan: (j) => sc.plans.get(j) })) {
+    for (const e of commandEffects(command, { config, state: sc.state(), view: sc.view(), exists: () => false, fingerprint: () => undefined, report: () => undefined, plan: (j) => sc.plans.get(j) })) {
       if (e.type === "event") sc.add(e.event);
       if (e.type === "start") sc.startJob(e.plan);
     }

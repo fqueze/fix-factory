@@ -4,6 +4,7 @@ import { REQUEST_STEPS } from "../commands.ts";
 import { html, join, type Html } from "../html.ts";
 import { needsMetaBug as stackNeedsMetaBug } from "../../state/meta-bug.ts";
 import { landingState } from "../../state/landing.ts";
+import { unapproved, type Fingerprint } from "../../state/approval.ts";
 
 // What the pages need besides the state.
 export interface RenderContext {
@@ -36,6 +37,7 @@ export interface RenderContext {
   sessionCost?: (job: JobView) => number | undefined;
   freeDiskGB?: number; // where the worktrees go
   worktrees?: string[]; // the directories there: the factory's are named after their request
+  fingerprint?: Fingerprint; // of a commit, read with git: a patch you approved and that was rebased since is still approved
 }
 
 export const PHABRICATOR = "https://phabricator.services.mozilla.com";
@@ -209,11 +211,12 @@ export function patchesOutsideStacks(r: RequestState): PatchView[] {
 export interface Check {
   ok: boolean;
   text: string;
+  blocks?: true; // failing, the moz-phab command isn't offered
 }
 
 // The pre-submit checks the page can tell from the state (stack.ts check is the
 // real gate; this shows you why the submit button is disabled).
-export function submitChecks(r: RequestState, s: StackView): Check[] {
+export function submitChecks(r: RequestState, s: StackView, ctx: Pick<RenderContext, "fingerprint">): Check[] {
   const patches = stackPatches(r, s).filter((p) => !isLanded(r, p));
   const wip = patches.filter((p) => /^(WIP|DEBUG)\b/i.test(p.title) || /DO NOT LAND/i.test(p.title)).length;
   const noReviewer = patches.filter((p) => !/\br=\S/.test(p.title)).length;
@@ -223,8 +226,10 @@ export function submitChecks(r: RequestState, s: StackView): Check[] {
   const otherStack = (p: PushView) => Object.values(r.jobs).some((j) => j.purpose?.push === p.id && j.purpose.stack !== undefined && j.purpose.stack !== s.id);
   const pushes = Object.values(r.pushes).filter((p) => p.rev && !/^(initial|unskip|repro-)/.test(p.id) && !otherStack(p));
   const tryDone = pushes.length > 0 && pushes.every((p) => p.result === "green");
+  const waiting = unapproved(patches, ctx.fingerprint).length;
   return [
-    { ok: wip === 0, text: wip === 0 ? "no WIP/DEBUG" : `${wip} WIP/DEBUG patches` },
+    { ok: wip === 0, text: wip === 0 ? "no WIP/DEBUG" : `${wip} WIP/DEBUG patches`, blocks: true },
+    { ok: waiting === 0, text: waiting === 0 ? "every patch approved" : `waits for you to approve ${waiting === 1 ? "1 patch" : `${waiting} patches`} in stack-viewer`, blocks: true },
     { ok: tryDone, text: tryDone ? "try complete and green" : pushes.length === 0 ? "no try push" : "try not complete and green" },
     { ok: noReviewer === 0, text: noReviewer === 0 ? "r= on every patch" : `${noReviewer} patches without r=` },
     { ok: noBug === 0, text: noBug === 0 ? "every patch has a bug" : `${noBug} ${noBug === 1 ? "patch still says" : "patches still say"} Bug XXXXXXX` },
@@ -260,6 +265,8 @@ export const COMMAND_LABELS: Record<Command["cmd"], string> = {
   "comment-bug-draft": "comment on the bug draft",
   "stack-comments": "stack-viewer comments",
   "redo-annotations": "redo the skip-if annotations item",
+  approve: "approving a patch",
+  "review-send": "stack-viewer comments and answers",
   "poll-phab": "check Phabricator now",
   "revise-push": "revise the push",
   "take-it": "take it",
@@ -296,8 +303,8 @@ export const COMMAND_LABELS: Record<Command["cmd"], string> = {
   dismiss: "dismiss",
 };
 
-export type ActionKind = "approve-push" | "take-it" | "file-bug" | "meta-bug" | "submit" | "resubmit" | "reply" | "reopen-bug" | "land" | "recovery" | "failed" | "stopped" | "disagrees" | "question" | "reviewers" | "other";
-const ACTION_KINDS: ActionKind[] = ["approve-push", "take-it", "file-bug", "meta-bug", "submit", "resubmit", "reply", "reopen-bug", "land", "recovery", "failed", "stopped", "disagrees", "question", "reviewers"];
+export type ActionKind = "approve-push" | "take-it" | "file-bug" | "meta-bug" | "approve" | "submit" | "resubmit" | "reply" | "reopen-bug" | "land" | "recovery" | "failed" | "stopped" | "disagrees" | "question" | "reviewers" | "other";
+const ACTION_KINDS: ActionKind[] = ["approve-push", "take-it", "file-bug", "meta-bug", "approve", "submit", "resubmit", "reply", "reopen-bug", "land", "recovery", "failed", "stopped", "disagrees", "question", "reviewers"];
 
 // The key's "<kind>:" prefix names the buttons of a needs-user entry, and the ids
 // it carries (push, item, patch, stack, job) say what they act on. Entries with

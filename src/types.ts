@@ -156,7 +156,14 @@ export type Event =
   | (EventBase & { type: "try-verified"; patch: PatchId })
   | (EventBase & { type: "follow-up"; push: PushId; item: ItemId }) // you leave what that push found broken by its patch as a follow-up // that push is green: it may land
   | (EventBase & { type: "backout-verified"; patch: PatchId }) // a try push showed its fix green: it may land again // you want the stack pushed to try as it stands, whatever the step
-  | (EventBase & { type: "comment-sent"; patch: PatchId; text: string; key: string }) // your comment on a patch, and the key of the author run answering it
+  // Your comment on a patch, and the key of the author run answering it. From stack-viewer pages with annotations: its
+  // id, where it was made (anchor, on commit sha) and, on a section, the lines it was about (sections aren't in git).
+  | (EventBase & { type: "comment-sent"; patch: PatchId; text: string; key: string; id?: string; anchor?: ReviewAnchor; sha?: string; lines?: string[] })
+  // What you did in stack-viewer to an earlier comment on a patch (yours c-…, a Phabricator reviewer's phab-<id>, a
+  // critical review finding f-…); key: the author run it went to (address, reply).
+  | (EventBase & { type: "comment-response"; patch: PatchId; comment: string; response: ReviewResponse["response"]; text?: string; key?: string })
+  // You approved that version of the patch (its code and message, by fingerprint: a rebase keeps it approved).
+  | (EventBase & { type: "patch-approved"; patch: PatchId; sha: string; fingerprint: string })
   | (EventBase & { type: "config-set"; config: Record<string, unknown> })
   | (EventBase & { type: "step"; step: RequestStep })
   | (EventBase & { type: "item-created"; item: ItemId; folder: string; group: FailureGroup })
@@ -253,6 +260,9 @@ export type Command =
   | (CommandBase & { cmd: "take-patch"; item: ItemId }) // its author's fix of a failure it couldn't reproduce, taken as it is
   | (CommandBase & { cmd: "hand-back"; item: ItemId })
   | (CommandBase & { cmd: "comment-fix"; patch: PatchId; text: string })
+  | (CommandBase & { cmd: "approve"; patch: PatchId; sha: string }) // the version of it stack-viewer showed you
+  // From stack-viewer with annotations: new comments, and what you did to earlier ones.
+  | (CommandBase & { cmd: "review-send"; comments: ReviewComment[]; responses: (ReviewResponse & { patch: PatchId })[] })
   | (CommandBase & { cmd: "follow-up"; push: PushId; patch: PatchId }) // a failure that push pinned on that patch is left as a follow-up
   | (CommandBase & { cmd: "set-test-plan"; patch: PatchId; text: string }) // on its revision
   | (CommandBase & { cmd: "revise-test-plan"; patch: PatchId; text: string }) // what its agent should change
@@ -398,8 +408,35 @@ export interface PatchView {
   testPlan?: string; // for its revision's Test Plan field: how the fix was shown to work, a few lines
   testPlanSent?: { revision: number; text: string; t: Iso }; // what you set on its revision
   reviewerFromYou?: string; // the r= you gave it
-  yourComments?: { text: string; key: string; t: Iso }[]; // what you told its author (Comment on the fix, stack-viewer), oldest first
+  // What you told its author (Comment on the fix, stack-viewer), oldest first; sha: its commit then; id: derived from
+  // key and text for events without one.
+  yourComments?: { text: string; key: string; t: Iso; id: string; sha: string; anchor?: ReviewAnchor; lines?: string[] }[];
+  responses?: Record<string, { response: ReviewResponse["response"]; text?: string; key?: string; t: Iso }>; // the latest per comment id
+  approved?: { sha: string; fingerprint: string; t: Iso }; // the version you last approved
 }
+
+// Where a comment is in stack-viewer: a file of the commit, its message, or a section the factory added (test-plan).
+export interface ReviewAnchor {
+  file: string; // a path in the repo, "(commit)" or "(section:<id>)"
+  line?: number | [number, number];
+  side?: "new" | "old";
+}
+
+export interface ReviewComment {
+  patch: PatchId;
+  text: string; // as stack-viewer's mdvReviewEntries wrote it
+  id?: string;
+  anchor?: ReviewAnchor;
+  sha?: string; // the commit it was made on
+}
+
+export interface ReviewResponse {
+  id: string;
+  response: "done" | "address" | "ignore" | "reply" | "reopen";
+  text?: string;
+}
+
+export type ReviewStatus = "approved" | "changed" | "unreviewed";
 
 // The revision's latest diff: what Phabricator has, and the local commit moz-phab sent it from.
 export interface PhabDiff {

@@ -44,6 +44,7 @@ export class Scenario {
   activeRequests: { id: RequestId; summary: string }[] = []; // the other requests, for route-request
   freeDiskGB?: number; // where the worktrees go: absent, as many as agents
   pool?: { claim: (key: string, build?: WorktreeBuild) => boolean; evicting: Set<string> }; // worktreePool's, as main.ts gives it
+  readonly fingerprints = new Map<string, string>(); // a commit's fingerprint, by default its sha
   readonly commands: CommandInput[] = []; // what the handlers appended to commands.jsonl
 
   constructor(kind: RequestKind, fields: { folder?: string; rev?: string; text?: string } = {}) {
@@ -78,6 +79,7 @@ export class Scenario {
       activeRequests: () => this.activeRequests,
       ...(this.freeDiskGB !== undefined ? { freeDiskGB: this.freeDiskGB } : {}),
       ...(this.pool ? { claimWorktree: this.pool.claim, evicting: this.pool.evicting } : {}),
+      fingerprint: (sha) => this.fingerprints.get(sha) ?? sha,
     });
   }
 
