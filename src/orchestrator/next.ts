@@ -183,11 +183,12 @@ export function folderOf(test: string): string {
 }
 
 // The commits an author's report hands over, by the prompt that produced it.
-export function commitsOf(name: string, report: unknown): string[] {
+// taken: you took the item's fix without a reproduction (take-patch), so a "not reproduced" report's commits count.
+export function commitsOf(name: string, report: unknown, taken = false): string[] {
   switch (name) {
     case "investigate-and-fix": {
       const r = report as InvestigateReport;
-      return r.state === "fix verified locally" ? r.commits : [];
+      return r.state === "fix verified locally" || (taken && r.state === "not reproduced") ? r.commits : [];
     }
     case "write-annotation-patches": {
       const r = report as WriteAnnotationPatchesReport;
@@ -1114,9 +1115,14 @@ class Planner {
   }
 
   // The author's latest successful report, with the commits it hands over.
+  // A run's commits: its fix's, a fix you took without a reproduction included.
+  private jobCommits(j: JobRecord): string[] {
+    return commitsOf(j.name, this.rep(j), j.item !== undefined && this.view.done.has(`take-patch:${j.item}`));
+  }
+
   private authorReport(item: ItemId): { job: JobRecord; commits: string[] } | undefined {
     const ok = this.authorJobs(item).filter(succeeded).at(-1);
-    return ok && { job: ok, commits: commitsOf(ok.name, this.rep(ok)) };
+    return ok && { job: ok, commits: this.jobCommits(ok) };
   }
 
   // Round limits count from the author's latest fresh start, address-review run or continue from you:
@@ -1571,7 +1577,9 @@ class Planner {
     const reviews = patches.filter((p) => !this.acceptedPatch(item.id, author, p.id, phabCode.get(p.id))).map((p) => {
       const comments = (this.s.patches[p.id]?.review?.comments ?? []).filter((c) => answered.includes(c.id));
       const file = dataPath(this.config, this.s.id, `review-comments-${p.id}-${author.job}.json`);
-      const vars = { sha: p.sha, worktree: cwd, report: reportPath(this.config, this.s.id, author.job), comments: comments.length ? ` It answers the review comments in ${file}: check each one is really dealt with as its reviewer asked, in the code or in a reply in the report; a change the report claims but the diff doesn't make is a must-fix.` : "" };
+      // You took its fix without a reproduction: the missing reproduction is your call, not a finding.
+      const taken = this.view.done.has(`take-patch:${item.id}`) ? " The user took this fix without a reproduction of the failure: a missing reproduction isn't a finding; review the fix itself." : "";
+      const vars = { sha: p.sha, worktree: cwd, report: reportPath(this.config, this.s.id, author.job), comments: `${comments.length ? ` It answers the review comments in ${file}: check each one is really dealt with as its reviewer asked, in the code or in a reply in the report; a change the report claims but the diff doesn't make is a must-fix.` : ""}${taken}` };
       return this.wantAgent(`review:${p.id}:${author.job}`, "review", "review-patch", vars, {
         cwd,
         priority,
@@ -2459,7 +2467,7 @@ class Planner {
       // No run of its author since the push changed its commits ("no change: not mine"): nothing new to verify. A change
       // made since (by an earlier run, for your message) is, even when this answer only points at it.
       const pushed = this.view.pushedAt.get(push) ?? 0;
-      if (!this.authorJobs(j.item).some((x) => succeeded(x) && x.startedAt > pushed && x.startedAt <= j.startedAt && commitsOf(x.name, this.rep(x)).length > 0 && !this.unchangedBy(j.item!, x))) continue;
+      if (!this.authorJobs(j.item).some((x) => succeeded(x) && x.startedAt > pushed && x.startedAt <= j.startedAt && this.jobCommits(x).length > 0 && !this.unchangedBy(j.item!, x))) continue;
       const submitted = Math.min(...own.map((p) => (p.submittedAt ? Date.parse(p.submittedAt) : Infinity)));
       if (!((this.view.pushedAt.get(push) ?? 0) > submitted)) continue;
       const rev = this.s.pushes[push].rev ?? push;
@@ -2548,7 +2556,7 @@ class Planner {
       for (const p of st.order.map((pid) => this.s.patches[pid])) {
         if (!p.item || this.s.landedAt[p.id] || (this.s.tryNeeded[p.id] && !this.s.tryNeeded[p.id].verified)) continue;
         const index = Number(/-(\d+)$/.exec(p.id.slice(patchId(p.item, 0).length))?.[1] ?? 1) - 1;
-        const runs = this.authorJobs(p.item).filter((j) => succeeded(j) && commitsOf(j.name, this.rep(j))[index] !== undefined);
+        const runs = this.authorJobs(p.item).filter((j) => succeeded(j) && this.jobCommits(j)[index] !== undefined);
         const code = (j: JobRecord) => {
           const imp = this.view.byKey.get(`import:${j.job}`)?.find(succeeded);
           return imp ? this.out<ImportedCommit[]>(imp)[index]?.patchId : undefined;
@@ -2560,7 +2568,7 @@ class Planner {
         let first = runs.length - 1;
         while (first > 0 && code(runs[first - 1]) === code(last)) first--;
         const hist = this.s.patchShas[p.id] ?? [p.sha];
-        const since = commitsOf(runs[first].name, this.rep(runs[first]))[index];
+        const since = this.jobCommits(runs[first])[index];
         const from = hist.findIndex((x) => x.startsWith(since) || since.startsWith(x));
 
         if (first === 0 || from < 0 || pushed(hist.slice(from)) || !pushed(hist.slice(0, from))) continue;
@@ -2751,13 +2759,13 @@ class Planner {
   // An author run that changed its commits ended after the push was made.
   private changedSince(item: ItemId, push: PushId): boolean {
     const at = this.view.pushedAt.get(push);
-    return at !== undefined && this.authorJobs(item).filter(succeeded).some((j) => j.end!.at > at && commitsOf(j.name, this.rep(j)).length > 0 && !this.unchangedBy(item, j));
+    return at !== undefined && this.authorJobs(item).filter(succeeded).some((j) => j.end!.at > at && this.jobCommits(j).length > 0 && !this.unchangedBy(item, j));
   }
 
   private unchangedBy(item: ItemId, j: JobRecord): boolean {
     const jobs = this.authorJobs(item).filter(succeeded);
-    const before = jobs.slice(0, jobs.findIndex((x) => x.job === j.job)).findLast((x) => commitsOf(x.name, this.rep(x)).length > 0);
-    return before !== undefined && commitsOf(before.name, this.rep(before)).join() === commitsOf(j.name, this.rep(j)).join();
+    const before = jobs.slice(0, jobs.findIndex((x) => x.job === j.job)).findLast((x) => this.jobCommits(x).length > 0);
+    return before !== undefined && this.jobCommits(before).join() === this.jobCommits(j).join();
   }
 
   private routeToAuthor(item: ItemId, push: PushId, lines: string[], suffix = ""): void {
@@ -3222,12 +3230,12 @@ class Planner {
     if (answer.name !== "address-review" && !(p.submittedAt && answer.startedAt > Date.parse(p.submittedAt))) return;
     const st = Object.values(this.s.stacks).find((x) => x.order.includes(p.id));
     if (!st) return;
-    const previous = this.authorJobs(item.id).filter((j) => succeeded(j) && j.startedAt < answer.startedAt && commitsOf(j.name, this.rep(j)).length > 0).at(-1);
+    const previous = this.authorJobs(item.id).filter((j) => succeeded(j) && j.startedAt < answer.startedAt && this.jobCommits(j).length > 0).at(-1);
     const index = author.commits.findIndex((_, i) => patchId(item.id, i) === p.id);
     // Against what Phabricator had when it was answered (what the reviewer saw), not the author's previous commit (which
     // may never have been sent), nor a moz-phab command copied since.
     const sentBefore = (this.s.patchSent[p.id] ?? []).filter((x) => Date.parse(x.t) < answer.startedAt && this.knownCommit(p, x.sha)).at(-1)?.sha;
-    const oldSha = sentBefore ?? p.sentSha ?? (previous ? commitsOf(previous.name, this.rep(previous))[index] : undefined);
+    const oldSha = sentBefore ?? p.sentSha ?? (previous ? this.jobCommits(previous)[index] : undefined);
     // Rebuilt on today's central (patches that landed drop out), with each submitted patch's Differential Revision
     // line. v2: a conflict is left for resolve-conflict, as in the stack's assembly.
     const key = `rewrite-review:${st.id}:${author.job.job}:v2`;

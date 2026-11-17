@@ -6,7 +6,7 @@ import { md } from "./md.ts";
 import { canRetry, reviewLimitFlag } from "../../state/flags.ts";
 import type { ItemState, ItemView, JobView, NeedsUser, RequestState, ReviewPatchReport } from "../../types.ts";
 import { html, join, type Html } from "../html.ts";
-import { continueBox, flagControls, flagItemOf, flagText, handBackButton, hasAuthorSession, isAuthorJob, retryButton } from "./actions.ts";
+import { continueBox, flagControls, flagItemOf, flagText, handBackButton, hasAuthorSession, isAuthorJob, retryButton, untakenFix } from "./actions.ts";
 import { actionKind, elapsed, isDropped, isLandable, linkify, jobLabel, jobNoun, modelLabel, refusedOf, requestUrl, type RenderContext, type StateClass } from "./common.ts";
 
 // What a running job does to its group. Author runs say why they were resumed (purpose.reason).
@@ -155,6 +155,9 @@ export function flagAsk(r: RequestState, i: ItemView, n: NeedsUser): Html {
     case "failed":
       if (job?.kind !== "agent") {
         return html`${detail}<p>Retry it, tell its author what to do, or drop this item (🗑).</p>`;
+      }
+      if (isAuthorJob(job) && untakenFix(r, i.id, n)) {
+        return html`<p>Its author couldn't reproduce the failure, but committed a fix:</p>${detail}<p>Take its patch as it is (critical review is told you took it without a reproduction), resume it where it stopped, tell it what to do, or drop this item (🗑).</p>`;
       }
       return isAuthorJob(job)
         ? html`<p>Its author stopped without a fix:</p>${detail}<p>Resume it where it stopped, tell it what to do, or drop this item (🗑).</p>`

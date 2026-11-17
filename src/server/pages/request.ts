@@ -4,7 +4,7 @@ import { REQUEST_STEPS } from "../commands.ts";
 import type { BugDraft, ItemView, JobView, NeedsUser, PatchView, PushView, Regression, RequestState, ReviewPatchReport, ReviewerStatus, StackView } from "../../types.ts";
 import { isAnswered } from "../../state/landing.ts";
 import { escapeHtml, html, join, raw, type Html } from "../html.ts";
-import { actionsSummary, flagPlaceOf, renderAction, recoveryAnswers, pollPhabButton, verifyStackButton, redoAnnotationsButton, approvePushControls, bugBox, continueBox, copyButton, handBackButton, flagControls, flagItemOf, flagText, plannedLabel, recoveryPlanFor, hasAuthorSession, stackViewerLink, submitControls, summaryId } from "./actions.ts";
+import { actionsSummary, flagPlaceOf, renderAction, recoveryAnswers, pollPhabButton, verifyStackButton, redoAnnotationsButton, approvePushControls, bugBox, continueBox, copyButton, handBackButton, flagControls, flagItemOf, flagText, plannedLabel, recoveryPlanFor, hasAuthorSession, stackViewerLink, submitControls, summaryId, untakenFix } from "./actions.ts";
 import { groupJobs, jobLine } from "./activity.ts";
 import { flagAsk, itemBucket, itemSentence, needsYouDetail, progressLine, requestProgress, submittedDetail, type Bucket } from "./progress.ts";
 import {
@@ -384,7 +384,7 @@ function askBlock(r: RequestState, i: ItemView, ctx: RenderContext, patches: Pat
   if (s.cls !== "find" || !s.ask) {
     return undefined;
   }
-  const more = r.needsUser.filter((n) => flagItemOf(r, n) === i.id).slice(1);
+  const [first, ...more] = r.needsUser.filter((n) => flagItemOf(r, n) === i.id);
   if (!withFirst && !more.length) {
     return undefined;
   }
@@ -392,7 +392,7 @@ function askBlock(r: RequestState, i: ItemView, ctx: RenderContext, patches: Pat
   // Its commits not imported yet (what "Go ahead with its patch" takes): as its author's latest report has them.
   const commits = (i.lastReport?.report as { commits?: string[] } | undefined)?.commits ?? [];
   const unimported = !patches.length && commits.length && !Object.values(r.patches).some((p) => p.item === i.id) && i.lastReport?.prompt === "investigate-and-fix";
-  const view = unimported ? html`<p><a href="/requests/${encodeURIComponent(r.id)}/items/${encodeURIComponent(i.id)}/debug" target="_blank" rel="noopener">View its ${commits.length === 1 ? "commit" : `${commits.length} commits`}</a> (what “Go ahead with its patch” takes)</p>` : null;
+  const view = unimported ? html`<p><a href="/requests/${encodeURIComponent(r.id)}/items/${encodeURIComponent(i.id)}/debug" target="_blank" rel="noopener">View its ${commits.length === 1 ? "commit" : `${commits.length} commits`}</a> (what “${first && untakenFix(r, i.id, first) ? "Take its patch" : "Go ahead with its patch"}” takes)</p>` : null;
   return html`${withFirst ? html`${s.ask}${patches.length ? html`<p>${patches.map((p) => html`“${patchTitle(p)}” ${viewLink(r, p, "View the patch")} `)}</p>` : view}${controls(s.controls)}` : null}${more.map(
     (n) => html`<div class="ask-more" data-key="${n.key}"><p><b>Also: ${flagText(r, n)}</b></p>${flagAsk(r, i, n)}${controls(flagControls(r, n, ctx))}</div>`,
   )}`;

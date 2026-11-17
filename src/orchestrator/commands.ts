@@ -372,6 +372,21 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
       ev({ type: "user-done", key: `take-it:${c.item}`, ...(c.text?.trim() ? { text: c.text.trim() } : {}) });
       done(true);
       break;
+    case "take-patch": {
+      // Its author's latest run stopped with a fix of a failure it couldn't reproduce: you take the fix as it is.
+      const author = authorJobsOf(view, c.item).at(-1);
+      const last = s.items[c.item]?.lastReport;
+      const commits = last?.job === author?.job ? (last?.report as { commits?: string[] } | undefined)?.commits : undefined;
+      if (!author?.end || !commits?.length) {
+        done(false, `${itemName(c.item)}'s author has no fix to take`);
+        break;
+      }
+      ev({ type: "user-done", key: `take-patch:${c.item}` });
+      for (const n of s.needsUser.filter((x) => x.key === `failed:${author.job}`)) ev({ type: "user-done", key: n.key });
+      ev({ type: "item-state", item: c.item, state: "fix verified locally", detail: "You took its fix without a reproduction of the failure" });
+      done(true);
+      break;
+    }
     case "hand-back":
       ev({ type: "item-state", item: c.item, state: "handed back" });
       ev({ type: "user-done", key: `take-it:${c.item}` });

@@ -123,8 +123,10 @@ export function flagControls(r: RequestState, n: NeedsUser, ctx: RenderContext):
     case "failed": {
       // A critical review that ran but never said ok: the work is there, you judge it. A crashed one is retried.
       const accept = item !== undefined && reviewLimitFlag(r, item) === n;
+      const take = item !== undefined && untakenFix(r, item, n) ? commandButton(r.id, { cmd: "take-patch", item }, "Take its patch", back, false, "Its fix goes on to critical review as it is, without a reproduction of the failure") : null;
       controls = buttons(
         accept ? commandButton(r.id, { cmd: "accept-review", item }, "Accept the patch as it is", back, true, "Takes the patch without another critical review") : retry,
+        take,
         // Its findings are its author's to address: what you tell it goes to that author, as on its row.
         job?.kind === "agent" && !isAuthorJob(job) && !accept ? null : talk,
         accept ? null : handBack,
@@ -147,6 +149,13 @@ export function flagControls(r: RequestState, n: NeedsUser, ctx: RenderContext):
     return controls;
   }
   return canDismiss(n.key) ? dismissButton(r.id, n.key, back) : null;
+}
+
+// Its author's latest run stopped with a fix of a failure it couldn't reproduce (this ⚑): you can take that fix.
+export function untakenFix(r: RequestState, item: string, n: { key: string }): boolean {
+  const last = r.items[item]?.lastReport;
+  const rep = last?.report as { state?: string; commits?: string[]; reproduction?: { reproduced?: boolean } } | undefined;
+  return n.key === `failed:${last?.job}` && !!rep?.commits?.length && (rep.state === "not reproduced" || (rep.state === "fix verified locally" && rep.reproduction?.reproduced === false));
 }
 
 function buttons(...list: (Html | null)[]): Html {

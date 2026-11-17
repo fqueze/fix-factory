@@ -246,6 +246,7 @@ export type Command =
   | (CommandBase & { cmd: "comment-bug-draft"; patch: PatchId | "meta"; text: string })
   | (CommandBase & { cmd: "stack-comments"; stack: string; comments: { patch: PatchId; text: string }[] })
   | (CommandBase & { cmd: "take-it"; item: ItemId; text?: string }) // text: what its author should do about the other fix
+  | (CommandBase & { cmd: "take-patch"; item: ItemId }) // its author's fix of a failure it couldn't reproduce, taken as it is
   | (CommandBase & { cmd: "hand-back"; item: ItemId })
   | (CommandBase & { cmd: "comment-fix"; patch: PatchId; text: string })
   | (CommandBase & { cmd: "follow-up"; push: PushId; patch: PatchId }) // a failure that push pinned on that patch is left as a follow-up

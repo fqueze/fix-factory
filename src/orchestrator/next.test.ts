@@ -3381,6 +3381,37 @@ describe("4. a fix for a failure only try shows", () => {
   });
 });
 
+describe("4. a fix of a failure its author couldn't reproduce", () => {
+  it("waits for you; Take its patch sends it on to critical review, told so, and a later not reproduced from its author is a fix", () => {
+    const sc = workList([group("ka", "a/test_a.js", "boom")]);
+    investigating(sc, "i-test-a");
+    const job = sc.complete("author:i-test-a:initial", { report: fixed([sha("1")], { state: "not reproduced", reproduction: { reproduced: false }, bugDraft: { product: "Core", component: "XPCOM", summary: "s", description: "d" } }) });
+    assert.equal(sc.state().items["i-test-a"].state, "blocked");
+    assert.ok(sc.open().includes(`failed:${job}`));
+    command(sc, { cmd: "take-patch", item: "i-test-a" });
+    assert.equal(sc.state().items["i-test-a"].state, "fix verified locally");
+    assert.ok(!sc.open().includes(`failed:${job}`));
+    assert.ok(sc.settle().some((k) => k.startsWith("import:")), "its commits are imported");
+    sc.complete(keyOf(sc, "import:"), { output: [{ sha: sha("1"), title: "Bug XXXXXXX - Fix it, r=x.", bug: null, reviewers: ["x"], files: ["a/test_a.js"], insertions: 1, deletions: 0, testOnly: true }] });
+    sc.settle();
+    for (let round = 0; round < 3; round++) {
+      for (const k of sc.view().jobs.filter((j) => !j.end && (j.purpose.what === "msg" || j.purpose.what === "lint")).map((j) => j.purpose.key)) sc.complete(k, { output: k.startsWith("msg:") ? "Bug XXXXXXX - Fix it, r=x.\n" : { ok: true, violations: [] } });
+      sc.settle();
+    }
+    const review = sc.view().jobs.find((j) => j.purpose.what === "review")!;
+    assert.match(String(sc.plan(review.purpose.key).agent?.vars?.comments), /The user took this fix without a reproduction of the failure: a missing reproduction isn't a finding/);
+  });
+
+  it("refuses Take its patch when its author left no commit", () => {
+    const sc = workList([group("ka", "a/test_a.js", "boom")]);
+    investigating(sc, "i-test-a");
+    sc.complete("author:i-test-a:initial", { report: fixed([], { state: "not reproduced", reproduction: { reproduced: false } }) });
+    command(sc, { cmd: "take-patch", item: "i-test-a" });
+    assert.equal(sc.state().items["i-test-a"].state, "blocked");
+    assert.match(JSON.stringify(sc.events.at(-1)), /has no fix to take/);
+  });
+});
+
 describe("10. an answer after submission adding a commit", () => {
   it("doesn't put the new commit on a bug of its own when the first is on one", () => {
     const sc = inReview();

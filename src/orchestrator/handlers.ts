@@ -444,12 +444,14 @@ function authorReport(input: HandlerInput, ev: <T extends EventInput["type"]>(ty
       if (r.state === "not reproduced" && r.reproduction?.reproduced && r.reproduction.where === "on try" && r.commits.length) {
         throw new InvalidReport(`The failure reproduced on try and you committed a fix you can't run here: report it as "fix verified locally", your \`verification\` saying it wasn't run and what the stack's try push must check. "not reproduced" is for a failure nobody saw happen.`);
       }
-      // A fix for a failure nobody saw happen can't be trusted.
-      if (r.state === "not reproduced") {
+      // A fix for a failure nobody saw happen can't be trusted, unless you took it as it is (take-patch).
+      const taken = input.view.done.has(`take-patch:${item}`) && r.commits.length > 0;
+      const reported = r.state === "not reproduced" && taken ? "fix verified locally" : r.state;
+      if (reported === "not reproduced") {
         blocked(r.summary, "The author couldn't reproduce the failure");
         return;
       }
-      if (r.state === "fix verified locally" && r.reproduction?.reproduced === false) {
+      if (r.state === "fix verified locally" && r.reproduction?.reproduced === false && !taken) {
         blocked(r.summary, "Fixed without reproducing the failure");
         return;
       }
@@ -464,7 +466,7 @@ function authorReport(input: HandlerInput, ev: <T extends EventInput["type"]>(ty
       // Its patch on Phabricator and its commits kept: nothing to change (a try failure that isn't its own), so it waits for
       // review; "left as-is" closes a group whose fix is dropped.
       const submitted = Object.values(input.state.patches).some((p) => p.item === item && p.revision !== undefined);
-      const state = r.state === "left as-is" && submitted && r.commits.length > 0 ? "waiting for review" : r.state;
+      const state = reported === "left as-is" && submitted && r.commits.length > 0 ? "waiting for review" : reported;
       ev("item-state", { item, state, detail: r.summary.slice(0, 300), ...(coveredBy ? { coveredBy } : {}) });
       // Draft replies it changed: on the patch whose revision has that comment.
       for (const reply of r.replies ?? []) {
@@ -477,7 +479,7 @@ function authorReport(input: HandlerInput, ev: <T extends EventInput["type"]>(ty
       }
       // A decision it leaves to you: answered on its group's row, which resumes it.
       if (r.question) ev("needs-user", { key: `question:${job.job}`, action: "Its author asks you", detail: r.question.slice(0, 1500), job: job.job, item });
-      if (r.state !== "fix verified locally") return;
+      if (reported !== "fix verified locally") return;
       const patch = patchId(item, Math.max(0, r.commits.length - 1));
       // Each report says what its commits need now: what an earlier one said and this one doesn't is gone.
       for (const p of Object.values(input.state.patches).filter((x) => x.item === item)) {
