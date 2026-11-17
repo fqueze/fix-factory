@@ -277,7 +277,8 @@ export class Orchestrator {
           break;
         // A retry waits like any job for its worktree to be free; a job outside worktrees starts now.
         case "start":
-          if (inWorktree(this.config, e.plan)) this.deferred.push({ request: loaded!.s.id, plan: e.plan });
+          // An agent waits its turn too (AGENT_START_GAP_MS): eighteen retries clicked together started together.
+          if (inWorktree(this.config, e.plan) || e.plan.kind === "agent") this.deferred.push({ request: loaded!.s.id, plan: e.plan });
           else this.start(loaded!.s.id, e.plan);
           break;
         case "cancel": {
