@@ -93,7 +93,8 @@ export async function profileVersions(repo: string, rev: string, firefox: string
   return { supported, made: { gecko, processed: ci.processed }, ciProfilerRev: pinned };
 }
 
-// A clone under tools/, at its remote's main.
+// A clone under tools/, at its remote's main; or at its checkout, when that has commits main hasn't (a tool you
+// changed locally, kept until main has them).
 async function fetched(url: string, repo: string): Promise<string> {
   if (!existsSync(repo)) {
     log(`cloning ${url}`);
@@ -101,7 +102,8 @@ async function fetched(url: string, repo: string): Promise<string> {
   } else {
     await execOk(["git", "fetch", "--quiet", "origin", "main"], { cwd: repo });
   }
-  return (await execOk(["git", "rev-parse", "origin/main"], { cwd: repo })).trim();
+  const local = (await exec(["git", "merge-base", "--is-ancestor", "HEAD", "origin/main"], { cwd: repo })).code !== 0;
+  return (await execOk(["git", "rev-parse", local ? "HEAD" : "origin/main"], { cwd: repo })).trim();
 }
 
 const YARN_ENV = { ...process.env, COREPACK_ENABLE_DOWNLOAD_PROMPT: "0" };
