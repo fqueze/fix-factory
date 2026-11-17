@@ -3685,7 +3685,7 @@ class Planner {
   }
 
   // Each worktree is ~6 GB: those of groups closed without a fix, and the signal worktrees a redo replaced, go
-  // right away, once nothing runs in them; those of items that landed a day after, when a backout gets unlikely (one
+  // right away, once nothing runs in them; those of items that landed 4 hours after, when a backout gets unlikely (one
   // restores it from its kept branch).
   private pruneWorktrees(): void {
     for (const j of this.view.jobs.filter((j) => j.purpose.what === "worktree" && succeeded(j))) {
@@ -3693,7 +3693,7 @@ class Planner {
       const item = j.purpose.item === undefined ? undefined : this.s.items[j.purpose.item];
       const landed = (i: ItemView) => {
         const at = Object.values(this.s.patches).filter((p) => p.item === i.id && p.revision !== undefined).map((p) => this.s.landedAt[p.id]);
-        return i.state === "landed" && at.length > 0 && at.every((t) => t !== undefined && this.ctx.now - Date.parse(t) > 24 * HOUR);
+        return i.state === "landed" && at.length > 0 && at.every((t) => t !== undefined && this.ctx.now - Date.parse(t) > 4 * HOUR);
       };
       const closed = item !== undefined && (item.state === "left as-is" || item.state === "handed back" || landed(item));
       const replaced = j.purpose.key.startsWith("wt:signal") && j.purpose.key !== `wt:signal${this.annotationsEpoch()}`;
