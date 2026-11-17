@@ -1,13 +1,15 @@
 // Firefox worktrees for agents: create (with a build) and remove. Port of the orchestrate-parallel-fixes
 // skill's new-worktree.sh.
 //
-//   node src/cli/worktree.ts create <name> [--base <ref>] --build artifact|debug|full [--notes <item folder>]
+//   node src/cli/worktree.ts create <name> [--base <ref>] --build artifact|debug|opt|full|none [--notes <item folder>]
 //     → {name, path, branch, base, build, mozconfig, objdir, smokeLog}
 //     Creates <config.worktreesDir>/<name> on branch <name> (off --base, default: the checkout's current
 //     branch; an existing branch is checked out as is), writes its mozconfig, runs ./mach build and a sanity
 //     mochitest. Long-running: meant to run as a job. Build output goes to stderr.
-//     artifact: opt artifact build. debug: debug artifact build (still about a minute). full: debug build
-//     compiled locally, for C++ changes.
+//     artifact: opt artifact build. debug: debug artifact build (still about a minute). opt, full: opt and debug
+//     builds compiled locally, for native code changes. none: no build, a plain worktree (a stack's).
+//     With a build, <name> is a symlink to a slot (see slotsDir): a free one of that build, reset to the branch, or
+//     a new one; its objdir is <objdirsDir>/<slot>.
 //     --notes: the artifacts/ of an item's folder (its agents' notes) are copied into the tree's, for an item
 //     whose worktree comes back.
 //     A failed build leaves the worktree in place. Running create again with the same name reuses it (the
@@ -16,7 +18,8 @@
 //   node src/cli/worktree.ts remove <name>
 //     → {name, path, killed: [{pid, cmdline}], removed: true, kept: {files, skipped}, refs}
 //     Kills the processes whose command line names the worktree or whose working directory is in it (and
-//     only those), then `git worktree remove --force`, which also deletes the in-tree objdir. The branch is
+//     only those), then frees its slot (its build kept for the next item), or, for a worktree made before slots,
+//     `git worktree remove --force`, which also deletes the in-tree objdir. The branch is
 //     kept, and so are artifacts/ and the worktree's own commits (see src/lib/kept.ts). killed lists the
 //     processes actually signalled.
 //
@@ -24,7 +27,7 @@
 
 import { freeDiskGB, MIN_FREE_GB, WORKTREE_GB } from "../lib/disk.ts";
 import { spawn } from "node:child_process";
-import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, readlinkSync, realpathSync, statfsSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmSync, statfsSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
 import { copyArtifacts, ITEM_NOTES_MAX_BYTES, KEEP_MAX_BYTES, keptDir } from "../lib/kept.ts";
 import { basename, dirname, join, resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -33,17 +36,71 @@ import { netLog } from "../lib/netlog.ts";
 import { exec, execOk } from "../lib/exec.ts";
 import { loadConfig } from "../config.ts";
 
-export type BuildKind = "artifact" | "debug" | "full";
+// artifact: opt artifact build; debug: debug artifact build; opt, full: opt and debug builds compiled locally (native
+// code changes); none: no build (a stack's worktree: git only).
+export type BuildKind = "artifact" | "debug" | "opt" | "full" | "none";
+export const BUILD_KINDS: BuildKind[] = ["artifact", "debug", "opt", "full", "none"];
 
 export function flavor(build: BuildKind): string {
-  return { artifact: "opt-artifact", debug: "dbg-artifact", full: "dbg" }[build];
+  return { artifact: "opt-artifact", debug: "dbg-artifact", opt: "opt", full: "dbg", none: "none" }[build];
 }
 
-export function mozconfig(build: BuildKind): string {
-  const lines = ["mk_add_options AUTOCLOBBER=1", `mk_add_options MOZ_OBJDIR=@TOPSRCDIR@/obj-${flavor(build)}`];
-  if (build !== "artifact") lines.push("ac_add_options --enable-debug");
-  if (build !== "full") lines.push("ac_add_options --enable-artifact-builds");
+// objdir: where the build goes; in the tree (@TOPSRCDIR@/obj-<flavor>) for the worktrees made before slots.
+export function mozconfig(build: BuildKind, objdir = `@TOPSRCDIR@/obj-${flavor(build)}`): string {
+  const lines = ["mk_add_options AUTOCLOBBER=1", `mk_add_options MOZ_OBJDIR=${objdir}`];
+  if (build === "debug" || build === "full") lines.push("ac_add_options --enable-debug");
+  if (build === "artifact" || build === "debug") lines.push("ac_add_options --enable-artifact-builds");
   return lines.join("\n") + "\n";
+}
+
+// Worktrees with a build are slots, reused from item to item: <worktreesDir>/slots/<flavor>-<n>, their build in
+// <objdirsDir>/<slot> (outside the tree, so resetting it for the next item keeps the build). An item's worktree is
+// <worktreesDir>/<name>, a symlink to the slot it has now: its path, which its agents remember, never changes.
+export function slotsDir(worktreesDir: string): string {
+  return join(worktreesDir, "slots");
+}
+
+// The slots in use: those a worktree's symlink points to.
+function slotsInUse(worktreesDir: string): Set<string> {
+  const used = new Set<string>();
+  for (const e of readdirSync(worktreesDir, { withFileTypes: true })) {
+    if (e.isSymbolicLink()) used.add(basename(readlinkSync(join(worktreesDir, e.name))));
+  }
+  return used;
+}
+
+// A free slot of that flavor, locked for this process (a create running beside it picks another), or undefined.
+function takeFreeSlot(worktreesDir: string, build: BuildKind): string | undefined {
+  const dir = slotsDir(worktreesDir);
+  if (!existsSync(dir)) return undefined;
+  const used = slotsInUse(worktreesDir);
+  for (const slot of readdirSync(dir).filter((n) => n.startsWith(`${flavor(build)}-`) && !n.endsWith(".lock") && !used.has(n)).sort()) {
+    if (lockSlot(dir, slot)) return slot;
+  }
+  return undefined;
+}
+
+// A lock file naming its process; one whose process is gone is taken over.
+function lockSlot(dir: string, slot: string): boolean {
+  const lock = join(dir, `${slot}.lock`);
+  try {
+    writeFileSync(lock, String(process.pid), { flag: "wx" });
+    return true;
+  } catch {
+    const pid = Number(readFileSync(lock, "utf8"));
+    if (pid && alive(pid)) return false;
+    writeFileSync(lock, String(process.pid));
+    return true;
+  }
+}
+
+function newSlot(worktreesDir: string, build: BuildKind): string {
+  const dir = slotsDir(worktreesDir);
+  mkdirSync(dir, { recursive: true });
+  for (let n = 1; ; n++) {
+    const slot = `${flavor(build)}-${n}`;
+    if (!existsSync(join(dir, slot)) && lockSlot(dir, slot)) return slot;
+  }
 }
 
 export function validateName(name: string): void {
@@ -112,10 +169,8 @@ export async function fetchRemoteBase(repo: string, base: string): Promise<void>
 }
 
 
-export async function create(name: string, opts: { base?: string; build: BuildKind; repo: string; worktreesDir: string; notes?: string }) {
+export async function create(name: string, opts: { base?: string; build: BuildKind; repo: string; worktreesDir: string; objdirsDir?: string; notes?: string }) {
   validateName(name);
-  const gb = freeDiskGB(opts.worktreesDir);
-  if (gb < MIN_FREE_GB) throw new Error(`only ${gb.toFixed(1)} GB free on the disk of ${opts.worktreesDir}: a worktree needs ~${WORKTREE_GB} GB, and none is created under ${MIN_FREE_GB} GB`);
   const { repo } = opts;
   if (!existsSync(join(repo, "mach"))) throw new Error(`${repo} is not a Firefox checkout`);
   if (isInside(opts.worktreesDir, repo)) throw new Error(`worktreesDir ${opts.worktreesDir} is inside ${repo}`);
@@ -123,10 +178,12 @@ export async function create(name: string, opts: { base?: string; build: BuildKi
   const git = (args: string[]) => execOk(["git", ...args], { cwd: repo });
 
   let base: string;
+  let slot: string | undefined;
   if (existsSync(dest)) {
     // A retry after a failed build: reuse the tree if it's ours, on our branch.
-    if (!isWorktreeOn(await git(["worktree", "list", "--porcelain"]), dest, name)) throw new Error(`${dest} already exists and isn't the worktree of branch ${name}`);
+    if (!isWorktreeOn(await git(["worktree", "list", "--porcelain"]), realpathSync(dest), name)) throw new Error(`${dest} already exists and isn't the worktree of branch ${name}`);
     base = opts.base ?? name;
+    if (lstatSync(dest).isSymbolicLink()) slot = basename(readlinkSync(dest));
     log(`reusing worktree ${dest}`);
   } else {
     let branchExists = (await exec(["git", "show-ref", "--verify", "--quiet", `refs/heads/${name}`], { cwd: repo })).code === 0;
@@ -143,23 +200,50 @@ export async function create(name: string, opts: { base?: string; build: BuildKi
     base = branchExists ? name : (opts.base ?? (await git(["rev-parse", "--abbrev-ref", "HEAD"])).trim());
     if (!branchExists) await fetchRemoteBase(repo, base);
     mkdirSync(opts.worktreesDir, { recursive: true });
-    log(`creating worktree ${dest} off ${base}`);
-    await git(worktreeAddArgs(dest, name, base, branchExists));
+    if (opts.build === "none") {
+      log(`creating worktree ${dest} off ${base}`);
+      await git(worktreeAddArgs(dest, name, base, branchExists));
+    } else {
+      // A free slot of its build, reset to the item's branch: its build is kept, and only what changed rebuilds.
+      slot = takeFreeSlot(opts.worktreesDir, opts.build);
+      const at = join(slotsDir(opts.worktreesDir), slot ?? "");
+      try {
+        if (slot) {
+          log(`reusing slot ${slot} for ${name} off ${base}`);
+          const g = (args: string[]) => execOk(["git", ...args], { cwd: at });
+          await g(["checkout", "-q", "-f", ...(branchExists ? [name] : ["-b", name, base])]);
+          // Everything untracked goes but the mozconfig, rewritten below: the build is outside the tree.
+          await g(["clean", "-q", "-fdx", "-e", "/mozconfig"]);
+        } else {
+          const gb = freeDiskGB(opts.worktreesDir);
+          if (gb < MIN_FREE_GB) throw new Error(`only ${gb.toFixed(1)} GB free on the disk of ${opts.worktreesDir}: a worktree needs ~${WORKTREE_GB} GB, and none is created under ${MIN_FREE_GB} GB`);
+          slot = newSlot(opts.worktreesDir, opts.build);
+          log(`creating slot ${slot} for ${name} off ${base}`);
+          await git(worktreeAddArgs(join(slotsDir(opts.worktreesDir), slot), name, base, branchExists));
+        }
+        symlinkSync(join(slotsDir(opts.worktreesDir), slot), dest);
+      } finally {
+        if (slot) rmSync(join(slotsDir(opts.worktreesDir), `${slot}.lock`), { force: true });
+      }
+    }
   }
 
+  const objdir = slot ? join(opts.objdirsDir ?? join(dirname(opts.worktreesDir), "objdirs"), slot) : join(dest, `obj-${flavor(opts.build)}`);
   const mozconfigPath = join(dest, "mozconfig");
   try {
     // mozconfig is untracked, so worktree add doesn't bring one across.
-    writeFileSync(mozconfigPath, mozconfig(opts.build));
+    writeFileSync(mozconfigPath, mozconfig(opts.build, slot ? objdir : undefined));
     mkdirSync(join(dest, "artifacts"), { recursive: true });
     // A stub, so a tree whose agent dies early still names itself.
     writeFileSync(join(dest, "artifacts/sessionlog.md"), `# ${name}\n\nWorktree \`${name}\`, branch \`${name}\`, off \`${base}\`.\n`);
     // Its agents' notes, sessionlog.md included, over the stub.
     if (opts.notes) copyArtifacts(opts.notes, dest, ITEM_NOTES_MAX_BYTES);
   } catch (e) {
-    await exec(["git", "worktree", "remove", "--force", dest], { cwd: repo });
+    if (slot) unlinkSync(dest);
+    else await exec(["git", "worktree", "remove", "--force", dest], { cwd: repo });
     throw e;
   }
+  if (opts.build === "none") return { name, path: dest, branch: name, base, build: opts.build };
 
   // An inherited MOZCONFIG would win over the worktree's own mozconfig.
   const env = { ...process.env, MOZCONFIG: mozconfigPath };
@@ -185,7 +269,7 @@ export async function create(name: string, opts: { base?: string; build: BuildKi
     throw new Error(`${dest} built but can't run a mochitest (the end of its log is in this job's stderr)`);
   }
 
-  return { name, path: dest, branch: name, base, build: opts.build, mozconfig: mozconfigPath, objdir: join(dest, `obj-${flavor(opts.build)}`), smokeLog };
+  return { name, path: dest, branch: name, base, build: opts.build, mozconfig: mozconfigPath, objdir, smokeLog, ...(slot ? { slot } : {}) };
 }
 
 // True when the command line names the path itself or something under it, not a sibling such as
@@ -255,9 +339,19 @@ export async function remove(name: string, opts: { repo: string; worktreesDir: s
   validateName(name);
   const dest = join(opts.worktreesDir, name);
   if (!existsSync(dest)) throw new Error(`${dest} does not exist`);
-  const killed = await killAll(processesUnder(realpathSync(dest)));
+  // Processes may name the item's path (the symlink) or the slot's.
+  const procs = [...processesUnder(realpathSync(dest)), ...(realpathSync(dest) === dest ? [] : processesUnder(dest))];
+  const killed = await killAll(procs.filter((p, i) => procs.findIndex((q) => q.pid === p.pid) === i));
   const kept = copyArtifacts(dest, keptDir(opts.stateDir, name), KEEP_MAX_BYTES);
   const refs = await keepCommits(dest, name, opts.repo);
+  // On a slot: the slot is freed for the next item, its build kept; the item's branch, no longer checked out, comes
+  // back in whichever slot is free when it's needed again.
+  if (lstatSync(dest).isSymbolicLink()) {
+    const slot = basename(readlinkSync(dest));
+    await execOk(["git", "checkout", "-q", "-f", "--detach"], { cwd: dest });
+    unlinkSync(dest);
+    return { name, path: dest, killed, removed: true, kept, refs, freed: slot };
+  }
   // --force: the objdir and mozconfig are untracked, git refuses without it. An objdir outside the tree
   // may be shared, so only the in-tree one goes, with the tree.
   await execOk(["git", "worktree", "remove", "--force", dest], { cwd: opts.repo });
@@ -281,11 +375,11 @@ async function main() {
     {
       create: async (args, values) => {
         const build = values.build as BuildKind;
-        if (args.length !== 1 || !["artifact", "debug", "full"].includes(build)) {
-          throw new UsageError("usage: create <name> [--base <ref>] --build artifact|debug|full [--notes <dir>]");
+        if (args.length !== 1 || !BUILD_KINDS.includes(build)) {
+          throw new UsageError(`usage: create <name> [--base <ref>] --build ${BUILD_KINDS.join("|")} [--notes <dir>]`);
         }
         const config = loadConfig();
-        return create(args[0], { base: values.base as string | undefined, build, repo: config.firefoxRepo, worktreesDir: config.worktreesDir, notes: values.notes as string | undefined });
+        return create(args[0], { base: values.base as string | undefined, build, repo: config.firefoxRepo, worktreesDir: config.worktreesDir, ...(config.objdirsDir ? { objdirsDir: config.objdirsDir } : {}), notes: values.notes as string | undefined });
       },
       remove: async (args) => {
         if (args.length !== 1) throw new UsageError("usage: remove <name>");

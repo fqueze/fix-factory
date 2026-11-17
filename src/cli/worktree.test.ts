@@ -116,6 +116,42 @@ test("create can be run again after a failed build: it reuses the worktree and b
   }
 });
 
+test("an item's worktree is a symlink to a slot, its build outside the tree; removed, its slot goes to the next item, reset to that item's branch", async () => {
+  const { root, repo, git } = await tempRepo();
+  const worktreesDir = join(root, "wt");
+  const objdirsDir = join(root, "objdirs");
+  writeFileSync(join(repo, "mach"), "#!/bin/sh\nexit 0\n");
+  chmodSync(join(repo, "mach"), 0o755);
+  await git("commit", "-qam", "mach");
+  const opts = { build: "artifact" as const, repo, worktreesDir, objdirsDir, base: "main" };
+  try {
+    const a = await create("a", opts);
+    assert.equal(a.path, join(worktreesDir, "a"));
+    assert.equal(realpathSync(a.path), join(worktreesDir, "slots", "opt-artifact-1"));
+    assert.equal("objdir" in a && a.objdir, join(objdirsDir, "opt-artifact-1"));
+    assert.match(readFileSync(join(a.path, "mozconfig"), "utf8"), new RegExp(`MOZ_OBJDIR=${objdirsDir}/opt-artifact-1\n`));
+    writeFileSync(join(a.path, "fix.txt"), "a's fix\n");
+    await execOk(["git", "-c", "user.name=T", "-c", "user.email=t@example.com", "add", "fix.txt"], { cwd: a.path });
+    await execOk(["git", "-c", "user.name=T", "-c", "user.email=t@example.com", "commit", "-qm", "a's fix"], { cwd: a.path });
+    writeFileSync(join(a.path, "scratch.log"), "untracked\n");
+    const gone = await remove("a", { repo, worktreesDir, stateDir: join(root, "state") });
+    assert.equal(gone.freed, "opt-artifact-1");
+    assert.ok(!existsSync(a.path), "its symlink is gone");
+    assert.ok(existsSync(join(worktreesDir, "slots", "opt-artifact-1")), "its slot stays");
+    // The next item gets that slot, on its own branch, without a's files.
+    const b = await create("b", { ...opts, base: "main" });
+    assert.equal(realpathSync(b.path), join(worktreesDir, "slots", "opt-artifact-1"));
+    assert.equal((await execOk(["git", "rev-parse", "--abbrev-ref", "HEAD"], { cwd: b.path })).trim(), "b");
+    assert.ok(!existsSync(join(b.path, "fix.txt")) && !existsSync(join(b.path, "scratch.log")));
+    // a comes back, on its branch, in a slot of its own: b holds the other.
+    const back = await create("a", { build: "artifact", repo, worktreesDir, objdirsDir });
+    assert.equal(realpathSync(back.path), join(worktreesDir, "slots", "opt-artifact-2"));
+    assert.equal(readFileSync(join(back.path, "fix.txt"), "utf8"), "a's fix\n");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("isWorktreeOn reads git worktree list --porcelain", () => {
   const out = "worktree /ff\nHEAD 1\nbranch refs/heads/main\n\nworktree /wt/a\nHEAD 2\nbranch refs/heads/a\n\nworktree /wt/c\nHEAD 3\ndetached\n";
   assert.ok(isWorktreeOn(out, "/wt/a", "a"));
