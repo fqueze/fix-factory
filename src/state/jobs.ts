@@ -16,6 +16,9 @@ export interface JobSpec {
   cwd: string;
   env?: Record<string, string>; // added to the orchestrator's environment
   stdinFile?: string; // absolute path used as the command's stdin; /dev/null when absent
+  // An agent's: a file holding a Claude Code OAuth token (claude setup-token), passed to it as CLAUDE_CODE_OAUTH_TOKEN
+  // by the wrapper when the file exists, so the token is in no spec.
+  tokenFile?: string;
   kind: JobKind;
   name: string;
   request?: RequestId;

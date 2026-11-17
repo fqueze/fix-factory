@@ -17,6 +17,7 @@ export interface FactoryConfig {
   stateDir: string; // commands.jsonl, requests/, jobs/, feedback/, cache/, kept/
   firefoxRepo: string; // main checkout; worktrees are created next to it, never inside
   worktreesDir: string; // items' worktrees (symlinks to slots/), stacks' worktrees, and slots/
+  claudeTokenFile?: string; // a Claude Code OAuth token (claude setup-token) agents get as CLAUDE_CODE_OAUTH_TOKEN, when the file exists (default: <stateDir>/claude-token): their login then needs no ~/.claude credentials
   agentStartGapMs?: number; // between two agents' starts (default 2 s): Claude Code's ~/.claude.json doesn't survive many at once
   objdirsDir?: string; // the slots' builds, one objdir per slot (default: worktreesDir/objdirs)
   baseRef: string; // central-based ref worktrees and stacks start from, e.g. "origin/main"

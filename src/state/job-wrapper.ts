@@ -8,7 +8,7 @@
 // SIGTERM, SIGINT and SIGHUP sent to the wrapper are forwarded to the command, and
 // exit.json is still written once it ends.
 import { spawn, type ChildProcess } from "node:child_process";
-import { appendFileSync, openSync, readFileSync } from "node:fs";
+import { appendFileSync, existsSync, openSync, readFileSync } from "node:fs";
 import { constants } from "node:os";
 import { join } from "node:path";
 import type { JobSpec } from "./jobs.ts";
@@ -46,9 +46,10 @@ try {
   const stdin = spec.stdinFile ? openSync(spec.stdinFile, "r") : "ignore";
   const out = openSync(join(jobDir, "out.log"), "a");
   const err = openSync(errPath, "a");
+  const token = spec.tokenFile && existsSync(spec.tokenFile) ? readFileSync(spec.tokenFile, "utf8").trim() : "";
   child = spawn(spec.cmd[0], spec.cmd.slice(1), {
     cwd: spec.cwd,
-    env: { ...process.env, ...spec.env },
+    env: { ...process.env, ...spec.env, ...(token ? { CLAUDE_CODE_OAUTH_TOKEN: token } : {}) },
     stdio: [stdin, out, err],
   });
   child.on("error", (e) => {

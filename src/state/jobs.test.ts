@@ -59,6 +59,20 @@ test("a job's stdout, stderr, env and cwd, and its exit code", async () => {
   assert.match(readExit(dir, job)!.endedAt, /^\d{4}-/);
 });
 
+test("an agent gets the token of its tokenFile as CLAUDE_CODE_OAUTH_TOKEN, and nothing without the file; the spec has only the path", async () => {
+  const tokenFile = join(dir, "claude-token");
+  writeFileSync(tokenFile, "sk-ant-oat-test\n");
+  const echo = ["sh", "-c", "echo \"[$CLAUDE_CODE_OAUTH_TOKEN]\""];
+  const { job } = startJob(dir, spec(echo, { kind: "agent", tokenFile }));
+  await waitFor(job);
+  assert.equal(log(job, "out.log"), "[sk-ant-oat-test]\n");
+  assert.ok(!readFileSync(join(jobDir(dir, job), "spec.json"), "utf8").includes("sk-ant"));
+  rmSync(tokenFile);
+  const { job: without } = startJob(dir, spec(echo, { kind: "agent", tokenFile }));
+  await waitFor(without);
+  assert.equal(log(without, "out.log"), `[${process.env.CLAUDE_CODE_OAUTH_TOKEN ?? ""}]\n`);
+});
+
 test("stdin comes from stdinFile, or /dev/null without it", async () => {
   const input = join(dir, "prompt.txt");
   writeFileSync(input, "x".repeat(200_000) + "\n");
