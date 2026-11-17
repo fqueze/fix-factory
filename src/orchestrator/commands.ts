@@ -7,7 +7,7 @@ import { itemDir } from "../lib/kept.ts";
 import type { EventInput } from "../state/events.ts";
 import { sameBugDraft } from "../state/meta-bug.ts";
 import { canDismiss, canRetry, isPushJob, reviewLimitFlag } from "../state/flags.ts";
-import type { Command, Event, FactoryConfig, ItemId, JobId, PlannedCommand, RequestId, RequestState } from "../types.ts";
+import type { Command, Event, FactoryConfig, ItemId, JobId, PatchId, PlannedCommand, RequestId, RequestState, ReviewComment } from "../types.ts";
 import { REQUEST_STEPS } from "../server/commands.ts";
 import { ANNOTATIONS_ITEM, authorJobsOf, CANCELLED, itemEpochOf, lostSession, SETTLED, TERMINAL, resumeAuthorPlan, removedWorktree } from "./next.ts";
 import { handOffReferences } from "./hand-off.ts";
@@ -87,6 +87,25 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
     }
     effects.push({ type: "start", plan });
     return undefined;
+  };
+  // The agent that wrote a patch's test plan, in its session: the key of its run, or why there's none now.
+  const reviseTestPlan = (patch: PatchId, suffix: string, message: string): { key: string } | { error: string } => {
+    const last = view!.jobs.findLast((j) => j.purpose.what === "test-plan" && j.purpose.patch === patch && j.sessionId);
+    if (!last) return { error: "no test plan to revise" };
+    if (!last.end) return { error: "its test plan is being written: send it again when it's done" };
+    const key = `${last.purpose.key.split(":").slice(0, 3).join(":")}:${suffix}`;
+    effects.push({
+      type: "start",
+      plan: {
+        purpose: { key, what: "test-plan", patch, reason: message },
+        kind: "agent",
+        name: "write-test-plan",
+        ...(last.item ? { item: last.item } : {}),
+        cwd: last.cwd,
+        agent: { sessionId: last.sessionId!, resume: true, message: `${message}\n\nThen end with the JSON report again.` },
+      },
+    });
+    return { key };
   };
   // The ⚑s that wait on an item's way forward.
   const clearItemFlags = (item: ItemId) => {
@@ -311,9 +330,22 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
         if (x.response) e.responses.push(x.response);
         toAuthor.set(item, e);
       };
+      // Comments on a test plan go to the agent that wrote it, one message per patch; the others to the author.
+      const onPlans = new Map<PatchId, typeof c.comments>();
       for (const x of c.comments) {
-        // stack-viewer names and quotes the test plan lines a comment is on; the author is told what that section is.
-        forAuthor(x.patch, x.anchor?.file === "(section:test-plan)" ? `(on its test plan, the Test Plan field reviewers read on Phabricator: say in your summary what it should say instead) ${x.text}` : x.text, { comment: x });
+        if (x.anchor?.file === "(section:test-plan)") onPlans.set(x.patch, [...(onPlans.get(x.patch) ?? []), x]);
+        else forAuthor(x.patch, commentLine(x), { comment: x });
+      }
+      for (const [patch, xs] of onPlans) {
+        const r = reviseTestPlan(patch, `review:${c.id}`, `The user's review comments on the test plan you wrote:\n${xs.map((x) => `- ${commentLine(x)}`).join("\n")}\n\nWrite it again for them, keeping what you were asked before.`);
+        if ("error" in r) {
+          errors.push(`${s.patches[patch].title}: ${r.error}`);
+          continue;
+        }
+        for (const x of xs) {
+          const lines = sectionLines(s.patches[patch].testPlan, x.anchor!.line);
+          ev({ type: "comment-sent", patch, text: x.text, ...(x.quote ? { quote: x.quote } : {}), key: r.key, ...(x.id ? { id: x.id } : {}), anchor: x.anchor!, sha: x.sha ?? s.patches[patch].sha, ...(lines ? { lines } : {}) });
+        }
       }
       for (const x of c.responses) {
         const p = s.patches[x.patch];
@@ -354,10 +386,7 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
           continue;
         }
         const key = `author:${item}${itemEpochOf(view, item)}:stack-comments:${c.id}`;
-        for (const x of e.comments) {
-          const lines = x.anchor?.file === "(section:test-plan)" ? sectionLines(s.patches[x.patch].testPlan, x.anchor.line) : undefined;
-          ev({ type: "comment-sent", patch: x.patch, text: x.text, key, ...(x.id ? { id: x.id } : {}), ...(x.anchor ? { anchor: x.anchor } : {}), sha: x.sha ?? s.patches[x.patch].sha, ...(lines ? { lines } : {}) });
-        }
+        for (const x of e.comments) ev({ type: "comment-sent", patch: x.patch, text: x.text, ...(x.quote ? { quote: x.quote } : {}), key, ...(x.id ? { id: x.id } : {}), ...(x.anchor ? { anchor: x.anchor } : {}), sha: x.sha ?? s.patches[x.patch].sha });
         for (const x of e.responses) ev({ type: "comment-response", patch: x.patch, comment: x.id, response: x.response, ...(x.text !== undefined ? { text: x.text } : {}), key });
       }
       done(errors.length === 0, errors.join("; "));
@@ -387,28 +416,8 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
       break;
     }
     case "revise-test-plan": {
-      // The agent that wrote it, in its session.
-      const last = view.jobs.findLast((j) => j.purpose.what === "test-plan" && j.purpose.patch === c.patch && j.sessionId);
-      if (!last) {
-        done(false, "no test plan to revise");
-        break;
-      }
-      if (!last.end) {
-        done(false, "its test plan is being written: send it again when it's done");
-        break;
-      }
-      effects.push({
-        type: "start",
-        plan: {
-          purpose: { key: `${last.purpose.key.split(":").slice(0, 3).join(":")}:revise:${c.id}`, what: "test-plan", patch: c.patch, reason: c.text },
-          kind: "agent",
-          name: "write-test-plan",
-          ...(last.item ? { item: last.item } : {}),
-          cwd: last.cwd,
-          agent: { sessionId: last.sessionId!, resume: true, message: `Revise the test plan: ${c.text}\n\nThen end with the JSON report again.` },
-        },
-      });
-      done(true);
+      const r = reviseTestPlan(c.patch, `revise:${c.id}`, `Revise the test plan: ${c.text}`);
+      done(!("error" in r), "error" in r ? r.error : undefined);
       break;
     }
     case "set-reviewer": {
@@ -825,6 +834,16 @@ export function sectionLines(text: string | undefined, line: number | [number, n
   const [a, b] = typeof line === "number" ? [line, line] : line;
   const lines = text.split("\n").slice(a - 1, b);
   return lines.length ? lines : undefined;
+}
+
+// A comment from stack-viewer as an agent reads it: where, the words it's on, what you wrote.
+export function commentLine(x: ReviewComment): string {
+  const a = x.anchor;
+  if (!a) return x.text;
+  const lines = a.line === undefined ? "" : typeof a.line === "number" ? `line ${a.line}` : `lines ${a.line[0]}-${a.line[1]}`;
+  const where = a.file === "(commit)" ? `the commit message${lines ? `, ${lines}` : ""}` : a.file === "(section:test-plan)" ? `the test plan${lines ? `, ${lines}` : ""}` : `${a.file}${a.line === undefined ? "" : `:${typeof a.line === "number" ? a.line : a.line.join("-")}`}${a.side === "old" ? " (the old side)" : ""}`;
+  const text = x.text.includes("\n") ? `\n${quoted(x.text.split("\n"))}` : ` ${x.text}`;
+  return `${where}${x.quote ? `, on "${x.quote}"` : ""}:${text}`;
 }
 
 function quoted(lines: string[]): string {

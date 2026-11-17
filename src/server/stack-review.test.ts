@@ -17,12 +17,11 @@ function loadPage() {
   const updated: [string, { status: { kind: string }; actions: { id: string }[] }][] = [];
   const listeners = new Map<string, (e: unknown) => void>();
   const button = { textContent: "Send comments to the factory", disabled: false, click: () => {}, addEventListener: (_: string, f: () => void) => (button.click = f) };
-  let comments = [{ id: "c-1", text: "Why?", line: 3, anchor: { file: "(commit)", line: 3 } }];
+  let comments = [{ id: "c-1", text: "Why?", quote: "x", line: 3, anchor: { file: "(commit)", line: 3 } }];
   let responses = [{ id: "phab-4", response: "ignore" }];
   const frame = {
     document: { querySelector: () => ({ getAttribute: () => SHA.slice(0, 12) }) },
     mdvReviewComments: () => comments,
-    mdvReviewEntries: (list: { text: string }[]) => `- the commit message, line 3 — "x"\n\n  ${list[0].text}`,
     mdvReviewResponses: () => responses,
     mdvReviewMarkSent: (ids: string[]) => {
       marked.push(ids);
@@ -68,7 +67,7 @@ describe("the review page's script", () => {
     assert.deepEqual(p.sent, [
       {
         cmd: "review-send",
-        comments: [{ patch: "p-a", text: '- the commit message, line 3 — "x"\n\n  Why?', anchor: { file: "(commit)", line: 3 }, sha: SHA, id: "c-1" }],
+        comments: [{ patch: "p-a", text: "Why?", anchor: { file: "(commit)", line: 3 }, sha: SHA, quote: "x", id: "c-1" }],
         responses: [{ patch: "p-a", id: "phab-4", response: "ignore" }],
         request: "r-1",
       },

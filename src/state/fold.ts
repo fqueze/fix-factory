@@ -103,7 +103,7 @@ export function folder(first: Event): { apply(events: readonly Event[]): void; s
           const same = (c: NonNullable<PatchView["yourComments"]>[number]) => (e.id === undefined ? c.key === e.key : c.id === e.id);
           p.yourComments = [
             ...(p.yourComments ?? []).filter((c) => !same(c)),
-            { text: e.text, key: e.key, t: e.t, id, sha: e.sha ?? p.sha, ...(e.anchor ? { anchor: e.anchor } : {}), ...(e.lines ? { lines: e.lines } : {}) },
+            { text: e.text, ...(e.quote ? { quote: e.quote } : {}), key: e.key, t: e.t, id, sha: e.sha ?? p.sha, ...(e.anchor ? { anchor: e.anchor } : {}), ...(e.lines ? { lines: e.lines } : {}) },
           ];
           break;
         }

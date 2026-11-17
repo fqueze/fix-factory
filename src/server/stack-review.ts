@@ -256,8 +256,8 @@ const REVIEW_SCRIPT = `
       var ids = [];
       for (var k = 0; k < comments.length; k++) {
         var c = comments[k];
-        var text = typeof win.mdvReviewEntries === "function" ? win.mdvReviewEntries([c]) : JSON.stringify(c, null, 2);
-        var item = { patch: patch, text: text, anchor: anchorOf(c), sha: sha };
+        var item = { patch: patch, text: c.text, anchor: anchorOf(c), sha: sha };
+        if (c.quote) item.quote = c.quote;
         if (c.id) { item.id = c.id; ids.push(c.id); }
         out.comments.push(item);
       }

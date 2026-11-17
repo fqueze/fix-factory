@@ -216,11 +216,14 @@ describe("commands", () => {
     sc.startJob({ purpose: { key: "review:p-a:x", what: "review", item: "i-a", patch: "p-a", sha: sha("1").slice(0, 12) }, kind: "agent", name: "review-patch", item: "i-a", cwd: "/wt/a" });
     sc.complete("review:p-a:x", { report: { verdict: "findings", findings: [{ severity: "nit", file: "a/test_a.js", line: 5, text: "Dead code" }], feedback: [] } });
     const review = sc.view().byKey.get("review:p-a:x")![0].job;
+    sc.startJob({ purpose: { key: "test-plan:p-a:v1:h", what: "test-plan", patch: "p-a" }, kind: "agent", name: "write-test-plan", item: "i-a", cwd: "/wt/a", agent: { sessionId: "s-plan", resume: false } });
+    sc.complete("test-plan:p-a:v1:h", { report: { testPlan: "Ran it 20 times.\nGreen on try.", feedback: [] } });
     const c = cmd({
       cmd: "review-send",
       comments: [
-        { patch: "p-a", id: "c-new1", text: "- a/test_a.js:2 — \"x\"\n\n  Why?", anchor: { file: "a/test_a.js", line: 2 }, sha: sha("1") },
-        { patch: "p-a", id: "c-new2", text: "Say which platform", anchor: { file: "(section:test-plan)", line: 2 } },
+        { patch: "p-a", id: "c-new1", text: "Why?", quote: "x", anchor: { file: "a/test_a.js", line: 2 }, sha: sha("1") },
+        { patch: "p-a", id: "c-new3", text: "Say why.", quote: "Fix", anchor: { file: "(commit)", line: 1 } },
+        { patch: "p-a", id: "c-new2", text: "Say which platform", quote: "try", anchor: { file: "(section:test-plan)", line: 2 } },
       ],
       responses: [
         { patch: "p-a", id: "phab-41", response: "address" },
@@ -233,15 +236,19 @@ describe("commands", () => {
     assert.deepEqual(executed(sc).at(-1), { ok: true, detail: undefined });
     const key = `author:i-a:stack-comments:${c.id}`;
     const message = sc.plan(key).agent?.message ?? "";
-    assert.match(message, /Why\?/);
-    assert.match(message, /\(on its test plan, the Test Plan field reviewers read on Phabricator: [^)]*\) Say which platform/);
+    assert.match(message, /- On [^:]+: a\/test_a\.js:2, on "x": Why\?/);
+    assert.match(message, /the commit message, line 1, on "Fix": Say why\./);
+    assert.doesNotMatch(message, /which platform/, "the test plan is its writer's");
+    const plan = sc.plan(`test-plan:p-a:v1:review:${c.id}`);
+    assert.equal(plan.agent?.resume, true);
+    assert.match(plan.agent?.message ?? "", /- the test plan, line 2, on "try": Say which platform/);
     assert.match(message, /address this comment of smaug on Phabricator \(D7, a\/test_a\.js:3\): Why a timeout\?/);
     assert.match(message, /address this finding of a critical review \(nit, a\/test_a\.js:5\): Dead code/);
     assert.doesNotMatch(message, /typo|c-old/, "a reply to post and a done comment aren't the author's");
     const p = sc.state().patches["p-a"];
     assert.deepEqual(p.replyDrafts, [{ commentId: 42, text: "Fixed, thanks." }], "shown on the request page to post, like the factory's drafts");
     assert.deepEqual(Object.fromEntries(Object.entries(p.responses!).map(([id, x]) => [id, [x.response, x.key]])), { "c-old": ["done", undefined], "phab-42": ["reply", undefined], "phab-41": ["address", key], [`f-${review}-0`]: ["address", key] });
-    assert.deepEqual(p.yourComments?.map((x) => [x.id, x.key, x.anchor?.file, x.lines]), [["c-new1", key, "a/test_a.js", undefined], ["c-new2", key, "(section:test-plan)", ["Green on try."]]]);
+    assert.deepEqual(p.yourComments?.map((x) => [x.id, x.key, x.anchor?.file, x.lines]), [["c-new2", `test-plan:p-a:v1:review:${c.id}`, "(section:test-plan)", ["Green on try."]], ["c-new1", key, "a/test_a.js", undefined], ["c-new3", key, "(commit)", undefined]]);
     // A reply written, then done ticked: stack-viewer gives the reply with the latest response.
     run(sc, cmd({ cmd: "review-send", comments: [], responses: [{ patch: "p-a", id: "phab-42", response: "done", text: "Fixed now." }] }));
     const after = sc.state().patches["p-a"];

@@ -158,7 +158,7 @@ export type Event =
   | (EventBase & { type: "backout-verified"; patch: PatchId }) // a try push showed its fix green: it may land again // you want the stack pushed to try as it stands, whatever the step
   // Your comment on a patch, and the key of the author run answering it. From stack-viewer pages with annotations: its
   // id, where it was made (anchor, on commit sha) and, on a section, the lines it was about (sections aren't in git).
-  | (EventBase & { type: "comment-sent"; patch: PatchId; text: string; key: string; id?: string; anchor?: ReviewAnchor; sha?: string; lines?: string[] })
+  | (EventBase & { type: "comment-sent"; patch: PatchId; text: string; quote?: string; key: string; id?: string; anchor?: ReviewAnchor; sha?: string; lines?: string[] })
   // What you did in stack-viewer to an earlier comment on a patch (yours c-…, a Phabricator reviewer's phab-<id>, a
   // critical review finding f-…); key: the author run it went to (address, reply).
   | (EventBase & { type: "comment-response"; patch: PatchId; comment: string; response: ReviewResponse["response"]; text?: string; key?: string })
@@ -410,7 +410,7 @@ export interface PatchView {
   reviewerFromYou?: string; // the r= you gave it
   // What you told its author (Comment on the fix, stack-viewer), oldest first; sha: its commit then; id: derived from
   // key and text for events without one.
-  yourComments?: { text: string; key: string; t: Iso; id: string; sha: string; anchor?: ReviewAnchor; lines?: string[] }[];
+  yourComments?: { text: string; quote?: string; key: string; t: Iso; id: string; sha: string; anchor?: ReviewAnchor; lines?: string[] }[];
   responses?: Record<string, { response: ReviewResponse["response"]; text?: string; key?: string; t: Iso }>; // the latest per comment id
   approved?: { sha: string; fingerprint: string; t: Iso }; // the version you last approved
 }
@@ -424,7 +424,8 @@ export interface ReviewAnchor {
 
 export interface ReviewComment {
   patch: PatchId;
-  text: string; // as stack-viewer's mdvReviewEntries wrote it
+  text: string; // what you wrote; from before quotes, as stack-viewer's mdvReviewEntries wrote it, saying where
+  quote?: string; // the words it's on, as you selected them
   id?: string;
   anchor?: ReviewAnchor;
   sha?: string; // the commit it was made on
