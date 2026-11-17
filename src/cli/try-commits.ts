@@ -8,11 +8,13 @@ import { execOk } from "../lib/exec.ts";
 
 const TREEHERDER = "https://treeherder.mozilla.org/api/project/try/push/";
 const RAW = "https://hg.mozilla.org/try/raw-rev/";
+const HG2GIT = "https://lando.moz.tools/api/hg2git/firefox/";
 
 export interface HgPatch {
   node: string;
   user: string; // "Name <email>"
   date: string; // "<unix seconds> <tz offset>"
+  parent: string; // its first parent's hg node
   message: string;
   files: string[];
   diff: string;
@@ -28,6 +30,7 @@ export function parseHgPatch(text: string): HgPatch {
     node: header("Node ID"),
     user: header("User"),
     date: header("Date"),
+    parent: header("Parent").split(/\s+/)[0],
     message: lines.slice(first, diffAt).join("\n").trim(),
     files: lines.filter((l) => l.startsWith("diff --git ")).map((l) => l.split(" b/").pop()!),
     diff: lines.slice(diffAt).join("\n"),
@@ -55,20 +58,55 @@ export async function pushPatches(rev: string, fetchFn: typeof fetch = fetch): P
 // A commit's title without its reviewers: what it lands as, whatever its review gave it.
 const titleOf = (message: string) => message.split("\n")[0].replace(/^WIP:\s*/i, "").replace(/,?\s*r[=?][^ ]*\.?$/, "").trim();
 
-// A commit of the push that landed since (the push came before its landing): left out, base has it.
-export async function importPush(repo: string, rev: string, base: string, branch: string, fetchFn: typeof fetch = fetch): Promise<{ branch: string; shas: string[]; landed: string[] }> {
+// A commit of the push that landed since (the push came before its landing): left out, base has it. One that doesn't
+// apply on base, central having changed the same lines since, is the commit as made on the push's own base (`onPushBase`):
+// cherry-picked onto the stack, its conflict goes to resolve-conflict like a patch's.
+export async function importPush(repo: string, rev: string, base: string, branch: string, fetchFn: typeof fetch = fetch): Promise<{ branch: string; shas: string[]; landed: string[]; onPushBase: string[] }> {
   const patches = await pushPatches(rev, fetchFn);
   const dir = mkdtempSync(join(tmpdir(), "try-import-"));
   const wt = join(dir, "wt");
   await execOk(["git", "worktree", "add", "--detach", wt, base], { cwd: repo });
+  // The push's commits on its own base, each node's sha, made once one is needed.
+  let own: Map<string, string> | undefined;
+  const onOwnBase = async (): Promise<Map<string, string>> => {
+    if (own) return own;
+    const res = await fetchFn(HG2GIT + patches[0].parent, { headers: { Accept: "application/json" } });
+    if (!res.ok) throw new Error(`hg2git ${patches[0].parent.slice(0, 12)}: HTTP ${res.status}`);
+    const parent = ((await res.json()) as { git_hash: string }).git_hash;
+    if (!(await execOk(["git", "cat-file", "-e", `${parent}^{commit}`], { cwd: repo }).then(() => true, () => false))) await execOk(["git", "fetch", "-q", "origin", parent], { cwd: repo });
+    const owt = join(dir, "own");
+    await execOk(["git", "worktree", "add", "--detach", owt, parent], { cwd: repo });
+    try {
+      own = new Map();
+      for (const p of patches) {
+        await execOk(["git", "apply", "--index", join(dir, `${p.node}.diff`)], { cwd: owt });
+        await commit(p, owt);
+        own.set(p.node, (await execOk(["git", "rev-parse", "HEAD"], { cwd: owt })).trim());
+      }
+      // Kept from gc while the stack's pushes cherry-pick them.
+      await execOk(["git", "branch", "-f", `${branch}-own-base`, "HEAD"], { cwd: owt });
+      return own;
+    } finally {
+      await execOk(["git", "worktree", "remove", "--force", owt], { cwd: repo });
+    }
+  };
+  const commit = async (p: HgPatch, cwd: string) => {
+    const [, name, email] = /^(.*?)\s*<([^>]*)>$/.exec(p.user) ?? [, p.user, ""];
+    const when = p.date.split(" ")[0];
+    await execOk(["git", "-c", `user.name=${name}`, "-c", `user.email=${email}`, "commit", "-q", "-m", p.message], {
+      cwd,
+      env: { ...process.env, GIT_AUTHOR_NAME: name!, GIT_AUTHOR_EMAIL: email!, GIT_AUTHOR_DATE: `@${when}` },
+    });
+  };
   try {
+    for (const p of patches) writeFileSync(join(dir, `${p.node}.diff`), p.diff.endsWith("\n") ? p.diff : p.diff + "\n");
     const shas: string[] = [];
     const landed: string[] = [];
+    const onPushBase: string[] = [];
     const oldest = Math.min(...patches.map((p) => Number(p.date.split(" ")[0])));
     const baseTitles = patches.length ? new Set((await execOk(["git", "log", "--format=%s", `--since=@${oldest}`, "HEAD"], { cwd: wt })).split("\n").map(titleOf)) : new Set<string>();
     for (const p of patches) {
       const file = join(dir, `${p.node}.diff`);
-      writeFileSync(file, p.diff.endsWith("\n") ? p.diff : p.diff + "\n");
       if (baseTitles.has(titleOf(p.message))) {
         landed.push(p.node);
         continue;
@@ -80,25 +118,24 @@ export async function importPush(repo: string, rev: string, base: string, branch
         // what landed isn't left out: what it does beyond it may be what the push needs.
         await execOk(["git", "reset", "-q", "--hard"], { cwd: wt });
         if (!(await execOk(["git", "apply", "-R", "--check", file], { cwd: wt }).then(() => true, () => false))) {
-          const files = /error: patch failed: (\S+?):\d+/g;
-          const failed = [...String(e instanceof Error ? e.message : e).matchAll(files)].map((m) => m[1]);
-          throw new Error(
-            `${p.node.slice(0, 12)} "${p.message.split("\n")[0]}" of try push ${rev.slice(0, 12)} doesn't apply on today's ${base}${failed.length ? ` (${[...new Set(failed)].join(", ")})` : ""}, which doesn't have its change: a version of it may have landed since, changed. Push again with commits that apply on today's ${base}, or drop the request's tryWith if what they add has landed.`,
-          );
+          const ownSha = (await onOwnBase().catch((err: unknown) => {
+            const failed = [...String(e instanceof Error ? e.message : e).matchAll(/error: patch failed: (\S+?):\d+/g)].map((m) => m[1]);
+            throw new Error(
+              `${p.node.slice(0, 12)} "${p.message.split("\n")[0]}" of try push ${rev.slice(0, 12)} doesn't apply on today's ${base}${failed.length ? ` (${[...new Set(failed)].join(", ")})` : ""}, nor on the push's own base (${err instanceof Error ? err.message : err}). Push again with commits that apply on today's ${base}, or drop the request's tryWith if what they add has landed.`,
+            );
+          })).get(p.node)!;
+          shas.push(ownSha);
+          onPushBase.push(p.node);
+          continue;
         }
         landed.push(p.node);
         continue;
       }
-      const [, name, email] = /^(.*?)\s*<([^>]*)>$/.exec(p.user) ?? [, p.user, ""];
-      const when = p.date.split(" ")[0];
-      await execOk(["git", "-c", `user.name=${name}`, "-c", `user.email=${email}`, "commit", "-q", "-m", p.message], {
-        cwd: wt,
-        env: { ...process.env, GIT_AUTHOR_NAME: name!, GIT_AUTHOR_EMAIL: email!, GIT_AUTHOR_DATE: `@${when}` },
-      });
+      await commit(p, wt);
       shas.push((await execOk(["git", "rev-parse", "HEAD"], { cwd: wt })).trim());
     }
     await execOk(["git", "branch", "-f", branch, "HEAD"], { cwd: wt });
-    return { branch, shas, landed };
+    return { branch, shas, landed, onPushBase };
   } finally {
     await execOk(["git", "worktree", "remove", "--force", wt], { cwd: repo });
     rmSync(dir, { recursive: true, force: true });

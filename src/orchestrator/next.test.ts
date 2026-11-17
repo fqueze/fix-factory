@@ -1536,20 +1536,35 @@ describe("4b. try repro", () => {
     assert.notEqual(ids[0], ids[1]);
   });
 
-  it("a push commit that conflicts on top of the stack isn't left in progress in its worktree, and asks you", () => {
+  it("a push commit that conflicts on top of the stack (central changed its lines since) goes to resolve-conflict, then the rest is assembled; one it can't resolve asks you", () => {
     const sc = stacked(undefined, { tryWith: "164da8583219" });
-    sc.complete("try-with:164da8583219", { output: { branch: `${ID}-try-with`, shas: [sha("7")] } });
+    sc.complete("try-with:164da8583219", { output: { branch: `${ID}-try-with`, shas: [sha("7"), sha("8")] } });
     sc.settle();
-    sc.complete(keyOf(sc, "try-with:164da8583219:"), { output: { branch: `${ID}-try-with`, shas: [sha("7")] } });
+    sc.complete(keyOf(sc, "try-with:164da8583219:"), { output: { branch: `${ID}-try-with`, shas: [sha("7"), sha("8")], onPushBase: ["n7"] } });
     sc.settle();
     const tb = keyOf(sc, "try-branch:root:");
-    const job = sc.complete(tb, { output: { branch: "b", head: sha("f"), commits: [], conflict: { sha: sha("7"), files: ["taskcluster/config.yml"] }, conflictLeft: true } });
-    const [abort] = sc.settle();
-    assert.equal(abort, `abort:${job}`);
-    assert.equal(sc.plan(abort).cwd, `/wt/${ID}-root`);
-    sc.complete(abort, { output: "" });
-    sc.settle();
-    assert.ok(sc.open().includes(`failed:${job}`));
+    const h = tb.split(":")[2];
+    sc.complete(tb, { output: { branch: "b", head: sha("f"), commits: [], conflict: { sha: sha("7"), files: ["testing/mochitest/runtests.py"] }, conflictLeft: true, remaining: [sha("8")] } });
+    const resolve = `resolve:root:try-${h}:${sha("7")}`;
+    assert.ok(sc.settle().includes(resolve));
+    assert.equal(sc.plan(resolve).cwd, `/wt/${ID}-root`);
+    sc.complete(resolve, { report: { state: "resolved", commit: sha("9"), explanation: "kept both checks", feedback: [] } });
+    const after = `try-branch:root:${h}:after:${sha("7").slice(0, 12)}`;
+    assert.ok(sc.settle().includes(after));
+    assert.deepEqual(sc.plan(after).cli?.args.slice(-1), [sha("8")]);
+
+    const other = stacked(undefined, { tryWith: "164da8583219" });
+    other.complete("try-with:164da8583219", { output: { branch: `${ID}-try-with`, shas: [sha("7")] } });
+    other.settle();
+    other.complete(keyOf(other, "try-with:164da8583219:"), { output: { branch: `${ID}-try-with`, shas: [sha("7")] } });
+    other.settle();
+    const tb2 = keyOf(other, "try-branch:root:");
+    other.complete(tb2, { output: { branch: "b", head: sha("f"), commits: [], conflict: { sha: sha("7"), files: ["taskcluster/config.yml"] }, conflictLeft: true } });
+    other.settle();
+    const job = other.complete(`resolve:root:try-${tb2.split(":")[2]}:${sha("7")}`, { report: { state: "semantic", explanation: "the jobs it adds were redone differently", feedback: [] } });
+    other.settle();
+    const n = other.state().needsUser.find((x) => x.key === `failed:${job}`)!;
+    assert.deepEqual([n.action, n.item], ["A commit of try push 164da8583219 doesn't apply on top of the stack", undefined]);
   });
 
   it("puts a waiting group's DEBUG commits on top of the stack's verify push, then gives its author the results", () => {

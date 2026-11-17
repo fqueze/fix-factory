@@ -2347,7 +2347,10 @@ class Planner {
       const { sha, files } = o.conflict;
       // Authors may report short shas; the stack scripts answer with full ones.
       const owner = groups.find((g) => g.commits.some((c) => sha.startsWith(c) || c.startsWith(sha)));
-      if (!owner) {
+      // One of the try push's commits, central having changed its lines since (import-push gave it as made on the push's
+      // base): resolved like a DEBUG commit.
+      const pushCommit = !owner && withShas.includes(sha);
+      if (!owner && !pushCommit) {
         // Not left in progress: the stack's other jobs run in its worktree.
         if (!this.want(`abort:${cur.job}`, () => this.cli("abort", "sh", ["-c", ABORT_CHERRY_PICK], { cwd: info.wt, purpose: { stack: info.id } }))) return undefined;
         this.raise(`failed:${cur.job}`, { action: tryWith ? `The commits of try push ${tryWith.slice(0, 12)} don't apply on top of the stack` : `${sha.slice(0, 12)} doesn't apply on top of the stack`, detail: `${sha.slice(0, 12)} conflicts in ${files.join(", ")}`, job: cur.job });
@@ -2358,11 +2361,12 @@ class Planner {
       const r = this.rep<ResolveConflictReport>(res);
       if (r.state === "already fixed") {
         if (!this.want(`abort:${res.job}`, () => this.cli("abort", "sh", ["-c", ABORT_CHERRY_PICK], { cwd: info.wt, purpose: { stack: info.id } }))) return undefined;
-        this.setItem(owner.item.id, "left as-is", `already fixed: ${r.explanation}`.slice(0, 300));
-        return undefined;
-      }
-      if (r.state !== "resolved" || !r.commit) {
-        this.raise(`failed:${res.job}`, { action: "Its DEBUG commits don't apply on top of the stack", detail: r.explanation.slice(0, 500), job: res.job, item: owner.item.id });
+        if (owner) {
+          this.setItem(owner.item.id, "left as-is", `already fixed: ${r.explanation}`.slice(0, 300));
+          return undefined;
+        }
+      } else if (r.state !== "resolved" || !r.commit) {
+        this.raise(`failed:${res.job}`, owner ? { action: "Its DEBUG commits don't apply on top of the stack", detail: r.explanation.slice(0, 500), job: res.job, item: owner.item.id } : { action: `A commit of try push ${tryWith!.slice(0, 12)} doesn't apply on top of the stack`, detail: r.explanation.slice(0, 500), job: res.job });
         return undefined;
       }
       const remaining = o.remaining ?? [];

@@ -50,26 +50,33 @@ test("importPush leaves out the push's commits that landed since, under their re
   }
 });
 
-test("importPush leaves out a commit whose change central already has under another title, and says which one doesn't apply", async () => {
+test("importPush leaves out a commit whose change central already has under another title, and takes one that doesn't apply as made on the push's own base", async () => {
   const repo = mkdtempSync(join(tmpdir(), "import-push-"));
   try {
     const git = (...args: string[]) => execOk(["git", "-c", "user.name=t", "-c", "user.email=t@t", ...args], { cwd: repo });
     await git("init", "-q", "-b", "main");
+    writeFileSync(join(repo, "f-aaa"), "a\n");
+    writeFileSync(join(repo, "f-bbb"), "a\n");
+    await git("add", ".");
+    await git("commit", "-q", "-m", "base");
+    const pushBase = (await git("rev-parse", "HEAD")).trim();
     writeFileSync(join(repo, "f-aaa"), "b\n");
     writeFileSync(join(repo, "f-bbb"), "c\n");
-    await git("add", ".");
-    await git("commit", "-q", "-m", "Bug 2 - Something else entirely, r=x.");
+    await git("commit", "-q", "-am", "Bug 2 - Something else entirely, r=x.");
+    let mapped = true;
     const fake = (async (url: string) => {
       if (url.includes("treeherder")) return new Response(JSON.stringify({ results: [{ revisions: [{ revision: "bbb" }, { revision: "aaa" }] }] }));
+      if (url.includes("hg2git")) return mapped ? new Response(JSON.stringify({ git_hash: pushBase, hg_hash: "0000" })) : new Response("{}", { status: 404 });
       const node = url.split("/").pop()!;
       return new Response(patch(node, `f-${node}`, `WIP: ${node}`));
     }) as typeof fetch;
-    // aaa (a to b) is there; bbb (a to b) doesn't apply: f-bbb is c.
-    await assert.rejects(importPush(repo, "bbb", "main", "try-with", fake), /^Error: bbb "WIP: bbb" of try push bbb doesn't apply on today's main \(f-bbb\), which doesn't have its change/);
-    writeFileSync(join(repo, "f-bbb"), "a\n");
-    await git("commit", "-q", "-am", "Bug 3 - Reset bbb, r=x.");
+    // aaa (a to b) is there; bbb (a to b) doesn't apply, f-bbb being c: it's taken as made on the push's base.
     const r = await importPush(repo, "bbb", "main", "try-with", fake);
-    assert.deepEqual([r.landed, r.shas.length], [["aaa"], 1]);
+    assert.deepEqual([r.landed, r.onPushBase, r.shas.length], [["aaa"], ["bbb"], 1]);
+    assert.equal((await git("rev-parse", `${r.shas[0]}~2`)).trim(), pushBase, "on the push's base, after the push's earlier commit");
+    assert.equal((await git("rev-parse", "try-with-own-base")).trim(), r.shas[0], "kept from gc");
+    mapped = false;
+    await assert.rejects(importPush(repo, "bbb", "main", "try-with", fake), /^Error: bbb "WIP: bbb" of try push bbb doesn't apply on today's main \(f-bbb\), nor on the push's own base \(hg2git 0000: HTTP 404\)/);
   } finally {
     rmSync(repo, { recursive: true, force: true });
   }
