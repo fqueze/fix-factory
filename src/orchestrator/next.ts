@@ -254,6 +254,12 @@ export function authorJobsOf(view: View, item: ItemId): JobRecord[] {
 
 // Authors are resumed in their own session (the latest fresh one: start-agent begins a new one),
 // one run at a time.
+// A session Claude Code has no conversation of (its first run died before writing one: a config file another
+// starting agent was writing, say): resuming it fails every time, so it's started again instead.
+export function lostSession(view: View, sessionId: string): boolean {
+  return view.jobs.some((j) => j.sessionId === sessionId && j.end?.error?.includes("No conversation found with session ID") === true);
+}
+
 // A removal of worktree name: the first one, or one after it was restored.
 export const isRemoval = (key: string, name: string) => key === `remove:${name}` || key.startsWith(`remove:${name}:after:`);
 
@@ -568,7 +574,7 @@ class Planner {
   }
 
   private retryPlan(last: JobRecord, make?: () => JobPlan): JobPlan | undefined {
-    if (last.kind === "agent" && last.sessionId) {
+    if (last.kind === "agent" && last.sessionId && !lostSession(this.view, last.sessionId)) {
       const error = last.end?.error ?? `exit code ${last.end?.exitCode}`;
       const message = error.startsWith("invalid report")
         ? `Your JSON report is invalid:\n${error}\n\nReturn the whole report again, fixed.`

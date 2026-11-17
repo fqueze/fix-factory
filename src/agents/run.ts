@@ -137,7 +137,8 @@ export function parseStreamJson(text: string): StreamSummary {
       out.done = true;
       if (typeof msg.session_id === "string") out.sessionId = msg.session_id;
       out.report = msg.structured_output;
-      out.resultText = msg.result;
+      // A run that failed before its first turn has no result, only errors ("No conversation found…").
+      out.resultText = msg.result ?? (Array.isArray(msg.errors) ? msg.errors.join("; ") : undefined);
       out.costUsd = msg.total_cost_usd;
       out.durationMs = msg.duration_ms;
       out.numTurns = msg.num_turns;

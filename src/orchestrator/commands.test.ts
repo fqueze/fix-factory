@@ -276,6 +276,19 @@ describe("commands", () => {
     assert.deepEqual(sc.plan("prior-art-verdict:i-a").agent?.vars, { test: "a/test_a.js", facts: "f" });
   });
 
+  it("retry starts an author afresh when its session has no conversation (its first run died before writing one)", () => {
+    const sc = withPatch();
+    sc.startJob({ purpose: { key: "author:i-b:initial", what: "author", item: "i-b", reason: "initial" }, kind: "agent", name: "investigate-and-fix", item: "i-b", cwd: "/wt/b", agent: { sessionId: "s-lost", resume: false, vars: { test: "b/test_b.js", worktree: "/wt/b", failureSummary: "f", request: "r" } } });
+    sc.complete("author:i-b:initial", { error: "no result line (exit code 0): Configuration error in ~/.claude.json" });
+    sc.startJob({ purpose: { key: "author:i-b:initial", what: "author", item: "i-b", reason: "initial" }, kind: "agent", name: "investigate-and-fix", item: "i-b", cwd: "/wt/b", agent: { sessionId: "s-lost", resume: true, message: "continue" } });
+    const job = sc.complete("author:i-b:initial", { error: "claude reported an error: No conversation found with session ID: s-lost" });
+    run(sc, cmd({ cmd: "retry", job }));
+    const plan = sc.plan("author:i-b:initial");
+    assert.equal(plan.agent?.resume, false);
+    assert.notEqual(plan.agent?.sessionId, "s-lost");
+    assert.equal(plan.agent?.vars?.test, "b/test_b.js");
+  });
+
   it("resume-agent, set-state, redo-step, edit-config and shell", () => {
     const sc = withPatch();
     const resume = cmd({ cmd: "resume-agent", item: "i-a", message: "stop and report what you have", reason: "6 hours" });
