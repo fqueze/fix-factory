@@ -37,6 +37,7 @@ jobs/<jobId>/exit.json            # {exitCode, endedAt}, written by the wrapper 
 jobs/<jobId>/net.jsonl            # every network request the job made (FACTORY_NET_LOG), shown in the request's profile
 requests/<requestId>/artifacts/   # the request's own artifacts
 allow-push/<sessionId>            # the one try push you allowed an author session (src/agents/no-push.ts)
+claude-token                      # your Claude Code OAuth token (claude setup-token), mode 600: agents get it as CLAUDE_CODE_OAUTH_TOKEN (config claudeTokenFile)
 phab-client                       # curl or node: the client Conduit calls use, switched on a 429
 feedback/<target>.md              # agent feedback, one file per Feedback.target
 kept/<worktree>/artifacts/...      # a removed worktree's artifacts/ (files over 20 MB listed in skipped.txt); its commits stay as refs/fix-factory/<worktree>/<sha>
