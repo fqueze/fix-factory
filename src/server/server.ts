@@ -293,8 +293,8 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
       landoUrl,
       readData,
       freeDiskGB: freeDiskGB(),
-      // slots/ holds the trees items' worktrees link to (worktree.ts): not one itself.
-      worktrees: existsSync(opts.config.worktreesDir) ? readdirSync(opts.config.worktreesDir).filter((n) => n !== "slots") : undefined,
+      // slots/ holds the trees items' worktrees link to, objdirs/ their builds (worktree.ts): not worktrees themselves.
+      worktrees: existsSync(opts.config.worktreesDir) ? readdirSync(opts.config.worktreesDir).filter((n) => n !== "slots" && n !== "objdirs") : undefined,
     };
   }
 

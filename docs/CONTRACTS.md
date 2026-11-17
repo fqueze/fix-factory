@@ -102,7 +102,7 @@ worth keeping is outside it.
   (`worktree.ts remove`) keeps the slot and its build. The next item gets it reset to its own branch (`git checkout -f`,
   `git clean -fdx`, its mozconfig rewritten), and `./mach build` rebuilds only what changed. Flavors: `opt-artifact`
   (the default), `opt` and `dbg` (compiled locally, for an author that reports `needs a build`).
-- `config.objdirsDir/<slot>` (default `objdirs/` beside `worktreesDir`): each slot's objdir, outside the tree so a reset
+- `config.objdirsDir/<slot>` (default `config.worktreesDir/objdirs/`): each slot's objdir, outside the tree so a reset
   keeps it. `mach` resolves the symlink, so a slot's build always sees the same source directory.
 - `config.worktreesDir/<request>-<stack>`: a stack's worktree, a plain one without a build (git, `mach try`,
   `mach file-info` only).

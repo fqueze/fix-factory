@@ -60,6 +60,11 @@ export function slotsDir(worktreesDir: string): string {
   return join(worktreesDir, "slots");
 }
 
+// The slots' builds by default: beside them (/build itself isn't writable).
+export function objdirsDir(worktreesDir: string): string {
+  return join(worktreesDir, "objdirs");
+}
+
 // The slots in use: those a worktree's symlink points to.
 function slotsInUse(worktreesDir: string): Set<string> {
   const used = new Set<string>();
@@ -228,7 +233,7 @@ export async function create(name: string, opts: { base?: string; build: BuildKi
     }
   }
 
-  const objdir = slot ? join(opts.objdirsDir ?? join(dirname(opts.worktreesDir), "objdirs"), slot) : join(dest, `obj-${flavor(opts.build)}`);
+  const objdir = slot ? join(opts.objdirsDir ?? objdirsDir(opts.worktreesDir), slot) : join(dest, `obj-${flavor(opts.build)}`);
   const mozconfigPath = join(dest, "mozconfig");
   try {
     // mozconfig is untracked, so worktree add doesn't bring one across.

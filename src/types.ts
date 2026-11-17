@@ -17,7 +17,7 @@ export interface FactoryConfig {
   stateDir: string; // commands.jsonl, requests/, jobs/, feedback/, cache/, kept/
   firefoxRepo: string; // main checkout; worktrees are created next to it, never inside
   worktreesDir: string; // items' worktrees (symlinks to slots/), stacks' worktrees, and slots/
-  objdirsDir?: string; // the slots' builds, one objdir per slot (default: objdirs/ beside worktreesDir)
+  objdirsDir?: string; // the slots' builds, one objdir per slot (default: worktreesDir/objdirs)
   baseRef: string; // central-based ref worktrees and stacks start from, e.g. "origin/main"
   phabPollMinutes?: number; // default 10, while you are present
   phabPollHours?: number; // default 3, while you are away
