@@ -3417,6 +3417,30 @@ describe("4. the worktree pool (worktreePool)", () => {
   });
 });
 
+describe("4. the worktree pool: a retry", () => {
+  it("of an author whose worktree the pool freed brings the worktree back first, then resumes it", () => {
+    const sc = workList([group("ka", "a/test_a.js", "boom")]);
+    sc.pool = { claim: () => true, evicting: new Set() };
+    investigating(sc, "i-test-a");
+    sc.complete("author:i-test-a:initial", { error: "no result line (exit code 1)" });
+    sc.settle();
+    const job = sc.complete("author:i-test-a:initial", { error: "no result line (exit code 1)" });
+    sc.settle();
+    assert.ok(sc.open().includes(`failed:${job}`));
+    const name = `${ID}-i-test-a`;
+    sc.pool.evicting.add(name);
+    assert.ok(sc.settle().includes(`remove:${name}`), "idle: the pool frees it");
+    sc.complete(`remove:${name}`, { output: { name, removed: true } });
+    command(sc, { cmd: "retry", job });
+    assert.ok(!sc.open().includes(`failed:${job}`));
+    const restore = sc.settle().find((k) => k.startsWith(`wt-restore:${name}:`))!;
+    assert.ok(restore, "its worktree comes back first");
+    sc.complete(restore, { output: { name, path: `/wt/${name}` } });
+    const resumed = sc.settle().find((k) => k.startsWith("author:i-test-a:retry:"))!;
+    assert.equal(sc.plan(resumed).agent?.resume, true);
+  });
+});
+
 describe("4. the worktree pool: an item moved from another request", () => {
   it("counts the worktree its author's session runs in, made by that request, and removes it when the loop picks it", () => {
     const sc = new Scenario("burndown", { folder: "x" });
