@@ -656,8 +656,9 @@ class Planner {
     return this.want(key, () => this.agent(what, prompt, vars, { ...opts, key }));
   }
 
-  worktree(name: string, purpose: Partial<JobPurpose> = {}): JobPlan {
-    return this.cli("worktree", "worktree.ts", ["create", name, "--base", this.config.baseRef, "--build", "artifact"], {
+  // build none: a stack's worktree, where only git, mach try and file-info run.
+  worktree(name: string, purpose: Partial<JobPurpose> = {}, build: "artifact" | "none" = "artifact"): JobPlan {
+    return this.cli("worktree", "worktree.ts", ["create", name, "--base", this.config.baseRef, "--build", build], {
       kind: "build",
       cwd: this.config.firefoxRepo,
       purpose,
@@ -1813,7 +1814,7 @@ class Planner {
       const versioned = job?.purpose.stack === id && new RegExp(`^(assemble|deps|order|reorder|resolve|review-stack|summary|plan:verify):${id}:[0-9a-f]{10}`).test(job.purpose.key);
       if (versioned && !job.purpose.key.includes(`:${hash}`) && !job.purpose.key.includes(`:${code}`)) this.clear(n.key);
     }
-    if (!this.want(`wt:${id}`, () => this.worktree(info.branch))) return;
+    if (!this.want(`wt:${id}`, () => this.worktree(info.branch, {}, "none"))) return;
     const wt = info.wt!;
     const prev = this.s.stacks[id];
     const bySource = new Map(info.patches.map((p) => [p.source, p]));

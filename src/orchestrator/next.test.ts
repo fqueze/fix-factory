@@ -1459,6 +1459,8 @@ function twoReviewed(reportA?: object): Scenario {
 function stacked(reportA?: object, config?: Record<string, unknown>): Scenario {
   const sc = twoReviewed(reportA);
   if (config) sc.add({ type: "config-set", request: ID, config: { ...sc.state().config, ...config } });
+  // Git, mach try and file-info only: no build.
+  assert.deepEqual(sc.plan("wt:root").cli?.args.slice(-2), ["--build", "none"]);
   sc.complete("wt:root", { output: { name: `${ID}-root`, path: `/wt/${ID}-root`, branch: `${ID}-root` } });
   sc.settle();
   const key = sc.view().jobs.find((j) => j.purpose.what === "assemble")!.purpose.key;
