@@ -11,7 +11,7 @@ export function reviewStatus(p: Pick<PatchView, "sha" | "approved">, fingerprint
   return fingerprint?.(p.sha) === p.approved.fingerprint ? "approved" : "changed";
 }
 
-export const REVIEW_STATUS_LABELS: Record<ReviewStatus, string> = { approved: "Approved", changed: "Changed since approved", unreviewed: "Not approved yet" };
+export const REVIEW_STATUS_LABELS: Record<ReviewStatus, string> = { approved: "Ready", changed: "Changed since your self-review", unreviewed: "Needs self-review" };
 
 // What a moz-phab submit would send that you haven't approved: patches not landed, not as Phabricator has them already
 // (the commit it has, or one with the same fingerprint: the stack rebased since).

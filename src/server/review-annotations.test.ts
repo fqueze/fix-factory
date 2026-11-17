@@ -112,7 +112,7 @@ describe("buildAnnotations", () => {
     const r = foldEvents(events);
     const a = buildAnnotations(r, { [v2]: "p-a" }, { git: gitIn(dir), fingerprint: fingerprinter(dir), report: () => undefined, bugUrl: () => "https://bugzilla/enter" }).commits[v2];
     assert.equal(a.draftKey, "r-1:p-a", "drafts outlive the commit's sha");
-    assert.deepEqual(a.status, { kind: "changed", label: "Changed since approved" });
+    assert.deepEqual(a.status, { kind: "changed", label: "Changed since your self-review" });
     assert.deepEqual(a.actions.map((x) => x.id), ["approve", "set-bug"]);
     assert.deepEqual(a.titleLinks.map((x) => [x.text, x.href]), [["Bug XXXXXXX", "https://bugzilla/enter"]]);
     assert.deepEqual(a.sections, [{ id: "test-plan", title: "Test plan", markdown: "Green on try." }]);

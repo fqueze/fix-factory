@@ -568,7 +568,7 @@ describe("review pages of a stack-viewer that takes --annotations", () => {
     const r = state.getRequest("r-20261010-xpcshell-cwd")!;
     const sha = r.patches["p-prefs"].sha;
     const annotations = JSON.parse(page.match(/<pre id="annotations">(.*?)<\/pre>/s)![1].replaceAll("&lt;", "<").replaceAll("&amp;", "&"));
-    assert.deepEqual(annotations.commits[sha].status, { kind: "unreviewed", label: "Not approved yet" });
+    assert.deepEqual(annotations.commits[sha].status, { kind: "unreviewed", label: "Needs self-review" });
     assert.equal(annotations.commits[sha].actions[0].id, "approve");
     const cfg = JSON.parse(page.match(/<script type="application\/json" id="ff-review-config">(.*?)<\/script>/)![1]);
     assert.deepEqual(cfg.annotations, annotations, "the script updates them in place");

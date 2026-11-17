@@ -4,10 +4,11 @@ import { basename } from "node:path";
 import { MIN_FREE_GB, WORKTREE_GB } from "../../lib/disk.ts";
 import { md } from "./md.ts";
 import { canRetry, reviewLimitFlag } from "../../state/flags.ts";
+import { reviewStatus } from "../../state/approval.ts";
 import type { ItemState, ItemView, JobView, NeedsUser, RequestState, ReviewPatchReport } from "../../types.ts";
 import { html, join, type Html } from "../html.ts";
 import { continueBox, flagControls, flagItemOf, flagText, handBackButton, hasAuthorSession, isAuthorJob, retryButton, untakenFix } from "./actions.ts";
-import { actionKind, elapsed, isDropped, isLandable, linkify, jobLabel, jobNoun, modelLabel, refusedOf, requestUrl, type RenderContext, type StateClass } from "./common.ts";
+import { actionKind, elapsed, selfReview, isDropped, isLandable, linkify, jobLabel, jobNoun, modelLabel, refusedOf, requestUrl, type RenderContext, type StateClass } from "./common.ts";
 
 // What a running job does to its group. Author runs say why they were resumed (purpose.reason).
 const AUTHOR_REASONS: Record<string, string> = {
@@ -203,8 +204,9 @@ function stalledControls(r: RequestState, i: ItemView): Html {
 // Where each group stands, counted per request (and for the whole factory) and drawn as a bar.
 // "landable" and "submitted" (ready, all its patches on Phabricator) are only counted in a request's progress: their
 // rows are ready ones.
-export type Bucket = "working" | "needs you" | "waiting for try" | "landable" | "submitted" | "ready" | "pending" | "landed" | "handed over" | "closed";
-export const BUCKETS: Bucket[] = ["needs you", "working", "waiting for try", "landable", "submitted", "ready", "pending", "landed", "handed over", "closed"];
+// "to self-review" and "ready": a patch not on Phabricator yet, before and after you marked it self-reviewed.
+export type Bucket = "working" | "needs you" | "waiting for try" | "landable" | "submitted" | "to self-review" | "ready" | "pending" | "landed" | "handed over" | "closed";
+export const BUCKETS: Bucket[] = ["needs you", "working", "waiting for try", "landable", "submitted", "to self-review", "ready", "pending", "landed", "handed over", "closed"];
 
 const READY: ItemState[] = ["reviewed", "in stack", "waiting for review", "fixed", "landed"];
 
@@ -213,8 +215,8 @@ export function itemBucket(r: RequestState, i: ItemView, ctx: RenderContext): Bu
   if (cls === "run") {
     return "working";
   }
-  // A bug to file needs you too, though its row says it only with its ⚑ Bug to file.
-  if (cls === "find" || r.needsUser.some((n) => flagItemOf(r, n) === i.id && actionKind(n, r) === "file-bug")) {
+  // A bug to file isn't counted as needing you: it's filed while self-reviewing the patch.
+  if (cls === "find") {
     return "needs you";
   }
   // Its push runs on try: nothing of the factory's does.
@@ -236,7 +238,7 @@ export type Progress = Record<Bucket, number>;
 // ⚑s (recovery plans, refused commands…) need you too. Its own jobs aren't groups: the summary next to it says what
 // they do.
 export function requestProgress(r: RequestState, ctx: RenderContext): Progress {
-  const p: Progress = { "needs you": 0, working: 0, "waiting for try": 0, landable: 0, submitted: 0, ready: 0, pending: 0, landed: 0, "handed over": 0, closed: 0 };
+  const p: Progress = { "needs you": 0, working: 0, "waiting for try": 0, landable: 0, submitted: 0, "to self-review": 0, ready: 0, pending: 0, landed: 0, "handed over": 0, closed: 0 };
   for (const i of Object.values(r.items)) {
     const b = itemBucket(r, i, ctx);
     const patches = Object.values(r.patches).filter((x) => x.item === i.id && !isDropped(r, x));
@@ -249,9 +251,10 @@ export function requestProgress(r: RequestState, ctx: RenderContext): Progress {
       p[b] += Math.max(1, patches.length);
       continue;
     }
-    for (const x of patches) p[x.review?.status === "published" ? "landed" : isLandable(r, x) ? "landable" : x.revision !== undefined ? "submitted" : "ready"]++;
+    for (const x of patches) p[x.review?.status === "published" ? "landed" : isLandable(r, x) ? "landable" : x.revision !== undefined ? "submitted" : reviewStatus(x, ctx.fingerprint) === "approved" ? "ready" : "to self-review"]++;
   }
-  p["needs you"] += r.needsUser.filter((n) => flagItemOf(r, n) === undefined).length + refusedOf(r).length;
+  // The stack's ⚑ asking for your self-review is what "to self-review" counts.
+  p["needs you"] += r.needsUser.filter((n) => flagItemOf(r, n) === undefined && !selfReview(n, r)).length + refusedOf(r).length;
   return p;
 }
 
@@ -286,7 +289,7 @@ export function workLabel(j: JobView): Html {
 
 // The bar fills from the left with what's done, then what's ready, what waits on try, needs you, runs and waits, and
 // last, grey, what was handed over; closed groups aren't progress.
-const BAR: Bucket[] = ["landed", "landable", "submitted", "ready", "waiting for try", "needs you", "working", "pending", "handed over"];
+const BAR: Bucket[] = ["landed", "landable", "submitted", "ready", "to self-review", "waiting for try", "needs you", "working", "pending", "handed over"];
 
 // A bar with one segment per bucket, then "2 need you · 1 working · 3 ready · 4 pending · 5 closed".
 // Closed groups aren't progress: never counted. Handed over ones only on a request's line (withHandedOver).
@@ -297,13 +300,14 @@ export function progressLine(p: Progress, submitted = "", withHandedOver = true,
   }
   const cls = (b: Bucket) => b.replaceAll(" ", "-");
   return html`<span class="pbar">${BAR.filter((b) => p[b] > 0 && (withHandedOver || b !== "handed over")).map((b) => html`<span class="${cls(b)}" style="flex-grow:${p[b]}"></span>`)}</span>${join(
-    shown.map((b) => html`<span class="${cls(b)}">${p[b]} ${b === "needs you" && p[b] === 1 ? "needs you" : b === "needs you" ? "need you" : b}${b === "submitted" && submitted ? `: ${submitted}` : b === "needs you" && needsYou ? `: ${needsYou}` : ""}</span>`),
+    // Submitted patches all in one state on Phabricator are named by it: "2 waiting for review".
+    shown.map((b) => html`<span class="${cls(b)}">${p[b]} ${b === "needs you" && p[b] === 1 ? "needs you" : b === "needs you" ? "need you" : b === "submitted" && submitted && !submitted.includes(",") ? submitted : b}${b === "submitted" && submitted && submitted.includes(",") ? `: ${submitted}` : b === "needs you" && needsYou ? `: ${needsYou}` : ""}</span>`),
     " · ",
   )}`;
 }
 
 export function sumProgress(list: Progress[]): Progress {
-  const sum: Progress = { "needs you": 0, working: 0, "waiting for try": 0, landable: 0, "submitted": 0, ready: 0, pending: 0, landed: 0, "handed over": 0, closed: 0 };
+  const sum: Progress = { "needs you": 0, working: 0, "waiting for try": 0, landable: 0, "submitted": 0, "to self-review": 0, ready: 0, pending: 0, landed: 0, "handed over": 0, closed: 0 };
   for (const p of list) {
     for (const b of BUCKETS) {
       sum[b] += p[b];

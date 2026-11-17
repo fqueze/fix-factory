@@ -52,6 +52,7 @@ import {
   type RenderContext,
   type StateClass,
   regressionStatus,
+  selfReview,
 } from "./common.ts";
 
 // One line per request; the body only when expanded, so the overview stays small.
@@ -703,7 +704,7 @@ function patchRow(r: RequestState, p: PatchView, ctx: RenderContext): Html {
   const stacked = new Set(Object.values(r.stacks).flatMap((st) => st.order));
   const asks = item !== undefined && Object.values(r.patches).find((x) => x.item === item.id && (!isDraft(r, x) || stacked.has(x.id)) && !isDropped(r, x)) === p;
   return row({
-    you: parts.yours.length > 0 || (asks && item !== undefined && r.needsUser.some((n) => flagItemOf(r, n) === item.id)),
+    you: parts.yours.some((n) => !selfReview(n, r)) || (asks && item !== undefined && r.needsUser.some((n) => flagItemOf(r, n) === item.id && !selfReview(n, r))),
     anchor: html`id="patch-${p.id}" data-patch="${p.id}"`,
     fold: `patch-${p.id}`,
     bucket: item ? (landable && itemBucket(r, item, ctx) === "ready" ? "landable" : itemBucket(r, item, ctx)) : landable ? "landable" : undefined,
@@ -764,7 +765,7 @@ function fixRow(r: RequestState, ps: PatchView[], ctx: RenderContext): Html {
   )}`;
   const controls = parts.some((x) => x.bugBoxShown) && r.needsUser.some((n) => ps.some((p) => n.patch === p.id) && actionKind(n, r) === "file-bug") ? null : sentence.controls;
   return row({
-    you: parts.some((x) => x.yours.length > 0) || r.needsUser.some((n) => flagItemOf(r, n) === item.id),
+    you: parts.some((x) => x.yours.some((n) => !selfReview(n, r))) || r.needsUser.some((n) => flagItemOf(r, n) === item.id && !selfReview(n, r)),
     anchor: html`id="fix-${item.id}" data-item="${item.id}"`,
     fold: `fix-${item.id}`,
     bucket: landable && itemBucket(r, item, ctx) === "ready" ? "landable" : itemBucket(r, item, ctx),
@@ -1250,10 +1251,10 @@ function sinceSection(r: RequestState, p: PushView, ctx: RenderContext): Html | 
 function approvalText(r: RequestState, p: PatchView, ctx: RenderContext): Html | null {
   if (isLanded(r, p) || isDropped(r, p) || !stackOfPatch(r, p.id)) return null;
   const status = reviewStatus(p, ctx.fingerprint);
-  if (status === "approved") return html`<span class="approved" title="You approved this version in stack-viewer">approved</span>`;
+  if (status === "approved") return html`<span class="self-reviewed" title="You self-reviewed this version in stack-viewer: it's ready to submit">ready</span>`;
   if (!unapproved([p], ctx.fingerprint).length) return null;
-  if (status === "changed") return html`<b class="you" title="You approved an earlier version in stack-viewer; it's submitted once you approve this one">changed since you approved it</b>`;
-  return REQUEST_STEPS.indexOf(r.step) >= REQUEST_STEPS.indexOf("submit") ? html`<span class="sub" title="Approve it in stack-viewer: the stack is submitted once you approved every patch">not approved yet</span>` : null;
+  if (status === "changed") return html`<span class="sub" title="You self-reviewed an earlier version in stack-viewer; it's submitted once you mark this one">changed since your self-review</span>`;
+  return REQUEST_STEPS.indexOf(r.step) >= REQUEST_STEPS.indexOf("submit") ? html`<span class="sub" title="Mark it self-reviewed in stack-viewer: the stack is submitted once every patch is">needs self-review</span>` : null;
 }
 
 // Its landing backed out: whether it caused it, and what it waits for.
