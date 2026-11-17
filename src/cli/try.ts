@@ -480,7 +480,8 @@ export interface WatchDeps {
 
 export function defaultDeps(): WatchDeps {
   return {
-    fetch: (url) => fetch(url, { headers: { "User-Agent": USER_AGENT, Accept: "application/json" } }),
+    // A request that never answers would stop the watch for good: it fails after 2 min, and the next poll retries.
+    fetch: (url) => fetch(url, { headers: { "User-Agent": USER_AGENT, Accept: "application/json" }, signal: AbortSignal.timeout(2 * 60_000) }),
     sleep: (ms) => sleepMs(ms),
     now: () => Date.now(),
     emit: (line) => process.stdout.write(JSON.stringify(line) + "\n"),
