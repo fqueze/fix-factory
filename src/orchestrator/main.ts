@@ -7,7 +7,7 @@
 //
 // --dry-run (or "dryRun" in the config): starts no agents, and passes --dry-run to every CLI,
 // which then refuses try pushes and Phabricator or Bugzilla writes.
-import { copyFileSync, existsSync, mkdirSync, readFileSync, statSync, watch, writeFileSync, type FSWatcher } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, watch, writeFileSync, type FSWatcher } from "node:fs";
 import { delimiter, dirname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { toolsBin } from "../cli/tools.ts";
@@ -20,12 +20,13 @@ import { eventsPath, listRequests, readEvents, readEventsFrom } from "../state/e
 import { folder } from "../state/fold.ts";
 import { cancelJob, jobDir, jobStatus, reconcile, type ExitInfo } from "../state/jobs.ts";
 import type { Command, FactoryConfig, JobId, JobView, RequestId, RequestState } from "../types.ts";
+import { expiredTasks } from "./cache.ts";
 import { commandEffects } from "./commands.ts";
 import { appendEventSafe } from "./event-data.ts";
 import { handleWatchLines } from "./handlers.ts";
 import { compiledRoom, pickEvictions, poolRoom } from "./pool.ts";
 import { CANCELLED, itemWorktrees, next, requestSummary, type Action, type Ctx, type WorktreeBuild } from "./next.ts";
-import { DEFAULT_PRIORITY, reportPath, shortHash, type JobPlan } from "./plan.ts";
+import { artifactsDir, DEFAULT_PRIORITY, reportPath, shortHash, type JobPlan } from "./plan.ts";
 import { commitExists, defaultCliCommand, finishJob, jsonLines, readOut, readReport, startPlan, type RunnerDeps } from "./runner.ts";
 import { viewBuilder, type JobRecord, type View } from "./view.ts";
 
@@ -147,6 +148,18 @@ export class Orchestrator {
   }
   private poolPresent: ReturnType<typeof itemWorktrees> = [];
 
+  // Once an hour, the cached logs no request needs any more go (cache.ts).
+  private lastCachePrune = -Infinity;
+  private pruneCache(): void {
+    if (this.now() - this.lastCachePrune < 3_600_000) return;
+    this.lastCachePrune = this.now();
+    const dir = artifactsDir(this.config);
+    if (!existsSync(dir)) return;
+    const present = readdirSync(dir).map((task) => ({ task, madeAt: statSync(join(dir, task)).mtimeMs }));
+    const requests = this.requests().map((id) => this.load(id).s);
+    for (const task of expiredTasks(requests, present, this.now())) rmSync(join(dir, task), { recursive: true, force: true });
+  }
+
   private requests(): RequestId[] {
     return listRequests(this.config.stateDir);
   }
@@ -221,6 +234,7 @@ export class Orchestrator {
         await this.collect();
         this.plan();
       } while (this.again);
+      this.pruneCache();
     })().finally(() => {
       this.ticking = undefined;
     });
