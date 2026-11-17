@@ -25,6 +25,7 @@ export interface AnnotationComment {
 }
 
 export interface CommitAnnotation {
+  draftKey: string; // what stack-viewer keeps your drafts under: the patch, whatever its sha
   status: { kind: "approved" | "changed" | "unreviewed"; label: string };
   sections: { id: string; title: string; markdown: string }[];
   titleLinks: { text: string; href: string; tooltip?: string }[];
@@ -58,6 +59,8 @@ export function commitAnnotation(r: RequestState, p: PatchView, sha: string, io:
   const placeholder = /\bBug X+\b/.exec(p.title)?.[0];
   const testPlan = p.testPlan ?? p.testPlanSent?.text;
   return {
+    // Your unsent comments are kept under it: the patch's commit gets a new sha whenever the stack is rewritten.
+    draftKey: `${r.id}:${p.id}`,
     status: { kind, label: REVIEW_STATUS_LABELS[kind] },
     sections: testPlan === undefined ? [] : [{ id: "test-plan", title: "Test plan", markdown: testPlan }],
     titleLinks: toFile && placeholder ? [{ text: placeholder, href: io.bugUrl(p.bugDraft!), tooltip: "File its bug: Bugzilla's form, prefilled with the factory's draft. Then give its number in Bug number" }] : [],

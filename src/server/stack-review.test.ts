@@ -8,7 +8,7 @@ import type { Annotations } from "./review-annotations.ts";
 const SHA = "a".repeat(40);
 
 function loadPage() {
-  const annotations: Annotations = { commits: { [SHA]: { status: { kind: "unreviewed", label: "Not approved yet" }, sections: [], titleLinks: [{ text: "Bug XXXXXXX", href: "x" }], actions: [{ id: "approve", label: "Approve", kind: "button", tooltip: "t" }, { id: "set-bug", label: "Bug number", kind: "input", placeholder: "1", tooltip: "t" }], comments: [] } } };
+  const annotations: Annotations = { commits: { [SHA]: { draftKey: "r-1:p-a", status: { kind: "unreviewed", label: "Not approved yet" }, sections: [], titleLinks: [{ text: "Bug XXXXXXX", href: "x" }], actions: [{ id: "approve", label: "Approve", kind: "button", tooltip: "t" }, { id: "set-bug", label: "Bug number", kind: "input", placeholder: "1", tooltip: "t" }], comments: [] } } };
   const page = injectSendButton("<body></body>", { request: "r-1", stack: "root", shas: { [SHA]: "p-a" }, annotations });
   const script = page.match(/<script>([\s\S]*?)<\/script>/)![1];
   const config = page.match(/<script type="application\/json" id="ff-review-config">(.*?)<\/script>/)![1];
