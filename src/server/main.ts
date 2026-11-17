@@ -53,15 +53,17 @@ export function main(args: string[]): FactoryServer {
     server.on("close", () => state.close());
     what = `state from ${config.stateDir}`;
   }
-  // All interfaces: the page is often opened from another machine.
-  server.listen(config.port, () => {
+  // All interfaces: the page is often opened from another machine. reusePort: while supervise restarts it (--overlap),
+  // the next one listens beside it before it stops, and tells supervise once it does.
+  server.listen({ port: config.port, reusePort: true }, () => {
     process.stderr.write(`fix-factory page on http://localhost:${(server.address() as AddressInfo).port}/ (${what})\n`);
+    process.send?.("ready");
   });
   if (config.profilerOrigin === undefined) {
     const profiler = createProfilerServer(profilerWeb(config.stateDir));
     // The page's links can't name a port picked at random: one beside a fixed port only.
     profiler.on("error", (e) => process.stderr.write(`profiler front end not served: ${e.message}\n`));
-    profiler.listen(config.profilerPort ?? (config.port === 0 ? 0 : config.port + 1));
+    profiler.listen({ port: config.profilerPort ?? (config.port === 0 ? 0 : config.port + 1), reusePort: true });
     server.on("close", () => profiler.close());
   }
   return server;

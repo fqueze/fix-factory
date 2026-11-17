@@ -1,9 +1,12 @@
-// node src/tools/supervise.ts [--check] <script> [args…]
+// node src/tools/supervise.ts [--check] [--overlap] <script> [args…]
 //
 // Runs a factory process and restarts it when anything under src/ changes (prompts and schemas are read
 // fresh by every job already). With --check, it restarts only once the typecheck and the tests pass, so a
 // half-done edit never runs: the orchestrator and the web server both use it (a page reloaded on a broken one is stuck).
 // The supervisors share one check per version of the code: a second one waits for the first's result.
+// With --overlap (the web server), the new process starts before the old one stops, which it does once the new one
+// says it's ready (an IPC "ready" message): both listen on the port meanwhile (reusePort), so a page reloaded during
+// a restart never finds it closed. Never for the orchestrator: two would run the same jobs.
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdirSync, readdirSync, readFileSync, rmSync, statSync, watch, writeFileSync, type FSWatcher } from "node:fs";
@@ -73,8 +76,10 @@ function main(): void {
   const args = process.argv.slice(2);
   const check = args[0] === "--check";
   if (check) args.shift();
+  const overlap = args[0] === "--overlap";
+  if (overlap) args.shift();
   if (!args.length) {
-    process.stderr.write("usage: node src/tools/supervise.ts [--check] <script> [args…]\n");
+    process.stderr.write("usage: node src/tools/supervise.ts [--check] [--overlap] <script> [args…]\n");
     process.exit(2);
   }
 
@@ -82,19 +87,29 @@ function main(): void {
   // Children this stopped: their exit isn't news. The orchestrator exits with 0 on SIGTERM.
   const stopped = new WeakSet<ChildProcess>();
   let exiting = false;
-  function start(): void {
-    if (exiting) return;
-    const c = spawn(process.execPath, args, { cwd: root, stdio: "inherit" });
+  // Resolves once the process says it's ready (--overlap), exits, or a minute passes.
+  function start(): Promise<void> {
+    if (exiting) return Promise.resolve();
+    const c = spawn(process.execPath, args, { cwd: root, stdio: overlap ? ["inherit", "inherit", "inherit", "ipc"] : "inherit" });
     child = c;
     c.on("exit", (code, signal) => {
       if (!stopped.has(c)) log(`${args[0]} exited (${signal ?? code}); it starts again on the next change`);
     });
+    if (!overlap) return Promise.resolve();
+    return new Promise((resolve) => {
+      const done = () => {
+        clearTimeout(timer);
+        resolve();
+      };
+      const timer = setTimeout(done, 60_000);
+      c.on("message", (m) => m === "ready" && done());
+      c.once("exit", done);
+    });
   }
 
-  function stop(): Promise<void> {
+  function stop(c = child): Promise<void> {
     return new Promise((resolve) => {
-      if (!child || child.exitCode !== null || child.signalCode !== null) return resolve();
-      const c = child;
+      if (!c || c.exitCode !== null || c.signalCode !== null) return resolve();
       // One whose event loop is stuck never runs its SIGTERM handler.
       const kill = setTimeout(() => {
         log(`${args[0]} didn't exit 10 s after SIGTERM: killing it`);
@@ -167,8 +182,14 @@ function main(): void {
         log("keeping the running version");
         continue;
       }
-      await stop();
-      start();
+      if (overlap) {
+        const old = child;
+        await start();
+        await stop(old);
+      } else {
+        await stop();
+        await start();
+      }
       if (!exiting) log(`restarted ${args[0]}`);
     } while (again);
     busy = false;
