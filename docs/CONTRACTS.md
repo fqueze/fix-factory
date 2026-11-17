@@ -25,6 +25,8 @@ requests/<requestId>/events.jsonl # everything that happened to a request, appen
 requests/<requestId>/event-data/  # big event values; events.jsonl holds {"dataFile": ...} in their place
 requests/<requestId>/data/        # inputs the orchestrator writes for agents and CLIs (groups, comments, edits)
 requests/<requestId>/reports/<jobId>.json # each agent's validated report
+requests/<requestId>/items/<itemId>/notes/      # the item's notes, written there by its author: evidence.md, reproduction.md, reproduction.diff
+requests/<requestId>/items/<itemId>/artifacts/  # its agents' worktree artifacts/, copied when each of them ends (files up to 2 MB)
 jobs/<jobId>/spec.json            # {cmd, cwd, env, stdinFile?, kind, name, request, item}
 jobs/<jobId>/prompt.md            # an agent's rendered prompt, its stdin
 jobs/<jobId>/plan.json            # the orchestrator's plan for the job; retry-job runs it again
@@ -72,6 +74,43 @@ cache/artifacts/<taskId>/...      # downloaded try logs and profiles
   orchestrator (when it executes an approved recovery plan, it appends that plan's commands; when route-request says
   text from the main box is about an existing request, it appends a `tell-factory` for that request). Readers must ignore
   event types and fields they don't know.
+
+## Where files are
+
+What an item's work leaves, and where to look for it. An item's worktree comes and goes (see Worktrees); everything
+worth keeping is outside it.
+
+| What | Where |
+|---|---|
+| Its author's notes: evidence, reproduction, race-widening patch | `requests/<id>/items/<item>/notes/` (full paths in its report's `files`). Items from before notes folders: `files` relative to the worktree, read from `items/<item>/artifacts/`, else the worktree, else `kept/<worktree>/` |
+| Its agents' scratch (logs, profiles they saved, sessionlog.md) | the worktree's `artifacts/`; its small files copied to `requests/<id>/items/<item>/artifacts/` when each agent ends; all of it (up to 20 MB a file) to `kept/<worktree>/artifacts/` when the worktree is freed |
+| Its commits | the item's branch (`<request>-<item>`) in the Firefox checkout, while it exists; every commit its worktree had, as `refs/fix-factory/<worktree>/<sha>` once freed |
+| Its patches as imported | `patch` events in `requests/<id>/events.jsonl` (sha, title, files, bug) |
+| Its group (tests, failure, configs, task ids) | `requests/<id>/data/items/<item>.json`, given to its author |
+| Its agents' reports | `requests/<id>/reports/<job>.json`; prompts, transcripts and logs in `jobs/<job>/` |
+| A patch's test plan | `test-plan` events (the text the page shows); its writer's inputs in `requests/<id>/data/test-plan-<patch>-investigation.json` and `-pushes.json`; the plan you set on Phabricator in `requests/<id>/data/test-plan-<patch>-<command>.txt`. Test-plan agents run in the request's directory, never in a worktree |
+| Interdiffs, review comments, the stack's edits and orders | `requests/<id>/data/` (`interdiff-<patch>-<job>.diff`, `review-comments-<patch>-<job>.json`, `edits-<stack>-…`, `order-<stack>-…`); reply drafts are `reply-draft` events |
+| CI and try logs, profiles | `cache/artifacts/<taskId>/` |
+| Agent transcripts | `~/.claude/projects/<the job's real cwd, / as ->/<session>.jsonl` (an item's worktree: the slot it had when the session began); `claude --resume` finds a session from any directory |
+
+## Worktrees
+
+- `config.worktreesDir/<request>-<item>`: an item's worktree, a symlink to the slot it has now. Its path never changes,
+  so its agents' paths stay valid when the item gets another slot. Worktrees made before slots are real directories,
+  with their build inside (`obj-*`).
+- `config.worktreesDir/slots/<flavor>-<n>`: a slot, a git worktree reused from item to item. Freeing an item's worktree
+  (`worktree.ts remove`) keeps the slot and its build. The next item gets it reset to its own branch (`git checkout -f`,
+  `git clean -fdx`, its mozconfig rewritten), and `./mach build` rebuilds only what changed. Flavors: `opt-artifact`
+  (the default), `opt` and `dbg` (compiled locally, for an author that reports `needs a build`).
+- `config.objdirsDir/<slot>` (default `objdirs/` beside `worktreesDir`): each slot's objdir, outside the tree so a reset
+  keeps it. `mach` resolves the symlink, so a slot's build always sees the same source directory.
+- `config.worktreesDir/<request>-<stack>`: a stack's worktree, a plain one without a build (git, `mach try`,
+  `mach file-info` only).
+- The pool (`worktreePool`, default twice `maxAgents`): all requests' item worktrees together. When an item needs one
+  beyond it, or beyond what the disk has room for, the idle worktree unused the longest is freed (idle: nothing runs in
+  it, and its item is past review, closed, blocked or waiting for you). Compiled builds (`opt`, `dbg`) are at most 5
+  each. An item whose worktree was freed gets one back on its branch, with its notes and its build, when its author is
+  needed again. Worktrees you took over are yours: never freed, not counted.
 
 ## Jobs
 

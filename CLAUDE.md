@@ -15,7 +15,8 @@ patches on Phabricator. Node 24 + TypeScript, no frameworks, no dependencies bey
 - `src/server/`: the web UI (`pages/request.ts` renders a request, `client.js` the page's script, `style.css`).
 - `prompts/*.md` and `schemas/*.json`: each agent's prompt and its report's JSON schema.
   `docs/PROMPTS.md` is generated: run `node src/tools/prompts-doc.ts` after changing a prompt (a test checks it).
-- `docs/`: `CONTRACTS.md` (conventions, state layout) and `ORCHESTRATOR.md` (the planner's rules) are references;
+- `docs/`: `CONTRACTS.md` (conventions, state layout, where each file is, worktrees and their slots) and
+  `ORCHESTRATOR.md` (the planner's rules) are references;
   `PROMPTS.md` is generated; `MVP.md`, `WORKFLOW.md`, `COMPONENTS.md`, `initial-prompt.md` and `research/` are the
   initial design (historical: the code went further and elsewhere).
 
