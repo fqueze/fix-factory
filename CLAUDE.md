@@ -64,7 +64,7 @@ patches on Phabricator. Node 24 + TypeScript, no frameworks, no dependencies bey
 
 `port`, `stateDir`, `firefoxRepo`, `worktreesDir`, `baseRef`, `claudeCommand` (e.g. `["mozsb", "claude"]`),
 `mozPhabCommand`, `bugzillaEmail`, `maxAgents`, `maxBuilds`, `phabPollMinutes`, `phabPollHours`, `metaBugBlocks`,
-`dryRun`, `maxWorktrees`, viewer and profiler settings (all commented in `FactoryConfig`, `src/types.ts`). A request's own config (`config-set` events) carries per-request options such as `tryWith`.
+`dryRun`, `maxWorktrees`, `worktreePool`, viewer and profiler settings (all commented in `FactoryConfig`, `src/types.ts`). A request's own config (`config-set` events) carries per-request options such as `tryWith`.
 
 ## Screenshots of the UI
 

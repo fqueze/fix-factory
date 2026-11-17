@@ -13,7 +13,7 @@ import { parseArgs } from "node:util";
 import { toolsBin } from "../cli/tools.ts";
 import { loadConfig } from "../config.ts";
 import { delivered, sendToInbox } from "../agents/inbox.ts";
-import { freeDiskGB } from "../lib/disk.ts";
+import { freeDiskGB, MIN_FREE_GB, WORKTREE_GB } from "../lib/disk.ts";
 import { execOk } from "../lib/exec.ts";
 import { processNewCommands, readCommands } from "../state/commands.ts";
 import { eventsPath, listRequests, readEvents, readEventsFrom } from "../state/events.ts";
@@ -23,7 +23,8 @@ import type { Command, FactoryConfig, JobId, JobView, RequestId, RequestState } 
 import { commandEffects } from "./commands.ts";
 import { appendEventSafe } from "./event-data.ts";
 import { handleWatchLines } from "./handlers.ts";
-import { CANCELLED, next, requestSummary, type Action, type Ctx } from "./next.ts";
+import { pickEvictions, poolRoom } from "./pool.ts";
+import { CANCELLED, itemWorktrees, next, requestSummary, type Action, type Ctx } from "./next.ts";
 import { DEFAULT_PRIORITY, reportPath, shortHash, type JobPlan } from "./plan.ts";
 import { commitExists, defaultCliCommand, finishJob, jsonLines, readOut, readReport, startPlan, type RunnerDeps } from "./runner.ts";
 import { viewBuilder, type JobRecord, type View } from "./view.ts";
@@ -60,6 +61,9 @@ export class Orchestrator {
   private readonly planErrors = new Set<string>(); // failed:plan:<hash> keys raised by this process // visible=true presence commands, in order
   private ticking: Promise<void> | undefined;
   private again = false;
+  // With config.worktreePool: this planning pass's places in the pool, and the idle worktrees picked to make room.
+  private pool: { claim: (key: string) => boolean } | undefined;
+  private evicting = new Set<string>();
   private watchers: FSWatcher[] = [];
   private timer: NodeJS.Timeout | undefined;
 
@@ -98,6 +102,47 @@ export class Orchestrator {
     return f.loaded;
   }
 
+  // The pool's room this pass: worktreePool minus the items' worktrees there or being made, within what the disk has
+  // room for. Each item worktree to make claims a place; the ones refused are this pass's demand.
+  private openPool(): Set<string> | undefined {
+    const size = this.config.worktreePool;
+    this.pool = undefined;
+    if (size === undefined) return undefined;
+    const present = this.requests().flatMap((id) => {
+      const { s, view } = this.load(id);
+      // One removed outside the factory (by hand) is no longer there; those you took over are yours, not the pool's.
+      return itemWorktrees(s, view, this.config.worktreesDir).filter((w) => (!w.made || existsSync(join(this.config.worktreesDir, w.name))) && s.items[w.item]?.state !== "taken over");
+    });
+    for (const name of [...this.evicting]) if (!present.some((w) => w.name === name)) this.evicting.delete(name);
+    const disk = Math.floor((freeDiskGB(this.config.worktreesDir) - MIN_FREE_GB) / WORKTREE_GB);
+    const room = poolRoom(size, present.length, disk);
+    const claimed = new Set<string>();
+    const demand = new Set<string>();
+    this.pool = {
+      claim: (key) => {
+        if (claimed.has(key)) return true;
+        if (claimed.size < room) {
+          claimed.add(key);
+          return true;
+        }
+        demand.add(key);
+        return false;
+      },
+    };
+    this.poolPresent = present;
+    return demand;
+  }
+
+  // As many idle worktrees as items wait for one, those unused the longest, are picked; their requests remove them
+  // (pruneWorktrees) at the next pass.
+  private closePool(demand: Set<string> | undefined): void {
+    if (!demand?.size) return;
+    const more = pickEvictions(this.poolPresent, this.evicting, demand.size);
+    for (const name of more) this.evicting.add(name);
+    if (more.length) this.again = true;
+  }
+  private poolPresent: ReturnType<typeof itemWorktrees> = [];
+
   private requests(): RequestId[] {
     return listRequests(this.config.stateDir);
   }
@@ -126,6 +171,7 @@ export class Orchestrator {
       output: (job) => readOut(this.config, job),
       report: (job) => readReport(this.config, s.id, job),
       freeDiskGB: freeDiskGB(this.config.worktreesDir),
+      ...(this.pool ? { claimWorktree: (key: string) => this.pool!.claim(`${s.id} ${key}`), evicting: this.evicting } : {}),
       activeRequests: () =>
         this.requests()
           .map((id) => this.load(id).s)
@@ -329,6 +375,7 @@ export class Orchestrator {
   // Runs next() for every request (or one, for start-now, which also skips the caps) until it
   // stops writing events, then starts its jobs within the caps.
   plan(only?: RequestId): void {
+    const demand = this.openPool();
     let starts: { request: RequestId; plan: JobPlan }[] = [];
     for (let round = 0; round < MAX_PLANNING_ROUNDS; round++) {
       starts = [];
@@ -357,6 +404,7 @@ export class Orchestrator {
       }
       if (!wrote) break;
     }
+    this.closePool(demand);
     // Commands' jobs (a retry…) first; they skip the caps but not the worktree lock. The retry reopened its key,
     // so next() plans it too: the retry's job (an agent resumed where it stopped) is the one that runs.
     const retried = new Set(this.deferred.map((d) => `${d.request} ${d.plan.purpose.key}`));

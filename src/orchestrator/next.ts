@@ -9,7 +9,7 @@
 // assembly names a hash of the commits it assembles. redo-step bumps an epoch that ends up in the
 // keys of that step (step events per step) or of that item (item-state "not started" events).
 import { MIN_FREE_GB, WORKTREE_GB } from "../lib/disk.ts";
-import { basename, dirname, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import type { Annotation } from "../cli/annotations.ts";
 import { describePriorArt, type PriorArtBug } from "../cli/bugzilla.ts";
 import type { ClusterGroup, CollectedFailure, TryRow, TryTable } from "../cli/failures.ts";
@@ -83,7 +83,47 @@ export interface Ctx {
   report: (job: JobId) => unknown; // the validated report of a finished agent job
   activeRequests: () => { id: RequestId; summary: string }[]; // routed and not done, for route-request
   freeDiskGB?: number; // where the worktrees go; absent (tests): as many worktrees as agents
+  // With config.worktreePool: a place in the pool for an item's worktree to make (its key), false when there's none
+  // now (the loop then frees the idle one unused the longest); and the worktrees the loop picked to free.
+  claimWorktree?: (key: string) => boolean;
+  evicting?: Set<string>;
 }
+
+// An item's worktree no agent of it needs now: nothing runs in it, and its item is past review or closed (its author
+// comes back only for a review, try results or your answer, which restore it).
+const IDLE_WORKTREE: ItemState[] = ["reviewed", "in stack", "in try", "waiting for review", "fixed", "landed", "left as-is", "handed back", "blocked", "waiting for a try repro"];
+
+export interface ItemWorktree {
+  name: string;
+  item: ItemId;
+  idle: boolean;
+  lastUsed: number; // when a job last ended in it (ms), or it was made
+  made: boolean; // false while it's being made
+}
+
+// The request's items' worktrees there now or being made (a stack's own aren't items'), named as item() and
+// resumeAuthor() name them.
+export function itemWorktrees(s: RequestState, view: View, worktreesDir: string): ItemWorktree[] {
+  const out = new Map<string, ItemWorktree>();
+  for (const j of view.jobs.filter((j) => j.purpose.what === "worktree" && j.purpose.item !== undefined && (!j.end || succeeded(j)))) {
+    const key = j.purpose.key;
+    const name = key.startsWith("wt-restore:") ? key.split(":")[1] : key.startsWith("wt:") ? `${s.id}-${key.slice(3).replace("@", "-")}` : undefined;
+    if (!name) continue;
+    const removed = view.jobs.findLast((r) => isRemoval(r.purpose.key, name) && succeeded(r));
+    if (removed && removed.startedAt > j.startedAt) {
+      out.delete(name);
+      continue;
+    }
+    const path = join(worktreesDir, name);
+    const item = s.items[j.purpose.item!];
+    const inIt = view.jobs.filter((x) => x.cwd === path || x.cwd.startsWith(`${path}/`));
+    const lastUsed = Math.max(j.end?.at ?? j.startedAt, ...inIt.map((x) => x.end?.at ?? Infinity));
+    const idle = j.end !== undefined && item !== undefined && IDLE_WORKTREE.includes(item.state) && inIt.every((x) => x.end);
+    out.set(name, { name, item: j.purpose.item!, idle, lastUsed, made: j.end !== undefined });
+  }
+  return [...out.values()];
+}
+
 
 // One line for route-request's list of active requests.
 export function requestSummary(s: RequestState): string {
@@ -214,11 +254,14 @@ export function authorJobsOf(view: View, item: ItemId): JobRecord[] {
 
 // Authors are resumed in their own session (the latest fresh one: start-agent begins a new one),
 // one run at a time.
+// A removal of worktree name: the first one, or one after it was restored.
+export const isRemoval = (key: string, name: string) => key === `remove:${name}` || key.startsWith(`remove:${name}:after:`);
+
 // The worktree's name when it was removed (its group closed, to free the disk) and not restored since: its branch was
 // kept, so creating it again brings the author's commits back.
 export function removedWorktree(view: View, cwd: string): string | undefined {
   const name = basename(cwd);
-  const removed = view.jobs.findLast((j) => j.purpose.key === `remove:${name}` && succeeded(j));
+  const removed = view.jobs.findLast((j) => isRemoval(j.purpose.key, name) && succeeded(j));
   if (!removed) return undefined;
   const restored = view.jobs.findLast((j) => j.purpose.key.startsWith(`wt-restore:${name}:`) && succeeded(j));
   return restored && restored.startedAt > removed.startedAt ? undefined : name;
@@ -1172,7 +1215,8 @@ class Planner {
     const session = this.authorJobs(item).filter((j) => j.purpose.reason === "initial" || j.purpose.reason === "start").at(-1);
     const removed = session && removedWorktree(this.view, session.cwd);
     if (removed) {
-      const removal = this.view.jobs.findLast((j) => j.purpose.key === `remove:${removed}`)!;
+      const removal = this.view.jobs.findLast((j) => isRemoval(j.purpose.key, removed) && succeeded(j))!;
+      if (!this.view.byKey.has(`wt-restore:${removed}:${removal.job}:v2`) && this.ctx.claimWorktree && !this.ctx.claimWorktree(`wt-restore:${removed}`)) return undefined;
       // On its kept branch, as it was: no --base.
       this.want(`wt-restore:${removed}:${removal.job}:v2`, () => ({ ...this.worktree(removed, { item }), cli: { tool: "worktree.ts", args: ["create", removed, "--build", "artifact", "--notes", itemDir(this.config.stateDir, this.s.id, item)] } }));
       return undefined;
@@ -1276,7 +1320,10 @@ class Planner {
       const earlier = all.slice(0, all.indexOf(item)).filter((i) => i.group.tests[0] === test);
       // Each worktree is ~6 GB: as many as the disk has room for, those being made counted (worktree.ts refuses under
       // MIN_FREE_GB), or maxWorktrees; the others wait for room.
-      if (!this.view.byKey.has(`wt:${item.id}${e}`)) {
+      if (!this.view.byKey.has(`wt:${item.id}${e}`) && this.ctx.claimWorktree) {
+        if (earlier.some((i) => !SETTLED.includes(i.state))) return;
+        if (!this.ctx.claimWorktree(`wt:${item.id}${e}`)) return;
+      } else if (!this.view.byKey.has(`wt:${item.id}${e}`)) {
         if (earlier.some((i) => !SETTLED.includes(i.state))) return;
         // Groups being investigated in a worktree: reviewed ones keep theirs, but no agent runs in it; the disk
         // check in worktree.ts covers those.
@@ -3706,9 +3753,14 @@ class Planner {
       };
       const closed = item !== undefined && (item.state === "left as-is" || item.state === "handed back" || landed(item));
       const replaced = j.purpose.key.startsWith("wt:signal") && j.purpose.key !== `wt:signal${this.annotationsEpoch()}`;
-      if (!closed && !replaced) continue;
+      // Picked by the loop to make room in the pool (worktreePool) for an item that needs one: it was idle then.
+      const evicted = this.ctx.evicting?.has(name) === true && itemWorktrees(this.s, this.view, this.config.worktreesDir).some((w) => w.name === name && w.idle);
+      if (!closed && !replaced && !evicted) continue;
       if (this.view.jobs.some((r) => r.end === undefined && (r.cwd === path || r.cwd?.startsWith(`${path}/`)))) continue;
-      this.want(`remove:${name}`, () => this.cli("remove", "worktree.ts", ["remove", name], { cwd: this.config.firefoxRepo, ...(item ? { item: item.id, purpose: { item: item.id } } : {}) }));
+      // Restored since: the latest restore decides, and its removal has a key of its own.
+      if (this.view.jobs.some((r) => r.purpose.key.startsWith(`wt-restore:${name}:`) && succeeded(r) && r.startedAt > j.startedAt)) continue;
+      const key = j.purpose.key.startsWith("wt-restore:") ? `remove:${name}:after:${j.job}` : `remove:${name}`;
+      this.want(key, () => this.cli("remove", "worktree.ts", ["remove", name], { cwd: this.config.firefoxRepo, ...(item ? { item: item.id, purpose: { item: item.id } } : {}) }));
     }
   }
 

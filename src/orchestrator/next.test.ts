@@ -7,7 +7,7 @@ import { commandEffects } from "./commands.ts";
 import { landingState } from "../state/landing.ts";
 import type { Command } from "../types.ts";
 import type { EventInput } from "../state/events.ts";
-import { afterTheirDeps, commitsOf, resumeAuthorPlan, similarMessages, stackId } from "./next.ts";
+import { afterTheirDeps, commitsOf, itemWorktrees, resumeAuthorPlan, similarMessages, stackId } from "./next.ts";
 import { config, HOUR, ID, Scenario, sha } from "./testkit.ts";
 import { shortHash } from "./plan.ts";
 import { needsMetaBug } from "../state/meta-bug.ts";
@@ -3378,6 +3378,42 @@ describe("4. a fix for a failure only try shows", () => {
       () => sc.complete("author:i-test-a:initial", { report: fixed([sha("1")], { state: "not reproduced", reproduction: { reproduced: true, where: "on try", before: "2 of 2 on win11" } }) }),
       (e: Error) => e instanceof InvalidReport && /report it as "fix verified locally"/.test(e.message),
     );
+  });
+});
+
+describe("4. the worktree pool (worktreePool)", () => {
+  it("makes an item's worktree only with a place in the pool, lists the idle ones, and removes one the loop picks, which comes back when its author does", () => {
+    const sc = workList([group("ka", "a/test_a.js", "boom"), group("kb", "b/test_b.js", "slow")]);
+    let room = 1;
+    const asked: string[] = [];
+    sc.pool = { claim: (k) => (asked.push(k), room-- > 0), evicting: new Set() };
+    investigating(sc, "i-test-a");
+    sc.settle();
+    sc.complete("prior-art:i-test-b", { output: { bugs: [] } });
+    sc.settle();
+    sc.complete("prior-art-verdict:i-test-b", { report: none });
+    sc.settle();
+    assert.ok(asked.includes("wt:i-test-b"), "it asked for a place");
+    assert.ok(!sc.view().byKey.has("wt:i-test-b"), "none left: it waits");
+    const name = `${ID}-i-test-a`;
+    assert.deepEqual(itemWorktrees(sc.state(), sc.view(), config.worktreesDir).map((w) => [w.name, w.idle]), [[name, false]], "its author runs in it");
+    // Its author asks you something: nothing runs in it until you answer.
+    sc.complete("author:i-test-a:initial", { report: fixed([], { state: "blocked", summary: "which way?" }) });
+    assert.equal(sc.state().items["i-test-a"].state, "blocked");
+    assert.deepEqual(itemWorktrees(sc.state(), sc.view(), config.worktreesDir).map((w) => [w.name, w.idle]), [[name, true]]);
+    sc.pool.evicting.add(name);
+    assert.ok(sc.settle().includes(`remove:${name}`));
+    sc.complete(`remove:${name}`, { output: { name, removed: true } });
+    assert.deepEqual(itemWorktrees(sc.state(), sc.view(), config.worktreesDir), [], "gone from the pool");
+    room = 1;
+    assert.ok(sc.settle().includes("wt:i-test-b"), "the waiting item gets its place");
+    // You answer test_a's author: its worktree comes back once there's a place for it.
+    command(sc, { cmd: "continue", item: "i-test-a", text: "the first way" });
+    sc.settle();
+    assert.ok(asked.includes(`wt-restore:${name}`));
+    assert.ok(!sc.view().jobs.some((j) => j.purpose.key.startsWith(`wt-restore:${name}:`)), "no place: it waits");
+    room = 1;
+    assert.ok(sc.settle().some((k) => k.startsWith(`wt-restore:${name}:`)));
   });
 });
 

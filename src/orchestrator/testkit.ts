@@ -43,6 +43,7 @@ export class Scenario {
   lastActions: Action[] = [];
   activeRequests: { id: RequestId; summary: string }[] = []; // the other requests, for route-request
   freeDiskGB?: number; // where the worktrees go: absent, as many as agents
+  pool?: { claim: (key: string) => boolean; evicting: Set<string> }; // worktreePool's, as main.ts gives it
   readonly commands: CommandInput[] = []; // what the handlers appended to commands.jsonl
 
   constructor(kind: RequestKind, fields: { folder?: string; rev?: string; text?: string } = {}) {
@@ -76,6 +77,7 @@ export class Scenario {
       report: (job) => this.reports.get(job),
       activeRequests: () => this.activeRequests,
       ...(this.freeDiskGB !== undefined ? { freeDiskGB: this.freeDiskGB } : {}),
+      ...(this.pool ? { claimWorktree: this.pool.claim, evicting: this.pool.evicting } : {}),
     });
   }
 
