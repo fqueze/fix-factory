@@ -61,7 +61,7 @@ export class Orchestrator {
   private readonly planErrors = new Set<string>(); // failed:plan:<hash> keys raised by this process // visible=true presence commands, in order
   private ticking: Promise<void> | undefined;
   private again = false;
-  // With config.worktreePool: this planning pass's places in the pool, and the idle worktrees picked to make room.
+  // This planning pass's places in the worktree pool (config.worktreePool), and the idle worktrees picked to make room.
   private pool: { claim: (key: string) => boolean } | undefined;
   private evicting = new Set<string>();
   private watchers: FSWatcher[] = [];
@@ -104,10 +104,8 @@ export class Orchestrator {
 
   // The pool's room this pass: worktreePool minus the items' worktrees there or being made, within what the disk has
   // room for. Each item worktree to make claims a place; the ones refused are this pass's demand.
-  private openPool(): Set<string> | undefined {
-    const size = this.config.worktreePool;
-    this.pool = undefined;
-    if (size === undefined) return undefined;
+  private openPool(): Set<string> {
+    const size = this.config.worktreePool ?? 2 * this.config.maxAgents;
     const present = this.requests().flatMap((id) => {
       const { s, view } = this.load(id);
       // One removed outside the factory (by hand) is no longer there; those you took over are yours, not the pool's.
@@ -135,8 +133,8 @@ export class Orchestrator {
 
   // As many idle worktrees as items wait for one, those unused the longest, are picked; their requests remove them
   // (pruneWorktrees) at the next pass.
-  private closePool(demand: Set<string> | undefined): void {
-    if (!demand?.size) return;
+  private closePool(demand: Set<string>): void {
+    if (!demand.size) return;
     const more = pickEvictions(this.poolPresent, this.evicting, demand.size);
     for (const name of more) this.evicting.add(name);
     if (more.length) this.again = true;

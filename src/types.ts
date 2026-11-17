@@ -29,8 +29,8 @@ export interface FactoryConfig {
   profilerOrigin?: string; // a profiler front end for the profile links; by default the factory's own, on profilerPort
   profilerPort?: number; // where the page server serves it, by default port + 1
   bugzillaEmail?: string; // the bugs to file are assigned to it, ASSIGNED: you attach their patches
-  maxWorktrees?: number; // worktrees for fixes a request keeps at a time (default: as many as the disk has room for, ~6 GB each, keeping 20 GB free)
-  worktreePool?: number; // worktrees for fixes all requests keep together: one that's needed beyond it, or beyond the disk's room, replaces the idle one unused the longest (its commits and notes kept; it comes back on its branch when its item does). Unset: maxWorktrees, per request
+  maxWorktrees?: number; // without the worktree pool (planner tests): worktrees for fixes a request keeps at a time (default: as many as the disk has room for)
+  worktreePool?: number; // worktrees for fixes all requests keep together: one that's needed beyond it, or beyond the disk's room, replaces the idle one unused the longest (its commits and notes kept; it comes back on its branch when its item does). Default: twice maxAgents
   metaBugBlocks?: number[]; // what a burndown's meta bug blocks, e.g. the flakiness tracker
   maxAgents: number;
   maxBuilds: number;
