@@ -1,7 +1,9 @@
 // What each command does, as effects the loop carries out. Pure. Jobs a command starts skip the
 // caps: you asked for them. Recovery commands come from an approved plan and run exactly as written.
 import type { InboxMessage } from "../agents/inbox.ts";
+import { join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
+import { itemDir } from "../lib/kept.ts";
 import type { EventInput } from "../state/events.ts";
 import { sameBugDraft } from "../state/meta-bug.ts";
 import { canDismiss, canRetry, isPushJob, reviewLimitFlag } from "../state/flags.ts";
@@ -563,7 +565,7 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
           name: session.name,
           item: c.item,
           cwd: session.cwd,
-          agent: { sessionId: sessionIdFor(s.id, key), resume: false, vars: { ...startVars(item.group.tests, session.cwd), failureSummary: `"${item.group.message}" on ${item.group.configs.length} configs.\n\nInstructions for this run: ${c.prompt}`, request: s.text.trim() } },
+          agent: { sessionId: sessionIdFor(s.id, key), resume: false, vars: { ...startVars(item.group.tests, session.cwd), notes: join(itemDir(ctx.config.stateDir, s.id, c.item), "notes"), failureSummary: `"${item.group.message}" on ${item.group.configs.length} configs.\n\nInstructions for this run: ${c.prompt}`, request: s.text.trim() } },
           startEvents: [{ type: "item-state", request: s.id, item: c.item, state: "investigating", detail: "started again" }],
         },
       });

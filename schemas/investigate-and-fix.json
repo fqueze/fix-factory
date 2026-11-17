@@ -124,7 +124,7 @@
     },
     "files": {
       "type": "object",
-      "description": "Paths relative to your worktree, under artifacts/.",
+      "description": "Full paths of your notes, in the item's folder your prompt names (notes written before it had one: paths relative to your worktree, under artifacts/).",
       "properties": {
         "evidence": {
           "type": "string",

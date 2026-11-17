@@ -3446,7 +3446,7 @@ describe("4. the worktree pool: an item moved from another request", () => {
     const sc = new Scenario("burndown", { folder: "x" });
     sc.add({ type: "item-created", request: ID, item: "i-x", folder: "x", group: { message: "m", tests: ["x/test_x.js"], configs: [] } });
     const cwd = `${config.worktreesDir}/r-old-i-x`;
-    sc.startJob({ purpose: { key: "author:i-x:initial", what: "author", item: "i-x", reason: "initial" }, kind: "agent", name: "investigate-and-fix", item: "i-x", cwd, agent: { sessionId: "s", resume: false, vars: { test: "x/test_x.js", worktree: cwd, failureSummary: "f", request: "r" } } });
+    sc.startJob({ purpose: { key: "author:i-x:initial", what: "author", item: "i-x", reason: "initial" }, kind: "agent", name: "investigate-and-fix", item: "i-x", cwd, agent: { sessionId: "s", resume: false, vars: { test: "x/test_x.js", worktree: cwd, notes: "/state/notes", failureSummary: "f", request: "r" } } });
     sc.complete("author:i-x:initial", { report: fixed([], { state: "blocked", summary: "which way?" }) });
     assert.deepEqual(itemWorktrees(sc.state(), sc.view(), config.worktreesDir).map((w) => [w.name, w.item, w.idle]), [["r-old-i-x", "i-x", true]]);
     sc.pool = { claim: () => true, evicting: new Set(["r-old-i-x"]) };

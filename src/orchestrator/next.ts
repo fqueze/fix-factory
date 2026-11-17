@@ -9,7 +9,7 @@
 // assembly names a hash of the commits it assembles. redo-step bumps an epoch that ends up in the
 // keys of that step (step events per step) or of that item (item-state "not started" events).
 import { MIN_FREE_GB, WORKTREE_GB } from "../lib/disk.ts";
-import { basename, dirname, join, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import type { Annotation } from "../cli/annotations.ts";
 import { describePriorArt, type PriorArtBug } from "../cli/bugzilla.ts";
 import type { ClusterGroup, CollectedFailure, TryRow, TryTable } from "../cli/failures.ts";
@@ -493,7 +493,8 @@ class Planner {
           title: p.title,
           firefoxRepo: this.config.firefoxRepo,
           investigationFile,
-          files: notes.length ? notes.map((f) => `${itemDir(this.config.stateDir, this.s.id, item.id)}/${f}`).join(", ") : "(none written)",
+          // Written in the item's folder (full paths), or, before it had one, in the worktree's artifacts/, copied there.
+          files: notes.length ? notes.map((f) => (isAbsolute(f) ? f : `${itemDir(this.config.stateDir, this.s.id, item.id)}/${f}`)).join(", ") : "(none written)",
           worktree: dir,
           keptDir: keptDir(this.config.stateDir, basename(dir)),
           pushesFile,
@@ -1381,7 +1382,7 @@ class Planner {
         this.agent(
           "author",
           "investigate-and-fix",
-          { test: tests, worktree: path, failureSummary: `"${item.group.message}" on ${item.group.configs.length} configs${rate}; the full group, with its configs and task ids, is in ${groupFile}.${reuse}${before}${sharedNote}${withPush}${others}`, request: this.s.text.trim() },
+          { test: tests, worktree: path, notes: join(itemDir(this.config.stateDir, this.s.id, item.id), "notes"), failureSummary: `"${item.group.message}" on ${item.group.configs.length} configs${rate}; the full group, with its configs and task ids, is in ${groupFile}.${reuse}${before}${sharedNote}${withPush}${others}`, request: this.s.text.trim() },
           {
             key: `${prefix}:initial`,
             item: item.id,
