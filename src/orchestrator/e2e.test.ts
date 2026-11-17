@@ -27,6 +27,7 @@ export function setup(maxAgents = 3) {
     profilerOrigin: "http://localhost:4242",
     maxAgents,
     maxBuilds: 1,
+    agentStartGapMs: 0,
     dryRun: false,
   };
   mkdirSync(config.firefoxRepo, { recursive: true });

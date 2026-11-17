@@ -30,6 +30,9 @@ import { commitExists, defaultCliCommand, finishJob, jsonLines, readOut, readRep
 import { viewBuilder, type JobRecord, type View } from "./view.ts";
 
 export const TICK_MS = 30_000;
+// Claude Code rewrites ~/.claude.json as it starts, without a lock: agents starting together corrupted it (and lost
+// your login). One agent starts at a time, this far apart; the others start at the next ticks.
+export const AGENT_START_GAP_MS = 2_000;
 export const PRESENCE_MS = 30 * 60_000;
 const MAX_PLANNING_ROUNDS = 20;
 
@@ -61,6 +64,8 @@ export class Orchestrator {
   private readonly planErrors = new Set<string>(); // failed:plan:<hash> keys raised by this process // visible=true presence commands, in order
   private ticking: Promise<void> | undefined;
   private again = false;
+  private lastAgentStart = -Infinity;
+  private startTimer: NodeJS.Timeout | undefined;
   // This planning pass's places in the worktree pool (config.worktreePool), and the idle worktrees picked to make room.
   private pool: { claim: (key: string, build?: WorktreeBuild) => boolean } | undefined;
   private evicting = new Set<string>();
@@ -421,11 +426,26 @@ export class Orchestrator {
         }
         continue;
       }
+      if (plan.kind === "agent" && !this.agentMayStart()) continue;
       if (!lock(plan)) continue;
-      if (plan.kind === "agent") agents++;
+      if (plan.kind === "agent") {
+        agents++;
+        this.lastAgentStart = this.now();
+      }
       if (plan.kind === "build") builds++;
       this.start(request, plan);
     }
+  }
+
+  // Whether an agent may start now (AGENT_START_GAP_MS since the last one started); if not, a tick comes once it may.
+  private agentMayStart(): boolean {
+    const wait = this.lastAgentStart + (this.config.agentStartGapMs ?? AGENT_START_GAP_MS) - this.now();
+    if (wait <= 0) return true;
+    this.startTimer ??= setTimeout(() => {
+      this.startTimer = undefined;
+      void this.tick();
+    }, wait);
+    return false;
   }
 
   // Commands' jobs whose worktree is free; the lock, with them in it, for the jobs started after them.
@@ -433,7 +453,9 @@ export class Orchestrator {
     const running = this.requests().flatMap((id) => Object.values(this.load(id).s.jobs).filter((j) => j.endedAt === undefined));
     const lock = worktreeLock(this.config, running);
     for (const d of this.deferred.filter((d) => !only || d.request === only)) {
+      if (d.plan.kind === "agent" && !this.agentMayStart()) continue;
       if (!lock(d.plan)) continue;
+      if (d.plan.kind === "agent") this.lastAgentStart = this.now();
       this.deferred.splice(this.deferred.indexOf(d), 1);
       this.start(d.request, d.plan);
     }
@@ -457,6 +479,7 @@ export class Orchestrator {
     for (const w of this.watchers) w.close();
     this.watchers = [];
     clearInterval(this.timer);
+    clearTimeout(this.startTimer);
   }
 }
 
