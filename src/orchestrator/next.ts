@@ -121,6 +121,16 @@ export function itemWorktrees(s: RequestState, view: View, worktreesDir: string)
     const idle = j.end !== undefined && item !== undefined && IDLE_WORKTREE.includes(item.state) && inIt.every((x) => x.end);
     out.set(name, { name, item: j.purpose.item!, idle, lastUsed, made: j.end !== undefined });
   }
+  // An item moved from another request keeps the worktree it was made there: its author's session runs in it.
+  for (const item of Object.values(s.items)) {
+    const session = authorJobsOf(view, item.id).filter((j) => j.purpose.reason === "initial" || j.purpose.reason === "start").at(-1);
+    if (!session || dirname(session.cwd) !== worktreesDir) continue;
+    const name = basename(session.cwd);
+    if (out.has(name) || view.jobs.some((j) => j.purpose.what === "worktree" && j.purpose.key.startsWith(`wt-restore:${name}:`)) || removedWorktree(view, session.cwd)) continue;
+    const inIt = view.jobs.filter((x) => x.cwd === session.cwd || x.cwd.startsWith(`${session.cwd}/`));
+    const idle = IDLE_WORKTREE.includes(item.state) && inIt.every((x) => x.end);
+    out.set(name, { name, item: item.id, idle, lastUsed: Math.max(...inIt.map((x) => x.end?.at ?? Infinity)), made: true });
+  }
   return [...out.values()];
 }
 
@@ -3750,6 +3760,11 @@ class Planner {
   // right away, once nothing runs in them; those of items that landed 4 hours after, when a backout gets unlikely (one
   // restores it from its kept branch).
   private pruneWorktrees(): void {
+    // Picked by the loop to make room in the pool for an item that needs one, and still idle; a moved item's included.
+    for (const w of itemWorktrees(this.s, this.view, this.config.worktreesDir).filter((w) => w.idle && this.ctx.evicting?.has(w.name))) {
+      const restore = this.view.jobs.findLast((r) => r.purpose.key.startsWith(`wt-restore:${w.name}:`) && succeeded(r));
+      this.want(restore ? `remove:${w.name}:after:${restore.job}` : `remove:${w.name}`, () => this.cli("remove", "worktree.ts", ["remove", w.name], { cwd: this.config.firefoxRepo, item: w.item, purpose: { item: w.item } }));
+    }
     for (const j of this.view.jobs.filter((j) => j.purpose.what === "worktree" && succeeded(j))) {
       const { name, path } = this.out<{ name: string; path: string }>(j);
       const item = j.purpose.item === undefined ? undefined : this.s.items[j.purpose.item];
@@ -3759,9 +3774,7 @@ class Planner {
       };
       const closed = item !== undefined && (item.state === "left as-is" || item.state === "handed back" || landed(item));
       const replaced = j.purpose.key.startsWith("wt:signal") && j.purpose.key !== `wt:signal${this.annotationsEpoch()}`;
-      // Picked by the loop to make room in the pool (worktreePool) for an item that needs one: it was idle then.
-      const evicted = this.ctx.evicting?.has(name) === true && itemWorktrees(this.s, this.view, this.config.worktreesDir).some((w) => w.name === name && w.idle);
-      if (!closed && !replaced && !evicted) continue;
+      if (!closed && !replaced) continue;
       if (this.view.jobs.some((r) => r.end === undefined && (r.cwd === path || r.cwd?.startsWith(`${path}/`)))) continue;
       // Restored since: the latest restore decides, and its removal has a key of its own.
       if (this.view.jobs.some((r) => r.purpose.key.startsWith(`wt-restore:${name}:`) && succeeded(r) && r.startedAt > j.startedAt)) continue;

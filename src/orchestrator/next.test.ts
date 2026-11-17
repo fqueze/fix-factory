@@ -3417,6 +3417,21 @@ describe("4. the worktree pool (worktreePool)", () => {
   });
 });
 
+describe("4. the worktree pool: an item moved from another request", () => {
+  it("counts the worktree its author's session runs in, made by that request, and removes it when the loop picks it", () => {
+    const sc = new Scenario("burndown", { folder: "x" });
+    sc.add({ type: "item-created", request: ID, item: "i-x", folder: "x", group: { message: "m", tests: ["x/test_x.js"], configs: [] } });
+    const cwd = `${config.worktreesDir}/r-old-i-x`;
+    sc.startJob({ purpose: { key: "author:i-x:initial", what: "author", item: "i-x", reason: "initial" }, kind: "agent", name: "investigate-and-fix", item: "i-x", cwd, agent: { sessionId: "s", resume: false, vars: { test: "x/test_x.js", worktree: cwd, failureSummary: "f", request: "r" } } });
+    sc.complete("author:i-x:initial", { report: fixed([], { state: "blocked", summary: "which way?" }) });
+    assert.deepEqual(itemWorktrees(sc.state(), sc.view(), config.worktreesDir).map((w) => [w.name, w.item, w.idle]), [["r-old-i-x", "i-x", true]]);
+    sc.pool = { claim: () => true, evicting: new Set(["r-old-i-x"]) };
+    assert.ok(sc.settle().includes("remove:r-old-i-x"));
+    sc.complete("remove:r-old-i-x", { output: { name: "r-old-i-x", removed: true } });
+    assert.deepEqual(itemWorktrees(sc.state(), sc.view(), config.worktreesDir), []);
+  });
+});
+
 describe("4. a fix of a failure its author couldn't reproduce", () => {
   it("waits for you; Take its patch sends it on to critical review, told so, and a later not reproduced from its author is a fix", () => {
     const sc = workList([group("ka", "a/test_a.js", "boom")]);
