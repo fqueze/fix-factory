@@ -3419,6 +3419,28 @@ describe("4. the worktree pool (worktreePool)", () => {
   });
 });
 
+describe("4. an author that needs a build compiled locally", () => {
+  it("gets its worktree back at the same path on a tree with that build, then is resumed; later restores keep that build", () => {
+    const sc = workList([group("ka", "a/test_a.js", "boom")]);
+    const builds: (string | undefined)[] = [];
+    sc.pool = { claim: (_k, build) => (builds.push(build), true), evicting: new Set() };
+    investigating(sc, "i-test-a");
+    const name = `${ID}-i-test-a`;
+    assert.throws(() => sc.complete("author:i-test-a:initial", { report: fixed([sha("1")], { state: "needs a build" }) }), /says which build/);
+    const job = sc.complete("author:i-test-a:initial", { report: fixed([sha("1")], { state: "needs a build", build: "debug" }) });
+    assert.equal(sc.state().items["i-test-a"].state, "investigating");
+    assert.ok(sc.settle().includes(`remove:${name}:for:${job}`));
+    sc.complete(`remove:${name}:for:${job}`, { output: { name, removed: true } });
+    const restore = sc.settle().find((k) => k.startsWith(`wt-restore:${name}:`))!;
+    assert.deepEqual(sc.plan(restore).cli?.args.slice(0, 4), ["create", name, "--build", "full"]);
+    assert.equal(builds.at(-1), "full", "claimed as a debug tree");
+    sc.complete(restore, { output: { name, path: `/wt/${name}` } });
+    const resumed = sc.settle().find((k) => k.startsWith("author:i-test-a:build:"))!;
+    assert.match(String(sc.plan(resumed).agent?.message), /now has a debug build compiled locally/);
+    assert.deepEqual(itemWorktrees(sc.state(), sc.view(), config.worktreesDir).map((w) => [w.name, w.build]), [[name, "full"]]);
+  });
+});
+
 describe("4. the worktree pool: a retry", () => {
   it("of an author whose worktree the pool freed brings the worktree back first, then resumes it", () => {
     const sc = workList([group("ka", "a/test_a.js", "boom")]);

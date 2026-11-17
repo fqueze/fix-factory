@@ -23,8 +23,8 @@ import type { Command, FactoryConfig, JobId, JobView, RequestId, RequestState } 
 import { commandEffects } from "./commands.ts";
 import { appendEventSafe } from "./event-data.ts";
 import { handleWatchLines } from "./handlers.ts";
-import { pickEvictions, poolRoom } from "./pool.ts";
-import { CANCELLED, itemWorktrees, next, requestSummary, type Action, type Ctx } from "./next.ts";
+import { compiledRoom, pickEvictions, poolRoom } from "./pool.ts";
+import { CANCELLED, itemWorktrees, next, requestSummary, type Action, type Ctx, type WorktreeBuild } from "./next.ts";
 import { DEFAULT_PRIORITY, reportPath, shortHash, type JobPlan } from "./plan.ts";
 import { commitExists, defaultCliCommand, finishJob, jsonLines, readOut, readReport, startPlan, type RunnerDeps } from "./runner.ts";
 import { viewBuilder, type JobRecord, type View } from "./view.ts";
@@ -62,7 +62,7 @@ export class Orchestrator {
   private ticking: Promise<void> | undefined;
   private again = false;
   // This planning pass's places in the worktree pool (config.worktreePool), and the idle worktrees picked to make room.
-  private pool: { claim: (key: string) => boolean } | undefined;
+  private pool: { claim: (key: string, build?: WorktreeBuild) => boolean } | undefined;
   private evicting = new Set<string>();
   private watchers: FSWatcher[] = [];
   private timer: NodeJS.Timeout | undefined;
@@ -104,7 +104,7 @@ export class Orchestrator {
 
   // The pool's room this pass: worktreePool minus the items' worktrees there or being made, within what the disk has
   // room for. Each item worktree to make claims a place; the ones refused are this pass's demand.
-  private openPool(): Set<string> {
+  private openPool(): Map<string, WorktreeBuild> {
     const size = this.config.worktreePool ?? 2 * this.config.maxAgents;
     const present = this.requests().flatMap((id) => {
       const { s, view } = this.load(id);
@@ -114,16 +114,17 @@ export class Orchestrator {
     for (const name of [...this.evicting]) if (!present.some((w) => w.name === name)) this.evicting.delete(name);
     const disk = Math.floor((freeDiskGB(this.config.worktreesDir) - MIN_FREE_GB) / WORKTREE_GB);
     const room = poolRoom(size, present.length, disk);
-    const claimed = new Set<string>();
-    const demand = new Set<string>();
+    const claimed = new Map<string, WorktreeBuild>();
+    const demand = new Map<string, WorktreeBuild>();
     this.pool = {
-      claim: (key) => {
+      claim: (key, build = "artifact") => {
         if (claimed.has(key)) return true;
-        if (claimed.size < room) {
-          claimed.add(key);
+        if (claimed.size < room && compiledRoom(build, present, [...claimed.values()])) {
+          claimed.set(key, build);
           return true;
         }
-        demand.add(key);
+        // A compiled build's tree waits for one of its kind to be freed: only those are picked for it.
+        demand.set(key, build);
         return false;
       },
     };
@@ -133,9 +134,9 @@ export class Orchestrator {
 
   // As many idle worktrees as items wait for one, those unused the longest, are picked; their requests remove them
   // (pruneWorktrees) at the next pass.
-  private closePool(demand: Set<string>): void {
+  private closePool(demand: Map<string, WorktreeBuild>): void {
     if (!demand.size) return;
-    const more = pickEvictions(this.poolPresent, this.evicting, demand.size);
+    const more = pickEvictions(this.poolPresent, this.evicting, [...demand.values()]);
     for (const name of more) this.evicting.add(name);
     if (more.length) this.again = true;
   }
@@ -169,7 +170,7 @@ export class Orchestrator {
       output: (job) => readOut(this.config, job),
       report: (job) => readReport(this.config, s.id, job),
       freeDiskGB: freeDiskGB(this.config.worktreesDir),
-      ...(this.pool ? { claimWorktree: (key: string) => this.pool!.claim(`${s.id} ${key}`), evicting: this.evicting } : {}),
+      ...(this.pool ? { claimWorktree: (key: string, build?: WorktreeBuild) => this.pool!.claim(`${s.id} ${key}`, build), evicting: this.evicting } : {}),
       activeRequests: () =>
         this.requests()
           .map((id) => this.load(id).s)

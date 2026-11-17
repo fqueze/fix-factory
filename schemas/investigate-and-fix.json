@@ -9,7 +9,8 @@
         "handed back",
         "blocked",
         "not reproduced",
-        "needs a try repro"
+        "needs a try repro",
+        "needs a build"
       ]
     },
     "summary": {
@@ -283,7 +284,9 @@
           },
           "permalinks": {
             "type": "array",
-            "items": { "type": "string" },
+            "items": {
+              "type": "string"
+            },
             "description": "For a CI profile: the profiler.firefox.com link of each marker that shows the finding, from `profiler-cli marker info <m> --permalink` (its Permalink line), the profile loaded from its artifact URL."
           }
         },
@@ -313,6 +316,14 @@
         "additionalProperties": false
       },
       "description": "Your draft replies to reviewers' comments on Phabricator that what you did changes: the new text, by comment id."
+    },
+    "build": {
+      "type": "string",
+      "enum": [
+        "opt",
+        "debug"
+      ],
+      "description": "With state \"needs a build\": the build compiled locally your change to native code needs (debug for assertions and leak checks)."
     }
   },
   "required": [

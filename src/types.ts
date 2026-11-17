@@ -298,7 +298,8 @@ export interface Feedback {
 }
 
 export interface InvestigateReport {
-  state: "fix verified locally" | "left as-is" | "handed back" | "blocked" | "not reproduced" | "needs a try repro"; // needs a try repro: commits are DEBUG commits widening the race
+  state: "fix verified locally" | "left as-is" | "handed back" | "blocked" | "not reproduced" | "needs a try repro" | "needs a build"; // needs a try repro: commits are DEBUG commits widening the race; needs a build: build says which
+  build?: "opt" | "debug"; // the build compiled locally it needs (native code): its worktree moves onto one, at the same path
   summary: string; // one line, shown on the status page
   disagreement?: string; // why it didn't follow your message: the factory stops and asks you
   question?: string; // a decision it leaves to you: a ⚑ on its group

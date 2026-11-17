@@ -9,7 +9,7 @@ import { foldEvents } from "../state/fold.ts";
 import type { CommandInput } from "../state/commands.ts";
 import type { Event, FactoryConfig, JobId, RequestId, RequestKind, RequestState } from "../types.ts";
 import { handleFinished } from "./handlers.ts";
-import { next, type Action } from "./next.ts";
+import { next, type Action, type WorktreeBuild } from "./next.ts";
 import type { JobPlan } from "./plan.ts";
 import type { JobPurpose } from "../types.ts";
 import { buildView, type View } from "./view.ts";
@@ -43,7 +43,7 @@ export class Scenario {
   lastActions: Action[] = [];
   activeRequests: { id: RequestId; summary: string }[] = []; // the other requests, for route-request
   freeDiskGB?: number; // where the worktrees go: absent, as many as agents
-  pool?: { claim: (key: string) => boolean; evicting: Set<string> }; // worktreePool's, as main.ts gives it
+  pool?: { claim: (key: string, build?: WorktreeBuild) => boolean; evicting: Set<string> }; // worktreePool's, as main.ts gives it
   readonly commands: CommandInput[] = []; // what the handlers appended to commands.jsonl
 
   constructor(kind: RequestKind, fields: { folder?: string; rev?: string; text?: string } = {}) {

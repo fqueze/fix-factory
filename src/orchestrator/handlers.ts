@@ -426,6 +426,12 @@ function authorReport(input: HandlerInput, ev: <T extends EventInput["type"]>(ty
       if (first?.bug && !r.bugDrafts?.some((d) => d.commits.some((x) => names(x, r.commits[0]))) && r.bugDrafts?.some((d) => d.commits.length === 0 || d.commits.some((x) => r.commits.some((c) => names(x, c))))) {
         throw new InvalidReport(`Your first commit is on Bug ${first.bug}: the commits of this fix share it. Put \`Bug ${first.bug}\` in the message of every commit of yours that says Bug XXXXXXX, drop their bugDrafts, and end with the JSON report again.`);
       }
+      // Its worktree moves onto a tree with that build compiled (next.ts, switchBuild), then it's resumed.
+      if (r.state === "needs a build") {
+        if (!r.build) throw new InvalidReport(`State "needs a build" says which build in \`build\`: "opt" or "debug".`);
+        ev("item-state", { item, state: "investigating", detail: `moving to a worktree with a local ${r.build} build` });
+        return;
+      }
       if (r.state === "blocked") {
         blocked(r.summary);
         return;

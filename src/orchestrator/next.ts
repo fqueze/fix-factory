@@ -85,7 +85,7 @@ export interface Ctx {
   freeDiskGB?: number; // where the worktrees go; absent (tests): as many worktrees as agents
   // With config.worktreePool: a place in the pool for an item's worktree to make (its key), false when there's none
   // now (the loop then frees the idle one unused the longest); and the worktrees the loop picked to free.
-  claimWorktree?: (key: string) => boolean;
+  claimWorktree?: (key: string, build?: WorktreeBuild) => boolean;
   evicting?: Set<string>;
 }
 
@@ -93,8 +93,11 @@ export interface Ctx {
 // comes back only for a review, try results or your answer, which restore it).
 const IDLE_WORKTREE: ItemState[] = ["reviewed", "in stack", "in try", "waiting for review", "fixed", "landed", "left as-is", "handed back", "blocked", "waiting for a try repro"];
 
+export type WorktreeBuild = "artifact" | "opt" | "full" | "none";
+
 export interface ItemWorktree {
   name: string;
+  build: WorktreeBuild;
   item: ItemId;
   idle: boolean;
   lastUsed: number; // when a job last ended in it (ms), or it was made
@@ -119,7 +122,7 @@ export function itemWorktrees(s: RequestState, view: View, worktreesDir: string)
     const inIt = view.jobs.filter((x) => x.cwd === path || x.cwd.startsWith(`${path}/`));
     const lastUsed = Math.max(j.end?.at ?? j.startedAt, ...inIt.map((x) => x.end?.at ?? Infinity));
     const idle = j.end !== undefined && item !== undefined && IDLE_WORKTREE.includes(item.state) && inIt.every((x) => x.end);
-    out.set(name, { name, item: j.purpose.item!, idle, lastUsed, made: j.end !== undefined });
+    out.set(name, { name, build: (j.purpose.reason as WorktreeBuild | undefined) ?? "artifact", item: j.purpose.item!, idle, lastUsed, made: j.end !== undefined });
   }
   // An item moved from another request keeps the worktree it was made there: its author's session runs in it.
   for (const item of Object.values(s.items)) {
@@ -129,7 +132,7 @@ export function itemWorktrees(s: RequestState, view: View, worktreesDir: string)
     if (out.has(name) || view.jobs.some((j) => j.purpose.what === "worktree" && j.purpose.key.startsWith(`wt-restore:${name}:`)) || removedWorktree(view, session.cwd)) continue;
     const inIt = view.jobs.filter((x) => x.cwd === session.cwd || x.cwd.startsWith(`${session.cwd}/`));
     const idle = IDLE_WORKTREE.includes(item.state) && inIt.every((x) => x.end);
-    out.set(name, { name, item: item.id, idle, lastUsed: Math.max(...inIt.map((x) => x.end?.at ?? Infinity)), made: true });
+    out.set(name, { name, build: "artifact", item: item.id, idle, lastUsed: Math.max(...inIt.map((x) => x.end?.at ?? Infinity)), made: true });
   }
   return [...out.values()];
 }
@@ -270,8 +273,9 @@ export function lostSession(view: View, sessionId: string): boolean {
   return view.jobs.some((j) => j.sessionId === sessionId && j.end?.error?.includes("No conversation found with session ID") === true);
 }
 
-// A removal of worktree name: the first one, or one after it was restored.
-export const isRemoval = (key: string, name: string) => key === `remove:${name}` || key.startsWith(`remove:${name}:after:`);
+// A removal of worktree name: the first one, one after it was restored (remove:<name>:after:<job>), or one to move it
+// onto another build (remove:<name>:for:<job>).
+export const isRemoval = (key: string, name: string) => key === `remove:${name}` || key.startsWith(`remove:${name}:`);
 
 // The worktree's name when it was removed (its group closed, to free the disk) and not restored since: its branch was
 // kept, so creating it again brings the author's commits back.
@@ -657,11 +661,12 @@ class Planner {
   }
 
   // build none: a stack's worktree, where only git, mach try and file-info run.
-  worktree(name: string, purpose: Partial<JobPurpose> = {}, build: "artifact" | "none" = "artifact"): JobPlan {
+  worktree(name: string, purpose: Partial<JobPurpose> = {}, build: WorktreeBuild = "artifact"): JobPlan {
     return this.cli("worktree", "worktree.ts", ["create", name, "--base", this.config.baseRef, "--build", build], {
       kind: "build",
       cwd: this.config.firefoxRepo,
-      purpose,
+      // Its build, which the pool counts by (opt and debug trees are few).
+      purpose: { ...purpose, reason: build },
       ...(purpose.item ? { item: purpose.item } : {}),
     });
   }
@@ -1227,6 +1232,26 @@ class Planner {
     }
   }
 
+  // The build an item's worktree has: the one its author last asked for (needs a build), else an artifact build.
+  private itemBuild(item: ItemId): WorktreeBuild {
+    const asked = this.authorJobs(item).filter(succeeded).map((j) => this.rep<InvestigateReport>(j)).findLast((r) => r.state === "needs a build" && r.build);
+    return asked?.build === "debug" ? "full" : asked?.build === "opt" ? "opt" : "artifact";
+  }
+
+  // Its author needs a build compiled locally: its worktree is freed, then comes back, at the same path, on a tree with
+  // that build, and its author is resumed.
+  private switchBuild(item: ItemView, author: JobRecord, build: "opt" | "debug"): void {
+    const session = this.authorJobs(item.id).filter((j) => j.purpose.reason === "initial" || j.purpose.reason === "start").at(-1)!;
+    const name = basename(session.cwd);
+    const key = `remove:${name}:for:${author.job}`;
+    if (!this.view.byKey.has(key) && !removedWorktree(this.view, session.cwd)) {
+      this.want(key, () => this.cli("remove", "worktree.ts", ["remove", name], { cwd: this.config.firefoxRepo, item: item.id, purpose: { item: item.id } }));
+      return;
+    }
+    if (!this.want(key)) return;
+    this.resumeAuthor(item.id, `author:${item.id}${this.itemEpoch(item.id)}:build:${author.job}`, "build", `Your worktree, at the same path, now has a ${build} build compiled locally (\`./mach build\` rebuilds what you change). Carry on from where you stopped, then end with the JSON report.`);
+  }
+
   resumeAuthor(item: ItemId, key: string, reason: string, message: string, state: ItemState = "investigating"): JobRecord | undefined {
     if (this.view.byKey.has(key)) return this.want(key);
     // A removed worktree comes back first.
@@ -1234,9 +1259,10 @@ class Planner {
     const removed = session && removedWorktree(this.view, session.cwd);
     if (removed) {
       const removal = this.view.jobs.findLast((j) => isRemoval(j.purpose.key, removed) && succeeded(j))!;
-      if (!this.view.byKey.has(`wt-restore:${removed}:${removal.job}:v2`) && this.ctx.claimWorktree && !this.ctx.claimWorktree(`wt-restore:${removed}`)) return undefined;
-      // On its kept branch, as it was: no --base.
-      this.want(`wt-restore:${removed}:${removal.job}:v2`, () => ({ ...this.worktree(removed, { item }), cli: { tool: "worktree.ts", args: ["create", removed, "--build", "artifact", "--notes", itemDir(this.config.stateDir, this.s.id, item)] } }));
+      const build = this.itemBuild(item);
+      if (!this.view.byKey.has(`wt-restore:${removed}:${removal.job}:v2`) && this.ctx.claimWorktree && !this.ctx.claimWorktree(`wt-restore:${removed}`, build)) return undefined;
+      // On its kept branch, as it was: no --base; with the build its author asked for, if any.
+      this.want(`wt-restore:${removed}:${removal.job}:v2`, () => ({ ...this.worktree(removed, { item }, build), cli: { tool: "worktree.ts", args: ["create", removed, "--build", build, "--notes", itemDir(this.config.stateDir, this.s.id, item)] } }));
       return undefined;
     }
     // Its own commit has no Differential Revision line (the stack's has): without the revision it can't read the reviews.
@@ -1407,6 +1433,11 @@ class Planner {
       }
     }
     const author = this.authorReport(item.id)!;
+    const asked = author.job.name === "investigate-and-fix" ? this.rep<InvestigateReport>(author.job) : undefined;
+    if (asked?.state === "needs a build" && asked.build) {
+      this.switchBuild(item, author.job, asked.build);
+      return;
+    }
     if (this.askedPush(item, author.job)) return;
     // Skips whose tests still fail: leaving those failures unfixed is your call.
     if (item.id === ANNOTATIONS_ITEM) {
