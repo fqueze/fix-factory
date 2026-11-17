@@ -1290,6 +1290,12 @@ class Planner {
       const before = fixed.length
         ? ` This test already has a fix for another failure (${fixed.map((j) => `"${this.s.items[j!.item!].group.message}": the commits beyond origin/main in ${j!.cwd}`).join("; ")}). First check whether it fixes this failure too; if it does, change nothing and report "left as-is", saying so.`
         : "";
+      // The request's fixes of product or harness code, done or still worked on, can fix tests beyond their own (a shared
+      // cause, like a harness slowdown): checked first, a failure one of them fixes gets no second fix.
+      const shared = Object.values(this.s.patches).filter((p) => p.testOnly === false && p.item !== undefined && p.item !== item.id && !["left as-is", "handed back", "taken over"].includes(this.s.items[p.item].state));
+      const sharedNote = shared.length
+        ? ` Other fixes of this request change product or harness code, and may fix your failure too: ${shared.map((p) => `${p.sha.slice(0, 12)} "${p.title}" (for ${this.s.items[p.item!].group.tests.map((t) => t.split("/").pop()).join(", ")}: \`git show ${p.sha.slice(0, 12)}\`)`).join("; ")}. First check whether one has your failure's cause; if it does, change nothing and report "left as-is", with its sha in \`coveredBy\`.`
+        : "";
       // The push's own commits (the jobs and harness changes it tests), which authors apply to run tests as it did.
       const pushCommits = this.tryWithBranch();
       if (pushCommits === null) return;
@@ -1305,7 +1311,7 @@ class Planner {
         this.agent(
           "author",
           "investigate-and-fix",
-          { test: tests, worktree: path, failureSummary: `"${item.group.message}" on ${item.group.configs.length} configs${rate}; the full group, with its configs and task ids, is in ${groupFile}.${reuse}${before}${withPush}${others}`, request: this.s.text.trim() },
+          { test: tests, worktree: path, failureSummary: `"${item.group.message}" on ${item.group.configs.length} configs${rate}; the full group, with its configs and task ids, is in ${groupFile}.${reuse}${before}${sharedNote}${withPush}${others}`, request: this.s.text.trim() },
           {
             key: `${prefix}:initial`,
             item: item.id,

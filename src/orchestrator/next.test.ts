@@ -863,6 +863,18 @@ describe("4. investigate and fix", () => {
     assert.deepEqual([after["p-test-a"].bug, after["p-test-a-2"].bug, after["p-test-a-3"].bug], [777, 777, null]);
   });
 
+  it("tells a new author about the request's fixes of product or harness code, which may fix its failure too, not those closed or test-only", () => {
+    const sc = workList([group("ka", "a/test_a.js", "boom"), group("kb", "b/test_b.js", "slow")]);
+    investigating(sc, "i-test-a");
+    sc.add({ type: "patch", request: ID, patch: "p-harness", item: "i-test-a", sha: sha("9"), worktree: `/wt/${ID}-i-test-a`, title: "Bug XXXXXXX - Shorten chaos mode's delays, r=xpcom.", bug: null, testOnly: false } as never);
+    sc.add({ type: "patch", request: ID, patch: "p-test", item: "i-test-a", sha: sha("8"), worktree: `/wt/${ID}-i-test-a`, title: "Bug XXXXXXX - Wait in test_a.js, r=x.", bug: null, testOnly: true } as never);
+    sc.add({ type: "item-state", request: ID, item: "i-test-a", state: "reviewed" });
+    investigating(sc, "i-test-b");
+    const summary = String(sc.plan("author:i-test-b:initial").agent?.vars?.failureSummary);
+    assert.match(summary, new RegExp(` Other fixes of this request change product or harness code, and may fix your failure too: ${sha("9").slice(0, 12)} "Bug XXXXXXX - Shorten chaos mode's delays, r=xpcom\\." \\(for test_a\\.js: \`git show ${sha("9").slice(0, 12)}\`\\)\\. First check whether one has your failure's cause; if it does, change nothing and report "left as-is", with its sha in \`coveredBy\`\\.`));
+    assert.doesNotMatch(summary, /Wait in test_a/);
+  });
+
   it("investigates in the worktree, imports the commits, lints, reviews; a bug draft doesn't ask you to file it yet", () => {
     const sc = workList([group("ka", "a/test_a.js", "boom", 2)]);
     investigating(sc, "i-test-a");
