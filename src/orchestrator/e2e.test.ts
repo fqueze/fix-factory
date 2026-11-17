@@ -98,6 +98,8 @@ test("a try-push request goes from the request to a planned verification push", 
     assert.equal(authorB[1].sessionId, authorB[0].sessionId);
     // Each run's cost: the session's total minus the earlier runs.
     assert.deepEqual(authorB.map((j) => j.costUsd), [0.25, 0.5]);
+    // Their notes went to their items' folders as their runs ended.
+    assert.equal(readFileSync(join(config.stateDir, "requests", s.id, "items", "i-test-b", "artifacts", "evidence.md"), "utf8"), `# ${s.id}-i-test-b\n`);
     const builds = of("job-started").filter((e) => e.kind === "build");
     const ends = new Map(of("job-finished").map((e) => [e.job, e.t]));
     assert.equal(builds.length, 3);

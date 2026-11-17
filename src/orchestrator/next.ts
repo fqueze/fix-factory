@@ -19,7 +19,7 @@ import type { MessageEdit } from "../cli/stack/message.ts";
 import type { OrderOutput } from "../cli/stack/order.ts";
 import { expectedTests, type DryRunResult, type TestRuns } from "../cli/try.ts";
 import type { BugInfo, BugLandings } from "../cli/bugzilla.ts";
-import { keptDir } from "../lib/kept.ts";
+import { itemDir, keptDir } from "../lib/kept.ts";
 import { REQUEST_STEPS } from "../server/commands.ts";
 import { isReviewComment, landingState, unpostedReplies } from "../state/landing.ts";
 import { BRANCH_MOVED, COMMITS_CHANGED, unreachable } from "../state/flags.ts";
@@ -433,7 +433,8 @@ class Planner {
           title: p.title,
           firefoxRepo: this.config.firefoxRepo,
           investigationFile,
-          files: notes.length ? notes.map((f) => `${dir}/${f}`).join(", ") : "(none written)",
+          files: notes.length ? notes.map((f) => `${itemDir(this.config.stateDir, this.s.id, item.id)}/${f}`).join(", ") : "(none written)",
+          worktree: dir,
           keptDir: keptDir(this.config.stateDir, basename(dir)),
           pushesFile,
         },
@@ -1167,7 +1168,7 @@ class Planner {
     if (removed) {
       const removal = this.view.jobs.findLast((j) => j.purpose.key === `remove:${removed}`)!;
       // On its kept branch, as it was: no --base.
-      this.want(`wt-restore:${removed}:${removal.job}:v2`, () => ({ ...this.worktree(removed, { item }), cli: { tool: "worktree.ts", args: ["create", removed, "--build", "artifact"] } }));
+      this.want(`wt-restore:${removed}:${removal.job}:v2`, () => ({ ...this.worktree(removed, { item }), cli: { tool: "worktree.ts", args: ["create", removed, "--build", "artifact", "--notes", itemDir(this.config.stateDir, this.s.id, item)] } }));
       return undefined;
     }
     // Its own commit has no Differential Revision line (the stack's has): without the revision it can't read the reviews.

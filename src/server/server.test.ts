@@ -486,6 +486,22 @@ describe("GET /requests/:id/items/:item/files/:which", () => {
     assert.equal((await fetch(url("other"))).status, 404);
     rmSync(wt, { recursive: true, force: true });
   });
+
+  it("reads them from the item's folder first, where they're copied when its agents end, its worktree gone or not", async () => {
+    const ID = "r-20261015-enterprisepolicies";
+    const r = structuredClone(state.getRequest(ID)!);
+    const i = r.items["i-browser-policy-trackingprotection"];
+    const notes = join(stateDir, "requests", ID, "items", i.id, "artifacts");
+    mkdirSync(notes, { recursive: true });
+    writeFileSync(join(notes, "evidence.md"), "# From the item's folder\n");
+    r.jobs["j-inv-tp"].cwd = join(stateDir, "gone-worktree");
+    i.investigation = { state: "fix verified locally", summary: "s", cause: "c", verification: "v", commits: [], landsAfter: [], feedback: [], files: { evidence: "artifacts/evidence.md", reproduction: "artifacts/reproduction.md" } };
+    state.set(r);
+    const url = (which: string) => `${base}/requests/${ID}/items/${i.id}/files/${which}`;
+    assert.match(await (await fetch(url("evidence"))).text(), /<pre id="text"># From the item's folder/);
+    assert.equal((await fetch(url("reproduction"))).status, 404, "not copied: nowhere");
+    rmSync(join(stateDir, "requests", ID, "items"), { recursive: true, force: true });
+  });
 });
 
 describe("GET /requests/:id/patches/:patch/view", () => {

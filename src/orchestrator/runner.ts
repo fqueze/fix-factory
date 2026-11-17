@@ -3,7 +3,8 @@
 // events (src/orchestrator/handlers.ts says what they mean).
 import { spawnSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, relative } from "node:path";
+import { copyArtifacts, ITEM_NOTES_MAX_BYTES, itemDir } from "../lib/kept.ts";
 import { appendFeedback, buildAgentCommand, parseStreamJson, promptVersion, repairSwallowedParameters, renderPrompt, validateReport, type JsonSchema } from "../agents/run.ts";
 import { appendCommand } from "../state/commands.ts";
 import type { EventInput } from "../state/events.ts";
@@ -130,6 +131,8 @@ export function readReport(config: Pick<FactoryConfig, "stateDir">, request: str
 
 // Records a finished job: its meaning as events (successful ones only), then job-finished.
 // The derived events go first, so a crash in between replays them rather than losing them.
+const isInside = (dir: string, path: string) => !relative(dir, path).startsWith("..");
+
 export function finishJob(deps: RunnerDeps, s: RequestState, view: View, rec: JobRecord, exit: ExitInfo | { exitCode: number; endedAt: string; error: string }): void {
   const { config } = deps;
   const out = readOut(config, rec.job);
@@ -189,6 +192,15 @@ export function finishJob(deps: RunnerDeps, s: RequestState, view: View, rec: Jo
         }
       }
       if (error === undefined) handle();
+    }
+  }
+  // An item's agent's notes go to the item's folder, whatever came of its run: they outlive its worktree.
+  if (rec.kind === "agent" && rec.item && rec.cwd && isInside(config.worktreesDir, rec.cwd) && existsSync(rec.cwd)) {
+    try {
+      copyArtifacts(rec.cwd, itemDir(config.stateDir, s.id, rec.item), ITEM_NOTES_MAX_BYTES);
+    } catch (e) {
+      // Its kept copy, made when the worktree goes, still has them.
+      process.stderr.write(`copying the notes of ${rec.job} to its item's folder failed: ${e instanceof Error ? e.message : String(e)}\n`);
     }
   }
   const machProfiles = rec.kind === "agent" ? 0 : keepMachProfiles(config, rec.job, out);

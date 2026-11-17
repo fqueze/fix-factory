@@ -17,7 +17,10 @@ for (const rule of rules) {
   const fill = (s) => s.replace(/\$(\d)/g, (_, n) => m[Number(n)] ?? "").replace(/\$WORKTREES/g, process.env.FAKE_WORKTREES ?? "");
   const deep = (v) => (typeof v === "string" ? fill(v) : Array.isArray(v) ? v.map(deep) : v && typeof v === "object" ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, deep(x)])) : v);
   if (rule.mkdir) mkdirSync(fill(rule.mkdir), { recursive: true });
-  for (const [path, text] of Object.entries(rule.write ?? {})) writeFileSync(fill(path), fill(text));
+  for (const [path, text] of Object.entries(rule.write ?? {})) {
+    mkdirSync(fill(path).replace(/\/[^/]*$/, ""), { recursive: true });
+    writeFileSync(fill(path), fill(text));
+  }
   if (rule.stderr) process.stderr.write(fill(rule.stderr));
   for (const l of rule.lines ?? []) process.stdout.write(JSON.stringify(deep(l)) + "\n");
   if (rule.out !== undefined) process.stdout.write(typeof rule.out === "string" ? fill(rule.out) : JSON.stringify(deep(rule.out)) + "\n");

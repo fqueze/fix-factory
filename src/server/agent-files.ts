@@ -5,22 +5,27 @@ import { tmpdir } from "node:os";
 import { join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { exec } from "../lib/exec.ts";
-import { keptPath } from "../lib/kept.ts";
+import { itemDir, keptPath } from "../lib/kept.ts";
 import type { InvestigateReport, ItemView, RequestState } from "../types.ts";
 
 export type AgentFile = keyof NonNullable<InvestigateReport["files"]>;
 export const AGENT_FILES: AgentFile[] = ["evidence", "reproduction", "widening"];
 
-// The file in the worktree of the group's latest investigation (or its kept copy, once the worktree is gone);
-// never outside it, even through a symlink.
+// The file in the item's folder, where its author's notes are copied when it ends; else in the worktree of its
+// latest investigation (or that worktree's kept copy, once it's gone), for notes from before item folders. Never
+// outside them, even through a symlink.
 export function agentFilePath(r: RequestState, i: ItemView, which: AgentFile, dirs: { stateDir: string; worktreesDir: string }): string | undefined {
   const rel = i.investigation?.files?.[which];
   const author = i.jobs.map((j) => r.jobs[j]).findLast((j) => j.name === "investigate-and-fix");
   if (!rel || !author) {
     return undefined;
   }
+  return within(itemDir(dirs.stateDir, r.id, i.id), rel) ?? within(keptPath(dirs, author.cwd), rel);
+}
+
+function within(dir: string, rel: string): string | undefined {
   try {
-    const root = realpathSync(keptPath(dirs, author.cwd));
+    const root = realpathSync(dir);
     const path = realpathSync(resolve(root, rel));
     return path.startsWith(root + sep) ? path : undefined;
   } catch {

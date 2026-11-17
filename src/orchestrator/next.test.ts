@@ -3747,7 +3747,7 @@ describe("9. a try push of a submitted stack", () => {
     const queued = sc.state().queuedAuthors![0].key;
     assert.ok(!sc.view().byKey.has(queued), "not resumed in a missing worktree");
     const restore = sc.settle().find((k) => k.startsWith(`wt-restore:${name}:`))!;
-    assert.deepEqual(sc.plan(restore).cli?.args, ["create", name, "--build", "artifact"], "on its kept branch: no --base");
+    assert.deepEqual(sc.plan(restore).cli?.args, ["create", name, "--build", "artifact", "--notes", `${config.stateDir}/requests/${ID}/items/i-test-a`], "on its kept branch: no --base, its notes back");
     sc.complete(restore, { output: { name, path: `/wt/${name}` } });
     assert.ok(sc.settle().includes(queued));
     assert.match(sc.plan(queued).agent?.message ?? "", /Post the reply\./);

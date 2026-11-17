@@ -1,13 +1,15 @@
 // Firefox worktrees for agents: create (with a build) and remove. Port of the orchestrate-parallel-fixes
 // skill's new-worktree.sh.
 //
-//   node src/cli/worktree.ts create <name> [--base <ref>] --build artifact|debug|full
+//   node src/cli/worktree.ts create <name> [--base <ref>] --build artifact|debug|full [--notes <item folder>]
 //     → {name, path, branch, base, build, mozconfig, objdir, smokeLog}
 //     Creates <config.worktreesDir>/<name> on branch <name> (off --base, default: the checkout's current
 //     branch; an existing branch is checked out as is), writes its mozconfig, runs ./mach build and a sanity
 //     mochitest. Long-running: meant to run as a job. Build output goes to stderr.
 //     artifact: opt artifact build. debug: debug artifact build (still about a minute). full: debug build
 //     compiled locally, for C++ changes.
+//     --notes: the artifacts/ of an item's folder (its agents' notes) are copied into the tree's, for an item
+//     whose worktree comes back.
 //     A failed build leaves the worktree in place. Running create again with the same name reuses it (the
 //     worktree at that path on branch <name>) and runs the build again, so a failed create can be retried.
 //
@@ -22,8 +24,8 @@
 
 import { freeDiskGB, MIN_FREE_GB, WORKTREE_GB } from "../lib/disk.ts";
 import { spawn } from "node:child_process";
-import { closeSync, copyFileSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, readlinkSync, realpathSync, statfsSync, statSync, writeFileSync } from "node:fs";
-import { KEEP_MAX_BYTES, keptDir } from "../lib/kept.ts";
+import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, readlinkSync, realpathSync, statfsSync, writeFileSync } from "node:fs";
+import { copyArtifacts, ITEM_NOTES_MAX_BYTES, KEEP_MAX_BYTES, keptDir } from "../lib/kept.ts";
 import { basename, dirname, join, resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { log, runCli, UsageError } from "../lib/cli.ts";
@@ -110,7 +112,7 @@ export async function fetchRemoteBase(repo: string, base: string): Promise<void>
 }
 
 
-export async function create(name: string, opts: { base?: string; build: BuildKind; repo: string; worktreesDir: string }) {
+export async function create(name: string, opts: { base?: string; build: BuildKind; repo: string; worktreesDir: string; notes?: string }) {
   validateName(name);
   const gb = freeDiskGB(opts.worktreesDir);
   if (gb < MIN_FREE_GB) throw new Error(`only ${gb.toFixed(1)} GB free on the disk of ${opts.worktreesDir}: a worktree needs ~${WORKTREE_GB} GB, and none is created under ${MIN_FREE_GB} GB`);
@@ -152,6 +154,8 @@ export async function create(name: string, opts: { base?: string; build: BuildKi
     mkdirSync(join(dest, "artifacts"), { recursive: true });
     // A stub, so a tree whose agent dies early still names itself.
     writeFileSync(join(dest, "artifacts/sessionlog.md"), `# ${name}\n\nWorktree \`${name}\`, branch \`${name}\`, off \`${base}\`.\n`);
+    // Its agents' notes, sessionlog.md included, over the stub.
+    if (opts.notes) copyArtifacts(opts.notes, dest, ITEM_NOTES_MAX_BYTES);
   } catch (e) {
     await exec(["git", "worktree", "remove", "--force", dest], { cwd: repo });
     throw e;
@@ -252,39 +256,12 @@ export async function remove(name: string, opts: { repo: string; worktreesDir: s
   const dest = join(opts.worktreesDir, name);
   if (!existsSync(dest)) throw new Error(`${dest} does not exist`);
   const killed = await killAll(processesUnder(realpathSync(dest)));
-  const kept = keepArtifacts(dest, keptDir(opts.stateDir, name));
+  const kept = copyArtifacts(dest, keptDir(opts.stateDir, name), KEEP_MAX_BYTES);
   const refs = await keepCommits(dest, name, opts.repo);
   // --force: the objdir and mozconfig are untracked, git refuses without it. An objdir outside the tree
   // may be shared, so only the in-tree one goes, with the tree.
   await execOk(["git", "worktree", "remove", "--force", dest], { cwd: opts.repo });
   return { name, path: dest, killed, removed: true, kept, refs };
-}
-
-// artifacts/, without files over KEEP_MAX_BYTES (listed in skipped.txt) or symlinks.
-function keepArtifacts(dest: string, to: string): { files: number; skipped: string[] } {
-  const from = join(dest, "artifacts");
-  const out = { files: 0, skipped: [] as string[] };
-  if (!existsSync(from)) return out;
-  const walk = (rel: string) => {
-    for (const e of readdirSync(join(from, rel), { withFileTypes: true })) {
-      const r = join(rel, e.name);
-      if (e.isDirectory()) walk(r);
-      else if (e.isFile()) {
-        if (statSync(join(from, r)).size > KEEP_MAX_BYTES) out.skipped.push(r);
-        else {
-          mkdirSync(dirname(join(to, "artifacts", r)), { recursive: true });
-          copyFileSync(join(from, r), join(to, "artifacts", r));
-          out.files++;
-        }
-      }
-    }
-  };
-  walk("");
-  if (out.skipped.length) {
-    mkdirSync(to, { recursive: true });
-    writeFileSync(join(to, "skipped.txt"), out.skipped.join("\n") + "\n");
-  }
-  return out;
 }
 
 // Every commit the worktree's HEAD pointed to that isn't upstream (earlier versions of its patches included)
@@ -305,10 +282,10 @@ async function main() {
       create: async (args, values) => {
         const build = values.build as BuildKind;
         if (args.length !== 1 || !["artifact", "debug", "full"].includes(build)) {
-          throw new UsageError("usage: create <name> [--base <ref>] --build artifact|debug|full");
+          throw new UsageError("usage: create <name> [--base <ref>] --build artifact|debug|full [--notes <dir>]");
         }
         const config = loadConfig();
-        return create(args[0], { base: values.base as string | undefined, build, repo: config.firefoxRepo, worktreesDir: config.worktreesDir });
+        return create(args[0], { base: values.base as string | undefined, build, repo: config.firefoxRepo, worktreesDir: config.worktreesDir, notes: values.notes as string | undefined });
       },
       remove: async (args) => {
         if (args.length !== 1) throw new UsageError("usage: remove <name>");
@@ -316,7 +293,7 @@ async function main() {
         return remove(args[0], { repo: config.firefoxRepo, worktreesDir: config.worktreesDir, stateDir: config.stateDir });
       },
     },
-    { base: { type: "string" }, build: { type: "string" } },
+    { base: { type: "string" }, build: { type: "string" }, notes: { type: "string" } },
   );
 }
 
