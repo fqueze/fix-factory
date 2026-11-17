@@ -555,6 +555,11 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
         done(false, `the investigation of ${itemName(c.item)} can only be restarted after a first one`);
         break;
       }
+      // Its worktree went to another item meanwhile: a resume brings it back (a fresh session can't wait for it).
+      if (removedWorktree(view, session.cwd)) {
+        done(false, `the worktree of ${itemName(c.item)} was freed for another item: resume its author with these instructions instead (resume-agent), which brings it back`);
+        break;
+      }
       // A fresh session in the same worktree, with the first run's inputs plus what you said.
       const key = `author:${c.item}${itemEpochOf(view, c.item)}:start:${c.id}`;
       effects.push({
