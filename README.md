@@ -7,8 +7,10 @@ Orchestrator and web dashboard for producing, verifying and landing Firefox test
 You need:
 - Linux, Node 24 or later, git, and yarn (through corepack, which comes with Node).
 - A Firefox checkout set up with `./mach bootstrap`. That also installs moz-phab and searchfox-cli.
-- Claude Code, logged in. Agents run it through `claudeCommand`, ideally in a sandbox wrapper (`["mozsb", "claude"]`)
-  so they can't read your credentials or push anything themselves.
+- Claude Code, logged in. Agents run it through `claudeCommand`, ideally in a sandbox wrapper such as
+  [mozsb](https://github.com/padenot/moz-local-sandbox/) (`["mozsb", "claude"]`) so they can't read your credentials
+  or push anything themselves. Agents get their skills from the factory's `agent-plugin/` and Firefox's own
+  `.claude/skills`, and need nothing from `~/.claude` but Claude Code's login.
 - A Phabricator token in `~/.arcrc` (`moz-phab install-certificate`): the factory reads reviews with it and sets test
   plans when you click. It never submits: the page gives you the `moz-phab submit` command to run.
 - A Lando login for `./mach try` (run one try push by hand once): the factory pushes to try, only after you approve

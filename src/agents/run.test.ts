@@ -54,6 +54,9 @@ test("buildAgentCommand with a new session", () => {
   for (const skill of ["commit-message", "debug-a-test-failure", "push-to-try", "read-phabricator-comments"]) assert.ok(existsSync(join(AGENT_PLUGIN_DIR, "skills", skill, "SKILL.md")), skill);
   const settings = JSON.parse(cmd.at(-1)!);
   assert.deepEqual(settings.env, { BASH_DEFAULT_TIMEOUT_MS: "7200000", BASH_MAX_TIMEOUT_MS: "7200000", SSH_AUTH_SOCK: "", CLAUDE_CODE_PLUGIN_PREFER_HTTPS: "1" });
+  // Its commits get no Co-Authored-By line, whatever your own settings say.
+  assert.equal(settings.includeCoAuthoredBy, false);
+  assert.deepEqual(settings.attribution, { commit: "", pr: "" });
   // Every agent's Bash commands go through no-push.ts first.
   const [hook] = settings.hooks.PreToolUse;
   assert.equal(hook.matcher, "Bash");

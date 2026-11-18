@@ -49,8 +49,12 @@ export type AgentCommandOptions = {
 // The SessionStart hook puts the factory's own tools (tools.ts update) first on the PATH of the agent's commands.
 // The hook command is a shell line; paths may have spaces.
 const shellQuote = (s: string) => `'${s.replaceAll("'", "'\\''")}'`;
+// No AI attribution in their commits and PRs (the commit-message skill's rule, checked by lint-text's noAiAttribution),
+// whatever your own settings say: attribution for this version, includeCoAuthoredBy for older ones.
 const agentSettings = (stateDir: string) =>
   JSON.stringify({
+    includeCoAuthoredBy: false,
+    attribution: { commit: "", pr: "" },
     env: { BASH_DEFAULT_TIMEOUT_MS: "7200000", BASH_MAX_TIMEOUT_MS: "7200000", SSH_AUTH_SOCK: "", CLAUDE_CODE_PLUGIN_PREFER_HTTPS: "1" },
     hooks: {
       PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: [process.execPath, join(import.meta.dirname, "no-push.ts"), stateDir].map(shellQuote).join(" ") }] }],
