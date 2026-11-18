@@ -143,10 +143,12 @@ export class Orchestrator {
   }
 
   // As many idle worktrees as items wait for one, those unused the longest, are picked; their requests remove them
-  // (pruneWorktrees) at the next pass.
+  // (pruneWorktrees) at the next pass. A pool over its size (made smaller) is brought back to it at once: else the
+  // removals come one at a time, a pass apart, and the items wait for all of them.
   private closePool(demand: Map<string, WorktreeBuild>): void {
     if (!demand.size) return;
-    const more = pickEvictions(this.poolPresent, this.evicting, [...demand.values()]);
+    const over = Math.max(0, this.poolPresent.length - (this.config.worktreePool ?? 2 * this.config.maxAgents));
+    const more = pickEvictions(this.poolPresent, this.evicting, [...demand.values(), ...Array<WorktreeBuild>(over).fill("artifact")]);
     for (const name of more) this.evicting.add(name);
     if (more.length) this.again = true;
   }
