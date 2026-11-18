@@ -12,7 +12,7 @@ import type { FactoryConfig, JobView, PatchView, RequestState } from "../types.t
 import { HostCheck } from "./host-check.ts";
 import { commandsFromForm, validateCommand } from "./commands.ts";
 import { conversationOf, jobUrl, renderActivity, type Activity } from "./pages/activity.ts";
-import { enterBugUrl, type RenderContext } from "./pages/common.ts";
+import { AGENT_PATH, enterBugUrl, type RenderContext } from "./pages/common.ts";
 import { readFeedback, renderFeedback } from "./pages/feedback.ts";
 import { renderMain, renderOverview, renderStrip } from "./pages/overview.ts";
 import { renderRequest } from "./pages/request.ts";
@@ -22,7 +22,7 @@ import { buildPatchView, buildPushView, buildStackReview, isRevName, takesAnnota
 import { gitIn, type AnnotationIo } from "./review-annotations.ts";
 import { fingerprinter } from "../lib/fingerprint.ts";
 import { filedBugs, matchFiledBugs, settledKeys, type FiledBug, type PendingDraft } from "./bug-match.ts";
-import { AGENT_FILE_CSP, AGENT_FILES, agentFilePath, renderAgentFile, type AgentFile } from "./agent-files.ts";
+import { AGENT_FILE_CSP, AGENT_FILES, agentFilePath, itemFilePath, renderAgentFile, type AgentFile } from "./agent-files.ts";
 import { pushTasks } from "./pages/tasks.ts";
 import type { DryRunResult } from "../cli/try.ts";
 import { dryRunJobs, type TryJob } from "../cli/task-set.ts";
@@ -553,6 +553,28 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
         pushCommits.set(dry.job, log?.status === 0 ? log.stdout.split("\n").filter(Boolean).map((l) => ({ sha: l.slice(0, 40), subject: l.slice(41) })) : d.commits.map((sha) => ({ sha, subject: "" })));
       }
       return send(res, 200, "text/html; charset=utf-8", pushTasks(d, pushCommits.get(dry.job)!).value);
+    }
+    if ((m = path.match(/^\/requests\/([^/]+)\/items\/([^/]+)\/file$/))) {
+      const request = opts.state.getRequest(decodeURIComponent(m[1]));
+      const item = request?.items[decodeURIComponent(m[2])];
+      const rel = url.searchParams.get("path") ?? "";
+      const file = request && item && AGENT_PATH.test(rel) ? itemFilePath(request, item, rel, opts.config) : undefined;
+      if (!request || !item || !file) {
+        throw new HttpError(404, "no such file");
+      }
+      let page: string;
+      try {
+        page = await renderAgentFile({
+          mdViewer: opts.config.mdViewerCommand ?? viewerCommand(opts.config.stateDir, "md-viewer"),
+          diffViewer: opts.config.diffViewerCommand ?? viewerCommand(opts.config.stateDir, "diff-viewer"),
+          path: file,
+          title: `${rel}: ${item.group.tests.join(", ")}`,
+        });
+      } catch (e) {
+        throw new HttpError(502, errorMessage(e));
+      }
+      res.setHeader("Content-Security-Policy", AGENT_FILE_CSP);
+      return send(res, 200, "text/html; charset=utf-8", page);
     }
     if ((m = path.match(/^\/requests\/([^/]+)\/items\/([^/]+)\/files\/([a-z]+)$/))) {
       const request = opts.state.getRequest(decodeURIComponent(m[1]));

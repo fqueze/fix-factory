@@ -16,11 +16,13 @@ export const AGENT_FILES: AgentFile[] = ["evidence", "reproduction", "widening"]
 // outside them, even through a symlink.
 export function agentFilePath(r: RequestState, i: ItemView, which: AgentFile, dirs: { stateDir: string; worktreesDir: string }): string | undefined {
   const rel = i.investigation?.files?.[which];
+  return rel ? itemFilePath(r, i, rel, dirs) : undefined;
+}
+
+// Any file of an item's, by its path there (notes/…, artifacts/…), as an agent names it in what it says.
+export function itemFilePath(r: RequestState, i: ItemView, rel: string, dirs: { stateDir: string; worktreesDir: string }): string | undefined {
   const author = i.jobs.map((j) => r.jobs[j]).findLast((j) => j.name === "investigate-and-fix");
-  if (!rel || !author) {
-    return undefined;
-  }
-  return within(itemDir(dirs.stateDir, r.id, i.id), rel) ?? within(keptPath(dirs, author.cwd), rel);
+  return within(itemDir(dirs.stateDir, r.id, i.id), rel) ?? (author && within(keptPath(dirs, author.cwd), rel));
 }
 
 function within(dir: string, rel: string): string | undefined {

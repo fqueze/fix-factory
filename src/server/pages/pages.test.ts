@@ -983,7 +983,7 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.match(h, /accepted with comments/);
     assert.match(h, /<span class="r">-  let tiles = row\.querySelectorAll\(&quot;\.top-site-outer&quot;\);<\/span>/);
     assert.match(h, /<textarea rows="1" id="reply-p-sponsored-1873402">Done\.<\/textarea>/);
-    assert.match(h, /data-copy="reply-p-sponsored-1873402">Copy reply</);
+    assert.match(h, /data-copy="reply-p-sponsored-1873402" data-copy-prefix="\[Claude&#39;s reply\]\n">Copy reply</);
     assert.match(h, /href="https:\/\/phabricator\.services\.mozilla\.com\/D327101#inline-1873402"/);
     assert.match(h, /<h4 class="part">Review comments<\/h4><div class="thread" data-comment="1873402">/);
     assert.doesNotMatch(h, /Comment on the fix/, "the row's Tell its author box says it");

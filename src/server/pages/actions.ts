@@ -3,7 +3,7 @@ import { unapproved } from "../../state/approval.ts";
 import { md } from "./md.ts";
 import { canDismiss, canRetry, reviewLimitFlag, unreachable } from "../../state/flags.ts";
 import { html, join, type Html } from "../html.ts";
-import { bugDraftData, actionKind, COMMAND_LABELS, isLanded, linkify, commandFields, enterBugUrl, metaBugUrl, groupLabel, jobLabel, pushName, jobNoun, refusedOf, needsMetaBug, plural, requestUrl, elapsed, stackOfPatch, submitChecks, regressionStatus, type ActionKind, type RenderContext } from "./common.ts";
+import { bugDraftData, actionKind, COMMAND_LABELS, isLanded, linkify, commandFields, enterBugUrl, metaBugUrl, groupLabel, jobLabel, pushName, jobNoun, refusedOf, needsMetaBug, plural, requestUrl, elapsed, stackOfPatch, submitChecks, regressionStatus, itemFileLink, type ActionKind, type FileLink, type RenderContext } from "./common.ts";
 
 // The ⚑ area of one open needs-user entry: what you're asked, why, and the buttons.
 export function renderAction(r: RequestState, n: NeedsUser, ctx: RenderContext): Html {
@@ -13,11 +13,11 @@ export function renderAction(r: RequestState, n: NeedsUser, ctx: RenderContext):
     // Moot once you've done it another way: Dismiss.
     return html`<div class="action reply" data-key="${n.key}"><span class="flag">You asked</span> ${dismissButton(r.id, n.key, requestUrl(r.id))}<span class="said clamp1" data-expand title="${plan.text}">“${plan.text}”</span>${recoveryPlan(r, plan, requestUrl(r.id))}</div>`;
   }
-  return html`<div class="action" data-key="${n.key}"><span class="flag">${flagTitle(r, n)}</span>${flagCopy(r, n)}${flagControls(r, n, ctx)}${actionKind(n, r) === "submit" ? null : why(n.detail, flagTests(r, n))}</div>`;
+  return html`<div class="action" data-key="${n.key}"><span class="flag">${flagTitle(r, n)}</span>${flagCopy(r, n)}${flagControls(r, n, ctx)}${actionKind(n, r) === "submit" ? null : why(n.detail, flagTests(r, n), flagFiles(r, n))}</div>`;
 }
 
 // ⚑s asking you to do something the factory expected of you, not saying something went wrong.
-const ASKS: ActionKind[] = ["approve-push", "take-it", "file-bug", "meta-bug", "approve", "submit", "resubmit", "reply", "reopen-bug", "land", "reviewers", "question", "disagrees"];
+const ASKS: ActionKind[] = ["approve-push", "take-it", "file-bug", "meta-bug", "approve", "submit", "resubmit", "reply", "reopen-bug", "land", "reviewers"];
 
 // ⧉: what a ⚑ saying something went wrong says, and what it's about by id, to paste to whoever looks into it.
 export function flagCopy(r: RequestState, n: Partial<Pick<NeedsUser, "item" | "patch" | "stack" | "job" | "detail" | "push">> & { key: string; action: string }): Html | null {
@@ -39,8 +39,13 @@ export function flagCopy(r: RequestState, n: Partial<Pick<NeedsUser, "item" | "p
 }
 
 // Under the title and its buttons, the whole width: one line, all of it when clicked.
-function why(text: string | undefined, tests: string[] = []): Html | null {
-  return text ? html`<span class="why clamp1" data-expand title="${text}">${linkify(text, tests)}</span>` : null;
+function why(text: string | undefined, tests: string[] = [], file?: FileLink): Html | null {
+  return text ? html`<span class="why clamp1" data-expand title="${text}">${linkify(text, tests, file)}</span>` : null;
+}
+
+function flagFiles(r: RequestState, n: NeedsUser): FileLink | undefined {
+  const item = n.item ?? (n.job === undefined ? undefined : r.jobs[n.job]?.item);
+  return item !== undefined && item in r.items ? itemFileLink(r.id, item) : undefined;
 }
 
 function flagTests(r: RequestState, n: NeedsUser): string[] {
@@ -303,8 +308,9 @@ export function summaryId(request: string, stack: string): string {
 }
 
 // Copies the value or text of the element with this id (see client.js).
-export function copyButton(id: string, label: string, primary = false): Html {
-  return html`<button type="button" class="btn small${primary ? " primary" : ""}" data-copy="${id}">${label}</button>`;
+// prefix: put before the text copied.
+export function copyButton(id: string, label: string, primary = false, prefix?: string): Html {
+  return html`<button type="button" class="btn small${primary ? " primary" : ""}" data-copy="${id}"${prefix ? html` data-copy-prefix="${prefix}"` : null}>${label}</button>`;
 }
 
 export function stackViewerLink(r: RequestState, stack: StackView, primary = false): Html {

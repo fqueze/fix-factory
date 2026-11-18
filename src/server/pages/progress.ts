@@ -8,7 +8,7 @@ import { reviewStatus } from "../../state/approval.ts";
 import type { ItemState, ItemView, JobView, NeedsUser, RequestState, ReviewPatchReport } from "../../types.ts";
 import { html, join, type Html } from "../html.ts";
 import { continueBox, flagControls, flagItemOf, flagText, handBackButton, hasAuthorSession, isAuthorJob, retryButton, untakenFix } from "./actions.ts";
-import { actionKind, elapsed, selfReview, isDropped, isLandable, linkify, jobLabel, jobNoun, modelLabel, refusedOf, requestUrl, type RenderContext, type StateClass } from "./common.ts";
+import { actionKind, elapsed, itemFileLink, selfReview, isDropped, isLandable, linkify, jobLabel, jobNoun, modelLabel, refusedOf, requestUrl, type RenderContext, type StateClass } from "./common.ts";
 
 // What a running job does to its group. Author runs say why they were resumed (purpose.reason).
 const AUTHOR_REASONS: Record<string, string> = {
@@ -144,7 +144,7 @@ export function itemSentence(r: RequestState, i: ItemView, ctx: RenderContext): 
 // The question a group's ⚑ asks, with what you need to answer it; its buttons say what each answer does.
 export function flagAsk(r: RequestState, i: ItemView, n: NeedsUser): Html {
   const job = n.job === undefined ? undefined : r.jobs[n.job];
-  const detail = md(n.detail, i.group.tests);
+  const detail = md(n.detail, i.group.tests, itemFileLink(r.id, i.id));
   if (reviewLimitFlag(r, i.id) === n) {
     const report = i.lastReport?.prompt === "review-patch" ? (i.lastReport.report as ReviewPatchReport) : undefined;
     const findings = report?.findings.filter((f) => f.severity === "must-fix").map((f) => `${f.file ? `${f.file}${f.line ? `:${f.line}` : ""}: ` : ""}${f.text}`) ?? n.detail.split("; ");

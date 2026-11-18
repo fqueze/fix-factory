@@ -508,7 +508,10 @@
     };
     // What the page was rendered with, whatever a form restore put in it since.
     if (area.hidden) area.value = area.defaultValue;
-    if (navigator.clipboard && window.isSecureContext) {
+    // Said before it (a reply the factory drafted says so): copied through copyText, the text box left as it is.
+    if (button.dataset.copyPrefix) {
+      copyText(button.dataset.copyPrefix + area.value).then(done);
+    } else if (navigator.clipboard && window.isSecureContext) {
       navigator.clipboard.writeText(area.value).then(done);
     } else {
       // The page is often opened over plain http from another machine, where the

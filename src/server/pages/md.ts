@@ -1,21 +1,22 @@
 import { html, join, type Html } from "../html.ts";
-import { linkify } from "./common.ts";
+import { AGENT_PATH, linkify, type FileLink } from "./common.ts";
 
 // The Markdown agents (and you) write, as a page shows it: paragraphs, line breaks, lists, headings, fenced code,
 // `code`, **bold**, [links](https://…) and bare URLs; bug numbers, revisions and the given tests linked too. Every
 // piece of text goes through an html`` template, so nothing in it becomes markup.
-export function md(text: string, tests: string[] = []): Html {
+// file: the page of a file an agent names by its path in its notes or artifacts, when the text is an item's.
+export function md(text: string, tests: string[] = [], file?: FileLink): Html {
   const lines = text.replace(/\r\n?/g, "\n").trim().split("\n");
   const blocks: Html[] = [];
   let para: string[] = [];
   let list: { ordered: boolean; items: string[] } | undefined;
   const flushPara = () => {
-    if (para.length) blocks.push(html`<p>${join(para.map((l) => inline(l, tests)), html`<br>`)}</p>`);
+    if (para.length) blocks.push(html`<p>${join(para.map((l) => inline(l, tests, file)), html`<br>`)}</p>`);
     para = [];
   };
   const flushList = () => {
     if (list) {
-      const items = list.items.map((x) => html`<li>${inline(x, tests)}</li>`);
+      const items = list.items.map((x) => html`<li>${inline(x, tests, file)}</li>`);
       blocks.push(list.ordered ? html`<ol>${items}</ol>` : html`<ul>${items}</ul>`);
     }
     list = undefined;
@@ -48,7 +49,7 @@ export function md(text: string, tests: string[] = []): Html {
     const heading = /^#{1,6}\s+(.*)$/.exec(line);
     if (heading) {
       flushPara();
-      blocks.push(html`<p><b>${inline(heading[1], tests)}</b></p>`);
+      blocks.push(html`<p><b>${inline(heading[1], tests, file)}</b></p>`);
     } else if (line.trim() === "") {
       flushPara();
     } else {
@@ -62,16 +63,16 @@ export function md(text: string, tests: string[] = []): Html {
 
 const INLINE = /`([^`]+)`|\*\*([^*]+)\*\*|\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)|(https?:\/\/[^\s<>()]*[^\s<>().,;:!?'"])/g;
 
-function inline(text: string, tests: string[]): Html {
+function inline(text: string, tests: string[], file?: FileLink): Html {
   const parts: Html[] = [];
   let last = 0;
   for (const m of text.matchAll(INLINE)) {
-    parts.push(linkify(text.slice(last, m.index), tests));
-    if (m[1] !== undefined) parts.push(html`<code>${m[1]}</code>`);
-    else if (m[2] !== undefined) parts.push(html`<b>${linkify(m[2], tests)}</b>`);
+    parts.push(linkify(text.slice(last, m.index), tests, file));
+    if (m[1] !== undefined) parts.push(file && AGENT_PATH.test(m[1]) ? html`<a href="${file(m[1])}" target="_blank" rel="noopener"><code>${m[1]}</code></a>` : html`<code>${m[1]}</code>`);
+    else if (m[2] !== undefined) parts.push(html`<b>${linkify(m[2], tests, file)}</b>`);
     else parts.push(html`<a href="${m[4] ?? m[5]}" target="_blank" rel="noopener">${m[3] ?? m[5]}</a>`);
     last = m.index + m[0].length;
   }
-  parts.push(linkify(text.slice(last), tests));
+  parts.push(linkify(text.slice(last), tests, file));
   return join(parts, "");
 }

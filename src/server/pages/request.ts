@@ -394,7 +394,7 @@ function askBlock(r: RequestState, i: ItemView, ctx: RenderContext, patches: Pat
   const commits = (i.lastReport?.report as { commits?: string[] } | undefined)?.commits ?? [];
   const unimported = !patches.length && commits.length && !Object.values(r.patches).some((p) => p.item === i.id) && i.lastReport?.prompt === "investigate-and-fix";
   const view = unimported ? html`<p><a href="/requests/${encodeURIComponent(r.id)}/items/${encodeURIComponent(i.id)}/debug" target="_blank" rel="noopener">View its ${commits.length === 1 ? "commit" : `${commits.length} commits`}</a> (what “${first && untakenFix(r, i.id, first) ? "Take its patch" : "Go ahead with its patch"}” takes)</p>` : null;
-  return html`${withFirst ? html`${s.ask}${patches.length ? html`<p>${patches.map((p) => html`“${patchTitle(p)}” ${viewLink(r, p, "Review the patch")} `)}</p>` : view}${controls(first ? html`${flagCopy(r, { ...first, action: flagText(r, first) })}${s.controls}` : s.controls)}` : null}${more.map(
+  return html`${withFirst ? html`${s.ask}${patches.length ? html`<p>${patches.map((p) => html`“${patchTitle(p)}” `)}</p>` : view}${controls(first ? html`${flagCopy(r, { ...first, action: flagText(r, first) })}${s.controls}` : s.controls)}` : null}${more.map(
     (n) => html`<div class="ask-more" data-key="${n.key}"><p><b>Also: ${flagText(r, n)}</b></p>${flagAsk(r, i, n)}${controls(html`${flagCopy(r, { ...n, action: flagText(r, n) })}${flagControls(r, n, ctx)}`)}</div>`,
   )}`;
 }
@@ -543,7 +543,7 @@ function groupRow(r: RequestState, i: ItemView, ctx: RenderContext): Html {
     // Redo is on the top line: the group's patches are in its folded body, and it's what you'd want of it.
     end: i.id === ANNOTATIONS_ITEM && !Object.values(r.jobs).some((j) => j.item === i.id && j.endedAt === undefined)
       ? html`${redoAnnotationsButton(r.id, requestUrl(r.id))} ${costLabel(r, i, ctx)}`
-      : html`${closable(r, i, ctx) ? html`<span class="onhover">${closeButton(r, i)}</span>` : null}${costLabel(r, i, ctx)}`,
+      : html`${closable(r, i, ctx) ? html`<span class="onhover">${closeButton(r, i)}</span>` : null}${patches.filter((p) => isDraft(r, p)).map((p) => viewLink(r, p))}${costLabel(r, i, ctx)}`,
     state: stateText(r, i, ctx),
     trust: trustLine(r, i, ctx),
     ask: askBlock(r, i, ctx, patches.filter((p) => isDraft(r, p))),
@@ -1069,7 +1069,7 @@ function reviewBox(r: RequestState, p: PatchView, interdiff: string | undefined)
       c.suggestion ? html`<pre class="diff">${c.suggestion}</pre>` : null
     }</div>${c.author === p.review?.author ? null : answer(c.id)}${
       draft !== undefined
-        ? html`<div class="draftreply"><div class="parthead"><b>Draft reply</b>${copyButton(`reply-${p.id}-${c.id}`, "Copy reply", true)}${
+        ? html`<div class="draftreply"><div class="parthead"><b>Draft reply</b>${copyButton(`reply-${p.id}-${c.id}`, "Copy reply", true, REPLY_PREFIX)}${
             revision ? html`<a class="btn small" href="${phabUrl(revision, c.id)}" target="_blank" rel="noopener" title="D${revision}#inline-${c.id}">Open comment ↗</a>` : null
           }</div><textarea rows="${replyRows(draft)}" id="reply-${p.id}-${c.id}">${draft}</textarea></div>`
         : null
@@ -1078,6 +1078,9 @@ function reviewBox(r: RequestState, p: PatchView, interdiff: string | undefined)
 }
 
 // Tall enough to read it whole, wrapped at about 110 characters, up to 8 lines.
+// What a reply the factory drafted says it is, on Phabricator (isAnswered reads past it).
+const REPLY_PREFIX = "[Claude's reply]\n";
+
 function replyRows(text: string): number {
   return Math.min(8, text.split("\n").reduce((n, line) => n + Math.max(1, Math.ceil(line.length / 110)), 0));
 }

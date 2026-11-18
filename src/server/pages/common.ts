@@ -1,5 +1,5 @@
 import { basename } from "node:path";
-import type { BugDraft, Command, ItemState, ItemView, JobView, NeedsUser, PatchView, PushView, RefusedCommand, Regression, RequestId, RequestState, StackView } from "../../types.ts";
+import type { BugDraft, Command, ItemId, ItemState, ItemView, JobView, NeedsUser, PatchView, PushView, RefusedCommand, Regression, RequestId, RequestState, StackView } from "../../types.ts";
 import { REQUEST_STEPS } from "../commands.ts";
 import { html, join, type Html } from "../html.ts";
 import { needsMetaBug as stackNeedsMetaBug } from "../../state/meta-bug.ts";
@@ -504,15 +504,25 @@ export function groupLabel(r: RequestState, i: ItemView): string {
 }
 
 // Bug numbers, revisions and the given tests (by full path or file name) of a text, as links.
-export function linkify(text: string, tests: string[] = []): Html {
+// A file an agent wrote, named by its path in its item's notes or its worktree's artifacts (notes/x.md).
+export const AGENT_PATH = /^(?:notes|artifacts)\/[\w.\/-]+\.(?:md|txt|diff|patch|json|log)$/;
+export type FileLink = (rel: string) => string;
+
+// Such a file of an item's, rendered by the factory (md-viewer, diff-viewer).
+export function itemFileLink(request: RequestId, item: ItemId): FileLink {
+  return (rel) => `/requests/${encodeURIComponent(request)}/items/${encodeURIComponent(item)}/file?path=${encodeURIComponent(rel)}`;
+}
+
+export function linkify(text: string, tests: string[] = [], file?: FileLink): Html {
   const byName = new Map(tests.flatMap((t) => [[t, t], [basename(t), t]]));
   const names = [...byName.keys()].sort((a, b) => b.length - a.length).map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
-  const re = new RegExp(`\\b([Bb]ug (\\d{5,8}))\\b|\\b(D(\\d{5,7}))\\b${names.length ? `|(${names.join("|")})` : ""}`, "g");
+  const paths = file ? `|\\b(?<path>(?:notes|artifacts)\\/[\\w.\\/-]+\\.(?:md|txt|diff|patch|json|log))\\b` : "";
+  const re = new RegExp(`\\b([Bb]ug (\\d{5,8}))\\b|\\b(D(\\d{5,7}))\\b${names.length ? `|(?<test>${names.join("|")})` : ""}${paths}`, "g");
   const parts: Html[] = [];
   let last = 0;
   for (const m of text.matchAll(re)) {
     parts.push(html`${text.slice(last, m.index)}`);
-    const href = m[1] ? `${BUGZILLA}/show_bug.cgi?id=${m[2]}` : m[3] ? `${PHABRICATOR}/${m[3]}` : `https://tests.firefox.dev/test.html?test=${encodeURIComponent(byName.get(m[5])!)}`;
+    const href = m[1] ? `${BUGZILLA}/show_bug.cgi?id=${m[2]}` : m[3] ? `${PHABRICATOR}/${m[3]}` : m.groups?.path ? file!(m.groups.path) : `https://tests.firefox.dev/test.html?test=${encodeURIComponent(byName.get(m.groups!.test)!)}`;
     parts.push(html`<a href="${href}" target="_blank" rel="noopener">${m[0]}</a>`);
     last = m.index + m[0].length;
   }

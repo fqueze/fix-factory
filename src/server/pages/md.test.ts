@@ -18,6 +18,13 @@ describe("md", () => {
     assert.match(out, /<pre>if \(a &lt; b\) \{\}<\/pre>/);
   });
 
+  it("links the files of an item an agent names, bare or as code, when given where they're shown", () => {
+    const file = (rel: string) => `/f?path=${rel}`;
+    assert.match(md("The draft is in notes/followup-bug-draft.md (Testing).", [], file).value, /<a href="\/f\?path=notes\/followup-bug-draft.md"[^>]*>notes\/followup-bug-draft.md<\/a> \(Testing\)/);
+    assert.match(md("See `artifacts/evidence.md`.", [], file).value, /<a href="\/f\?path=artifacts\/evidence.md"[^>]*><code>artifacts\/evidence.md<\/code><\/a>/);
+    assert.doesNotMatch(md("See notes/x.md.").value, /<a/, "nowhere to show it");
+  });
+
   it("never lets a link become a javascript: URL", () => {
     assert.doesNotMatch(md("[x](javascript:alert(1))").value, /href=/);
   });
