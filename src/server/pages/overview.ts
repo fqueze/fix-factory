@@ -106,6 +106,8 @@ export function renderMain(requests: RequestState[], ctx: RenderContext): Html {
   const finished = byCreation.filter((r) => sectionOf(r) === "finished").sort((a, b) => (b.finishedAt ?? b.updatedAt).localeCompare(a.finishedAt ?? a.updatedAt));
   return html`<form class="ask cmd joined" method="post" action="/api/commands">${commandFields([{ cmd: "tell-factory" }], "/")}<textarea class="oneline" name="text" required rows="1" placeholder="New request, or more for an active one: tell the factory… (e.g. “burn down dom/base/test”, or “Lando was down this morning, re-push what failed”)"></textarea><button class="btn">Send</button></form>
 
+  ${renderRecentPushes(requests)}
+
   ${queued.length ? html`<h2>Queued requests <span class="count">${queued.length}</span></h2>
   <div class="simple" id="section-queued">${queued.map(
     (r) =>
@@ -117,8 +119,6 @@ export function renderMain(requests: RequestState[], ctx: RenderContext): Html {
 
   <h2>Active requests <span class="count">${active.length}</span></h2>
   <div id="section-active">${active.map((r) => renderRequest(r, ctx))}</div>
-
-  ${renderRecentPushes(requests)}
 
   ${finished.length ? html`<h2>Finished requests <span class="count">${finished.length}</span></h2>
   <div id="section-finished">${finished.filter((r) => r.kind !== "unrouted").map((r) => renderRequest(r, ctx, ctx.open?.includes(r.id)))}</div>
