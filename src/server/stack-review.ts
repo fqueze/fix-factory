@@ -271,21 +271,28 @@ const REVIEW_SCRIPT = `
         });
         say(sha, "Approved");
       }).catch(function (err) { say(sha, "Failed: " + err.message); });
-    } else if (d.id === "set-bug") {
-      var m = /(\\d{4,8})\\s*$/.exec(String(d.value || "").trim());
-      if (!m) return say(sha, "Not a bug number");
-      post({ cmd: "set-bug", patch: patch, bug: Number(m[1]) }).then(function () {
-        bugSet(patch, Number(m[1]));
-        say(sha, "Bug " + m[1] + " set: the factory puts it in the commit message");
-      }).catch(function (err) { say(sha, "Failed: " + err.message); });
+    } else if (d.id === "bug-draft") {
+      // A bug number (or its link), as the request page's field reads it; anything else is a comment on the draft.
+      var text = String(d.value || "").trim();
+      var m = /^(?:bug\\s*)?(\\d{4,8})$/i.exec(text) || /^https?:\\/\\/\\S*[?&\\/]id=(\\d{4,8})\\b\\S*$/.exec(text) || /^https?:\\/\\/bugzil\\.la\\/(\\d{4,8})$/.exec(text);
+      if (m) {
+        post({ cmd: "set-bug", patch: patch, bug: Number(m[1]) }).then(function () {
+          bugSet(patch, Number(m[1]));
+          say(sha, "Bug " + m[1] + " set: the factory puts it in the commit message");
+        }).catch(function (err) { say(sha, "Failed: " + err.message); });
+      } else {
+        post({ cmd: "comment-bug-draft", patch: patch, text: text }).then(function () {
+          say(sha, "Sent: the draft is revised after your comment");
+        }).catch(function (err) { say(sha, "Failed: " + err.message); });
+      }
     }
   });
-  // Following a commit's "Bug XXXXXXX" link (its bug to file): back here, bug-watch.js looks for the bug you filed.
+  // Following a commit's "Bug XXXXXXX" link, or its panel's "Bug to file" (its bug to file): back here, bug-watch.js looks for the bug you filed.
   window.addEventListener("mdv-link", function (e) {
     var sha = fullSha(e.detail.commit);
     var patch = sha && cfg.shas[sha];
     var draft = patch && cfg.bugDrafts && cfg.bugDrafts[patch];
-    if (draft && /^Bug X+$/.test(e.detail.text)) window.ffBugWatch.add({ request: cfg.request, patch: patch, summary: draft.summary, title: draft.title });
+    if (draft && /^Bug X+$|Bug to file$/.test(e.detail.text)) window.ffBugWatch.add({ request: cfg.request, patch: patch, summary: draft.summary, title: draft.title });
   });
   // A bug given for a patch: it and the patches sharing its draft link their Bug XXXXXXX to it, under its number, until
   // the factory has put it in their commit messages; nothing left to file.
@@ -295,7 +302,7 @@ const REVIEW_SCRIPT = `
     for (var sha in cfg.shas) {
       if (sharing.indexOf(cfg.shas[sha]) === -1 || !cfg.annotations.commits[sha]) continue;
       update(sha, function (a) {
-        a.actions = a.actions.filter(function (x) { return x.id !== "set-bug"; });
+        a.panels = (a.panels || []).filter(function (x) { return x.id !== "bug"; });
         a.titleLinks = [{ text: "Bug XXXXXXX", href: "https://bugzilla.mozilla.org/show_bug.cgi?id=" + bug, label: "Bug " + bug, tooltip: "The factory puts it in the commit message" }];
       });
     }

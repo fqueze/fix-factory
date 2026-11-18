@@ -113,13 +113,14 @@ describe("buildAnnotations", () => {
       e({ type: "comment-response", patch: "p-a", comment: "phab-41", response: "ignore" }),
     ];
     const r = foldEvents(events);
-    const all = buildAnnotations(r, { [v2]: "p-a" }, { git: gitIn(dir), fingerprint: fingerprinter(dir), report: () => undefined, bugUrl: () => "https://bugzilla/enter" }, "Repeat failures");
+    const all = buildAnnotations(r, { [v2]: "p-a" }, { git: gitIn(dir), fingerprint: fingerprinter(dir), report: () => undefined, bugUrl: () => "https://bugzilla/enter?comment=d" }, "Repeat failures");
     assert.equal(all.title, "Repeat failures", "the stack's name, for stack-viewer's header");
     const a = all.commits[v2];
     assert.equal(a.draftKey, "r-1:p-a", "drafts outlive the commit's sha");
     assert.deepEqual(a.status, { kind: "changed", label: "Changed since you approved it", tooltip: "Changed since you approved it: Approve this version is at the end of its page" });
-    assert.deepEqual(a.actions.map((x) => x.id), ["approve", "set-bug", "send"]);
-    assert.deepEqual(a.titleLinks.map((x) => [x.text, x.href]), [["Bug XXXXXXX", "https://bugzilla/enter"]]);
+    assert.deepEqual(a.actions.map((x) => x.id), ["approve", "send"]);
+    assert.deepEqual([a.panels[0].markdown, a.panels[0].details[0].markdown, a.panels[0].input.id], ["Core::DOM · “s”", "d", "bug-draft"]);
+    assert.deepEqual(a.titleLinks.map((x) => [x.text, x.href, x.label, x.tone]), [["Bug XXXXXXX", "https://bugzilla/enter?comment=d", "⚑ Bug to file", "attention"]]);
     assert.deepEqual(a.sections, [{ id: "test-plan", title: "Test plan", markdown: "Green on try." }]);
     const [yours, phab] = a.comments;
     assert.deepEqual(a.history, [

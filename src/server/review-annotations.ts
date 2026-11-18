@@ -9,7 +9,7 @@ import { patchFindings } from "../state/findings.ts";
 import { isAnswered } from "../state/landing.ts";
 import { sameBugDraft } from "../state/meta-bug.ts";
 import type { BugDraft, JobId, PatchId, PatchView, RequestState, ReviewAnchor, ReviewResponse } from "../types.ts";
-import { hasBug, phabUrl } from "./pages/common.ts";
+import { descriptionLeftOut, hasBug, phabUrl } from "./pages/common.ts";
 
 export interface AnnotationComment {
   id: string;
@@ -31,9 +31,11 @@ export interface CommitAnnotation {
   draftKey: string; // what stack-viewer keeps your drafts under: the patch, whatever its sha
   status?: { kind: "approved" | "changed" | "unreviewed"; label: string; tooltip: string }; // none once on Phabricator: resubmitted from its interdiff
   sections: { id: string; title: string; markdown: string }[];
-  titleLinks: { text: string; href: string; tooltip?: string; label?: string }[];
+  titleLinks: { text: string; href: string; tooltip?: string; label?: string; tone?: "attention" }[];
   history: { date: string; author: string; action: string; kind: "accept" | "request-changes" | "update" | "comment" }[];
-  actions: ({ id: "approve" | "send"; label: string; kind: "button"; at: "end"; tone?: "positive"; tooltip: string } | { id: "set-bug"; label: string; kind: "input"; placeholder: string; tooltip: string })[];
+  // Under its title: its bug to file, as the request page's box shows it.
+  panels: { id: "bug"; tone: "attention"; markdown: string; details: { label: string; markdown: string; copy: boolean }[]; input: { id: "bug-draft"; placeholder: string; button: string } }[];
+  actions: ({ id: "approve" | "send"; label: string; kind: "button"; at: "end"; tone?: "positive"; tooltip: string })[];
   comments: AnnotationComment[];
 }
 
@@ -69,13 +71,14 @@ export function commitAnnotation(r: RequestState, p: PatchView, sha: string, io:
     draftKey: `${r.id}:${p.id}`,
     ...(p.revision === undefined ? { status: { kind, label: REVIEW_STATUS_LABELS[kind], tooltip: REVIEW_STATUS_TOOLTIPS[kind] } } : {}),
     sections: testPlan === undefined ? [] : [{ id: "test-plan", title: "Test plan", markdown: testPlan }],
-    titleLinks: toFile && placeholder ? [{ text: placeholder, href: io.bugUrl(p.bugDraft!), tooltip: "File its bug: Bugzilla's form, prefilled with the factory's draft. Then give its number in Bug number" }] : [],
+    // Its Bug XXXXXXX reads "Bug to file", as the request page has it, linked to the prefilled form.
+    titleLinks: toFile && placeholder ? [{ text: placeholder, href: io.bugUrl(p.bugDraft!), label: "⚑ Bug to file", tone: "attention" as const, tooltip: "Opens Bugzilla's form, prefilled with the draft; back here, paste the bug's number below" }] : [],
     actions: [
       ...(kind === "approved" || p.revision !== undefined ? [] : [{ id: "approve" as const, label: kind === "changed" ? "Approve this version" : "Approve", kind: "button" as const, at: "end" as const, tone: "positive" as const, tooltip: "The moz-phab command is offered once you approved every patch of the stack; a rebase keeps it approved" }]),
-      ...(toFile ? [{ id: "set-bug" as const, label: "Bug number", kind: "input" as const, placeholder: "1234567", tooltip: "The bug you filed from the draft (the Bug XXXXXXX link): the factory puts it in the commit message" }] : []),
       { id: "send", label: SEND_LABEL, kind: "button", at: "end", tooltip: "Sends what you wrote and answered on every patch of the page since the last send" },
     ],
     history: history(r, p, sha, io),
+    panels: toFile ? [bugPanel(r, p, io)] : [],
     comments: [...yourComments(r, p, sha, lines), ...phabComments(p, sha, lines), ...findingComments(r, p, sha, io, lines)],
   };
 }
@@ -96,6 +99,27 @@ export function answerTo(r: RequestState, key: string): { state: "none" | "runni
   if (job.endedAt === undefined) return { state: "running" };
   const text = job.said ?? job.outcome;
   return text ? { state: "answered", text, at: job.endedAt } : { state: "failed", ...(job.error ? { error: job.error } : {}) };
+}
+
+// Its bug to file: its draft, the factory's answers to your comments on it, and the field taking the bug's number or a
+// comment on the draft.
+function bugPanel(r: RequestState, p: PatchView, io: AnnotationIo): CommitAnnotation["panels"][number] {
+  const d = p.bugDraft!;
+  const url = io.bugUrl(d);
+  const revisions = Object.values(r.jobs)
+    .filter((j) => j.purpose?.what === "revise-draft" && j.purpose.patch === p.id)
+    .map((j) => {
+      const done = j.endedAt === undefined ? "Revising it after" : j.exitCode === 0 ? "Revised after" : "Couldn't revise it after";
+      const said = j.said ?? j.outcome;
+      return `- ${done} your comment${j.purpose!.reason === undefined ? "" : ` “${j.purpose!.reason}”`}${said ? `: ${said}` : ""}`;
+    });
+  return {
+    id: "bug",
+    tone: "attention",
+    markdown: [`${d.product}::${d.component} · “${d.summary}”`, ...(descriptionLeftOut(url) ? ["The description is too long for the form's URL: copy it, and paste it there."] : []), ...(revisions.length ? ["", ...revisions] : [])].join("\n"),
+    details: [{ label: "Description", markdown: d.description, copy: true }],
+    input: { id: "bug-draft", placeholder: "Paste the bug number, or comment on the draft", button: "Send" },
+  };
 }
 
 // What you did with the patch, and its author's answers, as stack-viewer's timeline shows them: each approval (of

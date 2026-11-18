@@ -8,14 +8,14 @@ import type { Annotations } from "./review-annotations.ts";
 const SHA = "a".repeat(40);
 
 function loadPage() {
-  const annotations: Annotations = { commits: { [SHA]: { draftKey: "r-1:p-a", status: { kind: "unreviewed", label: "Not approved yet", tooltip: "t" }, sections: [], history: [], titleLinks: [{ text: "Bug XXXXXXX", href: "x" }], actions: [{ id: "approve", label: "Approve", kind: "button", at: "end", tooltip: "t" }, { id: "set-bug", label: "Bug number", kind: "input", placeholder: "1", tooltip: "t" }, { id: "send", label: "Send comments to the factory", kind: "button", at: "end", tooltip: "t" }], comments: [] } } };
+  const annotations: Annotations = { commits: { [SHA]: { draftKey: "r-1:p-a", status: { kind: "unreviewed", label: "Not approved yet", tooltip: "t" }, sections: [], history: [], panels: [{ id: "bug", tone: "attention", markdown: "m", details: [], input: { id: "bug-draft", placeholder: "p", button: "Send" } }], titleLinks: [{ text: "Bug XXXXXXX", href: "x" }], actions: [{ id: "approve", label: "Approve", kind: "button", at: "end", tooltip: "t" }, { id: "send", label: "Send comments to the factory", kind: "button", at: "end", tooltip: "t" }], comments: [] } } };
   const page = injectSendButton("<body></body>", { request: "r-1", stack: "root", shas: { [SHA]: "p-a" }, annotations, bugDrafts: { "p-a": { summary: "Popup left open", title: "Wait for the popup", patches: ["p-a"] } } });
   const script = page.match(/<script>([\s\S]*?)<\/script>/)![1];
   const filing: unknown[] = [];
   const config = page.match(/<script type="application\/json" id="ff-review-config">(.*?)<\/script>/)![1];
   const sent: unknown[] = [];
   const marked: string[][] = [];
-  const updated: [string, { status: { kind: string }; actions: { id: string; label?: string; disabled?: boolean }[]; titleLinks?: unknown[] }][] = [];
+  const updated: [string, { status: { kind: string }; actions: { id: string; label?: string; disabled?: boolean }[]; titleLinks?: unknown[]; panels?: { id: string }[] }][] = [];
   const listeners = new Map<string, (e: unknown) => void>();
   const button = { textContent: "Send comments to the factory", disabled: false, click: () => {}, addEventListener: (_: string, f: () => void) => (button.click = f) };
   let comments = [{ id: "c-1", text: "Why?", quote: "x", line: 3, anchor: { file: "(commit)", line: 3 } }];
@@ -51,15 +51,18 @@ function loadPage() {
 const settle = () => new Promise((done) => setImmediate(done));
 
 describe("the review page's script", () => {
-  it("approves a commit, then shows it approved in place; a bug number goes as set-bug", async () => {
+  it("approves a commit, then shows it approved in place; a bug number goes as set-bug, anything else as a comment on its draft", async () => {
     const p = loadPage();
     p.action({ commit: SHA.slice(0, 12), id: "approve" });
     await settle();
     assert.deepEqual(p.sent, [{ cmd: "approve", patch: "p-a", sha: SHA, request: "r-1" }]);
-    assert.deepEqual([p.updated[0][0], p.updated[0][1].status.kind, p.updated[0][1].actions.map((a) => a.id)], [SHA, "approved", ["set-bug", "send"]]);
-    p.action({ commit: SHA, id: "set-bug", value: "Bug 2081216" });
+    assert.deepEqual([p.updated[0][0], p.updated[0][1].status.kind, p.updated[0][1].actions.map((a) => a.id)], [SHA, "approved", ["send"]]);
+    p.action({ commit: SHA, id: "bug-draft", value: "Bug 2081216" });
     await settle();
     assert.deepEqual(p.sent[1], { cmd: "set-bug", patch: "p-a", bug: 2081216, request: "r-1" });
+    p.action({ commit: SHA, id: "bug-draft", value: "Should be Core::Networking" });
+    await settle();
+    assert.deepEqual(p.sent[2], { cmd: "comment-bug-draft", patch: "p-a", text: "Should be Core::Networking", request: "r-1" }, "anything else comments on the draft");
   });
 
   it("sends new comments and answers once, marks them sent, and stays usable for what comes next", async () => {
@@ -84,13 +87,15 @@ describe("the review page's script", () => {
     assert.equal(sendButton().label, "Nothing new to send");
   });
 
-  it("keeps the bug to file whose link you followed for bug-watch.js, and once its bug is recorded links it under its number and drops the field", () => {
+  it("keeps the bug to file whose link you followed for bug-watch.js, and once its bug is recorded links it under its number and drops its panel", () => {
     const p = loadPage();
     p.fire("mdv-link", { commit: SHA, text: "bug 1234567", href: "x" });
     p.fire("mdv-link", { commit: SHA.slice(0, 12), text: "Bug XXXXXXX", href: "x" });
     assert.deepEqual(JSON.parse(JSON.stringify(p.filing)), [{ request: "r-1", patch: "p-a", summary: "Popup left open", title: "Wait for the popup" }]);
     p.fire("ff-bug-recorded", { request: "r-1", patch: "p-a", bug: 2000001 });
-    assert.deepEqual([p.updated[0][0], p.updated[0][1].actions.map((a) => a.id)], [SHA, ["approve", "send"]]);
+    assert.deepEqual([p.updated[0][0], p.updated[0][1].panels], [SHA, []], "nothing left to file");
+    p.fire("mdv-link", { commit: SHA, text: "⚑ Bug to file", href: "x" });
+    assert.equal(p.filing.length, 2, "the panel's link too");
     assert.deepEqual(JSON.parse(JSON.stringify(p.updated[0][1].titleLinks)), [{ text: "Bug XXXXXXX", href: "https://bugzilla.mozilla.org/show_bug.cgi?id=2000001", label: "Bug 2000001", tooltip: "The factory puts it in the commit message" }], "the link goes to the bug, under its number");
   });
 });
