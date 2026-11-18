@@ -945,6 +945,32 @@ describe("4. investigate and fix", () => {
     }
   });
 
+  it("a commit message only a little long goes back to its author twice, then on as it is, not to you", () => {
+    const sc = workList([group("ka", "a/test_a.js", "boom")]);
+    investigating(sc, "i-test-a");
+    let author = "author:i-test-a:initial";
+    for (let round = 0; round < 3; round++) {
+      const commit = sha(String(round + 1));
+      sc.complete(author, { report: fixed([commit]) });
+      sc.settle();
+      const job = sc.view().byKey.get(author)!.at(-1)!.job;
+      sc.complete(`import:${job}`, { output: imported(commit, "Bug 1 - Fix", ["a/test_a.js"], 1) });
+      sc.settle();
+      sc.complete(`msg:p-test-a:${commit}`, { output: "m" });
+      sc.settle();
+      sc.complete(`lint:p-test-a:${commit}`, { output: { ok: false, violations: [{ rule: "bodyLength", text: "body has 9 lines, max 8" }] } });
+      const started = sc.settle();
+      if (round < 2) {
+        author = `author:i-test-a:lint:${job}`;
+        assert.deepEqual(started, [author]);
+      } else {
+        assert.ok(!started.some((k) => k.startsWith("author:")), "not sent back a third time");
+        assert.ok(!sc.open().some((k) => k.startsWith("failed:")), "nothing for you");
+        assert.notEqual(sc.state().items["i-test-a"].state, "blocked");
+      }
+    }
+  });
+
   it("a fix without a bug or a draft goes back to its author once, before anything else; with a draft it goes on", () => {
     const sc = workList([group("ka", "a/test_a.js", "boom")]);
     investigating(sc, "i-test-a");

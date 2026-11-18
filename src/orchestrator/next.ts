@@ -165,6 +165,8 @@ export const SUBMIT_IMPORT_SOON_MS = 20_000; // the first minutes after you copy
 export const SUBMIT_WATCH_MS = 60 * 60_000; // after you copy the moz-phab command
 export { ANNOTATIONS_ITEM };
 export const LINT_ROUNDS = 2;
+// Lint rules about style alone: once the author's rounds are spent, they no longer hold a patch back.
+const SOFT_LINT_RULES = ["bodyLength"];
 export const REVIEW_ROUNDS = 3;
 export const STACK_REVIEW_ROUNDS = 3;
 export const CANCELLED = "cancelled by you";
@@ -1672,10 +1674,12 @@ class Planner {
       }
     }
     if (pending) return;
-    const violations = lints.flatMap(({ job, what, skip }) => this.out<{ violations: { rule: string; line?: number; text: string }[] }>(job).violations.filter((v) => v.rule !== skip).map((v) => ({ ...v, what, job })));
+    const found = lints.flatMap(({ job, what, skip }) => this.out<{ violations: { rule: string; line?: number; text: string }[] }>(job).violations.filter((v) => v.rule !== skip).map((v) => ({ ...v, what, job })));
+    const exhausted = this.roundsSinceStart(item.id, "lint") >= LINT_ROUNDS && !this.view.byKey.has(`author:${item.id}${e}:lint:${author.job}`);
+    // After its rounds, a text a little long isn't worth asking you: it goes on as it is, for you to trim in review.
+    const violations = exhausted ? found.filter((v) => !SOFT_LINT_RULES.includes(v.rule)) : found;
     if (violations.length > 0) {
-      const rounds = this.roundsSinceStart(item.id, "lint");
-      if (rounds >= LINT_ROUNDS && !this.view.byKey.has(`author:${item.id}${e}:lint:${author.job}`)) {
+      if (exhausted) {
         this.raise(`failed:${violations[0].job.job}`, { action: `Lint violations after ${LINT_ROUNDS} rounds`, detail: violations.map((v) => `${v.rule}: ${v.text}`).join("; ").slice(0, 500), job: violations[0].job.job, item: item.id });
         this.setItem(item.id, "blocked", "lint violations");
         return;
@@ -1684,6 +1688,8 @@ class Planner {
       this.resumeAuthor(item.id, `author:${item.id}${e}:lint:${author.job}`, "lint", `lint-text.ts found these problems:\n${list}\n\nFix them, amending your commit (keep everything else), then end with the JSON report again.`);
       return;
     }
+    // Clean, or only a little long once its rounds were spent: a ⚑ an earlier lint of it raised is answered.
+    for (const l of lints) this.clear(`failed:${l.job.job}`);
     const reviewed = () => {
       if (!WITH_PATCHES.includes(item.state) || item.state === "addressing review comments") this.setItem(item.id, "reviewed");
     };
