@@ -72,6 +72,7 @@ describe("Orchestrator", () => {
       assert.deepEqual(started("r-a"), []);
       assert.deepEqual(started(b).filter((e) => e.kind === "agent").map((e) => e.name), ["classify-review-comments"]);
     } finally {
+      o.stop();
       rmSync(root, { recursive: true, force: true });
     }
   });
@@ -89,6 +90,7 @@ describe("Orchestrator", () => {
       assert.deepEqual(events.filter((e) => e.type === "job-started").map((e) => (e as { name: string }).name), ["route-request"]);
       assert.ok(events.some((e) => e.type === "command-executed" && e.ok));
     } finally {
+      o.stop();
       rmSync(root, { recursive: true, force: true });
     }
   });
@@ -106,6 +108,7 @@ describe("Orchestrator", () => {
       const at = kinds.indexOf("started phab.ts set-test-plan");
       assert.ok(at >= 0 && at < kinds.indexOf("command-executed"), kinds.join(", "));
     } finally {
+      o.stop();
       rmSync(root, { recursive: true, force: true });
     }
   });
@@ -138,6 +141,7 @@ describe("Orchestrator", () => {
       const s = foldEvents(events);
       assert.deepEqual([s.forwardedTo, s.step], ["r-a", "done"]);
     } finally {
+      o.stop();
       rmSync(root, { recursive: true, force: true });
     }
   });
@@ -159,6 +163,7 @@ describe("Orchestrator", () => {
       assert.equal(foldEvents(readEvents(config.stateDir, "r-b")).needsUser.length, 1);
       assert.equal(foldEvents(readEvents(config.stateDir, id)).kind, "unrouted");
     } finally {
+      o.stop();
       rmSync(root, { recursive: true, force: true });
     }
   });
@@ -173,6 +178,7 @@ describe("Orchestrator", () => {
       assert.equal(unrouted().length, 1);
       assert.equal(recover().length, 1);
     } finally {
+      o.stop();
       rmSync(root, { recursive: true, force: true });
     }
   });
@@ -192,6 +198,7 @@ describe("Orchestrator", () => {
       assert.equal(unrouted().length, 1);
       assert.equal(recover().length, 1);
     } finally {
+      o.stop();
       rmSync(root, { recursive: true, force: true });
     }
   });
@@ -217,6 +224,7 @@ describe("Orchestrator", () => {
       const p = readPidFile(config.stateDir, "j-orphan")!;
       assert.deepEqual(groupMembers(p.pid, p.pidStartTime), []);
     } finally {
+      o.stop();
       rmSync(root, { recursive: true, force: true });
     }
   });
@@ -250,6 +258,7 @@ describe("Orchestrator", () => {
       await o.tick();
       assert.ok(readEvents(config.stateDir, "r-a").some((e) => e.type === "user-done" && e.key === flags[0].key));
     } finally {
+      o.stop();
       rmSync(root, { recursive: true, force: true });
     }
   });
@@ -265,6 +274,7 @@ describe("Orchestrator", () => {
       const executed = readEvents(config.stateDir, "r-a").filter((e): e is Extract<Event, { type: "command-executed" }> => e.type === "command-executed");
       assert.deepEqual(executed.map((e) => [e.command, e.ok]), [[bad.id, false], [good.id, true]]);
     } finally {
+      o.stop();
       rmSync(root, { recursive: true, force: true });
     }
   });
@@ -282,6 +292,7 @@ describe("Orchestrator", () => {
       now = Date.parse("2026-10-15T10:26:00Z");
       assert.deepEqual(o.presence(), { present: false });
     } finally {
+      o.stop();
       rmSync(root, { recursive: true, force: true });
     }
   });
@@ -308,6 +319,7 @@ describe("Orchestrator", () => {
       assert.deepEqual(withDryRun(plan("try.ts", ["push", "--cwd", "/w", "--", "fuzzy", "-q", "x"])).cli?.args, ["push", "--cwd", "/w", "--dry-run", "--", "fuzzy", "-q", "x"]);
       assert.deepEqual(withDryRun(plan("lint-text.ts", ["--kind", "commit", "f"])).cli?.args, ["--kind", "commit", "f"]);
     } finally {
+      o.stop();
       rmSync(root, { recursive: true, force: true });
     }
   });
@@ -341,6 +353,7 @@ describe("Orchestrator", () => {
       assert.equal(started[0].cmd[started[0].cmd.indexOf("--resume") + 1], session);
       assert.ok(!started[0].cmd.includes("--session-id"));
     } finally {
+      o.stop();
       rmSync(root, { recursive: true, force: true });
     }
   });
