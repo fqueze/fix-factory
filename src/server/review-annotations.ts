@@ -36,6 +36,7 @@ export interface CommitAnnotation {
 }
 
 export interface Annotations {
+  open?: string; // the commit the page opens on: the first left for you to review
   title?: string; // stack-viewer's header in place of the range and the folder
   commits: Record<string, CommitAnnotation>;
 }

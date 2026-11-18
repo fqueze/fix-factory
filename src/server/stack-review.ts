@@ -7,6 +7,38 @@ import type { PatchId, PatchView, RequestState, StackView } from "../types.ts";
 import { buildAnnotations, SEND_LABEL, type Annotations, type AnnotationIo } from "./review-annotations.ts";
 import { sameBugDraft } from "../state/meta-bug.ts";
 import { requestName, shortTitle } from "./pages/common.ts";
+import type { ReviewPages } from "./review-pages.ts";
+
+// md-viewer's API, when the factory serves the review pages itself (review-pages.ts): where the stack page fetches a
+// commit's page (the patch it is, when known, gives its annotation), and where the pages' assets are.
+export interface Served {
+  pages: ReviewPages;
+  pageUrl: (sha: string, patch: PatchId | undefined, annotated: boolean) => string;
+  assetUrl: (name: string) => string;
+}
+
+// The page for a range: the stack page from the API, else stack-viewer's.
+async function viewerPage(o: { command: string[]; served?: Served; gitDir: string; range: string; annotations?: Annotations; shas: Record<string, PatchId> }): Promise<string> {
+  if (!o.served) return runViewer(o.command, o.gitDir, o.range, o.annotations);
+  const served = o.served;
+  const { html } = await served.pages.shell({
+    dir: o.gitDir,
+    range: o.range,
+    title: o.range,
+    annotations: o.annotations ?? null,
+    pageUrl: (sha) => served.pageUrl(sha, o.shas[sha], o.annotations !== undefined),
+    assetUrl: served.assetUrl,
+  });
+  return html;
+}
+
+// The first patch, oldest first, left for you to review: what the page opens on.
+function firstToReview(annotations: Annotations, oldestFirst: string[]): string | undefined {
+  return oldestFirst.find((sha) => {
+    const status = annotations.commits[sha]?.status;
+    return status !== undefined && status.kind !== "approved";
+  });
+}
 
 // A git revision name that can't be taken for an option: a sha, a branch, HEAD~2, sha^.
 export function isRevName(rev: string): boolean {
@@ -54,7 +86,7 @@ async function runViewer(command: string[], gitDir: string, range: string, annot
 
 // stack-viewer's output for the stack, with the button that sends its comments to
 // the factory. The base is `base`, else the stack's, else the parent of its first patch.
-export async function buildStackReview(opts: { repo: string; command: string[]; request: RequestState; stack: StackView; base?: string; annotations?: AnnotationIo }): Promise<string> {
+export async function buildStackReview(opts: { repo: string; command: string[]; request: RequestState; stack: StackView; base?: string; annotations?: AnnotationIo; served?: Served }): Promise<string> {
   const { request, stack } = opts;
   const first = request.patches[stack.order[0]];
   const base = opts.base ?? stack.base ?? (first ? `${first.sha}^` : undefined);
@@ -80,24 +112,29 @@ export async function buildStackReview(opts: { repo: string; command: string[]; 
   // The request's name, and the stack's folder when it has several.
   const title = Object.keys(request.stacks).length > 1 && stack.folder ? `${requestName(request)} — ${stack.folder}` : requestName(request);
   const annotations = opts.annotations && buildAnnotations(request, onPage, opts.annotations, title);
-  const page = await runViewer(opts.command, gitDirFor({ firefoxRepo: opts.repo }, stack.worktree), `${base}..${stack.branch}`, annotations);
+  const open = annotations && firstToReview(annotations, shown.map(([sha]) => sha).reverse());
+  if (annotations && open) annotations.open = open;
+  // Served, from the repository, which has every worktree's commits and branches.
+  const gitDir = opts.served ? opts.repo : gitDirFor({ firefoxRepo: opts.repo }, stack.worktree);
+  const page = await viewerPage({ command: opts.command, served: opts.served, gitDir, range: `${base}..${stack.branch}`, annotations, shas });
   return injectSendButton(page, { request: request.id, stack: stack.id, shas, ...(annotations ? { annotations, bugDrafts: bugDraftsOf(request, Object.values(shas)) } : {}) });
 }
 
 // One patch (a commit in its author's worktree) in stack-viewer; comments go back to its author.
-export async function buildPatchView(opts: { repo: string; command: string[]; request: RequestState; patch: PatchView; annotations?: AnnotationIo }): Promise<string> {
+export async function buildPatchView(opts: { repo: string; command: string[]; request: RequestState; patch: PatchView; annotations?: AnnotationIo; served?: Served }): Promise<string> {
   const { request, patch } = opts;
   if (!isRevName(patch.sha)) {
     throw new Error(`not a revision name: ${patch.sha}`);
   }
   const shas = { [patch.sha]: patch.id };
   const annotations = opts.annotations && buildAnnotations(request, shas, opts.annotations, `${shortTitle(patch)} — ${requestName(request)}`);
-  const page = await runViewer(opts.command, gitDirFor({ firefoxRepo: opts.repo }, patch.worktree), `${patch.sha}^..${patch.sha}`, annotations);
+  const gitDir = opts.served ? opts.repo : gitDirFor({ firefoxRepo: opts.repo }, patch.worktree);
+  const page = await viewerPage({ command: opts.command, served: opts.served, gitDir, range: `${patch.sha}^..${patch.sha}`, annotations, shas });
   return injectSendButton(page, { request: request.id, patch: patch.id, shas, ...(annotations ? { annotations, bugDrafts: bugDraftsOf(request, [patch.id]) } : {}) });
 }
 
 // What a try push would carry (the dry run's commits, newest first, in the worktree it pushes from), read-only.
-export async function buildPushView(opts: { repo: string; command: string[]; cwd: string; commits: string[] }): Promise<string> {
+export async function buildPushView(opts: { repo: string; command: string[]; cwd: string; commits: string[]; served?: Served }): Promise<string> {
   const newest = opts.commits[0];
   const oldest = opts.commits.at(-1)!;
   for (const rev of [newest, oldest]) {
@@ -105,7 +142,8 @@ export async function buildPushView(opts: { repo: string; command: string[]; cwd
       throw new Error(`not a revision name: ${rev}`);
     }
   }
-  return runViewer(opts.command, gitDirFor({ firefoxRepo: opts.repo }, opts.cwd), `${oldest}^..${newest}`, undefined);
+  const gitDir = opts.served ? opts.repo : gitDirFor({ firefoxRepo: opts.repo }, opts.cwd);
+  return viewerPage({ command: opts.command, served: opts.served, gitDir, range: `${oldest}^..${newest}`, shas: {} });
 }
 
 // JSON safe inside a <script> element.

@@ -18,8 +18,9 @@ import { renderMain, renderOverview, renderStrip } from "./pages/overview.ts";
 import { renderRequest } from "./pages/request.ts";
 import { buildRequestProfile } from "./request-profile.ts";
 import type { NetEntry } from "../lib/netlog.ts";
-import { buildPatchView, buildPushView, buildStackReview, isRevName, takesAnnotations } from "./stack-review.ts";
-import { gitIn, type AnnotationIo } from "./review-annotations.ts";
+import { buildPatchView, buildPushView, buildStackReview, isRevName, takesAnnotations, type Served } from "./stack-review.ts";
+import { commitAnnotation, gitIn, type AnnotationIo } from "./review-annotations.ts";
+import { reviewApi, reviewPages, type ReviewPages } from "./review-pages.ts";
 import { fingerprinter } from "../lib/fingerprint.ts";
 import { filedBugs, matchFiledBugs, settledKeys, type FiledBug, type PendingDraft } from "./bug-match.ts";
 import { AGENT_FILE_CSP, AGENT_FILES, agentFilePath, itemFilePath, renderAgentFile, type AgentFile } from "./agent-files.ts";
@@ -175,7 +176,31 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
 
   // A patch you approved is still approved once rebased: same fingerprint.
   const fingerprint = fingerprinter(opts.config.firefoxRepo);
-  const git = gitIn(opts.config.firefoxRepo);
+  // What annotations ask git (diffs and messages between shas, a sha's files) never changes: kept, up to a bound.
+  const gitOnce = gitIn(opts.config.firefoxRepo);
+  const gitKept = new Map<string, string | undefined>();
+  const git: AnnotationIo["git"] = (args) => {
+    const k = args.join("\0");
+    if (!gitKept.has(k)) {
+      gitKept.set(k, gitOnce(args));
+      if (gitKept.size > 20_000) gitKept.delete(gitKept.keys().next().value!);
+    }
+    return gitKept.get(k);
+  };
+
+  // The review pages, served from md-viewer's API when the stack-viewer has one (review-pages.ts).
+  const pagesByRev = new Map<string, ReviewPages>();
+  async function served(r: RequestState): Promise<Served | undefined> {
+    const found = await reviewApi(stackViewer);
+    if (!found) return undefined;
+    if (!pagesByRev.has(found.rev)) pagesByRev.set(found.rev, reviewPages(found.api));
+    const pages = pagesByRev.get(found.rev)!;
+    return {
+      pages,
+      pageUrl: (sha, patch, annotated) => `/requests/${encodeURIComponent(r.id)}/review/${sha}?${new URLSearchParams({ ...(annotated ? { a: "1" } : {}), ...(patch ? { patch } : {}) })}`,
+      assetUrl: (name) => `/review-assets/${found.rev}/${name}`,
+    };
+  }
 
   // What a review page's annotations are made from, when its stack-viewer takes them.
   async function annotationIo(r: RequestState, req: IncomingMessage): Promise<AnnotationIo | undefined> {
@@ -466,6 +491,38 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
       return;
     }
     // Stack ids are only unique within their request.
+    // A review page's assets, the same for as long as its md-viewer is.
+    if ((m = path.match(/^\/review-assets\/([0-9a-f]+)\/((?:hljs\/)?[\w-]+\.(css|js))$/))) {
+      const found = await reviewApi(stackViewer);
+      if (!found || found.rev !== m[1]) throw new HttpError(404, "no such asset");
+      let text: string;
+      try {
+        text = await found.api.assetText(m[2]);
+      } catch {
+        throw new HttpError(404, "no such asset");
+      }
+      const buf = Buffer.from(text, "utf8");
+      res.writeHead(200, { "Content-Type": m[3] === "css" ? "text/css; charset=utf-8" : "text/javascript; charset=utf-8", "Content-Length": buf.length, "Cache-Control": "public, max-age=31536000, immutable" });
+      return void res.end(req.method === "HEAD" ? undefined : buf);
+    }
+    // One commit's page, for a review page's frame: with its patch's annotation as it is now.
+    if ((m = path.match(/^\/requests\/([^/]+)\/review\/([0-9a-f]{40})$/))) {
+      const request = getRequest(decodeURIComponent(m[1]));
+      const patchId = url.searchParams.get("patch");
+      const patch = patchId === null ? undefined : request.patches[patchId];
+      if (patchId !== null && !patch) throw new HttpError(404, "unknown patch");
+      const s = await served(request);
+      if (!s) throw new HttpError(404, "this stack-viewer has no API to serve pages from");
+      const annotated = url.searchParams.get("a") === "1";
+      const io = annotated && patch ? await annotationIo(request, req) : undefined;
+      let page: string;
+      try {
+        page = await s.pages.page({ dir: opts.config.firefoxRepo, sha: m[2], annotated, annotation: io && patch ? commitAnnotation(request, patch, m[2], io) : null, assetUrl: s.assetUrl });
+      } catch (e) {
+        throw new HttpError(502, errorMessage(e));
+      }
+      return send(res, 200, "text/html; charset=utf-8", page);
+    }
     if ((m = path.match(/^\/requests\/([^/]+)\/stacks\/([^/]+)\/review$/))) {
       const request = getRequest(decodeURIComponent(m[1]));
       const id = decodeURIComponent(m[2]);
@@ -487,6 +544,7 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
           stack: found.stack,
           base,
           annotations: await annotationIo(found.request, req),
+          served: await served(found.request),
         });
       } catch (e) {
         throw new HttpError(502, errorMessage(e));
@@ -501,7 +559,7 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
       }
       let page: string;
       try {
-        page = await buildPatchView({ repo: opts.config.firefoxRepo, command: stackViewer, request, patch, annotations: await annotationIo(request, req) });
+        page = await buildPatchView({ repo: opts.config.firefoxRepo, command: stackViewer, request, patch, annotations: await annotationIo(request, req), served: await served(request) });
       } catch (e) {
         throw new HttpError(502, errorMessage(e));
       }
@@ -519,7 +577,7 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
       }
       let page: string;
       try {
-        page = await buildPushView({ repo: opts.config.firefoxRepo, command: stackViewer, cwd: request.jobs[last.job].cwd, commits: [...commits].reverse() });
+        page = await buildPushView({ repo: opts.config.firefoxRepo, command: stackViewer, cwd: request.jobs[last.job].cwd, commits: [...commits].reverse(), served: await served(request) });
       } catch (e) {
         throw new HttpError(502, errorMessage(e));
       }
@@ -532,7 +590,7 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
       }
       let page: string;
       try {
-        page = await buildPushView({ repo: opts.config.firefoxRepo, command: stackViewer, cwd: dry.cwd, commits: d.commits });
+        page = await buildPushView({ repo: opts.config.firefoxRepo, command: stackViewer, cwd: dry.cwd, commits: d.commits, served: await served(getRequest(decodeURIComponent(m[1]))) });
       } catch (e) {
         throw new HttpError(502, errorMessage(e));
       }
