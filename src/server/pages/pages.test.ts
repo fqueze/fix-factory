@@ -710,7 +710,7 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.ok(h.includes(cmd({ cmd: "set-bug", request: "r-20261008-permissions", patch: "meta" })));
     assert.match(h, /<span class="bad">2 patches still say Bug XXXXXXX<\/span>/);
     assert.match(h, /<span class="bad">waits for your review of 3 patches<\/span>/);
-    assert.match(h, /data-copy="mozphab-r-20261008-permissions-[^"]*" disabled>Copy the moz-phab command<\/button>/, "not before you approved them");
+    assert.match(h, /data-copy="mozphab-r-20261008-permissions-[^"]*" disabled title="[^"]*waits for your review of 3 patches[^"]*">Copy the moz-phab command<\/button>/, "not before you approved them");
     const r = approvedAll(get("r-20261008-permissions"));
     assert.match(renderRequest(r, ctx, true).value, /data-copy="mozphab-r-20261008-permissions-[^"]*">Copy the moz-phab command<\/button>/, "the other checks inform, you decide");
   });

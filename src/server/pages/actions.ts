@@ -131,7 +131,7 @@ export function flagControls(r: RequestState, n: NeedsUser, ctx: RenderContext):
     case "submit": {
       const stack = findStack(r, n);
       const blocking = stack ? submitChecks(r, stack, ctx).filter((c) => c.blocks && !c.ok) : [];
-      controls = stack ? html`${stackViewerLink(r, stack)}${mozPhabButton(r.id, stack, blocking.length > 0, ctx)}${blocking.map((c) => html`<span class="sub">${c.text}</span>`)}` : null;
+      controls = stack ? html`${stackViewerLink(r, stack)}${mozPhabButton(r.id, stack, blocking.length ? blocking.map((c) => c.text).join("; ") : undefined, ctx)}${blocking.map((c) => html`<span class="sub">${c.text}</span>`)}` : null;
       break;
     }
     case "resubmit": {
@@ -141,7 +141,7 @@ export function flagControls(r: RequestState, n: NeedsUser, ctx: RenderContext):
       // approved this version of it.
       const waiting = p !== undefined && unapproved([p], ctx.fingerprint).length > 0;
       controls = stack
-        ? html`${waiting ? html`<a class="btn small" href="${patchViewUrl(r, p!)}" target="_blank" rel="noopener">Review it ↗</a>` : null}${mozPhabButton(r.id, stack, waiting, ctx, p?.sha)}${dismissButton(r.id, n.key, back)}`
+        ? html`${waiting ? html`<a class="btn small" href="${patchViewUrl(r, p!)}" target="_blank" rel="noopener">Review it ↗</a>` : null}${mozPhabButton(r.id, stack, waiting ? "This version needs your review: Review it, then Approve it in stack-viewer" : undefined, ctx, p?.sha)}${dismissButton(r.id, n.key, back)}`
         : null;
       break;
     }
@@ -301,7 +301,7 @@ export function bugBox(request: string, patch: string, back: string, cls = "inli
 export function submitControls(r: RequestState, stack: StackView, back: string, ctx: RenderContext): Html {
   const checks = submitChecks(r, stack, ctx);
   const failing = checks.filter((c) => !c.ok);
-  return html`${failing.length ? html`<span class="checks">${failing.map((c) => html`<span class="bad">${c.text}</span>`)}</span>` : null}${mozPhabButton(r.id, stack, failing.some((c) => c.blocks), ctx)}`;
+  return html`${failing.length ? html`<span class="checks">${failing.map((c) => html`<span class="bad">${c.text}</span>`)}</span>` : null}${mozPhabButton(r.id, stack, failing.some((c) => c.blocks) ? failing.filter((c) => c.blocks).map((c) => c.text).join("; ") : undefined, ctx)}`;
 }
 
 export function summaryId(request: string, stack: string): string {
@@ -343,10 +343,11 @@ function reorgButton(r: RequestState, stack: StackView, key: string, ctx: Render
   return html`<form class="inline cmd" method="post" action="/api/commands">${commandFields([{ cmd: "copied-reorg", request, key }], requestUrl(request))}<textarea hidden id="${id}">cd ${stack.worktree} && git switch ${stack.branch} && ${ctx.mozPhab ?? "moz-phab"} reorg${range}</textarea><button type="button" class="btn small primary" data-copy="${id}">Copy the moz-phab reorg command</button></form>`;
 }
 
-function mozPhabButton(request: string, stack: StackView, disabled: boolean, ctx: RenderContext, single?: string): Html {
+// disabled: why it can't be copied yet, said on the button.
+function mozPhabButton(request: string, stack: StackView, disabled: string | undefined, ctx: RenderContext, single?: string): Html {
   const id = `mozphab-${request}-${stack.id}${single ? `-${single.slice(0, 12)}` : ""}`;
   return html`<form class="inline cmd" method="post" action="/api/commands">${commandFields([{ cmd: "copied-submit", request, stack: stack.id }], requestUrl(request))}<textarea hidden id="${id}">${mozPhabCommand(stack, ctx.mozPhab, single)}</textarea><button type="button" class="btn small primary" data-copy="${id}"${
-    disabled ? html` disabled` : null
+    disabled ? html` disabled title="${disabled}"` : null
   }>Copy the moz-phab command</button></form>`;
 }
 
