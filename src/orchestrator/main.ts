@@ -13,6 +13,7 @@ import { parseArgs } from "node:util";
 import { toolsBin } from "../cli/tools.ts";
 import { loadConfig } from "../config.ts";
 import { delivered, sendToInbox } from "../agents/inbox.ts";
+import { agentCommandProblem } from "../lib/agent-command.ts";
 import { freeDiskGB, MIN_FREE_GB, WORKTREE_GB } from "../lib/disk.ts";
 import { execOk } from "../lib/exec.ts";
 import { fingerprinter } from "../lib/fingerprint.ts";
@@ -538,6 +539,12 @@ if (import.meta.main) {
   const { values } = parseArgs({ options: { "dry-run": { type: "boolean" } } });
   const configPath = resolve(process.env.FACTORY_CONFIG ?? "factory.config.json");
   const config = loadConfig(configPath);
+  // Not started without the command every agent runs with: each would fail.
+  const problem = agentCommandProblem(config.claudeCommand, [config.firefoxRepo, config.worktreesDir, config.stateDir]);
+  if (problem) {
+    process.stderr.write(`${problem}\n`);
+    process.exit(1);
+  }
   // The factory's own tools (tools.ts update) for its scripts too: failures.ts runs fx-tests.
   process.env.PATH = `${toolsBin(config.stateDir)}${delimiter}${process.env.PATH ?? ""}`;
   const factoryRoot = resolve(import.meta.dirname, "..", "..");
