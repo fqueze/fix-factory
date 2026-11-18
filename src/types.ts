@@ -417,6 +417,7 @@ export interface PatchView {
   yourComments?: { text: string; quote?: string; key: string; t: Iso; id: string; sha: string; anchor?: ReviewAnchor; lines?: string[] }[];
   responses?: Record<string, { response: ReviewResponse["response"]; text?: string; key?: string; t: Iso }>; // the latest per comment id
   approved?: { sha: string; fingerprint: string; t: Iso }; // the version you last approved
+  approvals?: { sha: string; t: Iso }[]; // every time you approved it, oldest first
 }
 
 // Where a comment is in stack-viewer: a file of the commit, its message, or a section the factory added (test-plan).

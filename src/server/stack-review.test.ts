@@ -8,7 +8,7 @@ import type { Annotations } from "./review-annotations.ts";
 const SHA = "a".repeat(40);
 
 function loadPage() {
-  const annotations: Annotations = { commits: { [SHA]: { draftKey: "r-1:p-a", status: { kind: "unreviewed", label: "Not approved yet", tooltip: "t" }, sections: [], titleLinks: [{ text: "Bug XXXXXXX", href: "x" }], actions: [{ id: "approve", label: "Approve", kind: "button", at: "end", tooltip: "t" }, { id: "set-bug", label: "Bug number", kind: "input", placeholder: "1", tooltip: "t" }, { id: "send", label: "Send comments to the factory", kind: "button", at: "end", tooltip: "t" }], comments: [] } } };
+  const annotations: Annotations = { commits: { [SHA]: { draftKey: "r-1:p-a", status: { kind: "unreviewed", label: "Not approved yet", tooltip: "t" }, sections: [], history: [], titleLinks: [{ text: "Bug XXXXXXX", href: "x" }], actions: [{ id: "approve", label: "Approve", kind: "button", at: "end", tooltip: "t" }, { id: "set-bug", label: "Bug number", kind: "input", placeholder: "1", tooltip: "t" }, { id: "send", label: "Send comments to the factory", kind: "button", at: "end", tooltip: "t" }], comments: [] } } };
   const page = injectSendButton("<body></body>", { request: "r-1", stack: "root", shas: { [SHA]: "p-a" }, annotations, bugDrafts: { "p-a": { summary: "Popup left open", title: "Wait for the popup", patches: ["p-a"] } } });
   const script = page.match(/<script>([\s\S]*?)<\/script>/)![1];
   const filing: unknown[] = [];

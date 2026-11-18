@@ -111,7 +111,10 @@ export function folder(first: Event): { apply(events: readonly Event[]): void; s
           if (s.patches[e.patch]) s.patches[e.patch].responses = { ...s.patches[e.patch].responses, [e.comment]: { response: e.response, ...(e.text !== undefined ? { text: e.text } : {}), ...(e.key ? { key: e.key } : {}), t: e.t } };
           break;
         case "patch-approved":
-          if (s.patches[e.patch]) s.patches[e.patch].approved = { sha: e.sha, fingerprint: e.fingerprint, t: e.t };
+          if (s.patches[e.patch]) {
+            s.patches[e.patch].approved = { sha: e.sha, fingerprint: e.fingerprint, t: e.t };
+            s.patches[e.patch].approvals = [...(s.patches[e.patch].approvals ?? []), { sha: e.sha, t: e.t }];
+          }
           break;
         case "author-queued":
           s.queuedAuthors = [...(s.queuedAuthors ?? []), { item: e.item, key: e.key, reason: e.reason, message: e.message, ...(e.plan ? { plan: e.plan } : {}) }];
@@ -293,6 +296,7 @@ export function folder(first: Event): { apply(events: readonly Event[]): void; s
             ...(before?.yourComments ? { yourComments: before.yourComments } : {}),
             ...(before?.responses ? { responses: before.responses } : {}),
             ...(before?.approved ? { approved: before.approved } : {}),
+            ...(before?.approvals ? { approvals: before.approvals } : {}),
             ...(before?.testPlan ? { testPlan: before.testPlan } : {}),
             ...(before?.testPlanSent ? { testPlanSent: before.testPlanSent } : {}),
           };

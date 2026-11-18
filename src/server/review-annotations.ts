@@ -32,6 +32,7 @@ export interface CommitAnnotation {
   status?: { kind: "approved" | "changed" | "unreviewed"; label: string; tooltip: string }; // none once on Phabricator: resubmitted from its interdiff
   sections: { id: string; title: string; markdown: string }[];
   titleLinks: { text: string; href: string; tooltip?: string; label?: string }[];
+  history: { date: string; author: string; action: string; kind: "accept" | "request-changes" | "update" | "comment" }[];
   actions: ({ id: "approve" | "send"; label: string; kind: "button"; at: "end"; tone?: "positive"; tooltip: string } | { id: "set-bug"; label: string; kind: "input"; placeholder: string; tooltip: string })[];
   comments: AnnotationComment[];
 }
@@ -74,6 +75,7 @@ export function commitAnnotation(r: RequestState, p: PatchView, sha: string, io:
       ...(toFile ? [{ id: "set-bug" as const, label: "Bug number", kind: "input" as const, placeholder: "1234567", tooltip: "The bug you filed from the draft (the Bug XXXXXXX link): the factory puts it in the commit message" }] : []),
       { id: "send", label: SEND_LABEL, kind: "button", at: "end", tooltip: "Sends what you wrote and answered on every patch of the page since the last send" },
     ],
+    history: history(r, p, sha, io),
     comments: [...yourComments(r, p, sha, lines), ...phabComments(p, sha, lines), ...findingComments(r, p, sha, io, lines)],
   };
 }
@@ -94,6 +96,29 @@ export function answerTo(r: RequestState, key: string): { state: "none" | "runni
   if (job.endedAt === undefined) return { state: "running" };
   const text = job.said ?? job.outcome;
   return text ? { state: "answered", text, at: job.endedAt } : { state: "failed", ...(job.error ? { error: job.error } : {}) };
+}
+
+// What you did with the patch, and its author's answers, as stack-viewer's timeline shows them: each approval (of
+// this version: the same fingerprint), each send of comments and answers back to its author, and when it answered.
+function history(r: RequestState, p: PatchView, sha: string, io: AnnotationIo): CommitAnnotation["history"] {
+  const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+  const out: CommitAnnotation["history"] = (p.approvals ?? []).map((a) => ({
+    date: a.t,
+    author: "you",
+    action: a.sha === sha || (io.fingerprint(a.sha) !== undefined && io.fingerprint(a.sha) === io.fingerprint(sha)) ? "approved this version." : "approved an earlier version.",
+    kind: "accept" as const,
+  }));
+  const sends = new Map<string, { t: string; comments: number; answers: number }>();
+  const send = (key: string, t: string) => sends.get(key) ?? sends.set(key, { t, comments: 0, answers: 0 }).get(key)!;
+  for (const c of p.yourComments ?? []) send(c.key, c.t).comments++;
+  for (const x of Object.values(p.responses ?? {})) if (x.key) send(x.key, x.t).answers++;
+  for (const [key, x] of sends) {
+    const what = [...(x.comments ? [plural(x.comments, "comment")] : []), ...(x.answers ? [plural(x.answers, "answer")] : [])].join(" and ");
+    out.push({ date: x.t, author: "you", action: `sent ${what} back to its author.`, kind: "request-changes" });
+    const answer = answerTo(r, key);
+    if (answer.state === "answered" && answer.at) out.push({ date: answer.at, author: "its author", action: "answered.", kind: "update" });
+  }
+  return out;
 }
 
 function yourComments(r: RequestState, p: PatchView, sha: string, lines: Lines): AnnotationComment[] {
