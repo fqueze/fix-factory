@@ -489,27 +489,36 @@ const ICON_TIPS: Record<StateClass, string> = {
   landed: "Landed (closed on Phabricator)",
   abandoned: "Abandoned on Phabricator",
   handedover: "Handed over to someone else",
-  draft: "Ready to submit: nothing left for the factory to do",
+  draft: "Ready to submit: you self-reviewed it",
+  selfreview: "Needs your self-review in stack-viewer: nothing left for the factory to do",
   resubmit: "To resubmit: it changed since Phabricator got it",
   dropped: "Dropped by you: the factory stopped working on it",
 };
 
 // A ready patch on Phabricator gets its icon there: accepted (✓), waiting for review (</>), landed (☑); an abandoned
 // one, ✈, whatever its group.
-function phabClass(p: PatchView, cls: StateClass): StateClass {
+function phabClass(p: PatchView, cls: StateClass, ctx: RenderContext): StateClass {
   if (p.review?.status === "abandoned") return "abandoned";
   if (cls !== "ok") return cls;
-  // Not submitted yet: Phabricator's draft.
-  if (p.revision === undefined) return "draft";
+  // Not submitted yet: Phabricator's draft once you self-reviewed it.
+  if (p.revision === undefined) return reviewStatus(p, ctx.fingerprint) === "approved" ? "draft" : "selfreview";
   // Submitted, its review not read yet, or a draft Phabricator hasn't sent its reviewers yet: waiting for review.
   return ({ published: "landed", accepted: "accepted", "needs-review": "review", draft: "review" } as const)[p.review?.status as "published" | "accepted" | "needs-review" | "draft"] ?? (p.review === undefined ? "review" : cls);
 }
 
 // A fix's row: its least advanced patch's (one accepted while another waits for review waits for review).
-function fixClass(ps: PatchView[], cls: StateClass): StateClass {
-  const rank: StateClass[] = ["draft", "review", "accepted", "landed"];
-  const classes = ps.map((p) => phabClass(p, cls));
+function fixClass(ps: PatchView[], cls: StateClass, ctx: RenderContext): StateClass {
+  const rank: StateClass[] = ["selfreview", "draft", "review", "accepted", "landed"];
+  const classes = ps.map((p) => phabClass(p, cls, ctx));
   return classes.reduce((a, b) => (rank.includes(a) && rank.includes(b) && rank.indexOf(b) < rank.indexOf(a) ? b : a));
+}
+
+// A ready item's row, by its patches: landable, to self-review while one not submitted yet waits for your self-review.
+function patchBucket(r: RequestState, i: ItemView, ps: PatchView[], landable: boolean, ctx: RenderContext): Bucket {
+  const b = itemBucket(r, i, ctx);
+  if (b !== "ready") return b;
+  if (landable) return "landable";
+  return ps.some((p) => p.revision === undefined && reviewStatus(p, ctx.fingerprint) !== "approved") ? "to self-review" : b;
 }
 
 function rowClass(r: RequestState, i: ItemView, ctx: RenderContext): StateClass {
@@ -661,7 +670,7 @@ function patchParts(r: RequestState, p: PatchView, ctx: RenderContext) {
     yours,
     own,
     onLine,
-    cls: own.some((n) => actionKind(n, r) === "resubmit") ? ("resubmit" as StateClass) : phabClass(p, item ? rowClass(r, item, ctx) : landable ? "ok" : "wait"),
+    cls: own.some((n) => actionKind(n, r) === "resubmit") ? ("resubmit" as StateClass) : phabClass(p, item ? rowClass(r, item, ctx) : landable ? "ok" : "wait", ctx),
     name: html`${p.revision ? html`<a class="phab" href="${phabUrl(p.revision)}" title="D${p.revision}" target="_blank" rel="noopener">${PHAB_ICON}</a>` : null}${
       first.id === p.id ? bugLabel(r, p, ctx) : html`<a class="bug tofile" href="#patch-${first.id}" title="Filed from ${first.title}">same bug</a>`
     }<span class="ptitle">${patchTitle(p)}</span>`,
@@ -707,7 +716,7 @@ function patchRow(r: RequestState, p: PatchView, ctx: RenderContext): Html {
     you: parts.yours.some((n) => !selfReview(n, r)) || (asks && item !== undefined && r.needsUser.some((n) => flagItemOf(r, n) === item.id && !selfReview(n, r))),
     anchor: html`id="patch-${p.id}" data-patch="${p.id}"`,
     fold: `patch-${p.id}`,
-    bucket: item ? (landable && itemBucket(r, item, ctx) === "ready" ? "landable" : itemBucket(r, item, ctx)) : landable ? "landable" : undefined,
+    bucket: item ? patchBucket(r, item, [p], landable, ctx) : landable ? "landable" : undefined,
     cls: parts.cls,
     tip: item && p.review?.status !== "abandoned" ? (closedTip(r, item) ?? (parts.cls === "wait" ? waitTip(r, item, ctx) : undefined)) : undefined,
     name: parts.name,
@@ -768,9 +777,9 @@ function fixRow(r: RequestState, ps: PatchView[], ctx: RenderContext): Html {
     you: parts.some((x) => x.yours.some((n) => !selfReview(n, r))) || r.needsUser.some((n) => flagItemOf(r, n) === item.id && !selfReview(n, r)),
     anchor: html`id="fix-${item.id}" data-item="${item.id}"`,
     fold: `fix-${item.id}`,
-    bucket: landable && itemBucket(r, item, ctx) === "ready" ? "landable" : itemBucket(r, item, ctx),
-    cls: fixClass(ps, rowClass(r, item, ctx)),
-    tip: closedTip(r, item) ?? (fixClass(ps, rowClass(r, item, ctx)) === "wait" ? waitTip(r, item, ctx) : undefined),
+    bucket: patchBucket(r, item, ps, landable, ctx),
+    cls: fixClass(ps, rowClass(r, item, ctx), ctx),
+    tip: closedTip(r, item) ?? (fixClass(ps, rowClass(r, item, ctx), ctx) === "wait" ? waitTip(r, item, ctx) : undefined),
     name: html`<span class="patchlines">${names}</span>`,
     title: ps.map((p) => p.title).join("\n"),
     end: costLabel(r, item, ctx),

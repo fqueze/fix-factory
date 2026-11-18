@@ -116,6 +116,7 @@ details.row[open]:has(> .under) .patchline .pbug > .bug.tofile { align-self: str
 .st.landed::before { content: "☑"; color: var(--text-muted); }
 .st.abandoned::before, .st.dropped::before { content: "✕"; color: var(--text-muted); }
 .st.handedover::before { content: "✈"; color: var(--text-muted); }
+.st.selfreview::before { content: ""; display: inline-block; width: 9px; height: 9px; border: 2px dotted var(--text-muted); border-radius: 50%; vertical-align: -1px; }
 .st.draft::before { content: ""; display: inline-block; width: 9px; height: 9px; border: 2px dotted #d63aa0; border-radius: 50%; vertical-align: -1px; }
 .st.resubmit::before { content: "⚑"; color: var(--serious); }
 /* Reviewers, as Phabricator shows them. */
@@ -454,6 +455,7 @@ details.row.b-landed { border-left-color: var(--good); }
 details.row.b-landable { border-left-color: var(--good); animation: landable-edge 2s ease-in-out infinite; }
 @keyframes landable-edge { 0%, 100% { border-left-color: var(--accent); } 50% { border-left-color: var(--good); } }
 details.row.b-ready { border-left-color: var(--accent); }
+details.row.b-to-self-review { border-left-color: color-mix(in srgb, var(--accent) 35%, var(--track)); }
 details.row.b-waiting-for-try { border-left-color: color-mix(in srgb, var(--accent) 40%, var(--track)); }
 details.row.b-working { border-left-color: var(--text-muted); }
 details.row.b-pending { border-left-color: var(--border); }
