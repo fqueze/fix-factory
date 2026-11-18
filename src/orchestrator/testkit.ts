@@ -3,6 +3,7 @@
 // handlers as the runner would.
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { withGuides } from "../agents/guides.ts";
 import { renderPrompt } from "../agents/run.ts";
 import type { EventInput } from "../state/events.ts";
 import { foldEvents } from "../state/fold.ts";
@@ -116,7 +117,11 @@ export class Scenario {
 
   startJob(plan: JobPlan): JobId {
     // As the runner would: a missing placeholder throws.
-    if (plan.agent?.vars) renderPrompt(readFileSync(fileURLToPath(new URL(`../../prompts/${plan.name}.md`, import.meta.url)), "utf8"), plan.agent.vars);
+    if (plan.agent?.vars) {
+      const read = (f: string) => readFileSync(fileURLToPath(new URL(`../../prompts/${f}.md`, import.meta.url)), "utf8");
+      const template = read(plan.name);
+      renderPrompt(template, withGuides({ stateDir: "/state" }, ID, plan, template, (name) => read(`guides/${name}`)).agent!.vars!);
+    }
     const job = `j-${++this.n}`;
     this.add({
       type: "job-started",

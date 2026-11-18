@@ -6,6 +6,7 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from
 import { dirname, join, relative } from "node:path";
 import { copyArtifacts, ITEM_NOTES_MAX_BYTES, itemDir } from "../lib/kept.ts";
 import { appendFeedback, buildAgentCommand, parseStreamJson, promptVersion, repairSwallowedParameters, renderPrompt, validateReport, type JsonSchema } from "../agents/run.ts";
+import { withGuides } from "../agents/guides.ts";
 import { appendCommand } from "../state/commands.ts";
 import type { EventInput } from "../state/events.ts";
 import { appendEventSafe } from "./event-data.ts";
@@ -52,9 +53,11 @@ function displayCmd(cmd: string[]): string[] {
   return out;
 }
 
-export function startPlan(deps: RunnerDeps, request: string, plan: JobPlan): JobId {
+export function startPlan(deps: RunnerDeps, request: string, planned: JobPlan): JobId {
   const { config } = deps;
   const job = newJobId();
+  const promptFile = join(deps.factoryRoot, "prompts", `${planned.name}.md`);
+  const plan = planned.agent ? withGuides(config, request, planned, readFileSync(promptFile, "utf8"), (name) => readFileSync(join(deps.factoryRoot, "prompts", "guides", `${name}.md`), "utf8")) : planned;
   writeFiles(plan.files ?? []);
   let cmd: string[];
   let stdinFile: string | undefined;
@@ -65,7 +68,6 @@ export function startPlan(deps: RunnerDeps, request: string, plan: JobPlan): Job
   if (plan.agent) {
     const index = JSON.parse(readFileSync(join(deps.factoryRoot, "prompts", "index.json"), "utf8")) as Record<string, { model: string }>;
     model = index[plan.name].model;
-    const promptFile = join(deps.factoryRoot, "prompts", `${plan.name}.md`);
     version = promptVersion(promptFile);
     const text = plan.agent.vars ? renderPrompt(readFileSync(promptFile, "utf8"), plan.agent.vars) : plan.agent.message!;
     jobFiles["prompt.md"] = text;
