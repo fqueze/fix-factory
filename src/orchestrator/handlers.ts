@@ -174,6 +174,8 @@ export function handleFinished(input: HandlerInput): HandlerResult {
           ...(c.bug === null && draftOf(c, i) ? { bugDraft: draftOf(c, i) } : existing?.bugDraft ? { bugDraft: existing.bugDraft } : {}),
           ...(c.revision ?? existing?.revision ? { revision: c.revision ?? existing?.revision } : {}),
           ...(existing?.effort ? { effort: existing.effort } : {}),
+          // Unmoved, it's the same version: its interdiff since you submitted it still stands.
+          ...(moved && existing.interdiffFile ? { interdiffFile: existing.interdiffFile } : {}),
           testOnly: c.testOnly,
         });
       });

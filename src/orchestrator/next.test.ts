@@ -4301,6 +4301,11 @@ describe("9. review comments", () => {
     sc.add({ type: "needs-user", request: ID, key: "reply:resubmit:root:jx", action: "Post 1 reply on D101", detail: "", stack: "root", patch: "p-test-a" });
     const inter = sc.complete(key, { output: { diff: "-a\n+b\n", method: "same-parent" } });
     assert.equal(sc.state().patches["p-test-a"].interdiffFile, `requests/${ID}/data/interdiff-p-test-a-${inter}.diff`);
+    // Its author run again with nothing to change reports its commit as it was: the same version, its interdiff kept.
+    const before = sc.state().patches["p-test-a"].sha;
+    sc.startJob({ purpose: { key: "import:j-again", what: "import", item: "i-test-a" }, kind: "script", name: "stack.ts import", cwd: "/wt/a" });
+    sc.complete("import:j-again", { output: [{ sha: sha("7"), title: sc.state().patches["p-test-a"].title, bug: 1, testOnly: true }] });
+    assert.deepEqual([sc.state().patches["p-test-a"].sha, sc.state().patches["p-test-a"].interdiffFile], [before, `requests/${ID}/data/interdiff-p-test-a-${inter}.diff`]);
     sc.settle();
     const n = sc.state().needsUser.find((x) => x.key.startsWith("resubmit:"))!;
     assert.equal(n.action, "Post 1 reply, then resubmit D101");
