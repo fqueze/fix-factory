@@ -648,6 +648,8 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
         break;
       }
       const key = `author:${c.item}${itemEpochOf(view, c.item)}:start:${c.id}`;
+      // A fresh start answers the ⚑s its failed or stopped runs raised.
+      clearItemFlags(c.item);
       // Its worktree went to another item meanwhile: it comes back first, then the session starts (next.ts).
       if (removedWorktree(view, session.cwd)) {
         ev({ type: "author-queued", item: c.item, key, reason: "start", message: c.prompt });

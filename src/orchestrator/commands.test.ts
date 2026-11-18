@@ -484,8 +484,10 @@ describe("commands", () => {
 
   it("start-agent starts a fresh session on the item, which later resumes use", () => {
     const sc = withPatch();
+    sc.add({ type: "needs-user", request: ID, key: "failed:j-old", action: "investigate-and-fix failed twice", detail: "x", item: "i-a" });
     const c = cmd({ cmd: "start-agent", item: "i-a", prompt: "Fix it in the product, not with a wait.", reason: "avoid the timeout approach" });
     run(sc, c);
+    assert.ok(!sc.state().needsUser.some((n) => n.key === "failed:j-old"), "a fresh start answers its failed run's ⚑");
     const plan = sc.plan(`author:i-a:start:${c.id}`);
     assert.equal(plan.agent?.resume, false);
     assert.notEqual(plan.agent?.sessionId, "s-1");
