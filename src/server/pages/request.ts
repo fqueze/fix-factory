@@ -380,6 +380,17 @@ function row(x: Row): Html {
 
 // The question, the patch to look at, then the answers; then the group's other ⚑s, each with its own answers.
 // withFirst: false when the first ⚑'s answers are elsewhere on the row (the bug box).
+// What a piece of the page says, as text to copy.
+function plainText(h: Html | string): string {
+  const text = typeof h === "string" ? h : h.value;
+  return text.replace(/<[^>]*>/g, "").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, "&").replace(/\s+/g, " ").trim();
+}
+
+function lastJob(r: RequestState, i: ItemView): { job?: string } {
+  const job = i.jobs.at(-1);
+  return job === undefined ? {} : { job };
+}
+
 function askBlock(r: RequestState, i: ItemView, ctx: RenderContext, patches: PatchView[], withFirst = true): Html | undefined {
   const s = itemSentence(r, i, ctx);
   if (s.cls !== "find" || !s.ask) {
@@ -394,7 +405,7 @@ function askBlock(r: RequestState, i: ItemView, ctx: RenderContext, patches: Pat
   const commits = (i.lastReport?.report as { commits?: string[] } | undefined)?.commits ?? [];
   const unimported = !patches.length && commits.length && !Object.values(r.patches).some((p) => p.item === i.id) && i.lastReport?.prompt === "investigate-and-fix";
   const view = unimported ? html`<p><a href="/requests/${encodeURIComponent(r.id)}/items/${encodeURIComponent(i.id)}/debug" target="_blank" rel="noopener">View its ${commits.length === 1 ? "commit" : `${commits.length} commits`}</a> (what “${first && untakenFix(r, i.id, first) ? "Take its patch" : "Go ahead with its patch"}” takes)</p>` : null;
-  return html`${withFirst ? html`${s.ask}${patches.length ? html`<p>${patches.map((p) => html`“${patchTitle(p)}” `)}</p>` : view}${controls(first ? html`${flagCopy(r, { ...first, action: flagText(r, first) })}${s.controls}` : s.controls)}` : null}${more.map(
+  return html`${withFirst ? html`${s.ask}${patches.length ? html`<p>${patches.map((p) => html`“${patchTitle(p)}” `)}</p>` : view}${controls(html`${first ? flagCopy(r, { ...first, action: flagText(r, first) }) : flagCopy(r, { item: i.id, action: `${groupLabel(r, i)}: ${plainText(s.text)}`, detail: plainText(s.ask), ...lastJob(r, i) })}${s.controls}`)}` : null}${more.map(
     (n) => html`<div class="ask-more" data-key="${n.key}"><p><b>Also: ${flagText(r, n)}</b></p>${flagAsk(r, i, n)}${controls(html`${flagCopy(r, { ...n, action: flagText(r, n) })}${flagControls(r, n, ctx)}`)}</div>`,
   )}`;
 }

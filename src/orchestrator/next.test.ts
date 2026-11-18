@@ -3916,6 +3916,17 @@ describe("9. a try push of a submitted stack", () => {
     const plan = sc.plan(queued.key);
     assert.equal(plan.agent?.resume, false, "a fresh session");
     assert.match(String(plan.agent?.vars?.failureSummary), /Instructions for this run: Fix it in the product\./);
+    // Its runs fail; you restart it again, and that run reports: the first restart's failures no longer block the item.
+    sc.complete(queued.key, { exitCode: 127, error: "no result line (exit code 127)" });
+    sc.settle();
+    sc.complete(queued.key, { exitCode: 127, error: "no result line (exit code 127)" });
+    sc.settle();
+    command(sc, { cmd: "start-agent", item: "i-test-a", prompt: "Try again.", reason: "r" });
+    const again = sc.view().jobs.findLast((j) => j.purpose.key.includes(":start:") && j.purpose.key !== queued.key && !j.end)!.purpose.key;
+    sc.complete(again, { report: { state: "left as-is", summary: "s", cause: "c", verification: "v", commits: [], landsAfter: [], feedback: [] } });
+    sc.settle();
+    assert.equal(sc.state().items["i-test-a"].state, "left as-is");
+    assert.deepEqual(sc.next().filter((x) => x.type === "event" && x.event.type === "item-state"), [], "settled, not flipping");
   });
 
   it("an answer that changes no code asks only to post its replies; comments from anyone but you count", () => {

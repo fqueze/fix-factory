@@ -434,6 +434,9 @@ class Planner {
     this.reportedFailures();
     // Your messages to authors whose worktree is being restored, and your restarts of them.
     for (const q of this.s.queuedAuthors ?? []) {
+      // Superseded by a later run of its author (you restarted it again): that one's outcome is the item's.
+      const ran = this.view.byKey.get(q.key)?.at(-1);
+      if (ran && this.authorJobs(q.item).some((j) => j.startedAt > ran.startedAt && !j.purpose.key.startsWith(q.key))) continue;
       if (q.plan) {
         if (this.view.byKey.has(q.key)) this.want(q.key);
         else if (!this.restoreWorktree(q.item)) this.want(q.key, () => q.plan!);

@@ -20,8 +20,9 @@ export function renderAction(r: RequestState, n: NeedsUser, ctx: RenderContext):
 const ASKS: ActionKind[] = ["approve-push", "take-it", "file-bug", "meta-bug", "approve", "submit", "resubmit", "reply", "reopen-bug", "land", "reviewers"];
 
 // ⧉: what a ⚑ saying something went wrong says, and what it's about by id, to paste to whoever looks into it.
-export function flagCopy(r: RequestState, n: Partial<Pick<NeedsUser, "item" | "patch" | "stack" | "job" | "detail" | "push">> & { key: string; action: string }): Html | null {
-  if (!n.key.startsWith("refused:") && ASKS.includes(actionKind(n as NeedsUser, r))) return null;
+// Without a key: what an item's row asks of you on its own (it stalled), not a ⚑.
+export function flagCopy(r: RequestState, n: Partial<Pick<NeedsUser, "item" | "patch" | "stack" | "job" | "detail" | "push" | "key">> & { action: string }): Html | null {
+  if (n.key !== undefined && !n.key.startsWith("refused:") && ASKS.includes(actionKind(n as NeedsUser, r))) return null;
   const item = n.item ?? (n.job === undefined ? undefined : r.jobs[n.job]?.item);
   const job = n.job === undefined ? undefined : r.jobs[n.job];
   const text = [
@@ -33,7 +34,7 @@ export function flagCopy(r: RequestState, n: Partial<Pick<NeedsUser, "item" | "p
     ...(n.patch !== undefined ? [`patch: ${n.patch}`] : []),
     ...(n.stack !== undefined ? [`stack: ${n.stack}`] : []),
     ...(job ? [`job: ${job.job} (${job.name})`] : n.job !== undefined ? [`job: ${n.job}`] : []),
-    `key: ${n.key}`,
+    ...(n.key !== undefined ? [`key: ${n.key}`] : []),
   ].join("\n");
   return html`<button type="button" class="btn small icon copyflag" data-copy-text="${text}" title="Copy what it says, with its request, item and job ids" aria-label="Copy">⧉</button>`;
 }
