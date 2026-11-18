@@ -3358,6 +3358,8 @@ class Planner {
           this.want(key);
           continue;
         }
+        // Its worktree freed while it waited for review comes back first.
+        if (this.restoreWorktree(item)) continue;
         const plan = resumeAuthorPlan(this.s.id, this.view, item, "review comments", { prompt: "address-review", vars: { revision: `D${p.revision}`, commentsFile: file } }, "addressing review comments");
         if (plan === undefined || plan === "busy") continue;
         plan.purpose.patch = p.id;

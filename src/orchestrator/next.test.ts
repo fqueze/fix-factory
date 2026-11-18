@@ -4184,6 +4184,22 @@ describe("9. review comments", () => {
     assert.deepEqual(sc.state().verifyAsked ?? [], [], "not before its change is reviewed and in the stack");
   });
 
+  it("review comments on a patch whose worktree was freed bring the worktree back before its author addresses them", () => {
+    const sc = inReview();
+    const name = `${ID}-i-test-a`;
+    sc.startJob({ purpose: { key: `remove:${name}`, what: "remove" }, kind: "script", name: "worktree.ts remove", cwd: config.firefoxRepo, cli: { tool: "worktree.ts", args: ["remove", name] } });
+    sc.complete(`remove:${name}`, { output: { name, removed: true } });
+    sc.complete("poll:0", { output: polled("needs-revision", [{ id: 7, author: "smaug", file: "a/test_a.js", line: 3, length: 1, text: "Use waitForCondition", done: false }], "blocking") });
+    const [classify] = sc.settle();
+    sc.complete(classify, { report: { comments: [{ id: 7, kind: "change request", impliesChange: true }], feedback: [] } });
+    const next = sc.settle();
+    assert.ok(!next.some((k) => k.includes(":address:")), "not in a missing worktree");
+    const restore = next.find((k) => k.startsWith(`wt-restore:${name}:`))!;
+    sc.complete(restore, { output: { name, path: `/wt/${name}` } });
+    const address = sc.settle().find((k) => k.includes(":address:"))!;
+    assert.equal(sc.plan(address).name, "address-review");
+  });
+
   it("classifies new comments, the author addresses them first, then the stack is rewritten and you resubmit", () => {
     const sc = inReview();
     const comment = { id: 7, author: "smaug", file: "a/test_a.js", line: 3, length: 1, text: "Use waitForCondition", done: false };
