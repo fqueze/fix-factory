@@ -185,8 +185,9 @@ export function isDraft(r: RequestState, p: PatchView): boolean {
   return item !== undefined && stateClass(item.state) !== "closed" && !REVIEWED_OR_LATER.includes(item.state);
 }
 
+// Closed on Phabricator, or its item landed: one patch of an item lands before the others.
 export function isLanded(r: RequestState, p: PatchView): boolean {
-  return itemOf(r, p)?.state === "landed";
+  return p.review?.status === "published" || itemOf(r, p)?.state === "landed";
 }
 
 export function isAccepted(p: PatchView): boolean {

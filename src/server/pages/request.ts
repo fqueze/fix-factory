@@ -53,6 +53,7 @@ import {
   type StateClass,
   regressionStatus,
   selfReview,
+  isLanded,
 } from "./common.ts";
 
 // One line per request; the body only when expanded, so the overview stays small.
@@ -276,10 +277,6 @@ function metaBugLine(r: RequestState, back: string, ctx: RenderContext): Html {
 
 // The stack's title and stack-viewer link, the meta bug, its patches in review order (easy and valuable first, each
 // after its hard deps), then the command to submit them.
-function isLanded(r: RequestState, p: PatchView): boolean {
-  return p.review?.status === "published" || (p.item !== undefined && r.items[p.item]?.state === "landed");
-}
-
 function livePatches(r: RequestState, s: StackView): PatchView[] {
   return stackPatches(r, s).filter((p) => !isLanded(r, p));
 }
@@ -996,7 +993,7 @@ function revisions(r: RequestState, patch: string): Html | null {
 function depLine(r: RequestState, d: PatchView["deps"][number]): Html {
   const needed = r.patches[d.needs];
   const label = needed ? `“${patchTitle(needed)}”${needed.revision ? ` (D${needed.revision})` : ""}` : d.needs;
-  const met = needed !== undefined && itemOf(r, needed)?.state === "landed";
+  const met = needed !== undefined && isLanded(r, needed);
   return html`<div class="dep${met ? " met" : ""}">${d.kind === "hard" ? "⛔ hard" : "🔗 soft"}: needs ${label} (${d.reason})</div>`;
 }
 

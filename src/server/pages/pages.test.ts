@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import { describe, it } from "node:test";
 import { FixtureStateSource } from "../state-source.ts";
 import type { RequestState } from "../../types.ts";
-import { jobLabel, linkify, pushStatus, requestName, type RenderContext } from "./common.ts";
+import { isLandable, jobLabel, linkify, pushStatus, requestName, type RenderContext } from "./common.ts";
 import { renderOverview, renderRecentPushes, renderStrip } from "./overview.ts";
 import { IDLE, itemBucket, needsYouDetail, progressLine, requestProgress, runningSentence } from "./progress.ts";
 import { configTable, parseConfig, renderRequest, requestSummary } from "./request.ts";
@@ -1019,6 +1019,15 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.match(mine, /git switch ff\/mouse-button && my-phab reorg<\/textarea>/);
     const focus = renderRequest(source.getRequest("r-20261007-focus")!, { ...ctx, mozPhab: "my-phab" }, true).value;
     assert.match(focus, /&amp;&amp; my-phab submit<\/textarea>/);
+  });
+
+  it("10. landing: a patch whose hard dep, in the same item, landed before it is landable", () => {
+    const r = structuredClone(get("r-20261001-mouse-button"));
+    const p = Object.values(r.patches).find((x) => isLandable(r, x))!;
+    r.patches["p-first"] = { ...structuredClone(p), id: "p-first", deps: [], review: { ...p.review!, status: "published" } };
+    p.deps = [{ patch: p.id, needs: "p-first", kind: "hard", reason: "uses its actor", source: "reviewer" }];
+    assert.notEqual(r.items[p.item!].state, "landed", "the item has a patch still to land");
+    assert.equal(isLandable(r, p), true);
   });
 
   it("10. landing: the reorg command starts above the landed patches still in the branch, which it leaves where they are", () => {
