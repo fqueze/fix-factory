@@ -9,7 +9,7 @@ import { sameBugDraft } from "../state/meta-bug.ts";
 import { canDismiss, canRetry, isPushJob, reviewLimitFlag } from "../state/flags.ts";
 import type { Command, Event, FactoryConfig, ItemId, JobId, PatchId, PlannedCommand, RequestId, RequestState, ReviewComment } from "../types.ts";
 import { REQUEST_STEPS } from "../server/commands.ts";
-import { ANNOTATIONS_ITEM, authorJobsOf, CANCELLED, freshAuthorPlan, itemEpochOf, lostSession, SETTLED, TERMINAL, resumeAuthorPlan, removedWorktree } from "./next.ts";
+import { ANNOTATIONS_ITEM, authorJobsOf, CANCELLED, firstPlan, freshAuthorPlan, NEVER_STARTED, itemEpochOf, lostSession, SETTLED, TERMINAL, resumeAuthorPlan, removedWorktree } from "./next.ts";
 import { handOffReferences } from "./hand-off.ts";
 import { moveProblem, movingProblem, partEvents, splitProblem } from "./split.ts";
 import { dataPath, requestDir, sessionIdFor, slug, type JobPlan } from "./plan.ts";
@@ -539,8 +539,11 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
       const fresh = (view.byKey.get(job.purpose.key) ?? []).map((j) => ctx.plan(j.job)).find((p) => p?.agent && !p.agent.resume);
       // An author continues in its session, which holds its work. Another agent starts afresh: its session, where its
       // report failed, may hold that it can't (a tool it decided was broken).
-      const plan: JobPlan =
-        job.kind === "agent" && job.sessionId && (job.purpose.what === "author" || job.name === "investigate-and-fix") && !lostSession(view, job.sessionId)
+      // Its agent never started (its session never saw the prompt): its first run's plan again, prompt and files.
+      const first = job.end?.error?.includes(NEVER_STARTED) ? firstPlan(view, job.purpose.key, ctx.plan) : undefined;
+      const plan: JobPlan = first
+        ? { ...first, purpose: { ...job.purpose, retried: true } }
+        : job.kind === "agent" && job.sessionId && (job.purpose.what === "author" || job.name === "investigate-and-fix") && !lostSession(view, job.sessionId)
           ? { purpose: { ...job.purpose, retried: true }, kind: "agent", name: job.name, item: job.item, cwd: job.cwd, agent: { sessionId: job.sessionId, resume: true, message: "Try again: continue where you stopped, then end with the JSON report." } }
           : fresh?.agent
             ? { ...fresh, purpose: { ...job.purpose, retried: true }, agent: { ...fresh.agent, sessionId: sessionIdFor(s.id, `${job.purpose.key}:retry:${c.id}`) } }

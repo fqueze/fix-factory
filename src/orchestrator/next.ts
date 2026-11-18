@@ -82,6 +82,7 @@ export interface Ctx {
   view: View;
   output: (job: JobId) => string; // out.log of a finished job
   report: (job: JobId) => unknown; // the validated report of a finished agent job
+  plan?: (job: JobId) => JobPlan | undefined; // what a job was started with (plan.json); absent (tests): retries don't need it
   activeRequests: () => { id: RequestId; summary: string }[]; // routed and not done, for route-request
   freeDiskGB?: number; // where the worktrees go; absent (tests): as many worktrees as agents
   // With config.worktreePool: a place in the pool for an item's worktree to make (its key), false when there's none
@@ -279,6 +280,15 @@ export function authorJobsOf(view: View, item: ItemId): JobRecord[] {
 // one run at a time.
 // A session Claude Code has no conversation of (its first run died before writing one: a config file another
 // starting agent was writing, say): resuming it fails every time, so it's started again instead.
+// What a run's error says when its agent never started (runner.ts): a retry sends its prompt again, not "try again".
+export const NEVER_STARTED = "the agent never started";
+
+// The plan of a run its retries come from: the key's first, whose agent got the prompt (or should have).
+export function firstPlan(view: View, key: string, plan: (job: JobId) => JobPlan | undefined): JobPlan | undefined {
+  const first = view.byKey.get(key)?.[0];
+  return first && plan(first.job);
+}
+
 export function lostSession(view: View, sessionId: string): boolean {
   return view.jobs.some((j) => j.sessionId === sessionId && j.end?.error?.includes("No conversation found with session ID") === true);
 }
@@ -634,6 +644,9 @@ class Planner {
   }
 
   private retryPlan(last: JobRecord, make?: () => JobPlan): JobPlan | undefined {
+    // Its agent never started: the same run again.
+    const first = last.end?.error?.includes(NEVER_STARTED) ? firstPlan(this.view, last.purpose.key, (j) => this.ctx.plan?.(j)) : undefined;
+    if (first) return { ...first, purpose: { ...last.purpose } };
     if (last.kind === "agent" && last.sessionId && !lostSession(this.view, last.sessionId)) {
       const error = last.end?.error ?? `exit code ${last.end?.exitCode}`;
       const message = error.startsWith("invalid report")

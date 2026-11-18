@@ -76,6 +76,7 @@ export class Scenario {
       view,
       output: (job) => this.outputs.get(job) ?? "",
       report: (job) => this.reports.get(job),
+      plan: (job) => this.plans.get(job),
       activeRequests: () => this.activeRequests,
       ...(this.freeDiskGB !== undefined ? { freeDiskGB: this.freeDiskGB } : {}),
       ...(this.pool ? { claimWorktree: this.pool.claim, evicting: this.pool.evicting } : {}),

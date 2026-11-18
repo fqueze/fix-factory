@@ -12,6 +12,7 @@ import { appendEventSafe } from "./event-data.ts";
 import { jobDir, newJobId, startJob, type ExitInfo } from "../state/jobs.ts";
 import type { FactoryConfig, Feedback, JobId, RequestState } from "../types.ts";
 import { handleFinished, handleWatchLines, InvalidReport } from "./handlers.ts";
+import { NEVER_STARTED } from "./next.ts";
 import { reportPath, type JobPlan } from "./plan.ts";
 import type { JobRecord, View } from "./view.ts";
 
@@ -159,7 +160,8 @@ export function finishJob(deps: RunnerDeps, s: RequestState, view: View, rec: Jo
     // total_cost_usd is the session's: subtract the earlier runs of the same session.
     const earlier = Object.values(s.jobs).filter((j) => j.sessionId === rec.sessionId && j.job !== rec.job && j.costUsd !== undefined);
     if (summary.costUsd !== undefined) costUsd = Math.round((summary.costUsd - earlier.reduce((a, j) => a + j.costUsd!, 0)) * 1e6) / 1e6;
-    if (!summary.done) error = `no result line (exit code ${exit.exitCode})${errTail(config, rec.job) ? `: ${errTail(config, rec.job)}` : ""}`;
+    // Nothing from Claude Code at all (no session id): the agent never started, so its session never saw this prompt.
+    if (!summary.done) error = `no result line${summary.sessionId === undefined ? `, ${NEVER_STARTED}` : ""} (exit code ${exit.exitCode})${errTail(config, rec.job) ? `: ${errTail(config, rec.job)}` : ""}`;
     else if (summary.isError) error = `claude reported an error: ${(summary.resultText ?? "").slice(0, 300)}`;
     else {
       // Jobs started before schema.json was saved have only the current one.

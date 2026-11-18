@@ -4223,6 +4223,24 @@ describe("9. review comments", () => {
     assert.equal(sc.plan(queued.key).name, "address-review", "with its prompt and comments, not only a try again");
   });
 
+  it("a run whose agent never started is retried as it was, its prompt and files again, by the planner and by you", () => {
+    const sc = inReview();
+    sc.complete("poll:0", { output: polled("needs-revision", [{ id: 7, author: "smaug", file: "a/test_a.js", line: 3, length: 1, text: "Use waitForCondition", done: false }], "blocking") });
+    const [classify] = sc.settle();
+    sc.complete(classify, { report: { comments: [{ id: 7, kind: "change request", impliesChange: true }], feedback: [] } });
+    const address = sc.settle().find((k) => k.includes(":address:"))!;
+    const first = sc.plan(address);
+    sc.complete(address, { exitCode: 127, error: "no result line, the agent never started (exit code 127)" });
+    sc.settle();
+    const retry = sc.view().byKey.get(address)!.at(-1)!;
+    const again = sc.plans.get(retry.job)!;
+    assert.deepEqual([again.name, again.agent?.vars, again.files], [first.name, first.agent?.vars, first.files], "not only a try again");
+    const job = sc.complete(address, { exitCode: 127, error: "no result line, the agent never started (exit code 127)" });
+    command(sc, { cmd: "retry", job });
+    const yours = sc.plans.get(sc.view().byKey.get(address)!.at(-1)!.job)!;
+    assert.deepEqual([yours.agent?.vars, yours.files, yours.purpose.retried], [first.agent?.vars, first.files, true]);
+  });
+
   it("classifies new comments, the author addresses them first, then the stack is rewritten and you resubmit", () => {
     const sc = inReview();
     const comment = { id: 7, author: "smaug", file: "a/test_a.js", line: 3, length: 1, text: "Use waitForCondition", done: false };

@@ -192,6 +192,7 @@ export class Orchestrator {
       presence: this.presence(),
       view,
       output: (job) => readOut(this.config, job),
+      plan: (job) => readPlan(this.config.stateDir, job),
       report: (job) => readReport(this.config, s.id, job),
       freeDiskGB: freeDiskGB(this.config.worktreesDir),
       ...(this.pool ? { claimWorktree: (key: string, build?: WorktreeBuild) => this.pool!.claim(`${s.id} ${key}`, build), evicting: this.evicting } : {}),
@@ -286,10 +287,7 @@ export class Orchestrator {
       report: (job) => (existsSync(reportPath(this.config, request!, job)) ? readReport(this.config, request!, job) : undefined),
       events: (id) => readEvents(this.config.stateDir, id),
       other: (id) => (existsSync(join(this.config.stateDir, "requests", id)) ? this.load(id).s : undefined),
-      plan: (job) => {
-        const path = join(jobDir(this.config.stateDir, job), "plan.json");
-        return existsSync(path) ? (JSON.parse(readFileSync(path, "utf8")) as JobPlan) : undefined;
-      },
+      plan: (job) => readPlan(this.config.stateDir, job),
     });
     // The click is recorded as done once its job has started: the page never shows it done with nothing running (a
     // button back for a moment).
@@ -553,4 +551,10 @@ if (import.meta.main) {
       process.exit(0);
     });
   }
+}
+
+// What a job was started with, its input files included.
+function readPlan(stateDir: string, job: JobId): JobPlan | undefined {
+  const path = join(jobDir(stateDir, job), "plan.json");
+  return existsSync(path) ? (JSON.parse(readFileSync(path, "utf8")) as JobPlan) : undefined;
 }
