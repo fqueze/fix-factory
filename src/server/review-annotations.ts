@@ -20,6 +20,7 @@ export interface AnnotationComment {
   sourceUrl?: string;
   outdated: boolean;
   draftReply?: string;
+  replies?: { author: string; date?: string; body: string }[];
   state: "open" | "done" | "addressed" | "ignored";
   responses: ReviewResponse["response"][];
 }
@@ -73,7 +74,7 @@ export function commitAnnotation(r: RequestState, p: PatchView, sha: string, io:
       ...(toFile ? [{ id: "set-bug" as const, label: "Bug number", kind: "input" as const, placeholder: "1234567", tooltip: "The bug you filed from the draft (the Bug XXXXXXX link): the factory puts it in the commit message" }] : []),
       { id: "send", label: SEND_LABEL, kind: "button", at: "end", tooltip: "Sends what you wrote and answered on every patch of the page since the last send" },
     ],
-    comments: [...yourComments(p, sha, lines), ...phabComments(p, sha, lines), ...findingComments(r, p, sha, io, lines)],
+    comments: [...yourComments(r, p, sha, lines), ...phabComments(p, sha, lines), ...findingComments(r, p, sha, io, lines)],
   };
 }
 
@@ -85,10 +86,21 @@ function responded(p: PatchView, id: string): ReviewResponse["response"] | undef
   return x === "reopen" ? undefined : x;
 }
 
-function yourComments(p: PatchView, sha: string, lines: Lines): AnnotationComment[] {
+// The answer to comments you sent together: what the run they started said (its summary answers each point), once it
+// ended; or where that run is.
+export function answerTo(r: RequestState, key: string): { state: "none" | "running" | "failed"; error?: string } | { state: "answered"; text: string; at?: string } {
+  const job = Object.values(r.jobs).findLast((j) => j.purpose?.key === key);
+  if (!job) return { state: "none" };
+  if (job.endedAt === undefined) return { state: "running" };
+  const text = job.said ?? job.outcome;
+  return text ? { state: "answered", text, at: job.endedAt } : { state: "failed", ...(job.error ? { error: job.error } : {}) };
+}
+
+function yourComments(r: RequestState, p: PatchView, sha: string, lines: Lines): AnnotationComment[] {
   return (p.yourComments ?? []).flatMap((c) => {
     // From before anchors: the text holds one entry per comment, each saying where it is.
     const entries = c.anchor ? [{ id: c.id, anchor: c.anchor, body: c.text }] : parseEntries(c.text).map((e, i, all) => ({ ...e, id: all.length > 1 ? `${c.id}-${i + 1}` : c.id }));
+    const answer = answerTo(r, c.key);
     return entries.map((e) => {
       const moved = lines.carry(e.anchor, c.sha, sha, c.lines, p.testPlan ?? p.testPlanSent?.text);
       return {
@@ -97,6 +109,7 @@ function yourComments(p: PatchView, sha: string, lines: Lines): AnnotationCommen
         author: "you",
         date: c.t,
         body: e.body,
+        ...(answer.state === "answered" ? { replies: [{ author: "its author", ...(answer.at ? { date: answer.at } : {}), body: answer.text }] } : {}),
         outdated: moved === undefined,
         state: responded(p, e.id) === "done" ? ("done" as const) : ("open" as const),
         responses: ["done", "reply"] as ReviewResponse["response"][],

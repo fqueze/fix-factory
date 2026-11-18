@@ -6,6 +6,7 @@ import { reviewStatus, unapproved } from "../../state/approval.ts";
 import { isAnswered } from "../../state/landing.ts";
 import { escapeHtml, html, join, raw, type Html } from "../html.ts";
 import { actionsSummary, flagCopy, flagPlaceOf, renderAction, recoveryAnswers, pollPhabButton, pushDebugButton, verifyStackButton, redoAnnotationsButton, approvePushControls, bugBox, continueBox, copyButton, handBackButton, flagControls, flagItemOf, flagText, plannedLabel, recoveryPlanFor, hasAuthorSession, stackViewerLink, submitControls, summaryId, untakenFix } from "./actions.ts";
+import { answerTo } from "../review-annotations.ts";
 import { groupJobs, jobLine } from "./activity.ts";
 import { flagAsk, itemBucket, itemSentence, needsYouDetail, progressLine, requestProgress, submittedDetail, type Bucket } from "./progress.ts";
 import {
@@ -830,11 +831,10 @@ function yourComments(r: RequestState, p: PatchView): Html | null {
     return null;
   }
   const answer = (key: string): Html => {
-    const job = Object.values(r.jobs).findLast((j) => j.purpose?.key === key);
-    if (!job) return html`<span class="sub">not answered yet</span>`;
-    if (job.endedAt === undefined) return html`<span class="working">being answered</span>`;
-    const text = job.said ?? job.outcome;
-    return text ? html`${md(text)}` : html`<span class="sub">${job.error ?? "no answer"}</span>`;
+    const a = answerTo(r, key);
+    if (a.state === "none") return html`<span class="sub">not answered yet</span>`;
+    if (a.state === "running") return html`<span class="working">being answered</span>`;
+    return a.state === "answered" ? html`${md(a.text)}` : html`<span class="sub">${a.error ?? "no answer"}</span>`;
   };
   return html`<h4 class="part">Your comments</h4>${p.yourComments.map((c) => html`<div class="yourcomment"><div class="comment-text">${md(c.text)}</div><div class="answer"><b>Its answer</b>${answer(c.key)}</div></div>`)}`;
 }
