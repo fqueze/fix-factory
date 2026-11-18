@@ -6,7 +6,7 @@ import { gitDirFor } from "../lib/kept.ts";
 import type { PatchId, PatchView, RequestState, StackView } from "../types.ts";
 import { buildAnnotations, type Annotations, type AnnotationIo } from "./review-annotations.ts";
 import { sameBugDraft } from "../state/meta-bug.ts";
-import { shortTitle } from "./pages/common.ts";
+import { requestName, shortTitle } from "./pages/common.ts";
 
 // A git revision name that can't be taken for an option: a sha, a branch, HEAD~2, sha^.
 export function isRevName(rev: string): boolean {
@@ -77,7 +77,9 @@ export async function buildStackReview(opts: { repo: string; command: string[]; 
   }
   // Annotated: the commits the page shows (those the log read), else the factory's.
   const onPage = shown.length ? Object.fromEntries(shown.filter(([sha]) => shas[sha]).map(([sha]) => [sha, shas[sha]])) : shas;
-  const annotations = opts.annotations && buildAnnotations(request, onPage, opts.annotations);
+  // The request's name, and the stack's folder when it has several.
+  const title = Object.keys(request.stacks).length > 1 && stack.folder ? `${requestName(request)} — ${stack.folder}` : requestName(request);
+  const annotations = opts.annotations && buildAnnotations(request, onPage, opts.annotations, title);
   const page = await runViewer(opts.command, gitDirFor({ firefoxRepo: opts.repo }, stack.worktree), `${base}..${stack.branch}`, annotations);
   return injectSendButton(page, { request: request.id, stack: stack.id, shas, ...(annotations ? { annotations, bugDrafts: bugDraftsOf(request, Object.values(shas)) } : {}) });
 }
@@ -89,7 +91,7 @@ export async function buildPatchView(opts: { repo: string; command: string[]; re
     throw new Error(`not a revision name: ${patch.sha}`);
   }
   const shas = { [patch.sha]: patch.id };
-  const annotations = opts.annotations && buildAnnotations(request, shas, opts.annotations);
+  const annotations = opts.annotations && buildAnnotations(request, shas, opts.annotations, `${shortTitle(patch)} — ${requestName(request)}`);
   const page = await runViewer(opts.command, gitDirFor({ firefoxRepo: opts.repo }, patch.worktree), `${patch.sha}^..${patch.sha}`, annotations);
   return injectSendButton(page, { request: request.id, patch: patch.id, shas, ...(annotations ? { annotations, bugDrafts: bugDraftsOf(request, [patch.id]) } : {}) });
 }

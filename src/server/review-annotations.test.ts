@@ -110,7 +110,9 @@ describe("buildAnnotations", () => {
       e({ type: "comment-response", patch: "p-a", comment: "phab-41", response: "ignore" }),
     ];
     const r = foldEvents(events);
-    const a = buildAnnotations(r, { [v2]: "p-a" }, { git: gitIn(dir), fingerprint: fingerprinter(dir), report: () => undefined, bugUrl: () => "https://bugzilla/enter" }).commits[v2];
+    const all = buildAnnotations(r, { [v2]: "p-a" }, { git: gitIn(dir), fingerprint: fingerprinter(dir), report: () => undefined, bugUrl: () => "https://bugzilla/enter" }, "Repeat failures");
+    assert.equal(all.title, "Repeat failures", "the stack's name, for stack-viewer's header");
+    const a = all.commits[v2];
     assert.equal(a.draftKey, "r-1:p-a", "drafts outlive the commit's sha");
     assert.deepEqual(a.status, { kind: "changed", label: "Changed since you approved it" });
     assert.deepEqual(a.actions.map((x) => x.id), ["approve", "set-bug"]);

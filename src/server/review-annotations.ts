@@ -34,6 +34,7 @@ export interface CommitAnnotation {
 }
 
 export interface Annotations {
+  title?: string; // stack-viewer's header in place of the range and the folder
   commits: Record<string, CommitAnnotation>;
 }
 
@@ -45,9 +46,9 @@ export interface AnnotationIo {
 }
 
 // Commits by full sha, each with its patch.
-export function buildAnnotations(r: RequestState, commits: Record<string, PatchId>, io: AnnotationIo): Annotations {
+export function buildAnnotations(r: RequestState, commits: Record<string, PatchId>, io: AnnotationIo, title?: string): Annotations {
   const lines = lineMapper(io.git);
-  const out: Annotations = { commits: {} };
+  const out: Annotations = { ...(title ? { title } : {}), commits: {} };
   for (const [sha, id] of Object.entries(commits)) out.commits[sha] = commitAnnotation(r, r.patches[id], sha, io, lines);
   return out;
 }
