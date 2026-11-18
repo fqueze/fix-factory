@@ -3870,6 +3870,8 @@ class Planner {
       const replaced = j.purpose.key.startsWith("wt:signal") && j.purpose.key !== `wt:signal${this.annotationsEpoch()}`;
       if (!closed && !replaced) continue;
       if (this.view.jobs.some((r) => r.end === undefined && (r.cwd === path || r.cwd?.startsWith(`${path}/`)))) continue;
+      // Brought back for an author you sent to it (a closed item you resume or restart): kept for it.
+      if (item && waitedFor(this.s, this.view, item.id)) continue;
       // Restored since: the latest restore decides, and its removal has a key of its own.
       if (this.view.jobs.some((r) => r.purpose.key.startsWith(`wt-restore:${name}:`) && succeeded(r) && r.startedAt > j.startedAt)) continue;
       const key = j.purpose.key.startsWith("wt-restore:") ? `remove:${name}:after:${j.job}` : `remove:${name}`;

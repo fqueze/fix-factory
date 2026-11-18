@@ -3902,13 +3902,17 @@ describe("9. a try push of a submitted stack", () => {
     const name = `${ID}-i-test-a`;
     sc.startJob({ purpose: { key: `remove:${name}`, what: "remove" }, kind: "script", name: "worktree.ts remove", cwd: config.firefoxRepo, cli: { tool: "worktree.ts", args: ["remove", name] } });
     sc.complete(`remove:${name}`, { output: { name, removed: true } });
+    // Closed: its worktree would go once nothing runs in it.
+    sc.add({ type: "item-state", request: ID, item: "i-test-a", state: "left as-is", detail: "a one-off" });
     command(sc, { cmd: "start-agent", item: "i-test-a", prompt: "Fix it in the product.", reason: "not with a wait" });
     const queued = sc.state().queuedAuthors![0];
     assert.equal(queued.reason, "start");
     assert.ok(!sc.view().byKey.has(queued.key), "not started in a missing worktree");
     const restore = sc.settle().find((k) => k.startsWith(`wt-restore:${name}:`))!;
     sc.complete(restore, { output: { name, path: `/wt/${name}` } });
-    assert.ok(sc.settle().includes(queued.key));
+    const started = sc.settle();
+    assert.ok(started.includes(queued.key));
+    assert.ok(!started.some((k) => k.startsWith(`remove:${name}`)), "kept for the author it was brought back for");
     const plan = sc.plan(queued.key);
     assert.equal(plan.agent?.resume, false, "a fresh session");
     assert.match(String(plan.agent?.vars?.failureSummary), /Instructions for this run: Fix it in the product\./);
