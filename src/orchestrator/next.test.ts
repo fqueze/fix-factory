@@ -3892,6 +3892,7 @@ describe("9. a try push of a submitted stack", () => {
     const restore = sc.settle().find((k) => k.startsWith(`wt-restore:${name}:`))!;
     assert.deepEqual(sc.plan(restore).cli?.args, ["create", name, "--build", "artifact", "--notes", `${config.stateDir}/requests/${ID}/items/i-test-a`], "on its kept branch: no --base, its notes back");
     sc.complete(restore, { output: { name, path: `/wt/${name}` } });
+    assert.deepEqual(itemWorktrees(sc.state(), sc.view(), config.worktreesDir).filter((w) => w.name === name).map((w) => w.idle), [false], "restored for its author: not one the pool frees again before it starts");
     assert.ok(sc.settle().includes(queued));
     assert.match(sc.plan(queued).agent?.message ?? "", /Post the reply\./);
   });

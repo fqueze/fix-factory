@@ -108,6 +108,12 @@ export interface ItemWorktree {
 
 // The request's items' worktrees there now or being made (a stack's own aren't items'), named as item() and
 // resumeAuthor() name them.
+// An item whose author waits for its worktree (your message, queued while it was freed): restored for it, the worktree
+// isn't idle though the item's state still is, until its author starts.
+function waitedFor(s: RequestState, view: View, item: ItemId): boolean {
+  return (s.queuedAuthors ?? []).some((q) => q.item === item && !view.byKey.has(q.key));
+}
+
 export function itemWorktrees(s: RequestState, view: View, worktreesDir: string): ItemWorktree[] {
   const out = new Map<string, ItemWorktree>();
   for (const j of view.jobs.filter((j) => j.purpose.what === "worktree" && j.purpose.item !== undefined && (!j.end || succeeded(j)))) {
@@ -123,7 +129,7 @@ export function itemWorktrees(s: RequestState, view: View, worktreesDir: string)
     const item = s.items[j.purpose.item!];
     const inIt = view.jobs.filter((x) => x.cwd === path || x.cwd.startsWith(`${path}/`));
     const lastUsed = Math.max(j.end?.at ?? j.startedAt, ...inIt.map((x) => x.end?.at ?? Infinity));
-    const idle = j.end !== undefined && item !== undefined && IDLE_WORKTREE.includes(item.state) && inIt.every((x) => x.end);
+    const idle = j.end !== undefined && item !== undefined && IDLE_WORKTREE.includes(item.state) && inIt.every((x) => x.end) && !waitedFor(s, view, item.id);
     out.set(name, { name, build: (j.purpose.reason as WorktreeBuild | undefined) ?? "artifact", item: j.purpose.item!, idle, lastUsed, made: j.end !== undefined });
   }
   // An item moved from another request keeps the worktree it was made there: its author's session runs in it.
@@ -133,7 +139,7 @@ export function itemWorktrees(s: RequestState, view: View, worktreesDir: string)
     const name = basename(session.cwd);
     if (out.has(name) || view.jobs.some((j) => j.purpose.what === "worktree" && j.purpose.key.startsWith(`wt-restore:${name}:`)) || removedWorktree(view, session.cwd)) continue;
     const inIt = view.jobs.filter((x) => x.cwd === session.cwd || x.cwd.startsWith(`${session.cwd}/`));
-    const idle = IDLE_WORKTREE.includes(item.state) && inIt.every((x) => x.end);
+    const idle = IDLE_WORKTREE.includes(item.state) && inIt.every((x) => x.end) && !waitedFor(s, view, item.id);
     out.set(name, { name, build: "artifact", item: item.id, idle, lastUsed: Math.max(...inIt.map((x) => x.end?.at ?? Infinity)), made: true });
   }
   return [...out.values()];
