@@ -1,0 +1,5 @@
+{
+  "name": "fix-factory",
+  "description": "The skills the fix-factory's agents use: commit-message, debug-a-test-failure, push-to-try, read-phabricator-comments.",
+  "version": "1.0.0"
+}

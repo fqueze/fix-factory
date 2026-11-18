@@ -168,7 +168,7 @@ worth keeping is outside it.
 ## Agents
 
 - `src/agents/run.ts` builds the command `config.claudeCommand + ["-p", "--output-format", "stream-json",
-  "--verbose", "--session-id", id, "--model", model, "--json-schema", schema, "--settings", <2 h command limit>]` and runs it as a job in the item's
+  "--verbose", "--session-id", id, "--model", model, "--json-schema", schema, "--plugin-dir", "agent-plugin", "--settings", <2 h command limit>]` and runs it as a job in the item's
   worktree. The rendered prompt is written to `jobs/<jobId>/prompt.md` and passed as stdin (job spec `stdinFile`),
   because Linux limits one argument to 128 KiB. A follow-up uses `--resume <id>` in place of `--session-id`.
 - **Result:** the last stream-json line, `type: "result"`, carries `structured_output` (the report),
@@ -184,6 +184,10 @@ worth keeping is outside it.
   `requests/<id>/data/guides/<name>-<content hash>.md`, and the placeholder holds that path. A resume with a
   message gets none: its session has the guides of the prompt it started with, if any, so a resume message never
   relies on one.
+- **Skills:** agents use the Firefox checkout's own (`.claude/skills` there: bug-filing, find-reviewer,
+  profiler-analysis…) and the factory's, in `agent-plugin/` (a Claude Code plugin: commit-message,
+  debug-a-test-failure, push-to-try, read-phabricator-comments), which every agent loads with `--plugin-dir`
+  and sees as `fix-factory:<skill>`. None come from `~/.claude/skills`.
 - **Schemas:** `schemas/<name>.json` must match the report type in `src/types.ts`.
 - **Feedback:** every report has `feedback: Feedback[]`. The runner appends each entry to
   `feedback/<target>.md`, with the job id.

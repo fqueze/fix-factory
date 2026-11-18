@@ -60,6 +60,10 @@ const agentSettings = (stateDir: string) =>
     },
   });
 
+// The skills agents use beyond the Firefox repository's own (.claude/skills there: bug-filing, find-reviewer) come with
+// the factory, as a plugin: agents need none from ~/.claude/skills. Claude Code lists them as fix-factory:<skill>.
+export const AGENT_PLUGIN_DIR = join(import.meta.dirname, "..", "..", "agent-plugin");
+
 export function buildAgentCommand(config: Pick<FactoryConfig, "claudeCommand" | "stateDir">, opts: AgentCommandOptions): string[] {
   const schema = typeof opts.schema === "string" ? opts.schema : JSON.stringify(opts.schema);
   const session = opts.resume !== undefined ? ["--resume", opts.resume] : ["--session-id", opts.sessionId];
@@ -74,6 +78,8 @@ export function buildAgentCommand(config: Pick<FactoryConfig, "claudeCommand" | 
     opts.model,
     "--json-schema",
     schema,
+    "--plugin-dir",
+    AGENT_PLUGIN_DIR,
     "--settings",
     agentSettings(config.stateDir),
   ];

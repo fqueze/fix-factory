@@ -1,11 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   appendFeedback,
+  AGENT_PLUGIN_DIR,
   buildAgentCommand,
   parseStreamJson,
   promptVersion,
@@ -46,8 +47,11 @@ test("buildAgentCommand with a new session", () => {
   assert.deepEqual(cmd.slice(0, -1), [
     "mozsb", "claude", "-p", "--output-format", "stream-json", "--verbose",
     "--session-id", "s1", "--model", "opus", "--json-schema", '{"type":"object"}',
-    "--settings",
+    "--plugin-dir", AGENT_PLUGIN_DIR, "--settings",
   ]);
+  // The factory's own skills, in the repository.
+  assert.ok(existsSync(join(AGENT_PLUGIN_DIR, ".claude-plugin", "plugin.json")));
+  for (const skill of ["commit-message", "debug-a-test-failure", "push-to-try", "read-phabricator-comments"]) assert.ok(existsSync(join(AGENT_PLUGIN_DIR, "skills", skill, "SKILL.md")), skill);
   const settings = JSON.parse(cmd.at(-1)!);
   assert.deepEqual(settings.env, { BASH_DEFAULT_TIMEOUT_MS: "7200000", BASH_MAX_TIMEOUT_MS: "7200000", SSH_AUTH_SOCK: "", CLAUDE_CODE_PLUGIN_PREFER_HTTPS: "1" });
   // Every agent's Bash commands go through no-push.ts first.

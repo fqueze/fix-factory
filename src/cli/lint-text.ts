@@ -7,7 +7,7 @@
 //     line is 1-based within the commit message, the bug description or the reply. Exit code 0 even when
 //     ok is false.
 //
-// Rules come from ~/.claude/skills/commit-message/SKILL.md and the verification greps of
+// Rules come from the commit-message skill (agent-plugin/skills/commit-message/SKILL.md) and the verification greps of
 // CLEANUP_COMMIT_MESSAGES.md. Those greps look for a shape, not a closed set of phrasings, so a clean
 // result here doesn't mean the message is good.
 
