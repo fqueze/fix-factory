@@ -1619,6 +1619,43 @@ describe("4b. try repro", () => {
     assert.ok(!open(sc).some((k) => k.startsWith("triage:") || k.startsWith("author:i-test-b:")));
   });
 
+  it("a waiting group's author gets the results of every push that carried its DEBUG commits, also once the stack was verified before the first of them finished", () => {
+    const sc = waitingStack();
+    const pushOnce = (summary?: string) => {
+      const tb = sc.view().jobs.findLast((j) => !j.end && j.purpose.key.startsWith("try-branch:root:"))!.purpose.key;
+      sc.complete(tb, { output: { branch: `${ID}-root-try-${tb.split(":")[2]}`, head: sha("f"), commits: [{ sha: sha("d"), newSha: sha("f") }] } });
+      sc.settle();
+      const planKey = sc.view().jobs.findLast((j) => !j.end && j.purpose.what === "plan-pushes")!.purpose.key;
+      sc.complete(planKey, { report: { pushes: [{ purpose: "verify", tryArgs: ["fuzzy", "-q", "x"], rebuild: 5 }], feedback: [] } });
+      const dry = sc.settle().find((k) => k.startsWith("dry-run:"))!;
+      const push = sc.purpose(dry).push!;
+      sc.complete(dry, { output: { command: ["./mach", "try", "fuzzy"], taskCount: 5, tasks: [], tryTaskConfig: {}, commits: [sha("f"), sha("b")], warnings: [] } });
+      sc.add({ type: "user-done", request: ID, key: `approve-push:${push}` });
+      sc.add({ type: "try-pushed", request: ID, push, rev: summary ? "abc" : "fed", url: "u" });
+      if (summary) sc.add({ type: "try-finished", request: ID, push, result: "green", summary });
+      sc.settle();
+      return push;
+    };
+    const first = pushOnce();
+    // Planned again while the first runs (here: with a try push's commits), the second push is green: verified.
+    sc.add({ type: "config-set", request: ID, config: { ...sc.state().config, tryWith: "164da8583219" } });
+    sc.settle();
+    sc.complete("try-with:164da8583219", { output: { branch: `${ID}-try-with`, shas: [sha("7")] } });
+    sc.settle();
+    sc.complete(keyOf(sc, "try-with:164da8583219:"), { output: { branch: `${ID}-try-with`, shas: [sha("7")] } });
+    sc.settle();
+    const second = pushOnce("all green");
+    assert.notEqual(first, second);
+    assert.equal(sc.state().step, "meta bug");
+    assert.ok(!open(sc).some((k) => k.startsWith("author:i-test-a:")), "its author waits for the first push too");
+    sc.add({ type: "try-finished", request: ID, push: first, result: "failures", summary: "3 failures" });
+    sc.settle();
+    const resumed = open(sc).filter((k) => k.startsWith("author:i-test-a:"));
+    assert.equal(resumed.length, 1);
+    assert.match(resumed[0], /^author:i-test-a:repro:[0-9a-f]{8}$/);
+    assert.match(sc.plan(resumed[0]).agent?.message ?? "", /^The factory pushed your DEBUG commits to try on top of the stack: (fed \(3 failures\), abc \(all green\)|abc \(all green\), fed \(3 failures\))\./);
+  });
+
   it("a waiting group's author hears nothing when the stack's push is discarded; your reason when it's declined", () => {
     for (const declined of ["discarded", "not now"]) {
       const sc = waitingStack();

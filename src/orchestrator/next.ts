@@ -2572,6 +2572,7 @@ class Planner {
     // Every verification push's failures are routed, also those of a stack being redone (its other authors still
     // need to hear about theirs), and those of a push that finished after the request moved on (you submitted
     // while it ran).
+    if (this.s.step !== "done") this.reproResults();
     if (at(this.s.step) < at("verify on try") || this.s.step === "done") return;
     for (const push of Object.values(this.s.pushes)) {
       const stack = this.view.byKey.get(`dry-run:${push.id}`)?.[0].purpose.stack;
@@ -2603,7 +2604,6 @@ class Planner {
           this.event(this.ev("try-declined", { push: push.id, text: "not needed anymore: the stack changed since it was planned", by: "factory" }));
         }
       }
-      if (plan) this.reproResults(plan);
       if (!plan || !this.stackGreen(info, plan.made)) green = false;
     }
     if (green) {
@@ -2793,20 +2793,30 @@ class Planner {
     return ids.map((id) => `${this.s.pushes[id].rev} (${this.s.pushes[id].summary ?? this.s.pushes[id].result})`).join(", ");
   }
 
-  // The authors whose DEBUG commits went to try on top of the stack get its results.
-  private reproResults(plan: { ids: PushId[]; made: PushId[] }): void {
-    const groups = this.debugGroups().filter((g) => g.item.id !== ANNOTATIONS_ITEM);
-    const key = (g: { item: ItemView; commits: string[] }, what: string) => `author:${g.item.id}${this.itemEpoch(g.item.id)}:${what}:${shortHash([...g.commits, ...plan.ids]).slice(0, 8)}`;
-    if (!plan.ids.length || plan.made.some((id) => this.s.pushes[id]?.result === undefined)) return;
-    const results = this.pushResults(plan.made);
-    // Pushes discarded (or withdrawn by the factory) say nothing: the DEBUG commits wait for the stack's next push.
-    // Only your reason for declining one goes to them.
-    const declined = plan.ids.map((id) => this.s.pushes[id]).filter((p) => p?.declined !== undefined && p.declined !== "discarded" && !p.withdrawn).map((p) => p.declined!);
-    if (!plan.made.length && !declined.length) return;
-    const message = plan.made.length
-      ? `The factory pushed your DEBUG commits to try on top of the stack: ${results}. Read the results with fx-tests (\`fx-tests try <rev>\`, with \`--all-jobs\` for the tests that failed then passed on retry inside a green job); the failed jobs' logs are under ${artifactsDir(this.config)}/<task id>. Say in your reproduction file whether it reproduced, and how often. Then drop your DEBUG commits and fix it as usual, with the reproduction "on try"; or, if it didn't reproduce, report "not reproduced". End with the JSON report again.`
-      : `The user declined the stack's try push your DEBUG commits were to go on: “${declined[0]}”. Go on from what you know: fix it if you can show the cause, or report "not reproduced". End with the JSON report again.`;
-    for (const g of groups) this.resumeAuthor(g.item.id, key(g, "repro"), "repro", message);
+  // The authors whose DEBUG commits went to try on top of the stack get its results, once every push that carried them
+  // has finished, whatever the step (the stack may be verified before an earlier push of it ends). Every push of a
+  // stack dry-run since its author reported carries them: the stack's try branch has every waiting group's.
+  private reproResults(): void {
+    for (const g of this.debugGroups()) {
+      if (g.item.id === ANNOTATIONS_ITEM) continue;
+      const reported = this.authorJobs(g.item.id).filter(succeeded).at(-1)!.end!.at;
+      if (this.authorJobs(g.item.id).some((j) => j.purpose.reason === "repro" && j.startedAt >= reported)) continue;
+      const dries = Object.values(this.s.pushes).flatMap((p) => {
+        const d = this.view.byKey.get(`dry-run:${p.id}`)?.find(succeeded);
+        return d?.purpose.stack && d.startedAt >= reported ? [{ p, dup: this.out<DryRunResult>(d).duplicateOf !== undefined }] : [];
+      });
+      const ids = dries.map((x) => x.p.id);
+      const made = dries.filter((x) => !x.dup && x.p.declined === undefined).map((x) => x.p.id);
+      if (!ids.length || made.some((id) => this.s.pushes[id].result === undefined)) continue;
+      // Pushes discarded (or withdrawn by the factory) say nothing: the DEBUG commits wait for the stack's next push.
+      // Only your reason for declining one goes to them.
+      const declined = dries.map((x) => x.p).filter((p) => p.declined !== undefined && p.declined !== "discarded" && !p.withdrawn).map((p) => p.declined!);
+      if (!made.length && !declined.length) continue;
+      const message = made.length
+        ? `The factory pushed your DEBUG commits to try on top of the stack: ${this.pushResults(made)}. Read the results with fx-tests (\`fx-tests try <rev>\`, with \`--all-jobs\` for the tests that failed then passed on retry inside a green job); the failed jobs' logs are under ${artifactsDir(this.config)}/<task id>. Say in your reproduction file whether it reproduced, and how often. Then drop your DEBUG commits and fix it as usual, with the reproduction "on try"; or, if it didn't reproduce, report "not reproduced". End with the JSON report again.`
+        : `The user declined the stack's try push your DEBUG commits were to go on: “${declined[0]}”. Go on from what you know: fix it if you can show the cause, or report "not reproduced". End with the JSON report again.`;
+      this.resumeAuthor(g.item.id, `author:${g.item.id}${this.itemEpoch(g.item.id)}:repro:${shortHash([...g.commits, ...ids]).slice(0, 8)}`, "repro", message);
+    }
   }
 
   private routeTryFailures(push: PushId, patches: PatchView[]): void {
