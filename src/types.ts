@@ -1,5 +1,6 @@
 // Shared contract between the orchestrator, the web server, the CLIs and the agent runner.
 // Only add fields or union members; never rename or remove (see docs/CONTRACTS.md).
+import type { JobPlan } from "./orchestrator/plan.ts";
 
 export type Iso = string; // ISO 8601 timestamp
 export type RequestId = string; // e.g. "r-20261015-xpcshell-cwd"
@@ -149,7 +150,7 @@ export type Event =
   | (EventBase & { type: "groups-moved"; to: RequestId; items: ItemId[] }) // they go on in that request
   | (EventBase & { type: "meta-draft-asked" }) // you want a meta bug for a stack that doesn't need one
   | (EventBase & { type: "tests-asked"; tests: string[] }) // failures already on central you want fixed too
-  | (EventBase & { type: "author-queued"; item: ItemId; key: string; reason: string; message: string }) // your message to an author whose worktree is restored first
+  | (EventBase & { type: "author-queued"; item: ItemId; key: string; reason: string; message: string; plan?: JobPlan }) // your message to an author whose worktree is restored first; or a run you retried, as it is (plan)
   | (EventBase & { type: "verify-asked"; text: string })
   | (EventBase & { type: "backout"; patch: PatchId; at: Iso; reason: string; culprit: boolean }) // its landing was backed out; culprit: the failure is its own (or nobody's could be told apart)
   | (EventBase & { type: "try-needed"; patch: PatchId; why: string; ask: string; job: JobId; after?: Iso }) // after: when its author answered // its fix answers failures try found: it lands once a push of it is green
@@ -534,7 +535,7 @@ export interface RequestState {
   movedTo?: Record<ItemId, RequestId>; // its groups the split moved, and where
   metaDraftAsked?: boolean; // you asked for a meta bug draft
   askedTests?: string[]; // failures already on central you asked to fix too, by test path
-  queuedAuthors?: { item: ItemId; key: string; reason: string; message: string }[]; // your messages waiting for their author's worktree
+  queuedAuthors?: { item: ItemId; key: string; reason: string; message: string; plan?: JobPlan }[]; // your messages, and runs you retried, waiting for their author's worktree
   verifyAsked?: string[];
   reopened: Record<PatchId, Iso>; // when its revision went from closed (landed) back to open: a backout
   landedAt: Record<PatchId, Iso>; // when a poll first saw its revision closed (landed), until a backout reopens it

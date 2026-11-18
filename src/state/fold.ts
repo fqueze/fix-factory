@@ -114,7 +114,7 @@ export function folder(first: Event): { apply(events: readonly Event[]): void; s
           if (s.patches[e.patch]) s.patches[e.patch].approved = { sha: e.sha, fingerprint: e.fingerprint, t: e.t };
           break;
         case "author-queued":
-          s.queuedAuthors = [...(s.queuedAuthors ?? []), { item: e.item, key: e.key, reason: e.reason, message: e.message }];
+          s.queuedAuthors = [...(s.queuedAuthors ?? []), { item: e.item, key: e.key, reason: e.reason, message: e.message, ...(e.plan ? { plan: e.plan } : {}) }];
           break;
         case "backout":
           s.backouts[e.patch] = { at: e.at, reason: e.reason, culprit: e.culprit };

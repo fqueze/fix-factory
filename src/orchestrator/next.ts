@@ -424,7 +424,10 @@ class Planner {
     this.reportedFailures();
     // Your messages to authors whose worktree is being restored, and your restarts of them.
     for (const q of this.s.queuedAuthors ?? []) {
-      if (q.reason !== "start") this.resumeAuthor(q.item, q.key, q.reason, q.message);
+      if (q.plan) {
+        if (this.view.byKey.has(q.key)) this.want(q.key);
+        else if (!this.restoreWorktree(q.item)) this.want(q.key, () => q.plan!);
+      } else if (q.reason !== "start") this.resumeAuthor(q.item, q.key, q.reason, q.message);
       else if (this.view.byKey.has(q.key)) this.want(q.key);
       else if (!this.restoreWorktree(q.item)) this.want(q.key, () => freshAuthorPlan(this.s, this.view, this.config.stateDir, q.item, q.key, q.message)!);
     }

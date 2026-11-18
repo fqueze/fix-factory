@@ -4204,6 +4204,25 @@ describe("9. review comments", () => {
     assert.equal(sc.plan(address).name, "address-review");
   });
 
+  it("retrying a run that answered review comments in a freed worktree brings it back, then runs it again as it was", () => {
+    const sc = inReview();
+    sc.complete("poll:0", { output: polled("needs-revision", [{ id: 7, author: "smaug", file: "a/test_a.js", line: 3, length: 1, text: "Use waitForCondition", done: false }], "blocking") });
+    const [classify] = sc.settle();
+    sc.complete(classify, { report: { comments: [{ id: 7, kind: "change request", impliesChange: true }], feedback: [] } });
+    const address = sc.settle().find((k) => k.includes(":address:"))!;
+    const job = sc.complete(address, { exitCode: 127, error: "no result line (exit code 127)" });
+    // Its worktree freed meanwhile.
+    const name = `${ID}-i-test-a`;
+    sc.startJob({ purpose: { key: `remove:${name}`, what: "remove" }, kind: "script", name: "worktree.ts remove", cwd: config.firefoxRepo, cli: { tool: "worktree.ts", args: ["remove", name] } });
+    sc.complete(`remove:${name}`, { output: { name, removed: true } });
+    command(sc, { cmd: "retry-job", job });
+    const queued = sc.state().queuedAuthors!.at(-1)!;
+    const restore = sc.settle().find((k) => k.startsWith(`wt-restore:${name}:`))!;
+    sc.complete(restore, { output: { name, path: `/wt/${name}` } });
+    assert.ok(sc.settle().includes(queued.key));
+    assert.equal(sc.plan(queued.key).name, "address-review", "with its prompt and comments, not only a try again");
+  });
+
   it("classifies new comments, the author addresses them first, then the stack is rewritten and you resubmit", () => {
     const sc = inReview();
     const comment = { id: 7, author: "smaug", file: "a/test_a.js", line: 3, length: 1, text: "Use waitForCondition", done: false };

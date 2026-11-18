@@ -545,17 +545,18 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
           : fresh?.agent
             ? { ...fresh, purpose: { ...job.purpose, retried: true }, agent: { ...fresh.agent, sessionId: sessionIdFor(s.id, `${job.purpose.key}:retry:${c.id}`) } }
             : { ...saved, purpose: { ...job.purpose } };
+      // A resumed agent isn't started again: its group's line says so.
+      plan.startEvents = plan.agent?.resume ? saved.startEvents?.map((e) => (e.type === "item-state" && e.state === "investigating" ? { ...e, detail: "retried" } : e)) : saved.startEvents;
       // An author whose worktree the pool freed (its item was idle): the planner brings the worktree back, then
       // resumes it with this.
       if (plan.agent?.resume && job.item !== undefined && removedWorktree(view, plan.cwd)) {
         const key = `author:${job.item}${itemEpochOf(view, job.item)}:retry:${c.id}`;
-        ev({ type: "author-queued", item: job.item, key, reason: "continue", message: plan.agent.message ?? "Try again: continue where you stopped, then end with the JSON report." });
+        // As it is: a run that died before its session saw its prompt (answering review comments) needs that prompt.
+        ev({ type: "author-queued", item: job.item, key, reason: "continue", message: plan.agent.message ?? "Try again: continue where you stopped, then end with the JSON report.", plan: { ...plan, purpose: { ...plan.purpose, key } } });
         for (const k of [`failed:${c.job}`, `stopped:${c.job}`]) if (s.needsUser.some((n) => n.key === k)) ev({ type: "user-done", key: k });
         done(true);
         break;
       }
-      // A resumed agent isn't started again: its group's line says so.
-      plan.startEvents = plan.agent?.resume ? saved.startEvents?.map((e) => (e.type === "item-state" && e.state === "investigating" ? { ...e, detail: "retried" } : e)) : saved.startEvents;
       effects.push({ type: "start", plan });
       for (const key of [`failed:${c.job}`, `stopped:${c.job}`]) if (s.needsUser.some((n) => n.key === key)) ev({ type: "user-done", key });
       // Out of the blocked state a stop or a failure left it in, unless the job's own start events set one.
