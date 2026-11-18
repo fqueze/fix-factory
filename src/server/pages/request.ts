@@ -1056,7 +1056,8 @@ function reviewBox(r: RequestState, p: PatchView, interdiff: string | undefined)
     if (!job) return html`<div class="answer sub">not answered yet</div>`;
     if (job.endedAt === undefined) return html`<div class="answer"><span class="working">being answered by its author</span></div>`;
     if (drafts.has(id)) return null;
-    if (job.exitCode !== 0) return html`<div class="answer sub">${job.error ?? "its author's run failed"}</div>`;
+    // Why it failed is on its ⚑ and its run, below: not repeated under each comment.
+    if (job.exitCode !== 0) return html`<div class="answer sub">not answered: its author's run failed</div>`;
     return html`<div class="answer sub" title="${job.said ?? job.outcome ?? ""}">handled in the code, no reply</div>`;
   };
   // Each comment a thread under one bar: the comment, its author's answer, the reply to post.
