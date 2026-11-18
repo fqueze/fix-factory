@@ -604,6 +604,7 @@ describe("one fixture per step of docs/MVP.md", () => {
     i.lastReport = { prompt: "investigate-and-fix", report: { state: "needs a try repro", commits: ["aaaaaaaaaaaaaaaa", "bbbbbbbbbbbbbbbb"] }, job: "j-1" };
     const row = rowOf(renderRequest(r, ctx, true).value, "item-i-idb-upgrade");
     assert.match(row, /Its DEBUG commits \(aaaaaaaaaaaa, bbbbbbbbbbbb\) go to try on top of the stack's next push\. <a href="\/requests\/r-20261013-dom-indexeddb\/items\/i-idb-upgrade\/debug"/);
+    assert.match(row, /<span class="end">[^]*?<a href="\/requests\/r-20261013-dom-indexeddb\/items\/i-idb-upgrade\/debug"[^>]*>review<\/a>/, "in its row's corner too");
   });
 
   it("a stack's patch that its author dropped from its fix shows under dropped", () => {

@@ -554,7 +554,7 @@ function groupRow(r: RequestState, i: ItemView, ctx: RenderContext): Html {
     // Redo is on the top line: the group's patches are in its folded body, and it's what you'd want of it.
     end: i.id === ANNOTATIONS_ITEM && !Object.values(r.jobs).some((j) => j.item === i.id && j.endedAt === undefined)
       ? html`${redoAnnotationsButton(r.id, requestUrl(r.id))} ${costLabel(r, i, ctx)}`
-      : html`${closable(r, i, ctx) ? html`<span class="onhover">${closeButton(r, i)}</span>` : null}${patches.filter((p) => isDraft(r, p)).map((p) => viewLink(r, p))}${costLabel(r, i, ctx)}`,
+      : html`${closable(r, i, ctx) ? html`<span class="onhover">${closeButton(r, i)}</span>` : null}${patches.filter((p) => isDraft(r, p)).map((p) => viewLink(r, p))}${debugLink(r, i)}${costLabel(r, i, ctx)}`,
     state: stateText(r, i, ctx),
     trust: trustLine(r, i, ctx),
     ask: askBlock(r, i, ctx, patches.filter((p) => isDraft(r, p))),
@@ -926,6 +926,12 @@ function trustLine(r: RequestState, i: ItemView, ctx: RenderContext): Html | nul
 function fileLink(r: RequestState, i: ItemView, which: "evidence" | "reproduction" | "widening", label: string): Html {
   const file = i.investigation?.files?.[which];
   return file ? html`<a href="/requests/${encodeURIComponent(r.id)}/items/${encodeURIComponent(i.id)}/files/${which}" target="_blank" rel="noopener" title="${file}">${label}</a>` : html`${label}`;
+}
+
+// Its DEBUG commits waiting for the stack's next try push, in stack-viewer: in its row's corner, as a patch's review link.
+function debugLink(r: RequestState, i: ItemView): Html | null {
+  const commits = i.state === "waiting for a try repro" ? (i.lastReport?.report as { commits?: string[] } | undefined)?.commits : undefined;
+  return commits?.length ? html`<a href="/requests/${encodeURIComponent(r.id)}/items/${encodeURIComponent(i.id)}/debug" target="_blank" rel="noopener" title="Its DEBUG ${commits.length === 1 ? "commit" : "commits"}, in stack-viewer">review</a>` : null;
 }
 
 // What goes to try on top of the stack for a group that needs CI evidence: you see it before approving that push.
