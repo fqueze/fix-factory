@@ -4,7 +4,7 @@
 // draft replies) and the critical reviews' findings. An earlier comment was made on an earlier version of the patch:
 // its line is carried to this version through the diff between the two, and it's outdated when that line changed.
 import { spawnSync } from "node:child_process";
-import { REVIEW_STATUS_LABELS, reviewStatus, type Fingerprint } from "../state/approval.ts";
+import { REVIEW_STATUS_LABELS, REVIEW_STATUS_TOOLTIPS, reviewStatus, type Fingerprint } from "../state/approval.ts";
 import { patchFindings } from "../state/findings.ts";
 import { isAnswered } from "../state/landing.ts";
 import { sameBugDraft } from "../state/meta-bug.ts";
@@ -24,12 +24,14 @@ export interface AnnotationComment {
   responses: ReviewResponse["response"][];
 }
 
+export const SEND_LABEL = "Send comments to the factory";
+
 export interface CommitAnnotation {
   draftKey: string; // what stack-viewer keeps your drafts under: the patch, whatever its sha
-  status?: { kind: "approved" | "changed" | "unreviewed"; label: string }; // none once on Phabricator: resubmitted from its interdiff
+  status?: { kind: "approved" | "changed" | "unreviewed"; label: string; tooltip: string }; // none once on Phabricator: resubmitted from its interdiff
   sections: { id: string; title: string; markdown: string }[];
   titleLinks: { text: string; href: string; tooltip?: string; label?: string }[];
-  actions: ({ id: "approve"; label: string; kind: "button"; tooltip: string } | { id: "set-bug"; label: string; kind: "input"; placeholder: string; tooltip: string })[];
+  actions: ({ id: "approve" | "send"; label: string; kind: "button"; at: "end"; tone?: "positive"; tooltip: string } | { id: "set-bug"; label: string; kind: "input"; placeholder: string; tooltip: string })[];
   comments: AnnotationComment[];
 }
 
@@ -62,12 +64,13 @@ export function commitAnnotation(r: RequestState, p: PatchView, sha: string, io:
   return {
     // Your unsent comments are kept under it: the patch's commit gets a new sha whenever the stack is rewritten.
     draftKey: `${r.id}:${p.id}`,
-    ...(p.revision === undefined ? { status: { kind, label: REVIEW_STATUS_LABELS[kind] } } : {}),
+    ...(p.revision === undefined ? { status: { kind, label: REVIEW_STATUS_LABELS[kind], tooltip: REVIEW_STATUS_TOOLTIPS[kind] } } : {}),
     sections: testPlan === undefined ? [] : [{ id: "test-plan", title: "Test plan", markdown: testPlan }],
     titleLinks: toFile && placeholder ? [{ text: placeholder, href: io.bugUrl(p.bugDraft!), tooltip: "File its bug: Bugzilla's form, prefilled with the factory's draft. Then give its number in Bug number" }] : [],
     actions: [
-      ...(kind === "approved" || p.revision !== undefined ? [] : [{ id: "approve" as const, label: kind === "changed" ? "Approve this version" : "Approve", kind: "button" as const, tooltip: "The moz-phab command is offered once you approved every patch of the stack; a rebase keeps it approved" }]),
+      ...(kind === "approved" || p.revision !== undefined ? [] : [{ id: "approve" as const, label: kind === "changed" ? "Approve this version" : "Approve", kind: "button" as const, at: "end" as const, tone: "positive" as const, tooltip: "The moz-phab command is offered once you approved every patch of the stack; a rebase keeps it approved" }]),
       ...(toFile ? [{ id: "set-bug" as const, label: "Bug number", kind: "input" as const, placeholder: "1234567", tooltip: "The bug you filed from the draft (the Bug XXXXXXX link): the factory puts it in the commit message" }] : []),
+      { id: "send", label: SEND_LABEL, kind: "button", at: "end", tooltip: "Sends what you wrote and answered on every patch of the page since the last send" },
     ],
     comments: [...yourComments(p, sha, lines), ...phabComments(p, sha, lines), ...findingComments(r, p, sha, io, lines)],
   };

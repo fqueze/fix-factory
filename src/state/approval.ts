@@ -11,7 +11,13 @@ export function reviewStatus(p: Pick<PatchView, "sha" | "approved">, fingerprint
   return fingerprint?.(p.sha) === p.approved.fingerprint ? "approved" : "changed";
 }
 
-export const REVIEW_STATUS_LABELS: Record<ReviewStatus, string> = { approved: "Approved", changed: "Changed since you approved it", unreviewed: "Needs your review" };
+export const REVIEW_STATUS_LABELS: Record<ReviewStatus, string> = { approved: "Approved", changed: "Changed since you approved it", unreviewed: "Needs review" };
+// What hovering the status says, in stack-viewer's list and on the badge.
+export const REVIEW_STATUS_TOOLTIPS: Record<ReviewStatus, string> = {
+  approved: "You approved it",
+  changed: "Changed since you approved it: Approve this version is at the end of its page",
+  unreviewed: "Needs your review: Approve is at the end of its page",
+};
 
 // What a moz-phab submit would send for the first time that you haven't approved. A patch already on Phabricator is
 // resubmitted from its interdiff, which the page shows you: no approval in stack-viewer.

@@ -114,8 +114,8 @@ describe("buildAnnotations", () => {
     assert.equal(all.title, "Repeat failures", "the stack's name, for stack-viewer's header");
     const a = all.commits[v2];
     assert.equal(a.draftKey, "r-1:p-a", "drafts outlive the commit's sha");
-    assert.deepEqual(a.status, { kind: "changed", label: "Changed since you approved it" });
-    assert.deepEqual(a.actions.map((x) => x.id), ["approve", "set-bug"]);
+    assert.deepEqual(a.status, { kind: "changed", label: "Changed since you approved it", tooltip: "Changed since you approved it: Approve this version is at the end of its page" });
+    assert.deepEqual(a.actions.map((x) => x.id), ["approve", "set-bug", "send"]);
     assert.deepEqual(a.titleLinks.map((x) => [x.text, x.href]), [["Bug XXXXXXX", "https://bugzilla/enter"]]);
     assert.deepEqual(a.sections, [{ id: "test-plan", title: "Test plan", markdown: "Green on try." }]);
     const [yours, phab] = a.comments;

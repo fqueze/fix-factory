@@ -849,7 +849,7 @@ export function commentLine(x: ReviewComment): string {
   const a = x.anchor;
   if (!a) return x.text;
   const lines = a.line === undefined ? "" : typeof a.line === "number" ? `line ${a.line}` : `lines ${a.line[0]}-${a.line[1]}`;
-  const where = a.file === "(commit)" ? `the commit message${lines ? `, ${lines}` : ""}` : a.file === "(section:test-plan)" ? `the test plan${lines ? `, ${lines}` : ""}` : `${a.file}${a.line === undefined ? "" : `:${typeof a.line === "number" ? a.line : a.line.join("-")}`}${a.side === "old" ? " (the old side)" : ""}`;
+  const where = a.file === "(commit)" ? (lines ? `the commit message, ${lines}` : "the patch as a whole") : a.file === "(section:test-plan)" ? `the test plan${lines ? `, ${lines}` : ""}` : `${a.file}${a.line === undefined ? "" : `:${typeof a.line === "number" ? a.line : a.line.join("-")}`}${a.side === "old" ? " (the old side)" : ""}`;
   const text = x.text.includes("\n") ? `\n${quoted(x.text.split("\n"))}` : ` ${x.text}`;
   return `${where}${x.quote ? `, on "${x.quote}"` : ""}:${text}`;
 }

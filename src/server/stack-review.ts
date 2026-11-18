@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { exec } from "../lib/exec.ts";
 import { gitDirFor } from "../lib/kept.ts";
 import type { PatchId, PatchView, RequestState, StackView } from "../types.ts";
-import { buildAnnotations, type Annotations, type AnnotationIo } from "./review-annotations.ts";
+import { buildAnnotations, SEND_LABEL, type Annotations, type AnnotationIo } from "./review-annotations.ts";
 import { sameBugDraft } from "../state/meta-bug.ts";
 import { requestName, shortTitle } from "./pages/common.ts";
 
@@ -171,24 +171,34 @@ const SEND_SCRIPT = `
 `;
 
 // With annotations (stack-viewer's contract with the factory, in md-viewer's README): its actions (approve, the bug
-// number) become commands right away, and the button sends what's new since the last send: new comments, those on the
-// commit message and on the test plan included, and what you did to earlier ones. Each commit's frame then marks
-// those sent, so the button stays usable.
+// number) become commands right away, and Send, at the end of each patch's page beside Approve, sends what's new on
+// the whole page since the last send: new comments, those on the commit message, the test plan and the whole patch
+// included, and what you did to earlier ones. Each commit's frame then marks those sent, so Send stays usable. What
+// happened shows on the Send of the commit it was done on.
 const REVIEW_SCRIPT = `
 (function () {
   var cfg = JSON.parse(document.getElementById("ff-review-config").textContent);
-  var button = document.getElementById("ff-send");
-  var label = button.textContent;
+  var LABEL = ${JSON.stringify(SEND_LABEL)};
   function fullSha(sha) {
     for (var full in cfg.shas) {
       if (full.indexOf(sha) === 0 || sha.indexOf(full) === 0) return full;
     }
     return null;
   }
-  function flash(text) {
-    button.textContent = text;
-    setTimeout(function () { button.textContent = label; }, 2500);
+  // The commit's Send says it, for a while; busy, it can't be clicked.
+  function say(sha, text, busy) {
+    if (!cfg.annotations.commits[sha]) return;
+    update(sha, function (a) {
+      a.actions.forEach(function (x) { if (x.id === "send") { x.label = text; x.disabled = Boolean(busy); } });
+    });
+    if (busy) return;
+    setTimeout(function () {
+      update(sha, function (a) {
+        a.actions.forEach(function (x) { if (x.id === "send" && x.label === text) x.label = LABEL; });
+      });
+    }, 2500);
   }
+
   function post(command) {
     command.request = cfg.request;
     return fetch("/api/commands", {
@@ -212,22 +222,24 @@ const REVIEW_SCRIPT = `
     var d = e.detail;
     var sha = fullSha(d.commit);
     var patch = sha && cfg.shas[sha];
-    if (!patch) return flash("Unknown commit");
-    if (d.id === "approve") {
+    if (!patch) return;
+    if (d.id === "send") {
+      send(sha);
+    } else if (d.id === "approve") {
       post({ cmd: "approve", patch: patch, sha: sha }).then(function () {
         update(sha, function (a) {
-          a.status = { kind: "approved", label: "Approved" };
+          a.status = { kind: "approved", label: "Approved", tooltip: "You approved it" };
           a.actions = a.actions.filter(function (x) { return x.id !== "approve"; });
         });
-        flash("Approved");
-      }).catch(function (err) { flash("Failed: " + err.message); });
+        say(sha, "Approved");
+      }).catch(function (err) { say(sha, "Failed: " + err.message); });
     } else if (d.id === "set-bug") {
       var m = /(\\d{4,8})\\s*$/.exec(String(d.value || "").trim());
-      if (!m) return flash("Not a bug number");
+      if (!m) return say(sha, "Not a bug number");
       post({ cmd: "set-bug", patch: patch, bug: Number(m[1]) }).then(function () {
         bugSet(patch, Number(m[1]));
-        flash("Bug " + m[1] + " set: the factory puts it in the commit message");
-      }).catch(function (err) { flash("Failed: " + err.message); });
+        say(sha, "Bug " + m[1] + " set: the factory puts it in the commit message");
+      }).catch(function (err) { say(sha, "Failed: " + err.message); });
     }
   });
   // Following a commit's "Bug XXXXXXX" link (its bug to file): back here, bug-watch.js looks for the bug you filed.
@@ -297,22 +309,20 @@ const REVIEW_SCRIPT = `
     }
     return out;
   }
-  button.addEventListener("click", function () {
+  function send(sha) {
     var c = collect();
-    if (!c.comments.length && !c.responses.length) return flash(c.unknown ? "Comments on unknown commits" : "Nothing new to send");
-    button.disabled = true;
+    if (!c.comments.length && !c.responses.length) return say(sha, c.unknown ? "Comments on unknown commits" : "Nothing new to send");
+    say(sha, "Sending…", true);
     post({ cmd: "review-send", comments: c.comments, responses: c.responses }).then(function () {
       for (var i = 0; i < c.marks.length; i++) if (typeof c.marks[i].win.mdvReviewMarkSent === "function") c.marks[i].win.mdvReviewMarkSent(c.marks[i].ids);
-      button.disabled = false;
       var parts = [];
       if (c.comments.length) parts.push(c.comments.length + (c.comments.length === 1 ? " comment" : " comments"));
       if (c.responses.length) parts.push(c.responses.length + (c.responses.length === 1 ? " answer" : " answers"));
-      flash("Sent " + parts.join(" and "));
+      say(sha, "Sent " + parts.join(" and "));
     }).catch(function (e) {
-      button.disabled = false;
-      button.textContent = "Failed: " + e.message;
+      say(sha, "Failed: " + e.message);
     });
-  });
+  }
 })();
 `;
 
@@ -331,8 +341,9 @@ export function injectSendButton(
   page: string,
   cfg: { request: string; stack?: string; patch?: string; shas: Record<string, string>; annotations?: Annotations; bugDrafts?: Record<PatchId, { summary: string; title: string; patches: PatchId[] }> },
 ): string {
+  // Annotated, Send is each commit's own action, at the end of its page.
   const snippet =
-    `<button id="ff-send" type="button" style="position:fixed;right:12px;bottom:12px;z-index:1000;padding:6px 12px;border-radius:6px;border:1px solid #2a78d6;background:#2a78d6;color:#fff;font:13px system-ui,sans-serif;cursor:pointer">Send comments to the factory</button>` +
+    (cfg.annotations ? "" : `<button id="ff-send" type="button" style="position:fixed;right:12px;bottom:12px;z-index:1000;padding:6px 12px;border-radius:6px;border:1px solid #2a78d6;background:#2a78d6;color:#fff;font:13px system-ui,sans-serif;cursor:pointer">${SEND_LABEL}</button>`) +
     `<script type="application/json" id="ff-review-config">${jsonForScript(cfg)}</script>` +
     (cfg.annotations ? `<script src="/bug-watch.js"></script><script>${REVIEW_SCRIPT}</script>` : `<script>${SEND_SCRIPT}</script>`);
   const i = page.lastIndexOf("</body>");
