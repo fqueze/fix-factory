@@ -9,13 +9,13 @@ const SHA = "a".repeat(40);
 
 function loadPage() {
   const annotations: Annotations = { commits: { [SHA]: { draftKey: "r-1:p-a", status: { kind: "unreviewed", label: "Not approved yet" }, sections: [], titleLinks: [{ text: "Bug XXXXXXX", href: "x" }], actions: [{ id: "approve", label: "Approve", kind: "button", tooltip: "t" }, { id: "set-bug", label: "Bug number", kind: "input", placeholder: "1", tooltip: "t" }], comments: [] } } };
-  const page = injectSendButton("<body></body>", { request: "r-1", stack: "root", shas: { [SHA]: "p-a" }, annotations, bugDrafts: { "p-a": { summary: "Popup left open", title: "Wait for the popup" } } });
+  const page = injectSendButton("<body></body>", { request: "r-1", stack: "root", shas: { [SHA]: "p-a" }, annotations, bugDrafts: { "p-a": { summary: "Popup left open", title: "Wait for the popup", patches: ["p-a"] } } });
   const script = page.match(/<script>([\s\S]*?)<\/script>/)![1];
   const filing: unknown[] = [];
   const config = page.match(/<script type="application\/json" id="ff-review-config">(.*?)<\/script>/)![1];
   const sent: unknown[] = [];
   const marked: string[][] = [];
-  const updated: [string, { status: { kind: string }; actions: { id: string }[] }][] = [];
+  const updated: [string, { status: { kind: string }; actions: { id: string }[]; titleLinks?: unknown[] }][] = [];
   const listeners = new Map<string, (e: unknown) => void>();
   const button = { textContent: "Send comments to the factory", disabled: false, click: () => {}, addEventListener: (_: string, f: () => void) => (button.click = f) };
   let comments = [{ id: "c-1", text: "Why?", quote: "x", line: 3, anchor: { file: "(commit)", line: 3 } }];
@@ -81,12 +81,13 @@ describe("the review page's script", () => {
     assert.equal(p.sent.length, 1, "nothing new: nothing sent");
   });
 
-  it("keeps the bug to file whose link you followed for bug-watch.js, and once its bug is recorded drops the link and the field", () => {
+  it("keeps the bug to file whose link you followed for bug-watch.js, and once its bug is recorded links it under its number and drops the field", () => {
     const p = loadPage();
     p.fire("mdv-link", { commit: SHA, text: "bug 1234567", href: "x" });
     p.fire("mdv-link", { commit: SHA.slice(0, 12), text: "Bug XXXXXXX", href: "x" });
     assert.deepEqual(JSON.parse(JSON.stringify(p.filing)), [{ request: "r-1", patch: "p-a", summary: "Popup left open", title: "Wait for the popup" }]);
     p.fire("ff-bug-recorded", { request: "r-1", patch: "p-a", bug: 2000001 });
     assert.deepEqual([p.updated[0][0], p.updated[0][1].actions.map((a) => a.id)], [SHA, ["approve"]]);
+    assert.deepEqual(JSON.parse(JSON.stringify(p.updated[0][1].titleLinks)), [{ text: "Bug XXXXXXX", href: "https://bugzilla.mozilla.org/show_bug.cgi?id=2000001", label: "Bug 2000001", tooltip: "The factory puts it in the commit message" }], "the link goes to the bug, under its number");
   });
 });

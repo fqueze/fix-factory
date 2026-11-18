@@ -223,10 +223,7 @@ const REVIEW_SCRIPT = `
       var m = /(\\d{4,8})\\s*$/.exec(String(d.value || "").trim());
       if (!m) return flash("Not a bug number");
       post({ cmd: "set-bug", patch: patch, bug: Number(m[1]) }).then(function () {
-        update(sha, function (a) {
-          a.actions = a.actions.filter(function (x) { return x.id !== "set-bug"; });
-          a.titleLinks = [];
-        });
+        bugSet(patch, Number(m[1]));
         flash("Bug " + m[1] + " set: the factory puts it in the commit message");
       }).catch(function (err) { flash("Failed: " + err.message); });
     }
@@ -238,16 +235,22 @@ const REVIEW_SCRIPT = `
     var draft = patch && cfg.bugDrafts && cfg.bugDrafts[patch];
     if (draft && /^Bug X+$/.test(e.detail.text)) window.ffBugWatch.add({ request: cfg.request, patch: patch, summary: draft.summary, title: draft.title });
   });
-  // bug-watch.js recorded it: its commits have their bug, nothing left to file.
-  window.addEventListener("ff-bug-recorded", function (e) {
-    if (e.detail.request !== cfg.request) return;
+  // A bug given for a patch: it and the patches sharing its draft link their Bug XXXXXXX to it, under its number, until
+  // the factory has put it in their commit messages; nothing left to file.
+  function bugSet(patch, bug) {
+    var draft = cfg.bugDrafts && cfg.bugDrafts[patch];
+    var sharing = draft ? draft.patches : [patch];
     for (var sha in cfg.shas) {
-      if (cfg.shas[sha] !== e.detail.patch || !cfg.annotations.commits[sha]) continue;
+      if (sharing.indexOf(cfg.shas[sha]) === -1 || !cfg.annotations.commits[sha]) continue;
       update(sha, function (a) {
         a.actions = a.actions.filter(function (x) { return x.id !== "set-bug"; });
-        a.titleLinks = [];
+        a.titleLinks = [{ text: "Bug XXXXXXX", href: "https://bugzilla.mozilla.org/show_bug.cgi?id=" + bug, label: "Bug " + bug, tooltip: "The factory puts it in the commit message" }];
       });
     }
+  }
+  // bug-watch.js recorded it.
+  window.addEventListener("ff-bug-recorded", function (e) {
+    if (e.detail.request === cfg.request) bugSet(e.detail.patch, e.detail.bug);
   });
   // An anchor stack-viewer gave, or one from where an older page says a comment is.
   function anchorOf(c) {
@@ -312,18 +315,19 @@ const REVIEW_SCRIPT = `
 `;
 
 // The bugs to file of a page's patches (the first of those sharing a draft), by patch: what bug-watch.js looks for.
-function bugDraftsOf(request: RequestState, patches: PatchId[]): Record<PatchId, { summary: string; title: string }> {
+// The bugs to file, by the first patch sharing each draft, with the patches sharing it.
+function bugDraftsOf(request: RequestState, patches: PatchId[]): Record<PatchId, { summary: string; title: string; patches: PatchId[] }> {
   return Object.fromEntries(
     [...new Set(patches)]
       .map((id) => request.patches[id])
       .filter((p) => (p.bug === null || p.bug === 0) && p.bugDraft && sameBugDraft(request, p.id)[0].id === p.id)
-      .map((p) => [p.id, { summary: p.bugDraft!.summary, title: shortTitle(p) }]),
+      .map((p) => [p.id, { summary: p.bugDraft!.summary, title: shortTitle(p), patches: sameBugDraft(request, p.id).map((x) => x.id) }]),
   );
 }
 
 export function injectSendButton(
   page: string,
-  cfg: { request: string; stack?: string; patch?: string; shas: Record<string, string>; annotations?: Annotations; bugDrafts?: Record<PatchId, { summary: string; title: string }> },
+  cfg: { request: string; stack?: string; patch?: string; shas: Record<string, string>; annotations?: Annotations; bugDrafts?: Record<PatchId, { summary: string; title: string; patches: PatchId[] }> },
 ): string {
   const snippet =
     `<button id="ff-send" type="button" style="position:fixed;right:12px;bottom:12px;z-index:1000;padding:6px 12px;border-radius:6px;border:1px solid #2a78d6;background:#2a78d6;color:#fff;font:13px system-ui,sans-serif;cursor:pointer">Send comments to the factory</button>` +

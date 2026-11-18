@@ -28,7 +28,7 @@ export interface CommitAnnotation {
   draftKey: string; // what stack-viewer keeps your drafts under: the patch, whatever its sha
   status: { kind: "approved" | "changed" | "unreviewed"; label: string };
   sections: { id: string; title: string; markdown: string }[];
-  titleLinks: { text: string; href: string; tooltip?: string }[];
+  titleLinks: { text: string; href: string; tooltip?: string; label?: string }[];
   actions: ({ id: "approve"; label: string; kind: "button"; tooltip: string } | { id: "set-bug"; label: string; kind: "input"; placeholder: string; tooltip: string })[];
   comments: AnnotationComment[];
 }
