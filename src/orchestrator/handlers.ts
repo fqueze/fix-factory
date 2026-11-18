@@ -444,6 +444,11 @@ function authorReport(input: HandlerInput, ev: <T extends EventInput["type"]>(ty
           "A DEBUG push is only for what the failing jobs' profiles can't show. Read the profiles of the failing tasks first (their profile_<test>.json.gz artifacts, with profiler-cli), list each with what it shows in `profiles`, and change or drop your DEBUG commits accordingly. If they have no profile, one entry saying so and how you checked.",
         );
       }
+      if (r.state === "needs a try repro" && !r.profileGap?.trim()) {
+        throw new InvalidReport(
+          "Say in `profileGap` what the failing jobs' profiles show, what exactly is missing from them, how you searched for it (profiler-cli, over every thread's markers, IPC payloads included), and why your commits get it: a DEBUG log, or a profiler marker added to the code when the data would help with other failures too.",
+        );
+      }
       if (r.state === "needs a try repro") {
         ev("item-state", { item, state: "waiting for a try repro", detail: r.summary.slice(0, 300) });
         return;

@@ -54,6 +54,7 @@ import {
   regressionStatus,
   selfReview,
   isLanded,
+  itemFileLink,
 } from "./common.ts";
 
 // One line per request; the body only when expanded, so the overview stays small.
@@ -936,11 +937,14 @@ function debugLink(r: RequestState, i: ItemView): Html | null {
 
 // What goes to try on top of the stack for a group that needs CI evidence: you see it before approving that push.
 function debugCommitsHtml(r: RequestState, i: ItemView): Html | null {
-  const commits = i.state === "waiting for a try repro" ? (i.lastReport?.report as { commits?: string[] } | undefined)?.commits : undefined;
+  const report = i.state === "waiting for a try repro" ? (i.lastReport?.report as { commits?: string[]; profileGap?: string } | undefined) : undefined;
+  const commits = report?.commits;
   if (!commits?.length) {
     return null;
   }
-  return html`<p class="sub">Its DEBUG ${commits.length === 1 ? "commit" : "commits"} (${commits.map((c) => c.slice(0, 12)).join(", ")}) go to try on top of the stack's next push. <a href="/requests/${encodeURIComponent(r.id)}/items/${encodeURIComponent(i.id)}/debug" target="_blank">View ↗</a></p>`;
+  return html`<p class="sub">Its DEBUG ${commits.length === 1 ? "commit" : "commits"} (${commits.map((c) => c.slice(0, 12)).join(", ")}) go to try on top of the stack's next push. <a href="/requests/${encodeURIComponent(r.id)}/items/${encodeURIComponent(i.id)}/debug" target="_blank">View ↗</a></p>${
+    report?.profileGap ? html`<div class="note"><b>Why the profiles weren't enough:</b> ${md(report.profileGap, i.group.tests, itemFileLink(r.id, i.id))}</div>` : null
+  }`;
 }
 
 function investigationHtml(i: ItemView): Html | null {

@@ -269,6 +269,10 @@
       "type": "string",
       "description": "Only with \"left as-is\" because a commit of the stack already fixes this failure: that commit's sha."
     },
+    "profileGap": {
+      "type": "string",
+      "description": "With \"needs a try repro\": what the failing jobs' profiles show, what exactly is missing from them for the cause (a message's text, a value, which branch was taken), and how you searched for it (the profiler-cli searches, over which threads and markers). Then why your commits get it: a DEBUG log, or a profiler marker added to the code (a patch of its own, to land) when the data would help with other failures too."
+    },
     "profiles": {
       "type": "array",
       "description": "The profiles of the failing jobs you read (the test's profile_<test>.json.gz artifact of each failing task), each with what it shows. Required before asking for a DEBUG push: what they show and why that isn't enough. If the failing tasks have none, one entry saying so and how you checked.",

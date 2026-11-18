@@ -323,6 +323,7 @@ export interface InvestigateReport {
   reproduction?: { reproduced: boolean; where?: "locally" | "on try"; widened?: boolean; command?: string; before: string; after?: string }; // command: in the first reports, before files
   files?: { evidence: string; reproduction: string; widening?: string }; // relative to the worktree
   profiles?: { profile: string; finding: string }[]; // the failing jobs' profiles read, and what each shows
+  profileGap?: string; // with "needs a try repro": what those profiles lack, and why its commits get it (log or marker)
   commits: string[]; // shas in the agent's worktree, oldest first
   bugDrafts?: { commits: string[]; draft: BugDraft }[]; // one per bug to file, with the commits it's for
   bugDraft?: BugDraft; // reports from before 2026-10-23: one draft, for its first commit without a bug
