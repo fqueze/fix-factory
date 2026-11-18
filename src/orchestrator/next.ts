@@ -165,6 +165,8 @@ export const CANCELLED = "cancelled by you";
 // pushed (a Lando timeout), and a retry would push again. They come to you instead.
 const NO_RETRY = new Set(["push"]);
 const TEST_PLAN_VERSION = "v4";
+// A test plan saying there were no retries, which "passed" already says.
+const NO_RETRIES = /\b(none|no runs?|0) (passed )?on retry|\bno retries\b|without (a )?retr/i;
 // A push whose failures triage found only these passes: they aren't the stack's.
 const BENIGN = new Set<TriageVerdict>(["pre-existing", "infra", "fixed"]);
 // A patch whose code was accepted gets a test plan; a landed one no longer needs it.
@@ -461,11 +463,12 @@ class Planner {
       const version = `test-plan:${p.id}:${TEST_PLAN_VERSION}:`;
       // passes-v1: plans written before told to confirm a push's runs with fx-tests --test are rewritten in their session;
       // pushes-v2: and those given every push of the request, whether it had the patch or not; positive-v1: and those
-      // saying what wasn't run, or leaving out the tests it fixes too; runs-v1: and those not given the tests' runs.
+      // saying what wasn't run, or leaving out the tests it fixes too; runs-v1: and those not given the tests' runs;
+      // retries-v1: and those saying there were no retries ("none on retry").
       // Keyed by the sha it had when written (thisVersion: the push had that very commit); written under any sha of this
       // version, it's current.
       const keyAt = (sha: string) =>
-        `${version}${shortHash([JSON.stringify([inv, results.map((x, i) => ({ ...x, thisVersion: had[i].commits.some((c) => same(c, sha)) }))]), "passes-v1", "pushes-v2", "positive-v1", "runs-v1", ...(alsoFixes.length ? [JSON.stringify(alsoFixes)] : [])]).slice(0, 8)}`;
+        `${version}${shortHash([JSON.stringify([inv, results.map((x, i) => ({ ...x, thisVersion: had[i].commits.some((c) => same(c, sha)) }))]), "passes-v1", "pushes-v2", "positive-v1", "runs-v1", ...(alsoFixes.length ? [JSON.stringify(alsoFixes)] : []), ...(NO_RETRIES.test(p.testPlan ?? "") ? ["retries-v1"] : [])]).slice(0, 8)}`;
       if (ownShas.some((sha) => sha !== p.sha && this.view.byKey.get(keyAt(sha))?.some(succeeded))) continue;
       const key = keyAt(p.sha);
       const investigationFile = dataPath(this.config, this.s.id, `test-plan-${p.id}-investigation.json`);
@@ -486,7 +489,7 @@ class Planner {
           item: item.id,
           cwd: last.cwd,
           files,
-          agent: { sessionId: last.sessionId!, resume: true, message: `Its investigation, its request's try results or your instructions changed: ${investigationFile} and ${pushesFile} are up to date. ${pushesFile} lists only the pushes that had this commit (\`thisVersion: false\`: an earlier version of it): cite no other push, and drop anything you wrote about one that isn't there. Its \`alsoFixes\`, when there, are tests it fixes too: link each on the first line with its own, with its reproduction and verification. Write nothing about what wasn't done (no platform, build type or push that wasn't run, nothing "untested" or "not confirmed"): what was run speaks for itself; only a push that still had failures in these tests is said plainly. Each push's \`runs\` are where its tests ran, per job, read with fx-tests: what you say about try (which platforms, build types, variants, how many runs, passed or failed) comes from them and nothing else, a job not listed there didn't run the test. A push with no runs of the test is left out, and nothing is said about what a tool could or couldn't show. Write the test plan again, keeping what you were asked before, then end with the JSON report.` },
+          agent: { sessionId: last.sessionId!, resume: true, message: `Its investigation, its request's try results or your instructions changed: ${investigationFile} and ${pushesFile} are up to date. ${pushesFile} lists only the pushes that had this commit (\`thisVersion: false\`: an earlier version of it): cite no other push, and drop anything you wrote about one that isn't there. Its \`alsoFixes\`, when there, are tests it fixes too: link each on the first line with its own, with its reproduction and verification. Write nothing about what wasn't done (no platform, build type or push that wasn't run, nothing "untested" or "not confirmed"): what was run speaks for itself; only a push that still had failures in these tests is said plainly. Each push's \`runs\` are where its tests ran, per job, read with fx-tests: what you say about try (which platforms, build types, variants, how many runs, passed or failed) comes from them and nothing else, a job not listed there didn't run the test. A push with no runs of the test is left out, and nothing is said about what a tool could or couldn't show. Retries are mentioned only when some runs failed first (\`passedOnRetry\`), as failures: never \"none on retry\". Write the test plan again, keeping what you were asked before, then end with the JSON report.` },
         }));
         continue;
       }
