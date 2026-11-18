@@ -65,7 +65,7 @@ export function commitAnnotation(r: RequestState, p: PatchView, sha: string, io:
     sections: testPlan === undefined ? [] : [{ id: "test-plan", title: "Test plan", markdown: testPlan }],
     titleLinks: toFile && placeholder ? [{ text: placeholder, href: io.bugUrl(p.bugDraft!), tooltip: "File its bug: Bugzilla's form, prefilled with the factory's draft. Then give its number in Bug number" }] : [],
     actions: [
-      ...(kind === "approved" ? [] : [{ id: "approve" as const, label: kind === "changed" ? "Mark this version self-reviewed" : "Mark self-reviewed", kind: "button" as const, tooltip: "The moz-phab command is offered once you self-reviewed every patch of the stack; a rebase keeps it reviewed" }]),
+      ...(kind === "approved" ? [] : [{ id: "approve" as const, label: kind === "changed" ? "Approve this version" : "Approve", kind: "button" as const, tooltip: "The moz-phab command is offered once you approved every patch of the stack; a rebase keeps it approved" }]),
       ...(toFile ? [{ id: "set-bug" as const, label: "Bug number", kind: "input" as const, placeholder: "1234567", tooltip: "The bug you filed from the draft (the Bug XXXXXXX link): the factory puts it in the commit message" }] : []),
     ],
     comments: [...yourComments(p, sha, lines), ...phabComments(p, sha, lines), ...findingComments(r, p, sha, io, lines)],

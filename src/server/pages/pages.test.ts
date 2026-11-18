@@ -101,7 +101,7 @@ describe("overview", () => {
     assert.match(page, /<span title="What the agents of every request cost; \$[\d.]+ of it for those not finished">spent <b>\$[\d.]+<\/b><\/span>/);
     // Hovering the count lists what runs, each linked to its row.
     assert.match(page, /<span class="running" tabindex="0">agents <b>10\/10<\/b><span class="running-list"><a href="#(patch|item|req)-[^"]+"><b>[^<]+<\/b> /);
-    assert.match(page, /<span class="progress"><span class="pbar">(<span class="[a-z-]+" style="flex-grow:\d+"><\/span>){7}<\/span><span class="needs-you">18 need you<\/span> · <span class="working">8 working<\/span> · <span class="landable">2 landable<\/span> · <span class="submitted">2 submitted<\/span> · <span class="to-self-review">9 to self-review<\/span> · <span class="pending">3 pending<\/span> · <span class="landed">3 landed<\/span><\/span>/, "landed: the finished requests' too; closed ones aren't progress");
+    assert.match(page, /<span class="progress"><span class="pbar">(<span class="[a-z-]+" style="flex-grow:\d+"><\/span>){7}<\/span><span class="needs-you">18 need you<\/span> · <span class="working">8 working<\/span> · <span class="landable">2 landable<\/span> · <span class="submitted">2 submitted<\/span> · <span class="to-review">9 to review<\/span> · <span class="pending">3 pending<\/span> · <span class="landed">3 landed<\/span><\/span>/, "landed: the finished requests' too; closed ones aren't progress");
     assert.ok(page.includes(cmd({ cmd: "tell-factory" })));
     assert.match(page, /placeholder="New request, or more for an active one: tell the factory…/, "what it's for: a new request, or more for an active one");
     assert.match(page, /<link rel="icon" href="data:image\/svg\+xml,[^"]*🏭/);
@@ -334,7 +334,7 @@ describe("one fixture per step of docs/MVP.md", () => {
     const h = expanded("r-20261013-tab-failures");
     const said = "restart the browser_pinnedTabs.js item, it has been waiting for a build slot since this morning";
     const summary = h.slice(0, h.indexOf("</summary>"));
-    assert.match(summary, /<span class="needs-you">2 need you<\/span> · <span class="working">1 working<\/span> · <span class="to-self-review">1 to self-review<\/span> · <span class="pending">1 pending<\/span><\/span> · answering you<\/span>/);
+    assert.match(summary, /<span class="needs-you">2 need you<\/span> · <span class="working">1 working<\/span> · <span class="to-review">1 to review<\/span> · <span class="pending">1 pending<\/span><\/span> · answering you<\/span>/);
     assert.ok(!summary.includes('data-key="recovery:j-recover"'), "its answer isn't in the summary");
     const body = h.slice(h.indexOf('<div class="rbody">'));
     const answer = body.indexOf('<div class="action reply" data-key="recovery:j-recover">');
@@ -548,7 +548,7 @@ describe("one fixture per step of docs/MVP.md", () => {
     r.items["i-drag"].state = "reviewed";
     const reviewed = renderRequest(r, ctx, true).value;
     assert.match(rowOf(reviewed, "patch-p-drag"), /<span class="name" title="[^"]*"><a class="bug tofile" data-patch="p-drag" href="https:\/\/bugzilla\.mozilla\.org\/enter_bug\.cgi\?[^"]*Drag\+session\+left\+open[^"]*"[^>]*>Bug to file<\/a><span class="ptitle">Close the drag session/);
-    assert.match(reviewed, /<span class="to-self-review">2 to self-review<\/span>/);
+    assert.match(reviewed, /<span class="to-review">2 to review<\/span>/);
   });
   it("names a try push by what it's for, numbered", () => {
     const r = structuredClone(get("r-20261010-xpcshell-cwd"));
@@ -707,22 +707,22 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.match(h, /Meta: Bug to file ↗/);
     assert.ok(h.includes(cmd({ cmd: "set-bug", request: "r-20261008-permissions", patch: "meta" })));
     assert.match(h, /<span class="bad">2 patches still say Bug XXXXXXX<\/span>/);
-    assert.match(h, /<span class="bad">waits for your self-review of 3 patches in stack-viewer<\/span>/);
+    assert.match(h, /<span class="bad">waits for your review of 3 patches<\/span>/);
     assert.match(h, /data-copy="mozphab-r-20261008-permissions-[^"]*" disabled>Copy the moz-phab command<\/button>/, "not before you approved them");
     const r = approvedAll(get("r-20261008-permissions"));
     assert.match(renderRequest(r, ctx, true).value, /data-copy="mozphab-r-20261008-permissions-[^"]*">Copy the moz-phab command<\/button>/, "the other checks inform, you decide");
   });
 
-  it("asks for your self-review of each patch in stack-viewer before submitting, and says which are ready", () => {
+  it("asks for your review of each patch before submitting, and says which are ready", () => {
     const r = approvedAll(get("r-20261007-focus"));
     r.patches["p-focus"].approved = { sha: "1".repeat(40), fingerprint: "fp", t: r.createdAt };
-    assert.match(rowOf(renderRequest(r, { ...ctx, fingerprint: () => "other" }, true).value, "patch-p-focus"), /<span class="sub"[^>]*>changed since your self-review<\/span>/);
-    assert.match(renderRequest(r, { ...ctx, fingerprint: () => "other" }, true).value, /<span class="bad">waits for your self-review of 1 patch in stack-viewer<\/span>/);
-    assert.match(rowOf(renderRequest(r, { ...ctx, fingerprint: (s) => (s === r.patches["p-focus"].sha ? "fp" : undefined) }, true).value, "patch-p-focus"), /<span class="self-reviewed"[^>]*>ready<\/span>/, "rebased, the same fingerprint");
+    assert.match(rowOf(renderRequest(r, { ...ctx, fingerprint: () => "other" }, true).value, "patch-p-focus"), /<span class="sub"[^>]*>changed since you approved it<\/span>/);
+    assert.match(renderRequest(r, { ...ctx, fingerprint: () => "other" }, true).value, /<span class="bad">waits for your review of 1 patch<\/span>/);
+    assert.match(rowOf(renderRequest(r, { ...ctx, fingerprint: (s) => (s === r.patches["p-focus"].sha ? "fp" : undefined) }, true).value, "patch-p-focus"), /<span class="approved"[^>]*>ready<\/span>/, "rebased, the same fingerprint");
     delete r.patches["p-focus"].approved;
     r.needsUser = [{ key: "approve:focus:1234", action: "Review and approve each patch in stack-viewer", detail: "0 of 1 approved", stack: "focus", since: r.createdAt }];
     const h = renderRequest(r, ctx, true).value;
-    assert.match(rowOf(h, "patch-p-focus"), /needs self-review/);
+    assert.match(rowOf(h, "patch-p-focus"), /needs your review/);
     assert.match(h, /<div class="action" data-key="approve:focus:1234"><span class="flag">Review and approve each patch in stack-viewer<\/span><a class="btn small primary" href="\/requests\/r-20261007-focus\/stacks\/focus\/review"/);
   });
 
@@ -775,7 +775,7 @@ describe("one fixture per step of docs/MVP.md", () => {
   it("8. submit: checks pass, stack-viewer link, moz-phab command to copy", () => {
     const h = renderRequest(approvedAll(get("r-20261007-focus")), ctx, true).value;
     assert.doesNotMatch(h, /class="bad"/);
-    assert.match(h, /Open in stack-viewer ↗/);
+    assert.match(h, /Review patches ↗/);
     assert.match(h, /<textarea hidden id="mozphab-r-20261007-focus-focus">cd [^<]+ &amp;&amp; git switch [^<]+ &amp;&amp; moz-phab submit<\/textarea>/);
     assert.match(h, /data-copy="mozphab-r-20261007-focus-focus">Copy the moz-phab command<\/button>/);
     assert.ok(h.includes(cmd({ cmd: "copied-submit", request: "r-20261007-focus", stack: "focus" })), "copying it tells the factory to look for the revisions");

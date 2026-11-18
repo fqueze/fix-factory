@@ -226,7 +226,7 @@ details.reopen[open] > summary { display: none; }
 .pbar { display: inline-flex; width: 120px; height: 8px; border-radius: 4px; overflow: hidden; background: var(--track); vertical-align: middle; margin-right: 8px; }
 .pbar > span { min-width: 3px; }
 .pbar .landed { background: var(--good); } .pbar .ready, .pbar .submitted { background: var(--accent); } .pbar .waiting-for-try { background: color-mix(in srgb, var(--accent) 40%, var(--track)); }
-.pbar .to-self-review { background: color-mix(in srgb, var(--accent) 35%, var(--track)); }
+.pbar .to-review { background: color-mix(in srgb, var(--accent) 35%, var(--track)); }
 .pbar .handed-over { background: color-mix(in srgb, var(--text-muted) 45%, var(--track)); }
 .pbar .needs-you { background: var(--serious); } .pbar .working { background: var(--text-muted); } .pbar .pending { background: var(--border); }
 .rprog > .needs-you, .progress > .needs-you { color: var(--serious); font-weight: 600; }
@@ -296,7 +296,7 @@ div.job { padding-left: 14px; }
 .landable, .rprog > .landable, .progress > .landable { color: var(--good); font-weight: 600; animation: landable-fg 2s ease-in-out infinite; }
 .pbar .landable { background: var(--good); animation: landable-bg 2s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) { .landable, .pbar .landable { animation: none; } }
-.self-reviewed { color: var(--accent); }
+.approved { color: var(--accent); }
 details.fold.configs > summary { padding: 0; }
 /* What a group needing you asks: in sight under its line, with its buttons. */
 div.asks { border-bottom: 1px solid var(--border); }
@@ -455,7 +455,7 @@ details.row.b-landed { border-left-color: var(--good); }
 details.row.b-landable { border-left-color: var(--good); animation: landable-edge 2s ease-in-out infinite; }
 @keyframes landable-edge { 0%, 100% { border-left-color: var(--accent); } 50% { border-left-color: var(--good); } }
 details.row.b-ready { border-left-color: var(--accent); }
-details.row.b-to-self-review { border-left-color: color-mix(in srgb, var(--accent) 35%, var(--track)); }
+details.row.b-to-review { border-left-color: color-mix(in srgb, var(--accent) 35%, var(--track)); }
 details.row.b-waiting-for-try { border-left-color: color-mix(in srgb, var(--accent) 40%, var(--track)); }
 details.row.b-working { border-left-color: var(--text-muted); }
 details.row.b-pending { border-left-color: var(--border); }

@@ -214,10 +214,10 @@ const REVIEW_SCRIPT = `
     if (d.id === "approve") {
       post({ cmd: "approve", patch: patch, sha: sha }).then(function () {
         update(sha, function (a) {
-          a.status = { kind: "approved", label: "Ready" };
+          a.status = { kind: "approved", label: "Approved" };
           a.actions = a.actions.filter(function (x) { return x.id !== "approve"; });
         });
-        flash("Marked self-reviewed: ready");
+        flash("Approved");
       }).catch(function (err) { flash("Failed: " + err.message); });
     } else if (d.id === "set-bug") {
       var m = /(\\d{4,8})\\s*$/.exec(String(d.value || "").trim());

@@ -3167,8 +3167,8 @@ class Planner {
       if (waiting.length) {
         const approved = patches.length - waiting.length;
         this.raise(approveKey, {
-          action: "Self-review each patch in stack-viewer",
-          detail: `${approved} of ${patches.length} self-reviewed: the moz-phab command comes once every patch is. Not yet: ${waiting.map((p) => p.title.replace(/,\s*r=.*$/, "")).join("; ")}`.slice(0, 500),
+          action: "Review each patch",
+          detail: `${approved} of ${patches.length} approved: the moz-phab command comes once every patch is. Not yet: ${waiting.map((p) => p.title.replace(/,\s*r=.*$/, "")).join("; ")}`.slice(0, 500),
           stack: st.id,
         });
         continue;

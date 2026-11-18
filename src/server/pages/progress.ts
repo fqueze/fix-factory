@@ -204,9 +204,9 @@ function stalledControls(r: RequestState, i: ItemView): Html {
 // Where each group stands, counted per request (and for the whole factory) and drawn as a bar.
 // "landable" and "submitted" (ready, all its patches on Phabricator) are only counted in a request's progress: their
 // rows are ready ones.
-// "to self-review" and "ready": a patch not on Phabricator yet, before and after you marked it self-reviewed.
-export type Bucket = "working" | "needs you" | "waiting for try" | "landable" | "submitted" | "to self-review" | "ready" | "pending" | "landed" | "handed over" | "closed";
-export const BUCKETS: Bucket[] = ["needs you", "working", "waiting for try", "landable", "submitted", "to self-review", "ready", "pending", "landed", "handed over", "closed"];
+// "to review" and "ready": a patch not on Phabricator yet, before and after you marked it self-reviewed.
+export type Bucket = "working" | "needs you" | "waiting for try" | "landable" | "submitted" | "to review" | "ready" | "pending" | "landed" | "handed over" | "closed";
+export const BUCKETS: Bucket[] = ["needs you", "working", "waiting for try", "landable", "submitted", "to review", "ready", "pending", "landed", "handed over", "closed"];
 
 const READY: ItemState[] = ["reviewed", "in stack", "waiting for review", "fixed", "landed"];
 
@@ -238,7 +238,7 @@ export type Progress = Record<Bucket, number>;
 // ⚑s (recovery plans, refused commands…) need you too. Its own jobs aren't groups: the summary next to it says what
 // they do.
 export function requestProgress(r: RequestState, ctx: RenderContext): Progress {
-  const p: Progress = { "needs you": 0, working: 0, "waiting for try": 0, landable: 0, submitted: 0, "to self-review": 0, ready: 0, pending: 0, landed: 0, "handed over": 0, closed: 0 };
+  const p: Progress = { "needs you": 0, working: 0, "waiting for try": 0, landable: 0, submitted: 0, "to review": 0, ready: 0, pending: 0, landed: 0, "handed over": 0, closed: 0 };
   for (const i of Object.values(r.items)) {
     const b = itemBucket(r, i, ctx);
     const patches = Object.values(r.patches).filter((x) => x.item === i.id && !isDropped(r, x));
@@ -251,9 +251,9 @@ export function requestProgress(r: RequestState, ctx: RenderContext): Progress {
       p[b] += Math.max(1, patches.length);
       continue;
     }
-    for (const x of patches) p[x.review?.status === "published" ? "landed" : isLandable(r, x) ? "landable" : x.revision !== undefined ? "submitted" : reviewStatus(x, ctx.fingerprint) === "approved" ? "ready" : "to self-review"]++;
+    for (const x of patches) p[x.review?.status === "published" ? "landed" : isLandable(r, x) ? "landable" : x.revision !== undefined ? "submitted" : reviewStatus(x, ctx.fingerprint) === "approved" ? "ready" : "to review"]++;
   }
-  // The stack's ⚑ asking for your self-review is what "to self-review" counts.
+  // The stack's ⚑ asking for your self-review is what "to review" counts.
   p["needs you"] += r.needsUser.filter((n) => flagItemOf(r, n) === undefined && !selfReview(n, r)).length + refusedOf(r).length;
   return p;
 }
@@ -289,7 +289,7 @@ export function workLabel(j: JobView): Html {
 
 // The bar fills from the left with what's done, then what's ready, what waits on try, needs you, runs and waits, and
 // last, grey, what was handed over; closed groups aren't progress.
-const BAR: Bucket[] = ["landed", "landable", "submitted", "ready", "to self-review", "waiting for try", "needs you", "working", "pending", "handed over"];
+const BAR: Bucket[] = ["landed", "landable", "submitted", "ready", "to review", "waiting for try", "needs you", "working", "pending", "handed over"];
 
 // A bar with one segment per bucket, then "2 need you · 1 working · 3 ready · 4 pending · 5 closed".
 // Closed groups aren't progress: never counted. Handed over ones only on a request's line (withHandedOver).
@@ -307,7 +307,7 @@ export function progressLine(p: Progress, submitted = "", withHandedOver = true,
 }
 
 export function sumProgress(list: Progress[]): Progress {
-  const sum: Progress = { "needs you": 0, working: 0, "waiting for try": 0, landable: 0, "submitted": 0, "to self-review": 0, ready: 0, pending: 0, landed: 0, "handed over": 0, closed: 0 };
+  const sum: Progress = { "needs you": 0, working: 0, "waiting for try": 0, landable: 0, "submitted": 0, "to review": 0, ready: 0, pending: 0, landed: 0, "handed over": 0, closed: 0 };
   for (const p of list) {
     for (const b of BUCKETS) {
       sum[b] += p[b];

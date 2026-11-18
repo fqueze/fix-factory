@@ -113,7 +113,7 @@ export function flagControls(r: RequestState, n: NeedsUser, ctx: RenderContext):
       // approved this version of it.
       const waiting = p !== undefined && unapproved([p], ctx.fingerprint).length > 0;
       controls = stack
-        ? html`${waiting ? html`<a class="btn small" href="${patchViewUrl(r, p!)}" target="_blank" rel="noopener">Approve it in stack-viewer ↗</a>` : null}${mozPhabButton(r.id, stack, waiting, ctx, p?.sha)}${dismissButton(r.id, n.key, back)}`
+        ? html`${waiting ? html`<a class="btn small" href="${patchViewUrl(r, p!)}" target="_blank" rel="noopener">Review it ↗</a>` : null}${mozPhabButton(r.id, stack, waiting, ctx, p?.sha)}${dismissButton(r.id, n.key, back)}`
         : null;
       break;
     }
@@ -285,7 +285,7 @@ export function copyButton(id: string, label: string, primary = false): Html {
 }
 
 export function stackViewerLink(r: RequestState, stack: StackView, primary = false): Html {
-  return html`<a class="btn small${primary ? " primary" : ""}" href="/requests/${encodeURIComponent(r.id)}/stacks/${encodeURIComponent(stack.id)}/review" target="_blank">Open in stack-viewer ↗</a>`;
+  return html`<a class="btn small${primary ? " primary" : ""}" href="/requests/${encodeURIComponent(r.id)}/stacks/${encodeURIComponent(stack.id)}/review" target="_blank">Review patches ↗</a>`;
 }
 
 export function patchViewUrl(r: RequestState, p: PatchView): string {

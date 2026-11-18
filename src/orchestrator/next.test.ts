@@ -2872,7 +2872,7 @@ describe("8. submit", () => {
     // Not before you approved each patch in stack-viewer: that's what it asks.
     const [approve] = sc.open();
     assert.match(approve, /^approve:root:/);
-    assert.match(sc.state().needsUser[0].detail, /^0 of 2 self-reviewed: the moz-phab command comes once every patch is/);
+    assert.match(sc.state().needsUser[0].detail, /^0 of 2 approved: the moz-phab command comes once every patch is/);
     const p = sc.state().patches;
     sc.add({ type: "patch-approved", request: ID, patch: "p-test-b", sha: p["p-test-b"].sha, fingerprint: "fp-b" });
     sc.settle();

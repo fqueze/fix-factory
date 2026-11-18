@@ -239,7 +239,7 @@ export function submitChecks(r: RequestState, s: StackView, ctx: Pick<RenderCont
   const waiting = unapproved(patches, ctx.fingerprint).length;
   return [
     { ok: wip === 0, text: wip === 0 ? "no WIP/DEBUG" : `${wip} WIP/DEBUG patches`, blocks: true },
-    { ok: waiting === 0, text: waiting === 0 ? "every patch self-reviewed" : `waits for your self-review of ${waiting === 1 ? "1 patch" : `${waiting} patches`} in stack-viewer`, blocks: true },
+    { ok: waiting === 0, text: waiting === 0 ? "every patch approved" : `waits for your review of ${waiting === 1 ? "1 patch" : `${waiting} patches`}`, blocks: true },
     { ok: tryDone, text: tryDone ? "try complete and green" : pushes.length === 0 ? "no try push" : "try not complete and green" },
     { ok: noReviewer === 0, text: noReviewer === 0 ? "r= on every patch" : `${noReviewer} patches without r=` },
     { ok: noBug === 0, text: noBug === 0 ? "every patch has a bug" : `${noBug} ${noBug === 1 ? "patch still says" : "patches still say"} Bug XXXXXXX` },
@@ -265,7 +265,7 @@ export function needsYou(r: RequestState): boolean {
 }
 
 // A ⚑ that's part of your self-review of the patches (marking them in stack-viewer, filing their bugs): counted with
-// the patches to self-review, it doesn't make a request or a row stand out.
+// the patches to review, it doesn't make a request or a row stand out.
 export function selfReview(n: NeedsUser, r: RequestState): boolean {
   return n.key.startsWith("approve:") || actionKind(n, r) === "file-bug";
 }
@@ -281,7 +281,7 @@ export const COMMAND_LABELS: Record<Command["cmd"], string> = {
   "comment-bug-draft": "comment on the bug draft",
   "stack-comments": "stack-viewer comments",
   "redo-annotations": "redo the skip-if annotations item",
-  approve: "marking a patch self-reviewed",
+  approve: "approving a patch",
   "review-send": "stack-viewer comments and answers",
   "poll-phab": "check Phabricator now",
   "revise-push": "revise the push",

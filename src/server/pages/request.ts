@@ -397,7 +397,7 @@ function askBlock(r: RequestState, i: ItemView, ctx: RenderContext, patches: Pat
   const commits = (i.lastReport?.report as { commits?: string[] } | undefined)?.commits ?? [];
   const unimported = !patches.length && commits.length && !Object.values(r.patches).some((p) => p.item === i.id) && i.lastReport?.prompt === "investigate-and-fix";
   const view = unimported ? html`<p><a href="/requests/${encodeURIComponent(r.id)}/items/${encodeURIComponent(i.id)}/debug" target="_blank" rel="noopener">View its ${commits.length === 1 ? "commit" : `${commits.length} commits`}</a> (what “${first && untakenFix(r, i.id, first) ? "Take its patch" : "Go ahead with its patch"}” takes)</p>` : null;
-  return html`${withFirst ? html`${s.ask}${patches.length ? html`<p>${patches.map((p) => html`“${patchTitle(p)}” ${viewLink(r, p, "View the patch")} `)}</p>` : view}${controls(s.controls)}` : null}${more.map(
+  return html`${withFirst ? html`${s.ask}${patches.length ? html`<p>${patches.map((p) => html`“${patchTitle(p)}” ${viewLink(r, p, "Review the patch")} `)}</p>` : view}${controls(s.controls)}` : null}${more.map(
     (n) => html`<div class="ask-more" data-key="${n.key}"><p><b>Also: ${flagText(r, n)}</b></p>${flagAsk(r, i, n)}${controls(flagControls(r, n, ctx))}</div>`,
   )}`;
 }
@@ -489,8 +489,8 @@ const ICON_TIPS: Record<StateClass, string> = {
   landed: "Landed (closed on Phabricator)",
   abandoned: "Abandoned on Phabricator",
   handedover: "Handed over to someone else",
-  draft: "Ready to submit: you self-reviewed it",
-  selfreview: "Needs your self-review in stack-viewer: nothing left for the factory to do",
+  draft: "You approved it",
+  selfreview: "Needs your review",
   resubmit: "To resubmit: it changed since Phabricator got it",
   dropped: "Dropped by you: the factory stopped working on it",
 };
@@ -513,12 +513,12 @@ function fixClass(ps: PatchView[], cls: StateClass, ctx: RenderContext): StateCl
   return classes.reduce((a, b) => (rank.includes(a) && rank.includes(b) && rank.indexOf(b) < rank.indexOf(a) ? b : a));
 }
 
-// A ready item's row, by its patches: landable, to self-review while one not submitted yet waits for your self-review.
+// A ready item's row, by its patches: landable, to review while one not submitted yet waits for your self-review.
 function patchBucket(r: RequestState, i: ItemView, ps: PatchView[], landable: boolean, ctx: RenderContext): Bucket {
   const b = itemBucket(r, i, ctx);
   if (b !== "ready") return b;
   if (landable) return "landable";
-  return ps.some((p) => p.revision === undefined && reviewStatus(p, ctx.fingerprint) !== "approved") ? "to self-review" : b;
+  return ps.some((p) => p.revision === undefined && reviewStatus(p, ctx.fingerprint) !== "approved") ? "to review" : b;
 }
 
 function rowClass(r: RequestState, i: ItemView, ctx: RenderContext): StateClass {
@@ -1127,7 +1127,7 @@ function landoState(job: JobView, ctx: RenderContext, submitted: Html | string, 
 }
 
 // The patch in stack-viewer, where comments go back to its author.
-function viewLink(r: RequestState, p: PatchView, label = "view"): Html {
+function viewLink(r: RequestState, p: PatchView, label = "review"): Html {
   return html`<a href="/requests/${encodeURIComponent(r.id)}/patches/${encodeURIComponent(p.id)}/view" target="_blank" rel="noopener" title="Opens the patch in stack-viewer; your comments there go to its author">${label}</a>`;
 }
 
@@ -1260,10 +1260,10 @@ function sinceSection(r: RequestState, p: PushView, ctx: RenderContext): Html | 
 function approvalText(r: RequestState, p: PatchView, ctx: RenderContext): Html | null {
   if (isLanded(r, p) || isDropped(r, p) || !stackOfPatch(r, p.id)) return null;
   const status = reviewStatus(p, ctx.fingerprint);
-  if (status === "approved") return html`<span class="self-reviewed" title="You self-reviewed this version in stack-viewer: it's ready to submit">ready</span>`;
+  if (status === "approved") return html`<span class="approved" title="You approved it: ready to submit">ready</span>`;
   if (!unapproved([p], ctx.fingerprint).length) return null;
-  if (status === "changed") return html`<span class="sub" title="You self-reviewed an earlier version in stack-viewer; it's submitted once you mark this one">changed since your self-review</span>`;
-  return REQUEST_STEPS.indexOf(r.step) >= REQUEST_STEPS.indexOf("submit") ? html`<span class="sub" title="Mark it self-reviewed in stack-viewer: the stack is submitted once every patch is">needs self-review</span>` : null;
+  if (status === "changed") return html`<span class="sub" title="You approved an earlier version; it's submitted once you approve this one">changed since you approved it</span>`;
+  return REQUEST_STEPS.indexOf(r.step) >= REQUEST_STEPS.indexOf("submit") ? html`<span class="sub" title="Review it and approve it: the stack is submitted once every patch is approved">needs your review</span>` : null;
 }
 
 // Its landing backed out: whether it caused it, and what it waits for.
