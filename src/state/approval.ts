@@ -13,10 +13,8 @@ export function reviewStatus(p: Pick<PatchView, "sha" | "approved">, fingerprint
 
 export const REVIEW_STATUS_LABELS: Record<ReviewStatus, string> = { approved: "Approved", changed: "Changed since you approved it", unreviewed: "Needs your review" };
 
-// What a moz-phab submit would send that you haven't approved: patches not landed, not as Phabricator has them already
-// (the commit it has, or one with the same fingerprint: the stack rebased since).
+// What a moz-phab submit would send for the first time that you haven't approved. A patch already on Phabricator is
+// resubmitted from its interdiff, which the page shows you: no approval in stack-viewer.
 export function unapproved(patches: PatchView[], fingerprint: Fingerprint | undefined): PatchView[] {
-  const onPhabricator = (p: PatchView) =>
-    p.revision !== undefined && [p.sentSha, p.review?.diff?.commit].some((sha) => sha !== undefined && (sha === p.sha || (fingerprint?.(sha) !== undefined && fingerprint(sha) === fingerprint(p.sha))));
-  return patches.filter((p) => p.review?.status !== "published" && !onPhabricator(p) && reviewStatus(p, fingerprint) !== "approved");
+  return patches.filter((p) => p.revision === undefined && reviewStatus(p, fingerprint) !== "approved");
 }

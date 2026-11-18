@@ -1276,7 +1276,8 @@ function sinceSection(r: RequestState, p: PushView, ctx: RenderContext): Html | 
 // Whether you approved it in stack-viewer: said once you did, and while a submit would send it without (not approved
 // yet: from the submit step on, when it's what the factory waits for).
 function approvalText(r: RequestState, p: PatchView, ctx: RenderContext): Html | null {
-  if (isLanded(r, p) || isDropped(r, p) || !stackOfPatch(r, p.id)) return null;
+  // On Phabricator: resubmitted from its interdiff, with no approval.
+  if (isLanded(r, p) || isDropped(r, p) || !stackOfPatch(r, p.id) || p.revision !== undefined) return null;
   const status = reviewStatus(p, ctx.fingerprint);
   if (status === "approved") return html`<span class="approved" title="You approved it: ready to submit">ready</span>`;
   if (!unapproved([p], ctx.fingerprint).length) return null;

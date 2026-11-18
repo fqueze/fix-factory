@@ -26,7 +26,7 @@ export interface AnnotationComment {
 
 export interface CommitAnnotation {
   draftKey: string; // what stack-viewer keeps your drafts under: the patch, whatever its sha
-  status: { kind: "approved" | "changed" | "unreviewed"; label: string };
+  status?: { kind: "approved" | "changed" | "unreviewed"; label: string }; // none once on Phabricator: resubmitted from its interdiff
   sections: { id: string; title: string; markdown: string }[];
   titleLinks: { text: string; href: string; tooltip?: string; label?: string }[];
   actions: ({ id: "approve"; label: string; kind: "button"; tooltip: string } | { id: "set-bug"; label: string; kind: "input"; placeholder: string; tooltip: string })[];
@@ -62,11 +62,11 @@ export function commitAnnotation(r: RequestState, p: PatchView, sha: string, io:
   return {
     // Your unsent comments are kept under it: the patch's commit gets a new sha whenever the stack is rewritten.
     draftKey: `${r.id}:${p.id}`,
-    status: { kind, label: REVIEW_STATUS_LABELS[kind] },
+    ...(p.revision === undefined ? { status: { kind, label: REVIEW_STATUS_LABELS[kind] } } : {}),
     sections: testPlan === undefined ? [] : [{ id: "test-plan", title: "Test plan", markdown: testPlan }],
     titleLinks: toFile && placeholder ? [{ text: placeholder, href: io.bugUrl(p.bugDraft!), tooltip: "File its bug: Bugzilla's form, prefilled with the factory's draft. Then give its number in Bug number" }] : [],
     actions: [
-      ...(kind === "approved" ? [] : [{ id: "approve" as const, label: kind === "changed" ? "Approve this version" : "Approve", kind: "button" as const, tooltip: "The moz-phab command is offered once you approved every patch of the stack; a rebase keeps it approved" }]),
+      ...(kind === "approved" || p.revision !== undefined ? [] : [{ id: "approve" as const, label: kind === "changed" ? "Approve this version" : "Approve", kind: "button" as const, tooltip: "The moz-phab command is offered once you approved every patch of the stack; a rebase keeps it approved" }]),
       ...(toFile ? [{ id: "set-bug" as const, label: "Bug number", kind: "input" as const, placeholder: "1234567", tooltip: "The bug you filed from the draft (the Bug XXXXXXX link): the factory puts it in the commit message" }] : []),
     ],
     comments: [...yourComments(p, sha, lines), ...phabComments(p, sha, lines), ...findingComments(r, p, sha, io, lines)],

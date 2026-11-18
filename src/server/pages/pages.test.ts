@@ -848,6 +848,9 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.doesNotMatch(rowOf(h, "patch-p-focus")!, /<b class="you">Post 1 reply/);
     assert.match(rowOf(h, "patch-p-focus")!, /<span class="st resubmit"/);
     assert.match(rowOf(h, "patch-p-focus")!, /moz-phab submit --single p-focus00000<\/textarea>/, "only that patch, by its commit");
+    // Never approved in stack-viewer, and changed since it was submitted: you review its interdiff, here.
+    assert.match(rowOf(h, "patch-p-focus")!, /data-copy="mozphab-[^"]*">Copy the moz-phab command/, "not disabled");
+    assert.doesNotMatch(rowOf(h, "patch-p-focus")!, /needs your review|Review it ↗/);
     // Checking Phabricator now and dropping it: in its ⋯ menu.
     assert.match(rowOf(h, "patch-p-focus")!, /<span class="onhover">[^]*?<details class="menu"><summary class="btn small" title="More">⋯<\/summary><div class="menu-items">[^]*?Check Phabricator now/);
     assert.equal(h.split('data-key="resubmit:focus:j1"').length, 2, "and not also at the top");
