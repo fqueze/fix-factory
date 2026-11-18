@@ -1701,6 +1701,122 @@ describe("4b. try repro", () => {
     }
   });
 
+  // The stack's verify push from its try branch, approved and made (finished: with that result).
+  const stackPush = (sc: Scenario, result?: "green" | "failures") => {
+    const tb = sc.view().jobs.findLast((j) => !j.end && j.purpose.key.startsWith("try-branch:root:"))!.purpose.key;
+    sc.complete(tb, { output: { branch: `${ID}-root-try-${tb.split(":")[2]}`, head: sha("f"), commits: [{ sha: sha("d"), newSha: sha("f") }] } });
+    sc.settle();
+    const planKey = sc.view().jobs.findLast((j) => !j.end && j.purpose.what === "plan-pushes")!.purpose.key;
+    sc.complete(planKey, { report: { pushes: [{ purpose: "verify", tryArgs: ["fuzzy", "-q", "x"], rebuild: 5 }], feedback: [] } });
+    const dry = sc.settle().find((k) => k.startsWith("dry-run:"))!;
+    const push = sc.purpose(dry).push!;
+    sc.complete(dry, { output: { command: ["./mach", "try", "fuzzy"], taskCount: 5, tasks: [], tryTaskConfig: {}, commits: [sha("f"), sha("b")], warnings: [] } });
+    sc.add({ type: "user-done", request: ID, key: `approve-push:${push}` });
+    sc.add({ type: "try-pushed", request: ID, push, rev: "fed", url: "u" });
+    if (result) sc.add({ type: "try-finished", request: ID, push, result, summary: result === "green" ? "all green" : "3 failures" });
+    sc.settle();
+    return push;
+  };
+  const debugKeys = (sc: Scenario) => sc.view().jobs.map((j) => j.purpose.key).filter((k) => /^(plan|try-branch|dry-run|push):debug/.test(k));
+  const askRepro = (commit: string) => fixed([commit], { state: "needs a try repro", summary: "not seen yet", profiles: [{ profile: "p.json.gz", finding: "no marker" }], profileGap: "a DEBUG log of the race" });
+
+  it("the stack's push still carries them by default: no push of their own while one of the stack is coming", () => {
+    const sc = waitingStack();
+    assert.deepEqual(sc.plan(keyOf(sc, "try-branch:root:")).cli?.args.slice(-1), [sha("d")]);
+    stackPush(sc);
+    assert.deepEqual(debugKeys(sc), []);
+  });
+
+  it("once the stack was verified, a group asking for another try repro gets a push of its own, on top of the stack when its failure was only seen on the stack's pushes, approved by you", () => {
+    const sc = waitingStack();
+    const first = stackPush(sc);
+    // Its failure is only seen on the stack's push.
+    sc.add({ type: "try-job-failed", request: ID, push: first, taskId: "T1", jobName: "test-macosx/debug-xpcshell", platform: "mac", result: "testfailed" });
+    sc.add({ type: "try-finished", request: ID, push: first, result: "green", summary: "all green" });
+    sc.settle();
+    assert.equal(sc.state().step, "meta bug");
+    const resumed = keyOf(sc, "author:i-test-a:repro:");
+    sc.complete(resumed, { report: askRepro(sha("e")) });
+    sc.settle();
+    assert.equal(sc.state().items["i-test-a"].state, "waiting for a try repro");
+    const tb = keyOf(sc, "try-branch:debug:");
+    const h = tb.split(":")[2];
+    assert.deepEqual(sc.plan(tb).cli?.args, ["assemble", "--cwd", `/wt/${ID}-root`, "--branch", `${ID}-debug-${h}`, "--base", `${ID}-root`, "--leave-conflict", sha("e")]);
+    sc.complete(tb, { output: { branch: `${ID}-debug-${h}`, head: sha("9"), commits: [{ sha: sha("e"), newSha: sha("9") }] } });
+    sc.settle();
+    const plan = sc.plan(`plan:debug:${h}`);
+    assert.deepEqual([plan.name, plan.purpose.items, plan.purpose.onto, plan.agent?.vars?.branch], ["plan-try-pushes", ["i-test-a"], "the stack", `${ID}-debug-${h}`]);
+    assert.match(String(plan.agent?.vars?.goal), /on top of the stack/);
+    const failures = JSON.parse(plan.files![0].content);
+    assert.deepEqual(failures.map((f: { item: string; debugCommits: string[]; toReproduce: boolean; configs: string[] }) => [f.item, f.debugCommits, f.toReproduce, f.configs]), [["i-test-a", [sha("e")], true, ["linux/opt-xpcshell"]]]);
+    sc.complete(`plan:debug:${h}`, { report: { pushes: [{ purpose: "repro", tryArgs: ["fuzzy", "-q", "mac xpcshell"], rebuild: 10, scope: "debug" }], feedback: [] } });
+    const dry = `dry-run:debug-${h}-1`;
+    assert.ok(sc.settle().includes(dry));
+    assert.ok(sc.plan(dry).cli?.args.includes(`${ID}-debug-${h}`), "dry-run of its branch");
+    sc.complete(dry, { output: { command: ["./mach", "try", "fuzzy"], taskCount: 10, tasks: [], tryTaskConfig: {}, commits: [sha("9"), sha("b")], warnings: [] } });
+    sc.settle();
+    assert.ok(sc.open().includes(`approve-push:debug-${h}-1`));
+    assert.match(sc.state().needsUser.find((n) => n.key === `approve-push:debug-${h}-1`)!.detail, /repro \(on top of the stack\)/, "its ⚑ says what it's on top of");
+    assert.ok(!debugKeys(sc).some((k) => k.startsWith("push:")), "nothing pushed before you approve");
+    sc.add({ type: "user-done", request: ID, key: `approve-push:debug-${h}-1` });
+    assert.ok(sc.settle().includes(`push:debug-${h}-1`));
+    sc.add({ type: "try-pushed", request: ID, push: `debug-${h}-1`, rev: "dbg", url: "u" });
+    sc.settle();
+    assert.equal(sc.view().jobs.filter((j) => j.purpose.key.startsWith("author:i-test-a:repro:")).length, 1, "its author waits for the push's results");
+    sc.add({ type: "try-finished", request: ID, push: `debug-${h}-1`, result: "failures", summary: "2 failures" });
+    sc.settle();
+    const again = sc.view().jobs.filter((j) => j.purpose.key.startsWith("author:i-test-a:repro:")).at(-1)!;
+    assert.notEqual(again.purpose.key, resumed);
+    assert.match(sc.plan(again.purpose.key).agent?.message ?? "", /^The factory pushed your DEBUG commits to try on top of the stack: dbg \(2 failures\)\./);
+  });
+
+  it("Push now plans a push of their own on central when the failure was seen on central's code (test-verify)", () => {
+    const sc = waitingStack();
+    sc.add({ type: "try-job-failed", request: ID, push: "verifypath", taskId: "T1", jobName: "test-verify", platform: "linux", result: "testfailed" });
+    command(sc, { cmd: "push-debug", item: "i-test-a" });
+    sc.settle();
+    const tb = keyOf(sc, "try-branch:debug:");
+    assert.deepEqual(sc.plan(tb).cli?.args.slice(-4), ["--base", config.baseRef, "--leave-conflict", sha("d")]);
+    assert.ok(!sc.view().byKey.has("try-with:abc"));
+  });
+
+  it("Push now plans a push of their own right away, in a try-push request on top of that push's commits; the stack's next push doesn't carry them; a second click is refused; your reason for declining goes to their author", () => {
+    const sc = waitingStack();
+    const tbRoot = keyOf(sc, "try-branch:root:");
+    sc.complete(tbRoot, { output: { branch: `${ID}-root-try-${tbRoot.split(":")[2]}`, head: sha("f"), commits: [{ sha: sha("d"), newSha: sha("f") }] } });
+    sc.settle();
+    command(sc, { cmd: "push-debug", item: "i-test-b" });
+    assert.match(sc.of("command-executed").at(-1)!.detail ?? "", /isn't waiting for a try repro/);
+    command(sc, { cmd: "push-debug", item: "i-test-a" });
+    // Its failure came from the try push the request was made from (abc): its commits are imported first.
+    assert.ok(sc.settle().includes("try-with:abc"));
+    assert.deepEqual(sc.plan("try-with:abc").cli?.args, ["import-push", "abc", "--cwd", config.firefoxRepo, "--base", config.baseRef, "--branch", `${ID}-try-abc`]);
+    sc.complete("try-with:abc", { output: { branch: `${ID}-try-abc`, shas: [sha("7")] } });
+    sc.settle();
+    const tb = keyOf(sc, "try-branch:debug:");
+    const h = tb.split(":")[2];
+    assert.deepEqual(sc.plan(tb).cli?.args, ["assemble", "--cwd", `/wt/${ID}-root`, "--branch", `${ID}-debug-${h}`, "--base", `${ID}-try-abc`, "--leave-conflict", sha("d")]);
+    command(sc, { cmd: "push-debug", item: "i-test-a" });
+    assert.deepEqual([sc.of("command-executed").at(-1)!.ok, sc.of("command-executed").at(-1)!.detail], [false, "A try push of DEBUG commits is already on its way (being prepared): the next one waits for its results"]);
+    sc.complete(tb, { output: { branch: `${ID}-debug-${h}`, head: sha("9"), commits: [{ sha: sha("d"), newSha: sha("9") }] } });
+    sc.settle();
+    assert.equal(sc.plan(`plan:debug:${h}`).purpose.onto, "try push abc's commits");
+    // The stack's push is planned again, without them.
+    const verify = sc.view().jobs.findLast((j) => j.purpose.key.startsWith("plan:verify:root:"))!;
+    assert.equal(sc.plan(verify.purpose.key).agent?.vars?.branch, `${ID}-root`);
+    assert.ok(!JSON.parse(sc.plan(verify.purpose.key).files![0].content).some((f: { toReproduce?: boolean }) => f.toReproduce));
+    sc.complete(`plan:debug:${h}`, { report: { pushes: [{ purpose: "repro", tryArgs: ["fuzzy", "-q", "mac xpcshell"], rebuild: 10 }], feedback: [] } });
+    sc.settle();
+    sc.complete(`dry-run:debug-${h}-1`, { output: { command: ["./mach", "try", "fuzzy"], taskCount: 10, tasks: [], tryTaskConfig: {}, commits: [sha("9")], warnings: [] } });
+    sc.settle();
+    command(sc, { cmd: "push-debug", item: "i-test-a" });
+    assert.match(sc.of("command-executed").at(-1)!.detail ?? "", new RegExp(`already on its way \\(push debug-${h}-1\\)`));
+    sc.add({ type: "try-declined", request: ID, push: `debug-${h}-1`, text: "not now" });
+    sc.settle();
+    const resumed = keyOf(sc, "author:i-test-a:repro:");
+    assert.match(sc.plan(resumed).agent?.message ?? "", /^The user declined the try push of your DEBUG commits: “not now”/);
+  });
+
   it("a DEBUG commit conflicting on the try branch is its author's however short a sha either side names it by", () => {
     const sc = waitingStack(true);
     const tb = keyOf(sc, "try-branch:root:");

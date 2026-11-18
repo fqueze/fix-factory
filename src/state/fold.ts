@@ -134,6 +134,9 @@ export function folder(first: Event): { apply(events: readonly Event[]): void; s
         case "verify-asked":
           s.verifyAsked = [...(s.verifyAsked ?? []), e.text];
           break;
+        case "debug-push-asked":
+          s.debugPushAsked = { item: e.item, t: e.t };
+          break;
         case "tests-asked":
           s.askedTests = [...new Set([...(s.askedTests ?? []), ...e.tests])];
           break;

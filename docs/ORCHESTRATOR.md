@@ -28,7 +28,16 @@ A tick runs on any change to `commands.jsonl` or a job file, and at least every 
   the stack no longer has, and not made, are withdrawn.
 - **Try repro:** an author that can only reproduce on CI hands back a DEBUG commit that logs and widens the race
   ("needs a try repro"). Once the folder's other groups are settled, their DEBUG commits go on one branch and one
-  push, planned like the others and approved by you. Once every stack push that carried them has finished (also after the stack was verified), each author is resumed with their results.
+  push, planned like the others and approved by you. Once every push that carried them has finished (also after the stack was verified), each author is resumed with their results.
+  - **A push of their own** (`debug-<h>-<n>`, planned by plan-try-pushes as `plan:debug:<h>`, approved by you): every
+    waiting item's DEBUG commits in one push, when no push of the stack is coming to carry them (the request is past
+    "verify on try"), or when you click Push now on a waiting item's row (`push-debug`). On top of what the failure was
+    seen on (its task ids' pushes): the stack's branch for the stack's own pushes; the commits of the try push a
+    try-push request was made from (imported with `import-push`, or the request's `tryWith` import); for a burndown's
+    un-skip push, the stack (or central) with the skip-if removals; else central (its history, test-verify on
+    central's code), with only them and the commits of `tryWith`. The push's purpose says what it's on top of. One at a time: a click while one is on its way is refused. Later stack pushes leave out
+    DEBUG commits pushed on their own, until their author asks for another try repro. Declining it sends your reason
+    to the authors.
 - **When step 3 runs:** at whichever comes first, the push finishing or 2 h after it started, so slow pools don't
   hold everything up. It runs again when the push finishes, adding new groups.
 - **Try failures:**

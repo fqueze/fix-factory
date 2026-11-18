@@ -235,7 +235,7 @@ export function submitChecks(r: RequestState, s: StackView, ctx: Pick<RenderCont
   // The stack's verification pushes that were made: not the initial, un-skip or repro pushes, nor another stack's,
   // nor those declined.
   const otherStack = (p: PushView) => Object.values(r.jobs).some((j) => j.purpose?.push === p.id && j.purpose.stack !== undefined && j.purpose.stack !== s.id);
-  const pushes = Object.values(r.pushes).filter((p) => p.rev && !/^(initial|unskip|repro-)/.test(p.id) && !otherStack(p));
+  const pushes = Object.values(r.pushes).filter((p) => p.rev && !/^(initial|unskip|repro-|debug-)/.test(p.id) && !otherStack(p));
   const tryDone = pushes.length > 0 && pushes.every((p) => p.result === "green");
   const waiting = unapproved(patches, ctx.fingerprint).length;
   return [
@@ -285,6 +285,7 @@ export const COMMAND_LABELS: Record<Command["cmd"], string> = {
   approve: "approving a patch",
   "review-send": "stack-viewer comments and answers",
   "poll-phab": "check Phabricator now",
+  "push-debug": "try push of the DEBUG commits",
   "revise-push": "revise the push",
   "take-it": "take it",
   "take-patch": "take its patch",
@@ -359,6 +360,7 @@ function pushKind(r: RequestState, id: string): string | undefined {
   const p = r.pushes[id];
   if (id === "initial") return "initial";
   if (id.startsWith("unskip")) return "unskip";
+  if (id.startsWith("debug-")) return "debug";
   const stack = Object.values(r.jobs).find((j) => j.purpose?.what === "dry-run" && j.purpose.push === id)?.purpose?.stack;
   if (stack !== undefined) {
     const name = Object.keys(r.stacks).length > 1 ? `verify-${stack}` : "verify";

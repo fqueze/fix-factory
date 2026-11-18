@@ -9,7 +9,7 @@ import { sameBugDraft } from "../state/meta-bug.ts";
 import { canDismiss, canRetry, isPushJob, reviewLimitFlag } from "../state/flags.ts";
 import type { Command, Event, FactoryConfig, ItemId, JobId, PatchId, PlannedCommand, RequestId, RequestState, ReviewComment } from "../types.ts";
 import { REQUEST_STEPS } from "../server/commands.ts";
-import { ANNOTATIONS_ITEM, authorJobsOf, CANCELLED, firstPlan, freshAuthorPlan, NEVER_STARTED, itemEpochOf, lostSession, SETTLED, TERMINAL, resumeAuthorPlan, removedWorktree } from "./next.ts";
+import { ANNOTATIONS_ITEM, authorJobsOf, CANCELLED, DEBUG_PLAN, firstPlan, pendingDebugPush, freshAuthorPlan, NEVER_STARTED, itemEpochOf, lostSession, SETTLED, TERMINAL, resumeAuthorPlan, removedWorktree } from "./next.ts";
 import { handOffReferences } from "./hand-off.ts";
 import { moveProblem, movingProblem, partEvents, splitProblem } from "./split.ts";
 import { dataPath, requestDir, sessionIdFor, slug, type JobPlan } from "./plan.ts";
@@ -441,6 +441,19 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
       ev({ type: "verify-asked", text: c.reason });
       done(true, c.reason);
       break;
+    case "push-debug": {
+      // One push of DEBUG commits of their own at a time: the next one waits for its results.
+      const pending = pendingDebugPush(s!, view!);
+      const asked = s!.debugPushAsked;
+      if (s!.items[c.item]?.state !== "waiting for a try repro") done(false, `${itemName(c.item)} isn't waiting for a try repro`);
+      else if (pending) done(false, `A try push of DEBUG commits is already on its way (${pending.startsWith("debug-") ? `push ${pending}` : "being prepared"}): the next one waits for its results`);
+      else if (asked && s!.items[asked.item]?.state === "waiting for a try repro" && !view!.jobs.some((j) => DEBUG_PLAN.test(j.purpose.key) && j.startedAt >= Date.parse(asked.t))) done(false, "Already asked: the factory is preparing that push");
+      else {
+        ev({ type: "debug-push-asked", item: c.item });
+        done(true);
+      }
+      break;
+    }
     case "fix-tests":
       ev({ type: "tests-asked", tests: c.tests });
       done(true, c.reason);

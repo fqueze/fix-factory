@@ -5,7 +5,7 @@ import type { BugDraft, ItemView, JobView, NeedsUser, PatchView, PushView, Regre
 import { reviewStatus, unapproved } from "../../state/approval.ts";
 import { isAnswered } from "../../state/landing.ts";
 import { escapeHtml, html, join, raw, type Html } from "../html.ts";
-import { actionsSummary, flagCopy, flagPlaceOf, renderAction, recoveryAnswers, pollPhabButton, verifyStackButton, redoAnnotationsButton, approvePushControls, bugBox, continueBox, copyButton, handBackButton, flagControls, flagItemOf, flagText, plannedLabel, recoveryPlanFor, hasAuthorSession, stackViewerLink, submitControls, summaryId, untakenFix } from "./actions.ts";
+import { actionsSummary, flagCopy, flagPlaceOf, renderAction, recoveryAnswers, pollPhabButton, pushDebugButton, verifyStackButton, redoAnnotationsButton, approvePushControls, bugBox, continueBox, copyButton, handBackButton, flagControls, flagItemOf, flagText, plannedLabel, recoveryPlanFor, hasAuthorSession, stackViewerLink, submitControls, summaryId, untakenFix } from "./actions.ts";
 import { groupJobs, jobLine } from "./activity.ts";
 import { flagAsk, itemBucket, itemSentence, needsYouDetail, progressLine, requestProgress, submittedDetail, type Bucket } from "./progress.ts";
 import {
@@ -942,7 +942,15 @@ function debugCommitsHtml(r: RequestState, i: ItemView): Html | null {
   if (!commits?.length) {
     return null;
   }
-  return html`<p class="sub">Its DEBUG ${commits.length === 1 ? "commit" : "commits"} (${commits.map((c) => c.slice(0, 12)).join(", ")}) go to try on top of the stack's next push. <a href="/requests/${encodeURIComponent(r.id)}/items/${encodeURIComponent(i.id)}/debug" target="_blank">View ↗</a></p>${
+  // A push of their own planned since its author asked (plan:debug:…, its pushes debug-…).
+  const since = i.lastReport ? r.jobs[i.lastReport.job]?.endedAt : undefined;
+  const own = Object.values(r.jobs).findLast((j) => j.purpose && /^plan:debug:[0-9a-f]+$/.test(j.purpose.key) && j.purpose.items?.includes(i.id) && (since === undefined || j.startedAt >= since));
+  const ownPushes = own ? Object.keys(r.pushes).filter((id) => id.startsWith(`debug-${own.purpose!.key.slice("plan:debug:".length)}-`)) : [];
+  const where = own
+    ? html`go to try in a push of their own${ownPushes.length ? html` (${ownPushes.join(", ")})` : " being planned"}.`
+    : html`go to try on top of the stack's next push.`;
+  const list = commits.map((c) => c.slice(0, 12)).join(", ");
+  return html`<p class="sub">Its DEBUG ${commits.length === 1 ? "commit" : "commits"} (${list}) ${where} <a href="/requests/${encodeURIComponent(r.id)}/items/${encodeURIComponent(i.id)}/debug" target="_blank">View ↗</a>${own ? null : html` ${pushDebugButton(r.id, i.id, requestUrl(r.id))}`}</p>${
     report?.profileGap ? html`<div class="note"><b>Why the profiles weren't enough:</b> ${md(report.profileGap, i.group.tests, itemFileLink(r.id, i.id))}</div>` : null
   }`;
 }

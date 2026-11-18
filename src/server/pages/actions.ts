@@ -244,6 +244,10 @@ export function verifyStackButton(request: string, back: string): Html {
   return commandButton(request, { cmd: "verify-stack", reason: "asked from the page" }, "Push to try", back, false, "Plans a try push of the stack as it stands, for your approval");
 }
 
+export function pushDebugButton(request: string, item: string, back: string): Html {
+  return commandButton(request, { cmd: "push-debug", item }, "Push now", back, false, "Plans a try push now of the DEBUG commits of every item waiting for a try repro, on their own rather than on the stack's next push, for your approval");
+}
+
 export function redoAnnotationsButton(request: string, back: string): Html {
   return commandButton(request, { cmd: "redo-annotations" }, "Redo with today's skip-ifs", back, false, "Lists and classifies the folder's skip-ifs again, writes the patches and plans the un-skip push");
 }

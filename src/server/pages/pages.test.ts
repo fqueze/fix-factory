@@ -605,6 +605,14 @@ describe("one fixture per step of docs/MVP.md", () => {
     const row = rowOf(renderRequest(r, ctx, true).value, "item-i-idb-upgrade");
     assert.match(row, /Its DEBUG commits \(aaaaaaaaaaaa, bbbbbbbbbbbb\) go to try on top of the stack's next push\. <a href="\/requests\/r-20261013-dom-indexeddb\/items\/i-idb-upgrade\/debug"/);
     assert.match(row, /<span class="end">[^]*?<a href="\/requests\/r-20261013-dom-indexeddb\/items\/i-idb-upgrade\/debug"[^>]*>review<\/a>/, "in its row's corner too");
+    assert.ok(row.includes(cmd({ cmd: "push-debug", item: "i-idb-upgrade", request: r.id })), "Push now, without waiting for the stack");
+    assert.match(row, /title="Plans a try push now of the DEBUG commits of every item waiting for a try repro[^"]*">Push now<\/button>/);
+    // Once a push of their own is planned, it says so instead.
+    r.jobs["j-2"] = { ...r.jobs[Object.keys(r.jobs)[0]], job: "j-2", startedAt: "2099-01-01T00:00:00.000Z", purpose: { key: "plan:debug:abc123", what: "plan-pushes", items: ["i-idb-upgrade"], onto: "central" } };
+    r.pushes["debug-abc123-1"] = { id: "debug-abc123-1", purpose: "repro", command: [] };
+    const planned = rowOf(renderRequest(r, ctx, true).value, "item-i-idb-upgrade");
+    assert.match(planned, /go to try in a push of their own \(debug-abc123-1\)\./);
+    assert.ok(!planned.includes(cmd({ cmd: "push-debug", item: "i-idb-upgrade", request: r.id })));
   });
 
   it("a stack's patch that its author dropped from its fix shows under dropped", () => {

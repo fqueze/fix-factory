@@ -197,6 +197,25 @@ export const TERMINAL: ItemState[] = ["left as-is", "handed back", "taken over",
 
 const at = (step: RequestStep) => REQUEST_STEPS.indexOf(step);
 
+// A push of their own for DEBUG commits (debugPushes): planned as plan:debug:<h>, its pushes debug-<h>-<n>.
+export const DEBUG_PLAN = /^plan:debug:[0-9a-f]+$/;
+const DEBUG_PUSH = /^debug-([0-9a-f]+)-/;
+type ReproGroup = { item: ItemView; commits: string[]; since: number };
+
+export function debugPlanPushes(s: RequestState, planKey: string): PushView[] {
+  const h = planKey.slice("plan:debug:".length);
+  return Object.values(s.pushes).filter((p) => p.id.startsWith(`debug-${h}-`));
+}
+
+// The push of DEBUG commits of their own on its way (one plan's, or any): a push to approve, made or running, or a
+// job making one (its worktree, branch, plan, dry runs). Its push id, or that job's key.
+export function pendingDebugPush(s: RequestState, view: View, planKey?: string): string | undefined {
+  const h = planKey?.slice("plan:debug:".length);
+  const job = view.jobs.find((j) => !j.end && (h === undefined ? /^(wt:debug$|try-branch:debug:|resolve:debug:|plan:debug:|dry-run:debug-)/.test(j.purpose.key) : j.purpose.key.startsWith(`plan:debug:${h}`) || j.purpose.key.startsWith(`dry-run:debug-${h}-`)));
+  if (job) return job.purpose.key;
+  return Object.values(s.pushes).find((p) => p.id.startsWith(h === undefined ? "debug-" : `debug-${h}-`) && p.declined === undefined && p.result === undefined)?.id;
+}
+
 export function next(s: RequestState, ctx: Ctx): Action[] {
   const p = new Planner(s, ctx);
   p.run();
@@ -432,6 +451,7 @@ class Planner {
     this.stacks();
     this.bugEdits();
     this.verify();
+    this.debugPushes();
     this.askedTests();
     this.reportedFailures();
     // Your messages to authors whose worktree is being restored, and your restarts of them.
@@ -930,6 +950,7 @@ class Planner {
     cwd: string,
     stack?: string,
     since?: PushId,
+    onTop?: string, // what its branch is on top of, said in each push's purpose
   ): { ids: PushId[]; dry: DryRunResult[]; made: PushId[] } | undefined {
     const ids: PushId[] = [];
     const dry: DryRunResult[] = [];
@@ -949,7 +970,7 @@ class Planner {
       const these = planned.map((_, i) => (r === 0 ? idOf(i, planned.length) : `${idOf(0, 1)}-v${r}${planned.length === 1 ? "" : `-${i + 1}`}`));
       // Its rebuild count, when its arguments don't say it.
       const args = (push: PlanTryPushesReport["pushes"][number]) => (push.rebuild > 1 && !push.tryArgs.includes("--rebuild") ? [...push.tryArgs, "--rebuild", String(push.rebuild)] : push.tryArgs);
-      const d = planned.map((push, i) => this.dryRun(these[i], args(push), push.purpose, cwd, stack, opts?.item, push.title, vars.branch));
+      const d = planned.map((push, i) => this.dryRun(these[i], args(push), onTop ? `${push.purpose} (on top of ${onTop})` : push.purpose, cwd, stack, opts?.item, push.title, vars.branch));
       if (d.some((x) => !x)) return undefined;
       // What you judge it by: the previous push's regressions, and what claims to fix each.
       const regressions = this.rep<PlanTryPushesReport>(plan).regressions;
@@ -1891,12 +1912,14 @@ class Planner {
     if (step < at("investigate and fix") || step > at(submitted ? "meta bug" : "submit")) return;
     for (const info of this.stackInfos.values()) this.buildStack(info);
     const items = Object.values(this.s.items);
-    if (!items.some((i) => i.state === "waiting for a try repro") || items.some((i) => WITH_PATCHES.includes(i.state))) this.clear("repro-only");
+    // Those going to try in a push of their own don't ask.
+    const unpushed = this.debugGroups().filter((g) => g.item.id !== ANNOTATIONS_ITEM);
+    if (!unpushed.length || items.some((i) => WITH_PATCHES.includes(i.state))) this.clear("repro-only");
     if (this.s.step === "investigate and fix" && this.newItems.size === 0 && items.every((i) => SETTLED.includes(i.state))) {
       const repro = items.filter((i) => i.state === "waiting for a try repro");
       if (items.every((i) => !WITH_PATCHES.includes(i.state)) && repro.length) {
-        // DEBUG commits go to try on top of the stack: without one, nothing carries them.
-        this.raise("repro-only", { action: "Only DEBUG commits are left, and no stack to push them with", detail: `${repro.map((i) => basename(i.group.tests[0])).join(", ")}: tell the factory whether to push them anyway, or close these groups.` });
+        // DEBUG commits go to try on top of the stack: without one, nothing carries them but a push of their own.
+        if (unpushed.length) this.raise("repro-only", { action: "Only DEBUG commits are left, and no stack to push them with", detail: `${unpushed.map((g) => basename(g.item.group.tests[0])).join(", ")}: Push now on their rows pushes them on their own, or close these items.` });
       } else if (items.every((i) => !WITH_PATCHES.includes(i.state))) {
         this.note("Every item ended without a patch.");
         this.setStep("done");
@@ -2450,7 +2473,7 @@ class Planner {
       let top: { head: string; branch: string } | undefined;
       let branch = "";
       for (const j of this.view.jobs.filter(succeeded)) {
-        if (j.purpose.what === "try-branch") {
+        if (j.purpose.what === "try-branch" && !j.purpose.key.startsWith("try-branch:debug:")) {
           const o = this.out<{ branch: string; commits?: { sha: string; newSha: string }[] }>(j);
           branch = o.branch;
           const c = o.commits?.find((c) => c.sha === debug);
@@ -2488,14 +2511,168 @@ class Planner {
   }
 
   // The DEBUG commits that go to try on top of the stack: the skip-ifs group's (a burndown's), then those of the
-  // groups that need CI evidence (no push of their own).
+  // groups that need CI evidence, but those that go in a push of their own since their author asked (debugPushes).
   private debugGroups(): { item: ItemView; commits: string[] }[] {
     const debug = this.s.kind === "burndown" ? this.debugCommit() : undefined;
-    const repro = Object.values(this.s.items)
-      .filter((i) => i.state === "waiting for a try repro")
-      .map((item) => ({ item, commits: this.rep<InvestigateReport>(this.authorJobs(item.id).filter(succeeded).at(-1)!).commits }));
+    const repro = this.reproGroups().filter((g) => !this.ownPlan(g));
     return [...(debug ? [{ item: this.s.items[ANNOTATIONS_ITEM], commits: [debug] }] : []), ...repro];
   }
+
+  // The groups waiting for a try repro, with their DEBUG commits and when their author asked for it.
+  private reproGroups(): ReproGroup[] {
+    return Object.values(this.s.items)
+      .filter((i) => i.state === "waiting for a try repro" && i.id !== ANNOTATIONS_ITEM)
+      .map((item) => {
+        const last = this.authorJobs(item.id).filter(succeeded).at(-1)!;
+        return { item, commits: this.rep<InvestigateReport>(last).commits, since: last.end!.at };
+      });
+  }
+
+  // The plan of a push of their own for a group's DEBUG commits since its author asked, still standing: planning, or
+  // with a push neither discarded nor withdrawn. Otherwise (none planned, or all gone) the stack's pushes carry them.
+  private ownPlan(g: ReproGroup): JobRecord | undefined {
+    return this.view.jobs.findLast((j) => DEBUG_PLAN.test(j.purpose.key) && j.purpose.items?.includes(g.item.id) && j.startedAt >= g.since && this.standing(j));
+  }
+
+  private standing(plan: JobRecord): boolean {
+    if (!plan.end || this.view.jobs.some((j) => !j.end && j.purpose.key.startsWith(`${plan.purpose.key}:`))) return true;
+    return debugPlanPushes(this.s, plan.purpose.key).some((p) => !p.withdrawn && p.declined !== "discarded");
+  }
+
+  // The plan of a DEBUG push of their own, by its push.
+  private debugPlanOf(push: PushId): JobRecord | undefined {
+    const h = DEBUG_PUSH.exec(push)?.[1];
+    return h === undefined ? undefined : this.view.byKey.get(`plan:debug:${h}`)?.[0];
+  }
+
+  // Pushes since its author asked that carried a group's DEBUG commits: its own, and the stack's until its own was
+  // planned (the stack's try branch has every waiting group's but those).
+  private reproPushes(g: ReproGroup): { p: PushView; dup: boolean; own: boolean; onto: string }[] {
+    const own = this.ownPlan(g);
+    return Object.values(this.s.pushes).flatMap((p) => {
+      const d = this.view.byKey.get(`dry-run:${p.id}`)?.find(succeeded);
+      if (!d || d.startedAt < g.since) return [];
+      const plan = this.debugPlanOf(p.id);
+      const mine = plan?.purpose.items?.includes(g.item.id) ?? false;
+      const stack = d.purpose.stack !== undefined && (!own || d.startedAt < own.startedAt);
+      return mine || stack ? [{ p, dup: this.out<DryRunResult>(d).duplicateOf !== undefined, own: mine, onto: mine ? (plan!.purpose.onto ?? "central") : "the stack" }] : [];
+    });
+  }
+
+  // Where a group's failure was seen, by the pushes its tasks failed on: only the stack's ("stack"), the try push the
+  // request was made from ("request": also a task no push of its knows, which can only come from there, as a split
+  // copies that push without its jobs), a burndown's un-skip push ("unskip"), else central's code (central's history,
+  // test-verify on central).
+  private failureOrigin(item: ItemView): "stack" | "request" | "unskip" | "central" {
+    const tasks = item.group.taskIds ?? [];
+    if (!tasks.length) return "central";
+    const kinds = tasks.map((t) => {
+      const pushes = this.view.tryFailures.filter((f) => f.taskId === t).map((f) => f.push);
+      if (!pushes.length) return "unknown";
+      if (pushes.some((p) => this.view.byKey.get(`dry-run:${p}`)?.[0].purpose.stack !== undefined)) return "stack";
+      if (pushes.includes("initial") && this.s.kind === "try-push") return "request";
+      return pushes.some((p) => p.startsWith("unskip")) ? "unskip" : "central";
+    });
+    if (kinds.every((k) => k === "stack")) return "stack";
+    if (kinds.includes("request") || (kinds.includes("unknown") && this.s.kind === "try-push" && this.s.rev)) return "request";
+    return kinds.includes("unskip") ? "unskip" : "central";
+  }
+
+  // A try push's own commits as a branch on central: the request's import of it if it has one (its tryWith), else one
+  // of its own. null while it's imported.
+  private importedPush(rev: string): { branch: string; shas: string[] } | null {
+    const done = this.view.jobs.findLast((j) => (j.purpose.key === `try-with:${rev}` || j.purpose.key.startsWith(`try-with:${rev}:`)) && succeeded(j));
+    if (done) return this.out<{ branch: string; shas: string[] }>(done);
+    const branch = rev === this.s.config.tryWith ? `${this.s.id}-try-with` : `${this.s.id}-try-${rev.slice(0, 12)}`;
+    const imported = this.want(`try-with:${rev}`, () => this.cli("try-with", "try.ts", ["import-push", rev, "--cwd", this.config.firefoxRepo, "--base", this.config.baseRef, "--branch", branch], { cwd: this.config.firefoxRepo }));
+    return imported ? this.out<{ branch: string; shas: string[] }>(imported) : null;
+  }
+
+  // DEBUG commits go to try in a push of their own, every waiting group's in one, when no push of the stack is coming
+  // to carry them (the stack was verified), or when you ask (push-debug). On top of what their failures were seen on
+  // (failureOrigin): the stack, the request's try push's commits, the skip-if removals, or central. Planned like the
+  // stack's pushes, approved by you; one at a time.
+  private debugPushes(): void {
+    if (this.s.step === "done") return;
+    // Those planned go on: their dry runs, your revisions.
+    for (const j of this.view.jobs.filter((j) => DEBUG_PLAN.test(j.purpose.key))) {
+      const h = j.purpose.key.slice("plan:debug:".length);
+      this.planPushes(j.purpose.key, { branch: `${this.s.id}-debug-${h}`, since: "" }, {}, (i) => `debug-${h}-${i + 1}`, j.cwd, undefined, undefined, j.purpose.onto);
+    }
+    const groups = this.reproGroups().filter((g) => !this.ownPlan(g));
+    const asked = this.s.debugPushAsked;
+    const ask = asked && groups.some((g) => g.item.id === asked.item && g.since <= Date.parse(asked.t)) && !this.view.jobs.some((j) => DEBUG_PLAN.test(j.purpose.key) && j.startedAt >= Date.parse(asked.t));
+    const these = ask ? groups : at(this.s.step) > at("verify on try") ? groups.filter((g) => !this.reproPushes(g).some(({ p }) => !p.withdrawn && p.declined !== "discarded")) : [];
+    if (!these.length || pendingDebugPush(this.s, this.view)) return;
+    const st = this.liveStacks()[0];
+    const origins = new Set(these.map((g) => this.failureOrigin(g.item)));
+    const rev = this.s.rev;
+    // One base for them all: the one that has the most under it.
+    const origin = st && origins.has("stack") ? "stack" : rev && origins.has("request") ? "request" : origins.has("unskip") ? "unskip" : "central";
+    // The commits of the try push the request was asked with go on top too (the jobs they add), unless they're the base.
+    const tryWith = typeof this.s.config.tryWith === "string" ? this.s.config.tryWith : undefined;
+    const pushCommits = origin === "request" && tryWith === rev ? undefined : this.tryWithBranch(st && this.stackInfos.get(st.id)?.hash);
+    if (pushCommits === null) return;
+    const withShas = pushCommits?.shas ?? [];
+    let base = st?.base ?? this.config.baseRef;
+    let onto = "central";
+    let extra: { item: ItemView; commits: string[] }[] = [];
+    if (origin === "stack") [base, onto] = [st!.branch, "the stack"];
+    else if (origin === "request") {
+      const imported = this.importedPush(rev!);
+      if (!imported) return;
+      [base, onto] = [imported.branch, `try push ${rev!.slice(0, 12)}'s commits`];
+    } else if (origin === "unskip") {
+      // The un-skip push carried the skip-if removals: the annotations group's DEBUG commit, on top of the stack (which
+      // has its annotation patches) when there's one.
+      const removals = this.debugCommit();
+      if (removals) extra = [{ item: this.s.items[ANNOTATIONS_ITEM], commits: [removals] }];
+      if (st) base = st.branch;
+      onto = `${st ? "the stack" : "central"}${removals ? " with the skip-if removals" : ""}`;
+    }
+    const h = shortHash([onto, ...these.map((g) => `${g.item.id}=${g.commits.join(",")}`)]).slice(0, 6);
+    let wt = st?.worktree;
+    if (!wt) {
+      const made = this.want("wt:debug", () => this.worktree(`${this.s.id}-debug`, {}, "none"));
+      if (!made) return;
+      wt = this.out<{ path: string }>(made).path;
+    }
+    const branch = this.onTop({ id: "debug", wt, where: onto, ...(st && wt === st.worktree ? { stack: st.id } : {}) }, h, `${this.s.id}-debug-${h}`, base, [...extra, ...these], withShas);
+    if (!branch) return;
+    const failuresFile = dataPath(this.config, this.s.id, `failures-debug-${h}.json`);
+    const pushesFile = dataPath(this.config, this.s.id, `pushes-debug-${h}.json`);
+    const made = Object.values(this.s.pushes).filter((p) => p.rev).map((p) => ({ push: p.id, purpose: p.purpose, command: p.command, rev: p.rev, result: p.result ?? "running", summary: p.summary }));
+    const planned = this.planPushes(
+      `plan:debug:${h}`,
+      {
+        goal: `reproduce the failures below with their DEBUG commits, which log (and widen) them, on top of ${onto === "central" ? "central (the branch has only them)" : onto}: their authors need the logs. Run the jobs where each test failed (its configs), repeated enough to see the failure, and nothing else; its scope is "debug"`,
+        failuresFile,
+        initialPushFile: pushesFile,
+        branch: branch.branch,
+        worktree: wt,
+        base,
+        since: "",
+      },
+      {
+        cwd: wt,
+        purpose: { items: these.map((g) => g.item.id), onto },
+        files: [
+          { path: failuresFile, content: JSON.stringify(these.map((g) => ({ item: g.item.id, debugCommits: g.commits, toReproduce: true, ...g.item.group })), null, 2) + "\n" },
+          { path: pushesFile, content: JSON.stringify(made, null, 2) + "\n" },
+        ],
+      },
+      (i) => `debug-${h}-${i + 1}`,
+      wt,
+      undefined,
+      undefined,
+      onto,
+    );
+    // Nothing to push, its planner says: the stack's next push carries them, or you tell their authors.
+    if (planned && !planned.ids.length) {
+      this.raise(`debug-none:${h}`, { action: "No try push planned for the DEBUG commits", detail: `${these.map((g) => basename(g.item.group.tests[0])).join(", ")}: its planner found nothing to push. Tell their authors what to do, or close these items.` });
+    }
+  }
+
 
   // Like the stack's assembly: a conflict goes to resolve-conflict, then the rest is assembled. One it can't resolve
   // (the approach doesn't fit) asks you on the group's row, and the push waits.
@@ -2514,14 +2691,20 @@ class Planner {
     // A try push whose own commits the fixes need (the jobs they add): on top of the stack, in every push of it.
     const pushCommits = this.tryWithBranch(info.hash);
     if (pushCommits === null) return undefined;
-    const tryWith = this.s.config.tryWith as string | undefined;
     const withShas = pushCommits?.shas ?? [];
     if (!groups.length && !withShas.length) return { branch: base };
+    const h = shortHash([info.hash, e, ...groups.flatMap((g) => g.commits), ...withShas]).slice(0, 6);
+    return this.onTop({ id: info.id, wt: info.wt!, where: "the stack", stack: info.id }, h, `${base}-try-${h}`, base, groups, withShas);
+  }
+
+  // The groups' DEBUG commits and the try push's (tryWith) assembled on base as branch, in a worktree (its id names
+  // the jobs; stack: the stack whose worktree it is).
+  private onTop(t: { id: string; wt: string; where: string; stack?: string }, h: string, branch: string, base: string, groups: { item: ItemView; commits: string[] }[], withShas: string[]): { branch: string } | undefined {
+    const tryWith = this.s.config.tryWith as string | undefined;
     const shas = [...groups.flatMap((g) => g.commits), ...withShas];
-    const h = shortHash([info.hash, e, ...shas]).slice(0, 6);
-    const branch = `${base}-try-${h}`;
-    let cur = this.want(`try-branch:${info.id}:${h}`, () =>
-      this.cli("try-branch", "stack.ts", ["assemble", "--cwd", info.wt!, "--branch", branch, "--base", base, "--leave-conflict", ...shas], { cwd: info.wt, purpose: { stack: info.id } }),
+    const purpose = t.stack ? { stack: t.stack } : {};
+    let cur = this.want(`try-branch:${t.id}:${h}`, () =>
+      this.cli("try-branch", "stack.ts", ["assemble", "--cwd", t.wt, "--branch", branch, "--base", base, "--leave-conflict", ...shas], { cwd: t.wt, purpose }),
     );
     while (cur) {
       const o = this.out<{ conflict?: { sha: string; files: string[] }; remaining?: string[] }>(cur);
@@ -2534,27 +2717,27 @@ class Planner {
       const pushCommit = !owner && withShas.includes(sha);
       if (!owner && !pushCommit) {
         // Not left in progress: the stack's other jobs run in its worktree.
-        if (!this.want(`abort:${cur.job}`, () => this.cli("abort", "sh", ["-c", ABORT_CHERRY_PICK], { cwd: info.wt, purpose: { stack: info.id } }))) return undefined;
-        this.raise(`failed:${cur.job}`, { action: tryWith ? `The commits of try push ${tryWith.slice(0, 12)} don't apply on top of the stack` : `${sha.slice(0, 12)} doesn't apply on top of the stack`, detail: `${sha.slice(0, 12)} conflicts in ${files.join(", ")}`, job: cur.job });
+        if (!this.want(`abort:${cur.job}`, () => this.cli("abort", "sh", ["-c", ABORT_CHERRY_PICK], { cwd: t.wt, purpose }))) return undefined;
+        this.raise(`failed:${cur.job}`, { action: tryWith ? `The commits of try push ${tryWith.slice(0, 12)} don't apply on top of ${t.where}` : `${sha.slice(0, 12)} doesn't apply on top of ${t.where}`, detail: `${sha.slice(0, 12)} conflicts in ${files.join(", ")}`, job: cur.job });
         return undefined;
       }
-      const res = this.wantAgent(`resolve:${info.id}:try-${h}:${sha}`, "resolve", "resolve-conflict", { sha, base: branch, files: files.join(", ") }, { cwd: info.wt, purpose: { stack: info.id, sha } });
+      const res = this.wantAgent(`resolve:${t.id}:try-${h}:${sha}`, "resolve", "resolve-conflict", { sha, base: branch, files: files.join(", ") }, { cwd: t.wt, purpose: { ...purpose, sha } });
       if (!res) return undefined;
       const r = this.rep<ResolveConflictReport>(res);
       if (r.state === "already fixed") {
-        if (!this.want(`abort:${res.job}`, () => this.cli("abort", "sh", ["-c", ABORT_CHERRY_PICK], { cwd: info.wt, purpose: { stack: info.id } }))) return undefined;
+        if (!this.want(`abort:${res.job}`, () => this.cli("abort", "sh", ["-c", ABORT_CHERRY_PICK], { cwd: t.wt, purpose }))) return undefined;
         if (owner) {
           this.setItem(owner.item.id, "left as-is", `already fixed: ${r.explanation}`.slice(0, 300));
           return undefined;
         }
       } else if (r.state !== "resolved" || !r.commit) {
-        this.raise(`failed:${res.job}`, owner ? { action: "Its DEBUG commits don't apply on top of the stack", detail: r.explanation.slice(0, 500), job: res.job, item: owner.item.id } : { action: `A commit of try push ${tryWith!.slice(0, 12)} doesn't apply on top of the stack`, detail: r.explanation.slice(0, 500), job: res.job });
+        this.raise(`failed:${res.job}`, owner ? { action: `Its DEBUG commits don't apply on top of ${t.where}`, detail: r.explanation.slice(0, 500), job: res.job, item: owner.item.id } : { action: `A commit of try push ${tryWith!.slice(0, 12)} doesn't apply on top of ${t.where}`, detail: r.explanation.slice(0, 500), job: res.job });
         return undefined;
       }
       const remaining = o.remaining ?? [];
       if (!remaining.length) return { branch };
-      cur = this.want(`try-branch:${info.id}:${h}:after:${sha.slice(0, 12)}`, () =>
-        this.cli("try-branch", "stack.ts", ["assemble", "--cwd", info.wt!, "--branch", branch, "--leave-conflict", ...remaining], { cwd: info.wt, purpose: { stack: info.id } }),
+      cur = this.want(`try-branch:${t.id}:${h}:after:${sha.slice(0, 12)}`, () =>
+        this.cli("try-branch", "stack.ts", ["assemble", "--cwd", t.wt, "--branch", branch, "--leave-conflict", ...remaining], { cwd: t.wt, purpose }),
       );
     }
     return undefined;
@@ -2590,7 +2773,8 @@ class Planner {
     if (this.s.step !== "verify on try") {
       // The pushes asked since it was verified done (none approved and not made, none made and not finished): no
       // longer "on try".
-      const pending = Object.values(this.s.pushes).some((p) => (p.rev !== undefined ? p.result === undefined : this.view.done.has(`approve-push:${p.id}`) && p.declined === undefined));
+      // Not a push of DEBUG commits of their own: it verifies nothing.
+      const pending = Object.values(this.s.pushes).some((p) => !DEBUG_PUSH.test(p.id) && (p.rev !== undefined ? p.result === undefined : this.view.done.has(`approve-push:${p.id}`) && p.declined === undefined));
       if (!pending) for (const item of Object.values(this.s.items)) if (item.state === "in try") this.setItem(item.id, this.submittedItem(item.id) ? "waiting for review" : "in stack");
       this.changedSinceTry();
       this.askedVerify(this.fixesToVerify());
@@ -2713,7 +2897,7 @@ class Planner {
   // having had that code: the stack goes to try again, its planner picking the jobs where its test failed. A reworded
   // commit has the same code (git patch-id).
   private changedSinceTry(): void {
-    const made = Object.values(this.s.pushes).filter((x) => x.rev !== undefined);
+    const made = Object.values(this.s.pushes).filter((x) => x.rev !== undefined && !DEBUG_PUSH.test(x.id));
     const pushed = (shas: string[]) =>
       made.some((x) => {
         const d = this.view.byKey.get(`dry-run:${x.id}`)?.find(succeeded);
@@ -2799,28 +2983,27 @@ class Planner {
     return ids.map((id) => `${this.s.pushes[id].rev} (${this.s.pushes[id].summary ?? this.s.pushes[id].result})`).join(", ");
   }
 
-  // The authors whose DEBUG commits went to try on top of the stack get its results, once every push that carried them
-  // has finished, whatever the step (the stack may be verified before an earlier push of it ends). Every push of a
-  // stack dry-run since its author reported carries them: the stack's try branch has every waiting group's.
+  // The authors whose DEBUG commits went to try get the results, once every push that carried them (reproPushes: the
+  // stack's, or one of their own) has finished, whatever the step (the stack may be verified before an earlier push of
+  // it ends). A push of their own being planned is waited for too.
   private reproResults(): void {
-    for (const g of this.debugGroups()) {
-      if (g.item.id === ANNOTATIONS_ITEM) continue;
-      const reported = this.authorJobs(g.item.id).filter(succeeded).at(-1)!.end!.at;
-      if (this.authorJobs(g.item.id).some((j) => j.purpose.reason === "repro" && j.startedAt >= reported)) continue;
-      const dries = Object.values(this.s.pushes).flatMap((p) => {
-        const d = this.view.byKey.get(`dry-run:${p.id}`)?.find(succeeded);
-        return d?.purpose.stack && d.startedAt >= reported ? [{ p, dup: this.out<DryRunResult>(d).duplicateOf !== undefined }] : [];
-      });
+    for (const g of this.reproGroups()) {
+      if (this.authorJobs(g.item.id).some((j) => j.purpose.reason === "repro" && j.startedAt >= g.since)) continue;
+      const own = this.ownPlan(g);
+      if (own && pendingDebugPush(this.s, this.view, own.purpose.key)) continue;
+      const dries = this.reproPushes(g);
       const ids = dries.map((x) => x.p.id);
-      const made = dries.filter((x) => !x.dup && x.p.declined === undefined).map((x) => x.p.id);
-      if (!ids.length || made.some((id) => this.s.pushes[id].result === undefined)) continue;
+      const made = dries.filter((x) => !x.dup && x.p.declined === undefined);
+      if (!ids.length || made.some((x) => x.p.result === undefined)) continue;
       // Pushes discarded (or withdrawn by the factory) say nothing: the DEBUG commits wait for the stack's next push.
       // Only your reason for declining one goes to them.
-      const declined = dries.map((x) => x.p).filter((p) => p.declined !== undefined && p.declined !== "discarded" && !p.withdrawn).map((p) => p.declined!);
+      const declined = dries.filter((x) => x.p.declined !== undefined && x.p.declined !== "discarded" && !x.p.withdrawn);
       if (!made.length && !declined.length) continue;
+      const onto = [...new Set(made.map((x) => x.onto))];
+      const where = onto.length !== 1 ? "" : onto[0] === "central" ? " on top of central, without the stack" : ` on top of ${onto[0]}`;
       const message = made.length
-        ? `The factory pushed your DEBUG commits to try on top of the stack: ${this.pushResults(made)}. Read the results with fx-tests (\`fx-tests try <rev>\`, with \`--all-jobs\` for the tests that failed then passed on retry inside a green job); the failed jobs' logs are under ${artifactsDir(this.config)}/<task id>. Say in your reproduction file whether it reproduced, and how often. Then drop your DEBUG commits and fix it as usual, with the reproduction "on try"; or, if it didn't reproduce, report "not reproduced". End with the JSON report again.`
-        : `The user declined the stack's try push your DEBUG commits were to go on: “${declined[0]}”. Go on from what you know: fix it if you can show the cause, or report "not reproduced". End with the JSON report again.`;
+        ? `The factory pushed your DEBUG commits to try${where}: ${this.pushResults(made.map((x) => x.p.id))}. Read the results with fx-tests (\`fx-tests try <rev>\`, with \`--all-jobs\` for the tests that failed then passed on retry inside a green job); the failed jobs' logs are under ${artifactsDir(this.config)}/<task id>. Say in your reproduction file whether it reproduced, and how often. Then drop your DEBUG commits and fix it as usual, with the reproduction "on try"; or, if it didn't reproduce, report "not reproduced". End with the JSON report again.`
+        : `The user declined ${declined[0].own ? "the try push of your DEBUG commits" : "the stack's try push your DEBUG commits were to go on"}: “${declined[0].p.declined}”. Go on from what you know: fix it if you can show the cause, or report "not reproduced". End with the JSON report again.`;
       this.resumeAuthor(g.item.id, `author:${g.item.id}${this.itemEpoch(g.item.id)}:repro:${shortHash([...g.commits, ...ids]).slice(0, 8)}`, "repro", message);
     }
   }

@@ -152,6 +152,7 @@ export type Event =
   | (EventBase & { type: "tests-asked"; tests: string[] }) // failures already on central you want fixed too
   | (EventBase & { type: "author-queued"; item: ItemId; key: string; reason: string; message: string; plan?: JobPlan }) // your message to an author whose worktree is restored first; or a run you retried, as it is (plan)
   | (EventBase & { type: "verify-asked"; text: string })
+  | (EventBase & { type: "debug-push-asked"; item: ItemId }) // you want the DEBUG commits pushed on their own now (push-debug)
   | (EventBase & { type: "backout"; patch: PatchId; at: Iso; reason: string; culprit: boolean }) // its landing was backed out; culprit: the failure is its own (or nobody's could be told apart)
   | (EventBase & { type: "try-needed"; patch: PatchId; why: string; ask: string; job: JobId; after?: Iso }) // after: when its author answered // its fix answers failures try found: it lands once a push of it is green
   | (EventBase & { type: "try-verified"; patch: PatchId })
@@ -274,6 +275,7 @@ export type Command =
   | (CommandBase & { cmd: "start-now" })
   | (CommandBase & { cmd: "redo-annotations" }) // the skip-ifs group again, from today's manifests
   | (CommandBase & { cmd: "poll-phab" }) // check its revisions on Phabricator now
+  | (CommandBase & { cmd: "push-debug"; item: ItemId }) // a try push now of the DEBUG commits of every item waiting for a try repro, without waiting for the stack's
   | (CommandBase & { cmd: "presence"; visible: boolean }) // sent by a visible page, see docs/ORCHESTRATOR.md
   // The ways out of a ⚑, from its buttons.
   | (CommandBase & { cmd: "accept-review"; item: ItemId }) // the item is reviewed despite its critical review findings
@@ -538,6 +540,7 @@ export interface RequestState {
   askedTests?: string[]; // failures already on central you asked to fix too, by test path
   queuedAuthors?: { item: ItemId; key: string; reason: string; message: string; plan?: JobPlan }[]; // your messages, and runs you retried, waiting for their author's worktree
   verifyAsked?: string[];
+  debugPushAsked?: { item: ItemId; t: Iso }; // your last ask for a push of the DEBUG commits of their own, from that item's row
   reopened: Record<PatchId, Iso>; // when its revision went from closed (landed) back to open: a backout
   landedAt: Record<PatchId, Iso>; // when a poll first saw its revision closed (landed), until a backout reopens it
   answers: Record<string, string>; // what you said with your answer to a ⚑, by its key (take-it: what its author should do)
@@ -608,6 +611,8 @@ export interface JobPurpose {
   replyTo?: JobId; // the recover run a reply-recovery answers
   retried?: boolean; // an agent's retry: its session resumed where it stopped
   requests?: RequestId[]; // the active requests a route-request run was given: its answer must be one of them
+  items?: ItemId[]; // a DEBUG push's plan (plan:debug:…): the items whose DEBUG commits it carries
+  onto?: string; // and what they go on top of: "the stack", "central", "try push <rev>'s commits"…
 }
 
 // ---------------------------------------------------------------------------
