@@ -67,6 +67,18 @@ describe("lineMapper", () => {
     assert.deepEqual(m.carry({ file: "a.js" }, v1, v2), { file: "a.js" });
   });
 
+  it("places a comment whose line changed on the first line that replaced it, and quotes the lines it was made on", () => {
+    const m = lineMapper(gitIn(dir));
+    assert.deepEqual(m.near({ file: "a.js", line: 4, side: "new" }, v1, v2), { file: "a.js", line: 6, side: "new" });
+    assert.equal(m.near({ file: "gone.js", line: 4 }, v1, v2), undefined);
+    assert.deepEqual(m.quote({ file: "a.js", line: 4, side: "new" }, v1), [
+      { n: 1, text: "line 1", here: false },
+      { n: 2, text: "line 2", here: false },
+      { n: 3, text: "line 3", here: false },
+      { n: 4, text: "line 4", here: true },
+    ]);
+  });
+
   it("finds a commit message's lines in the new message, and a section's lines in its new text", () => {
     const m = lineMapper(gitIn(dir));
     assert.deepEqual(m.carry({ file: "(commit)", line: 4 }, v1, v2), { file: "(commit)", line: 4 });

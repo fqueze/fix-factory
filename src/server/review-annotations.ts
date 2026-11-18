@@ -20,6 +20,7 @@ export interface AnnotationComment {
   sourceUrl?: string;
   outdated: boolean;
   draftReply?: string;
+  context?: { n: number; text: string; here: boolean }[]; // outdated: the lines it was made on, in that version
   replies?: { author: string; date?: string; body: string }[];
   state: "open" | "done" | "addressed" | "ignored";
   responses: ReviewResponse["response"][];
@@ -145,6 +146,13 @@ function history(r: RequestState, p: PatchView, sha: string, io: AnnotationIo): 
   return out;
 }
 
+// A comment whose lines changed since: shown near where they were, with the lines it was made on.
+function earlierPlace(lines: Lines, anchor: ReviewAnchor, from: string, to: string): { anchor?: ReviewAnchor; context?: AnnotationComment["context"] } {
+  const near = lines.near(anchor, from, to);
+  const context = lines.quote(anchor, from);
+  return { ...(near ? { anchor: near } : {}), ...(context ? { context } : {}) };
+}
+
 function yourComments(r: RequestState, p: PatchView, sha: string, lines: Lines): AnnotationComment[] {
   return (p.yourComments ?? []).flatMap((c) => {
     // From before anchors: the text holds one entry per comment, each saying where it is.
@@ -152,9 +160,11 @@ function yourComments(r: RequestState, p: PatchView, sha: string, lines: Lines):
     const answer = answerTo(r, c.key);
     return entries.map((e) => {
       const moved = lines.carry(e.anchor, c.sha, sha, c.lines, p.testPlan ?? p.testPlanSent?.text);
+      const earlier = moved === undefined ? earlierPlace(lines, e.anchor, c.sha, sha) : {};
       return {
         id: e.id,
-        anchor: moved ?? e.anchor,
+        anchor: moved ?? earlier.anchor ?? e.anchor,
+        ...(earlier.context ? { context: earlier.context } : {}),
         author: "you",
         date: c.t,
         body: e.body,
@@ -184,11 +194,13 @@ function phabComments(p: PatchView, sha: string, lines: Lines): AnnotationCommen
       const id = `phab-${c.id}`;
       const anchor: ReviewAnchor = c.file ? { file: c.file, ...(c.line ? { line: c.line } : {}), side: "new" } : { file: "(commit)" };
       const moved = base === undefined ? undefined : lines.carry(anchor, base, sha);
+      const earlier = moved === undefined && base !== undefined ? earlierPlace(lines, anchor, base, sha) : {};
       const r = responded(p, id);
       const draft = drafts.get(c.id);
       return {
         id,
-        anchor: moved ?? anchor,
+        anchor: moved ?? earlier.anchor ?? anchor,
+        ...(earlier.context ? { context: earlier.context } : {}),
         author: `${c.author} (Phabricator)`,
         body: `${c.kind && c.kind !== "none" ? `*${c.kind}* · ` : ""}${c.text}${c.suggestion ? `\n\nSuggested edit:\n\n\`\`\`\n${c.suggestion}\n\`\`\`` : ""}`,
         sourceUrl: phabUrl(review.revision, c.id),
@@ -209,10 +221,12 @@ function findingComments(r: RequestState, p: PatchView, sha: string, io: Annotat
     const anchor: ReviewAnchor = f.file ? { file: f.file, ...(f.line ? { line: f.line } : {}), side: "new" } : { file: "(commit)" };
     const reviewed = f.sha === undefined ? undefined : shas.find((x) => x.startsWith(f.sha!));
     const moved = reviewed === undefined ? (f.file ? undefined : anchor) : lines.carry(anchor, reviewed, sha);
+    const earlier = moved === undefined && reviewed !== undefined ? earlierPlace(lines, anchor, reviewed, sha) : {};
     const x = responded(p, f.id);
     return {
       id: f.id,
-      anchor: moved ?? anchor,
+      anchor: moved ?? earlier.anchor ?? anchor,
+      ...(earlier.context ? { context: earlier.context } : {}),
       author: f.of === "patch" ? "critical review" : "critical review of the stack",
       date: f.t,
       body: `**${f.severity}**: ${f.text}`,
@@ -259,15 +273,17 @@ export function lineMapper(git: AnnotationIo["git"]) {
     return cache.get(k);
   };
   const files = (sha: string) => new Set((run(["diff", "--name-only", "--no-renames", `${sha}^`, sha]) ?? "").split("\n").filter(Boolean));
-  const fileLine = (from: string, to: string, file: string, line: number): number | undefined => {
+  // A line's number in another version; one that changed has none, or `near`, the first of what replaced it (or the
+  // line before, when nothing did).
+  const fileLine = (from: string, to: string, file: string, line: number, near = false): number | undefined => {
     if (from === to) return line;
     const diff = run(["diff", "-U0", "--no-color", "--no-ext-diff", "--no-renames", from, to, "--", file]);
     if (diff === undefined || /^deleted file mode/m.test(diff)) return undefined;
     let shift = 0;
-    for (const m of diff.matchAll(/^@@ -(\d+)(?:,(\d+))? \+\d+(?:,(\d+))? @@/gm)) {
+    for (const m of diff.matchAll(/^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/gm)) {
       const start = Number(m[1]);
       const removed = m[2] === undefined ? 1 : Number(m[2]);
-      const added = m[3] === undefined ? 1 : Number(m[3]);
+      const added = m[4] === undefined ? 1 : Number(m[4]);
       // Lines added after line `start`, none removed.
       if (removed === 0) {
         if (line <= start) break;
@@ -275,7 +291,7 @@ export function lineMapper(git: AnnotationIo["git"]) {
         continue;
       }
       if (line < start) break;
-      if (line < start + removed) return undefined;
+      if (line < start + removed) return near ? Math.max(1, Number(m[3])) : undefined;
       shift += added - removed;
     }
     return line + shift;
@@ -291,6 +307,25 @@ export function lineMapper(git: AnnotationIo["git"]) {
   const range = (line: ReviewAnchor["line"]) => (line === undefined ? undefined : typeof line === "number" ? [line, line] : line);
   const withLine = (a: ReviewAnchor, start: number, end: number): ReviewAnchor => ({ ...a, line: start === end ? start : [start, end] });
   return {
+    // Where a comment on a file's lines that changed since is shown: the first line of what replaced them, as
+    // Phabricator shows a comment made on an older diff; none for a file this version doesn't change.
+    near(a: ReviewAnchor, from: string, to: string): ReviewAnchor | undefined {
+      const lines = range(a.line);
+      if (!lines || a.file.startsWith("(") || !files(to).has(a.file)) return undefined;
+      const [f, t] = a.side === "old" ? [`${from}^`, `${to}^`] : [from, to];
+      const start = fileLine(f, t, a.file, lines[0], true);
+      return start === undefined ? undefined : withLine(a, start, start);
+    },
+    // The lines a comment on a file was made on, in the version it was made on, with a few before them.
+    quote(a: ReviewAnchor, from: string): { n: number; text: string; here: boolean }[] | undefined {
+      const lines = range(a.line);
+      if (!lines || a.file.startsWith("(")) return undefined;
+      const text = run(["show", `${a.side === "old" ? `${from}^` : from}:${a.file}`]);
+      if (text === undefined) return undefined;
+      const all = text.split("\n");
+      const first = Math.max(1, lines[0] - 3);
+      return all.slice(first - 1, lines[1]).map((t, i) => ({ n: first + i, text: t, here: first + i >= lines[0] }));
+    },
     carry(a: ReviewAnchor, from: string, to: string, quoted?: string[], section?: string): ReviewAnchor | undefined {
       const lines = range(a.line);
       if (a.file.startsWith("(section:")) {
