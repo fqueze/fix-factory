@@ -3897,6 +3897,23 @@ describe("9. a try push of a submitted stack", () => {
     assert.match(sc.plan(queued).agent?.message ?? "", /Post the reply\./);
   });
 
+  it("a restart of an author whose worktree was removed waits for it to be restored, then starts afresh", () => {
+    const sc = inReview();
+    const name = `${ID}-i-test-a`;
+    sc.startJob({ purpose: { key: `remove:${name}`, what: "remove" }, kind: "script", name: "worktree.ts remove", cwd: config.firefoxRepo, cli: { tool: "worktree.ts", args: ["remove", name] } });
+    sc.complete(`remove:${name}`, { output: { name, removed: true } });
+    command(sc, { cmd: "start-agent", item: "i-test-a", prompt: "Fix it in the product.", reason: "not with a wait" });
+    const queued = sc.state().queuedAuthors![0];
+    assert.equal(queued.reason, "start");
+    assert.ok(!sc.view().byKey.has(queued.key), "not started in a missing worktree");
+    const restore = sc.settle().find((k) => k.startsWith(`wt-restore:${name}:`))!;
+    sc.complete(restore, { output: { name, path: `/wt/${name}` } });
+    assert.ok(sc.settle().includes(queued.key));
+    const plan = sc.plan(queued.key);
+    assert.equal(plan.agent?.resume, false, "a fresh session");
+    assert.match(String(plan.agent?.vars?.failureSummary), /Instructions for this run: Fix it in the product\./);
+  });
+
   it("an answer that changes no code asks only to post its replies; comments from anyone but you count", () => {
     const sc = inReview();
     sc.complete("poll:0", { output: polled("needs-revision", [{ id: 7, author: "emilio", text: "Why not CheckForAnchorChange?", done: false, length: 0 }, { id: 8, author: "florian", text: "my note", done: false, length: 0 }], "blocking").map((x) => ({ ...x, author: "florian" })) });

@@ -9,7 +9,7 @@ import { sameBugDraft } from "../state/meta-bug.ts";
 import { canDismiss, canRetry, isPushJob, reviewLimitFlag } from "../state/flags.ts";
 import type { Command, Event, FactoryConfig, ItemId, JobId, PatchId, PlannedCommand, RequestId, RequestState, ReviewComment } from "../types.ts";
 import { REQUEST_STEPS } from "../server/commands.ts";
-import { ANNOTATIONS_ITEM, authorJobsOf, CANCELLED, itemEpochOf, lostSession, SETTLED, TERMINAL, resumeAuthorPlan, removedWorktree } from "./next.ts";
+import { ANNOTATIONS_ITEM, authorJobsOf, CANCELLED, freshAuthorPlan, itemEpochOf, lostSession, SETTLED, TERMINAL, resumeAuthorPlan, removedWorktree } from "./next.ts";
 import { handOffReferences } from "./hand-off.ts";
 import { moveProblem, movingProblem, partEvents, splitProblem } from "./split.ts";
 import { dataPath, requestDir, sessionIdFor, slug, type JobPlan } from "./plan.ts";
@@ -647,25 +647,14 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
         done(false, `the investigation of ${itemName(c.item)} can only be restarted after a first one`);
         break;
       }
-      // Its worktree went to another item meanwhile: a resume brings it back (a fresh session can't wait for it).
+      const key = `author:${c.item}${itemEpochOf(view, c.item)}:start:${c.id}`;
+      // Its worktree went to another item meanwhile: it comes back first, then the session starts (next.ts).
       if (removedWorktree(view, session.cwd)) {
-        done(false, `the worktree of ${itemName(c.item)} was freed for another item: resume its author with these instructions instead (resume-agent), which brings it back`);
+        ev({ type: "author-queued", item: c.item, key, reason: "start", message: c.prompt });
+        done(true, `${c.reason ? `${c.reason}; ` : ""}its worktree comes back first`);
         break;
       }
-      // A fresh session in the same worktree, with the first run's inputs plus what you said.
-      const key = `author:${c.item}${itemEpochOf(view, c.item)}:start:${c.id}`;
-      effects.push({
-        type: "start",
-        plan: {
-          purpose: { key, what: "author", item: c.item, reason: "start" },
-          kind: "agent",
-          name: session.name,
-          item: c.item,
-          cwd: session.cwd,
-          agent: { sessionId: sessionIdFor(s.id, key), resume: false, vars: { ...startVars(item.group.tests, session.cwd), notes: join(itemDir(ctx.config.stateDir, s.id, c.item), "notes"), failureSummary: `"${item.group.message}" on ${item.group.configs.length} configs.\n\nInstructions for this run: ${c.prompt}`, request: s.text.trim() } },
-          startEvents: [{ type: "item-state", request: s.id, item: c.item, state: "investigating", detail: "started again" }],
-        },
-      });
+      effects.push({ type: "start", plan: freshAuthorPlan(s, view, ctx.config.stateDir, c.item, key, c.prompt)! });
       done(true, c.reason);
       break;
     }
@@ -852,6 +841,4 @@ function quoted(lines: string[]): string {
 
 const ANSWER_EACH ="Start the report's summary by answering each point of it in a line: what you changed, or, for a question or a change you didn't make, the answer and what backs it (the file, command or data you checked; for a shared helper, every test using it).";
 
-function startVars(tests: string[], worktree: string): Record<string, string> {
-  return { test: tests.length > 1 ? `${tests[0]} (and ${tests.length - 1} other tests)` : tests[0], worktree };
-}
+

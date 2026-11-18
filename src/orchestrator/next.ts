@@ -297,6 +297,33 @@ export function removedWorktree(view: View, cwd: string): string | undefined {
   return restored && restored.startedAt > removed.startedAt ? undefined : name;
 }
 
+// A fresh session of an item's author in its worktree, with its first run's inputs plus your instructions (start-agent).
+export function freshAuthorPlan(s: RequestState, view: View, stateDir: string, item: ItemId, key: string, prompt: string): JobPlan | undefined {
+  const session = authorJobsOf(view, item).find((j) => j.purpose.reason === "initial");
+  const i = s.items[item];
+  if (!session || !i) return undefined;
+  const tests = i.group.tests;
+  return {
+    purpose: { key, what: "author", item, reason: "start" },
+    kind: "agent",
+    name: session.name,
+    item,
+    cwd: session.cwd,
+    agent: {
+      sessionId: sessionIdFor(s.id, key),
+      resume: false,
+      vars: {
+        test: tests.length > 1 ? `${tests[0]} (and ${tests.length - 1} other tests)` : tests[0],
+        worktree: session.cwd,
+        notes: join(itemDir(stateDir, s.id, item), "notes"),
+        failureSummary: `"${i.group.message}" on ${i.group.configs.length} configs.\n\nInstructions for this run: ${prompt}`,
+        request: s.text.trim(),
+      },
+    },
+    startEvents: [{ type: "item-state", request: s.id, item, state: "investigating", detail: "started again" }],
+  };
+}
+
 export function resumeAuthorPlan(
   request: string,
   view: View,
@@ -395,8 +422,12 @@ class Planner {
     this.verify();
     this.askedTests();
     this.reportedFailures();
-    // Your messages to authors whose worktree is being restored.
-    for (const q of this.s.queuedAuthors ?? []) this.resumeAuthor(q.item, q.key, q.reason, q.message);
+    // Your messages to authors whose worktree is being restored, and your restarts of them.
+    for (const q of this.s.queuedAuthors ?? []) {
+      if (q.reason !== "start") this.resumeAuthor(q.item, q.key, q.reason, q.message);
+      else if (this.view.byKey.has(q.key)) this.want(q.key);
+      else if (!this.restoreWorktree(q.item)) this.want(q.key, () => freshAuthorPlan(this.s, this.view, this.config.stateDir, q.item, q.key, q.message)!);
+    }
     this.undeliveredMessages();
     this.skipRemoval();
     this.metaDraft();
@@ -1263,19 +1294,23 @@ class Planner {
     this.resumeAuthor(item.id, `author:${item.id}${this.itemEpoch(item.id)}:build:${author.job}`, "build", `Your worktree, at the same path, now has a ${build} build compiled locally (\`./mach build\` rebuilds what you change). Carry on from where you stopped, then end with the JSON report.`);
   }
 
+  // Whether the item's worktree was removed: then it's brought back (on its kept branch), a place in the pool permitting.
+  private restoreWorktree(item: ItemId): boolean {
+    const session = this.authorJobs(item).filter((j) => j.purpose.reason === "initial" || j.purpose.reason === "start").at(-1);
+    const removed = session && removedWorktree(this.view, session.cwd);
+    if (!removed) return false;
+    const removal = this.view.jobs.findLast((j) => isRemoval(j.purpose.key, removed) && succeeded(j))!;
+    const build = this.itemBuild(item);
+    if (!this.view.byKey.has(`wt-restore:${removed}:${removal.job}:v2`) && this.ctx.claimWorktree && !this.ctx.claimWorktree(`wt-restore:${removed}`, build)) return true;
+    // On its kept branch, as it was: no --base; with the build its author asked for, if any.
+    this.want(`wt-restore:${removed}:${removal.job}:v2`, () => ({ ...this.worktree(removed, { item }, build), cli: { tool: "worktree.ts", args: ["create", removed, "--build", build, "--notes", itemDir(this.config.stateDir, this.s.id, item)] } }));
+    return true;
+  }
+
   resumeAuthor(item: ItemId, key: string, reason: string, message: string, state: ItemState = "investigating"): JobRecord | undefined {
     if (this.view.byKey.has(key)) return this.want(key);
     // A removed worktree comes back first.
-    const session = this.authorJobs(item).filter((j) => j.purpose.reason === "initial" || j.purpose.reason === "start").at(-1);
-    const removed = session && removedWorktree(this.view, session.cwd);
-    if (removed) {
-      const removal = this.view.jobs.findLast((j) => isRemoval(j.purpose.key, removed) && succeeded(j))!;
-      const build = this.itemBuild(item);
-      if (!this.view.byKey.has(`wt-restore:${removed}:${removal.job}:v2`) && this.ctx.claimWorktree && !this.ctx.claimWorktree(`wt-restore:${removed}`, build)) return undefined;
-      // On its kept branch, as it was: no --base; with the build its author asked for, if any.
-      this.want(`wt-restore:${removed}:${removal.job}:v2`, () => ({ ...this.worktree(removed, { item }, build), cli: { tool: "worktree.ts", args: ["create", removed, "--build", build, "--notes", itemDir(this.config.stateDir, this.s.id, item)] } }));
-      return undefined;
-    }
+    if (this.restoreWorktree(item)) return undefined;
     // Its own commit has no Differential Revision line (the stack's has): without the revision it can't read the reviews.
     const revs = Object.values(this.s.patches).filter((p) => p.item === item && p.revision !== undefined);
     if (revs.length) {
