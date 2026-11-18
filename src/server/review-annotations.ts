@@ -104,6 +104,11 @@ function yourComments(p: PatchView, sha: string, lines: Lines): AnnotationCommen
   });
 }
 
+// Phabricator's review bots (reviewbot, reviewhelper-bot…).
+function isBot(author: string): boolean {
+  return /bot$/i.test(author);
+}
+
 function phabComments(p: PatchView, sha: string, lines: Lines): AnnotationComment[] {
   const review = p.review;
   if (!review) return [];
@@ -126,8 +131,9 @@ function phabComments(p: PatchView, sha: string, lines: Lines): AnnotationCommen
         sourceUrl: phabUrl(review.revision, c.id),
         outdated: moved === undefined,
         ...(draft !== undefined ? { draftReply: draft } : {}),
-        state: c.done ? "done" : r === "ignore" ? "ignored" : r === "address" || isAnswered(p, c) ? "addressed" : "open",
-        responses: ["address", "reply", "ignore"],
+        state: c.done || r === "done" ? "done" : r === "ignore" ? "ignored" : r === "address" || isAnswered(p, c) ? "addressed" : "open",
+        // A human reviewer's comment is yours to mark done, as on Phabricator; a bot's isn't.
+        responses: [...(isBot(c.author) ? [] : (["done"] as const)), "address", "reply", "ignore"],
       };
     });
 }
@@ -149,7 +155,8 @@ function findingComments(r: RequestState, p: PatchView, sha: string, io: Annotat
       body: `**${f.severity}**: ${f.text}`,
       outdated: moved === undefined,
       state: x === "ignore" ? "ignored" : x === "address" || f.addressed ? "addressed" : "open",
-      responses: ["address", "ignore"],
+      // Addressed by its author: nothing left for you to do with it, unless you already did something.
+      responses: f.addressed && x === undefined ? [] : ["address", "ignore"],
     };
   });
 }

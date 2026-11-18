@@ -120,6 +120,6 @@ describe("buildAnnotations", () => {
     assert.deepEqual(a.sections, [{ id: "test-plan", title: "Test plan", markdown: "Green on try." }]);
     const [yours, phab] = a.comments;
     assert.deepEqual([yours.id, yours.author, yours.anchor, yours.outdated, yours.state, yours.body, yours.responses], [r.patches["p-a"].yourComments![0].id, "you", { file: "a.js", line: 9, side: "new" }, false, "open", "Why here?", ["done", "reply"]]);
-    assert.deepEqual([phab.id, phab.author, phab.outdated, phab.state, phab.draftReply, phab.sourceUrl, phab.responses], ["phab-41", "smaug (Phabricator)", true, "ignored", "Because.", "https://phabricator.services.mozilla.com/D7#inline-41", ["address", "reply", "ignore"]]);
+    assert.deepEqual([phab.id, phab.author, phab.outdated, phab.state, phab.draftReply, phab.sourceUrl, phab.responses], ["phab-41", "smaug (Phabricator)", true, "ignored", "Because.", "https://phabricator.services.mozilla.com/D7#inline-41", ["done", "address", "reply", "ignore"]]);
   });
 });
