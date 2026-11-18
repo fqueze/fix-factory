@@ -3,7 +3,7 @@ import { unapproved } from "../../state/approval.ts";
 import { md } from "./md.ts";
 import { canDismiss, canRetry, reviewLimitFlag, unreachable } from "../../state/flags.ts";
 import { html, join, type Html } from "../html.ts";
-import { bugDraftData, actionKind, COMMAND_LABELS, isLanded, linkify, commandFields, enterBugUrl, metaBugUrl, groupLabel, jobLabel, pushName, jobNoun, refusedOf, needsMetaBug, plural, requestUrl, elapsed, stackOfPatch, submitChecks, regressionStatus, type RenderContext } from "./common.ts";
+import { bugDraftData, actionKind, COMMAND_LABELS, isLanded, linkify, commandFields, enterBugUrl, metaBugUrl, groupLabel, jobLabel, pushName, jobNoun, refusedOf, needsMetaBug, plural, requestUrl, elapsed, stackOfPatch, submitChecks, regressionStatus, type ActionKind, type RenderContext } from "./common.ts";
 
 // The ⚑ area of one open needs-user entry: what you're asked, why, and the buttons.
 export function renderAction(r: RequestState, n: NeedsUser, ctx: RenderContext): Html {
@@ -13,7 +13,29 @@ export function renderAction(r: RequestState, n: NeedsUser, ctx: RenderContext):
     // Moot once you've done it another way: Dismiss.
     return html`<div class="action reply" data-key="${n.key}"><span class="flag">You asked</span> ${dismissButton(r.id, n.key, requestUrl(r.id))}<span class="said clamp1" data-expand title="${plan.text}">“${plan.text}”</span>${recoveryPlan(r, plan, requestUrl(r.id))}</div>`;
   }
-  return html`<div class="action" data-key="${n.key}"><span class="flag">${flagTitle(r, n)}</span>${flagControls(r, n, ctx)}${actionKind(n, r) === "submit" ? null : why(n.detail, flagTests(r, n))}</div>`;
+  return html`<div class="action" data-key="${n.key}"><span class="flag">${flagTitle(r, n)}</span>${flagCopy(r, n)}${flagControls(r, n, ctx)}${actionKind(n, r) === "submit" ? null : why(n.detail, flagTests(r, n))}</div>`;
+}
+
+// ⚑s asking you to do something the factory expected of you, not saying something went wrong.
+const ASKS: ActionKind[] = ["approve-push", "take-it", "file-bug", "meta-bug", "approve", "submit", "resubmit", "reply", "reopen-bug", "land", "reviewers", "question", "disagrees"];
+
+// ⧉: what a ⚑ saying something went wrong says, and what it's about by id, to paste to whoever looks into it.
+export function flagCopy(r: RequestState, n: Partial<Pick<NeedsUser, "item" | "patch" | "stack" | "job" | "detail" | "push">> & { key: string; action: string }): Html | null {
+  if (!n.key.startsWith("refused:") && ASKS.includes(actionKind(n as NeedsUser, r))) return null;
+  const item = n.item ?? (n.job === undefined ? undefined : r.jobs[n.job]?.item);
+  const job = n.job === undefined ? undefined : r.jobs[n.job];
+  const text = [
+    n.action,
+    ...(n.detail ? [n.detail] : []),
+    "",
+    `request: ${r.id}`,
+    ...(item !== undefined ? [`item: ${item}${item in r.items ? ` (${r.items[item].group.tests.join(", ")})` : ""}`] : []),
+    ...(n.patch !== undefined ? [`patch: ${n.patch}`] : []),
+    ...(n.stack !== undefined ? [`stack: ${n.stack}`] : []),
+    ...(job ? [`job: ${job.job} (${job.name})`] : n.job !== undefined ? [`job: ${n.job}`] : []),
+    `key: ${n.key}`,
+  ].join("\n");
+  return html`<button type="button" class="btn small icon copyflag" data-copy-text="${text}" title="Copy what it says, with its request, item and job ids" aria-label="Copy">⧉</button>`;
 }
 
 // Under the title and its buttons, the whole width: one line, all of it when clicked.
@@ -188,7 +210,8 @@ export function isAuthorJob(j: JobView): boolean {
 
 // A command the orchestrator refused, until you dismiss it or the same kind of command succeeds.
 export function renderRefused(r: RequestState, x: RefusedCommand): Html {
-  return html`<div class="action" data-key="${x.key}"><span class="flag">Your ${x.cmd ? COMMAND_LABELS[x.cmd] : "command"} was refused</span>${dismissButton(r.id, x.key, requestUrl(r.id))}${why(x.detail)}</div>`;
+  const title = `Your ${x.cmd ? COMMAND_LABELS[x.cmd] : "command"} was refused`;
+  return html`<div class="action" data-key="${x.key}"><span class="flag">${title}</span>${flagCopy(r, { ...x, action: `${title} (command ${x.command})` })}${dismissButton(r.id, x.key, requestUrl(r.id))}${why(x.detail)}</div>`;
 }
 
 // 🗑: the factory drops the group (its row stays, closed; Reopen brings it back).

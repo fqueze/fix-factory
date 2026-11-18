@@ -481,6 +481,19 @@
   });
 
   document.addEventListener("click", function (event) {
+    // A ⚑'s ⧉: its text is on the button.
+    var copier = event.target.closest && event.target.closest("[data-copy-text]");
+    if (copier) {
+      event.preventDefault();
+      // Marked, not relabelled: its box doesn't shift.
+      copyText(copier.dataset.copyText).then(function () {
+        copier.classList.add("copied");
+        setTimeout(function () {
+          copier.classList.remove("copied");
+        }, 1500);
+      });
+      return;
+    }
     var button = event.target.closest && event.target.closest("[data-copy]");
     if (!button) return;
     // Copy buttons inside a request's summary line mustn't fold it.
@@ -509,6 +522,18 @@
       done();
     }
   });
+
+  // The clipboard API, or, over plain http from another machine where it isn't available, a textarea's selection.
+  function copyText(text) {
+    if (navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(text);
+    var area = document.createElement("textarea");
+    area.value = text;
+    document.body.appendChild(area);
+    area.select();
+    document.execCommand("copy");
+    area.remove();
+    return Promise.resolve();
+  }
 
   // Tells the orchestrator you're here: it polls Phabricator only while you are
   // (docs/ORCHESTRATOR.md). Not a user action, so no feedback, and failures are

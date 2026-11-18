@@ -399,7 +399,7 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.ok(has(flag("stopped:j-plan"), { cmd: "retry", job: "j-plan", request: D }));
     assert.ok(has(flag("stopped:j-plan"), { cmd: "dismiss", key: "stopped:j-plan", request: D }));
     assert.doesNotMatch(flag("stopped:j-plan"), /Continue/);
-    assert.match(flag("refused:c-12"), /Your comment on the fix was refused<\/span><form[^]*?<\/form><span class="why clamp1" data-expand title="[^"]*">the author of i-nits is running/);
+    assert.match(flag("refused:c-12"), /Your comment on the fix was refused<\/span><button[^>]*copyflag[^>]*>⧉<\/button><form[^]*?<\/form><span class="why clamp1" data-expand title="[^"]*">the author of i-nits is running/);
     assert.ok(has(flag("refused:c-12"), { cmd: "dismiss", key: "refused:c-12", request: D }));
 
     const r = structuredClone(get(D));
@@ -457,7 +457,7 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.doesNotMatch(ask, /Its author|Resume/);
     assert.ok(!ask.includes(cmd({ cmd: "continue", request: D, item: "i-idle" })), "its author has nothing to do with it");
     assert.ok(ask.includes(cmd({ cmd: "hand-back", request: D, item: "i-idle" })));
-    assert.match(ask, /<div class="ask-more" data-key="note:odd"><p><b>Also: Something odd<\/b><\/p><div class="md"><p>look at it<\/p><\/div><div class="jobctl"><form[^]*?>Dismiss<\/button>/, "the second ⚑ with its own buttons: a note isn't a take-it");
+    assert.match(ask, /<div class="ask-more" data-key="note:odd"><p><b>Also: Something odd<\/b><\/p><div class="md"><p>look at it<\/p><\/div><div class="jobctl"><button[^>]*copyflag[^>]*>⧉<\/button><form[^]*?>Dismiss<\/button>/, "the second ⚑ with its own buttons: a note isn't a take-it");
   });
 
   it("asks whether to keep the skip-ifs whose tests still fail, with Keep them and the talk box", () => {
@@ -592,7 +592,8 @@ describe("one fixture per step of docs/MVP.md", () => {
     r.refused = [{ key: "refused:c-7", command: "c-7", cmd: "start-agent", detail: "start-agent only starts a new investigate-and-fix on an item that already had one", t: r.createdAt }];
     const h = renderRequest(r, ctx).value;
     assert.match(h, /<details class="req needs"/);
-    assert.match(h, /<span class="flag">Your restart of the investigation was refused<\/span><form[^]*?<\/form><span class="why clamp1" data-expand title="[^"]*">start-agent only starts a new investigate-and-fix on an item that already had one<\/span>/, "its title and button first, the reason under them");
+    assert.match(h, /<span class="flag">Your restart of the investigation was refused<\/span><button[^>]*copyflag[^>]*>⧉<\/button><form[^]*?<\/form><span class="why clamp1" data-expand title="[^"]*">start-agent only starts a new investigate-and-fix on an item that already had one<\/span>/, "its title and button first, the reason under them");
+    assert.ok(h.includes(`data-copy-text="Your restart of the investigation was refused (command c-7)\nstart-agent only starts a new investigate-and-fix on an item that already had one\n\nrequest: ${r.id}\nkey: refused:c-7"`), "⧉ copies what it says and what it's about");
     assert.ok(h.includes(cmd({ cmd: "dismiss", key: "refused:c-7", request: "r-20261013-tab-failures" })));
   });
 
@@ -1011,6 +1012,8 @@ describe("one fixture per step of docs/MVP.md", () => {
     const h = expanded("r-20261001-mouse-button");
     assert.match(h, /<span class="landable">landable<\/span>/);
     assert.match(h, /Stack reordered: 1 landable patch moved to the bottom/);
+    assert.match(h, /data-key="land:mouse-button"/);
+    assert.doesNotMatch(h, /data-key="land:mouse-button">(?:(?!<\/div>)[^])*copyflag/, "⧉ only on what went wrong");
     assert.ok(h.includes(cmd({ cmd: "copied-reorg", request: "r-20261001-mouse-button", key: "land:mouse-button" })), "copying it answers the ⚑");
     assert.match(h, /<textarea hidden id="mozphab-reorg-r-20261001-mouse-button-mouse-button">cd \/build\/worktrees\/mouse-button && git switch ff\/mouse-button && moz-phab reorg<\/textarea>/);
     assert.match(h, /data-copy="mozphab-reorg-r-20261001-mouse-button-mouse-button">Copy the moz-phab reorg command</);

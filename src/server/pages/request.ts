@@ -5,7 +5,7 @@ import type { BugDraft, ItemView, JobView, NeedsUser, PatchView, PushView, Regre
 import { reviewStatus, unapproved } from "../../state/approval.ts";
 import { isAnswered } from "../../state/landing.ts";
 import { escapeHtml, html, join, raw, type Html } from "../html.ts";
-import { actionsSummary, flagPlaceOf, renderAction, recoveryAnswers, pollPhabButton, verifyStackButton, redoAnnotationsButton, approvePushControls, bugBox, continueBox, copyButton, handBackButton, flagControls, flagItemOf, flagText, plannedLabel, recoveryPlanFor, hasAuthorSession, stackViewerLink, submitControls, summaryId, untakenFix } from "./actions.ts";
+import { actionsSummary, flagCopy, flagPlaceOf, renderAction, recoveryAnswers, pollPhabButton, verifyStackButton, redoAnnotationsButton, approvePushControls, bugBox, continueBox, copyButton, handBackButton, flagControls, flagItemOf, flagText, plannedLabel, recoveryPlanFor, hasAuthorSession, stackViewerLink, submitControls, summaryId, untakenFix } from "./actions.ts";
 import { groupJobs, jobLine } from "./activity.ts";
 import { flagAsk, itemBucket, itemSentence, needsYouDetail, progressLine, requestProgress, submittedDetail, type Bucket } from "./progress.ts";
 import {
@@ -394,8 +394,8 @@ function askBlock(r: RequestState, i: ItemView, ctx: RenderContext, patches: Pat
   const commits = (i.lastReport?.report as { commits?: string[] } | undefined)?.commits ?? [];
   const unimported = !patches.length && commits.length && !Object.values(r.patches).some((p) => p.item === i.id) && i.lastReport?.prompt === "investigate-and-fix";
   const view = unimported ? html`<p><a href="/requests/${encodeURIComponent(r.id)}/items/${encodeURIComponent(i.id)}/debug" target="_blank" rel="noopener">View its ${commits.length === 1 ? "commit" : `${commits.length} commits`}</a> (what “${first && untakenFix(r, i.id, first) ? "Take its patch" : "Go ahead with its patch"}” takes)</p>` : null;
-  return html`${withFirst ? html`${s.ask}${patches.length ? html`<p>${patches.map((p) => html`“${patchTitle(p)}” ${viewLink(r, p, "Review the patch")} `)}</p>` : view}${controls(s.controls)}` : null}${more.map(
-    (n) => html`<div class="ask-more" data-key="${n.key}"><p><b>Also: ${flagText(r, n)}</b></p>${flagAsk(r, i, n)}${controls(flagControls(r, n, ctx))}</div>`,
+  return html`${withFirst ? html`${s.ask}${patches.length ? html`<p>${patches.map((p) => html`“${patchTitle(p)}” ${viewLink(r, p, "Review the patch")} `)}</p>` : view}${controls(first ? html`${flagCopy(r, { ...first, action: flagText(r, first) })}${s.controls}` : s.controls)}` : null}${more.map(
+    (n) => html`<div class="ask-more" data-key="${n.key}"><p><b>Also: ${flagText(r, n)}</b></p>${flagAsk(r, i, n)}${controls(html`${flagCopy(r, { ...n, action: flagText(r, n) })}${flagControls(r, n, ctx)}`)}</div>`,
   )}`;
 }
 
@@ -688,7 +688,7 @@ function patchParts(r: RequestState, p: PatchView, ctx: RenderContext) {
       r.tryNeeded?.[p.id] && !r.tryNeeded[p.id].verified ? html`<span class="bad" title="Not landable yet: it was changed for ${r.tryNeeded[p.id].why}, and no green try push has carried that change since">needs a green try push</span>` : null,
       ...yours.filter((n) => (!own.includes(n) || !onLine(n)) && actionKind(n, r) !== "file-bug").map((n) => html`<b class="you">${n.action}</b>`),
     ].filter((x) => x !== null),
-    flag: own.some(onLine) ? html`${own.filter(onLine).map((n) => html`<span class="flagitem" data-key="${n.key}"><b>${n.action}</b>${n.detail ? html` <span class="sub">${n.detail}</span>` : null}${flagControls(r, n, ctx)}</span>`)}` : null,
+    flag: own.some(onLine) ? html`${own.filter(onLine).map((n) => html`<span class="flagitem" data-key="${n.key}"><b>${n.action}</b>${n.detail ? html` <span class="sub">${n.detail}</span>` : null}${flagCopy(r, n)}${flagControls(r, n, ctx)}</span>`)}` : null,
     rest: own.filter((n) => !onLine(n)).map((n) => renderAction(r, n, ctx)),
     under: bugBoxShown ? bugDraftBox(r, p, back, ctx) : null,
     body: () => html`${testPlanSection(r, p, back)}${yourComments(r, p)}${p.deps.map((d) => depLine(r, d))}${reviewBox(r, p, p.interdiffFile === undefined ? undefined : ctx.interdiff?.(p))}${leftFindings(r, p, ctx)}`,

@@ -49,6 +49,10 @@ details[open] > summary .rname::before { content: "▾ "; }
 .step { font-size: 11px; border: 1px solid var(--border); border-radius: 10px; padding: 0 7px; color: var(--text-secondary); white-space: nowrap; }
 .action { grid-column: 1 / -1; background: var(--action-bg); border-radius: 6px; padding: 5px 8px; margin-top: 4px; font-size: 13px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .action .flag { font-weight: 600; }
+/* ⧉ on a ⚑ that went wrong: there only while you point at it, its place kept so nothing moves. */
+.copyflag { visibility: hidden; }
+:is(.action, .flagitem, .ask-you, .ask-more):hover .copyflag, .copyflag:focus-visible { visibility: visible; }
+.copyflag.copied { visibility: visible; color: var(--good); border-color: var(--good); }
 .action .flag::before { content: "⚑ "; color: var(--serious); }
 .action .flag { flex: 1 1 auto; }
 .action.warn { background: color-mix(in srgb, var(--critical) 12%, transparent); }
