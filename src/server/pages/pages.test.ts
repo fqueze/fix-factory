@@ -1395,6 +1395,10 @@ describe("agent activity", () => {
     assert.match(h, /<pre class="in">\.\/mach test [^<]*\necho done<\/pre>/);
     assert.match(h, /<details class="call subagent" data-more="call-t5" title="in a subagent">/);
     assert.match(h, /<div class="turn agent report"><dl><dt>Status<\/dt><dd><div class="rtext"><div class="md"><p>fixed<\/p><\/div><\/div>/);
+    // A file it names, opened in md-viewer from its item.
+    const named = renderActivity(r.id, job, { turns: [], summary: { done: true, report: { summary: "Drafted in artifacts/bug-draft.md.", feedback: [{ target: "factory", text: "see artifacts/bug-draft.md" }] }, toolUses: { count: 0, byName: {} } }, transcript: false }, ctx).value;
+    const href = `/requests/${r.id}/items/${job.item}/file?path=artifacts%2Fbug-draft.md`;
+    assert.equal(named.split(`<a href="${href}"`).length - 1, 2, "in its summary and its feedback");
     // A multi-line message with a "- " list: a paragraph, then a list.
     const said = renderActivity(r.id, job, { turns: [{ kind: "said" as const, text: "Two causes:\n- the paint\n- the timer" }], summary: { done: false, toolUses: { count: 0, byName: {} } }, transcript: false }, ctx).value;
     assert.match(said, /<div class="turn agent"><div class="md"><p>Two causes:<\/p><ul><li>the paint<\/li><li>the timer<\/li><\/ul><\/div><\/div>/);

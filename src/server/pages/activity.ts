@@ -2,9 +2,9 @@ import { toolCallText, type StreamSummary } from "../../agents/run.ts";
 import { md } from "./md.ts";
 import { isPushJob } from "../../state/flags.ts";
 import type { ItemView, JobView, RequestId, RequestState } from "../../types.ts";
-import { html, type Html } from "../html.ts";
+import { html, join, type Html } from "../html.ts";
 import { continueBox, stopButton } from "./actions.ts";
-import { elapsed, foldContent, formatCost, formatDuration, jobCost, jobLabel, modelLabel, plural, profileUrl, requestUrl, shownCost, stateClass, type RenderContext } from "./common.ts";
+import { elapsed, itemFileLink, linkify, foldContent, formatCost, formatDuration, jobCost, jobLabel, modelLabel, plural, profileUrl, requestUrl, shownCost, stateClass, type FileLink, type RenderContext } from "./common.ts";
 import { runningSentence, workLabel } from "./progress.ts";
 
 export function jobUrl(request: RequestId, job: string, what: "activity" | "transcript" | "profile" | "log" | `mach-profile-${number}`): string {
@@ -184,22 +184,24 @@ export function renderActivity(request: RequestId, job: JobView, a: Activity | u
     }
   }
   const s = a.summary;
+  // The files it names (artifacts/x.md), rendered by md-viewer, when it works on an item.
+  const file = job.item !== undefined ? itemFileLink(request, job.item) : undefined;
   const end =
     s.report !== undefined
-      ? html`<div class="turn agent report">${reportHtml(s.report)}</div>`
+      ? html`<div class="turn agent report">${reportHtml(s.report, file)}</div>`
       : s.isError && s.resultText
         ? html`<div class="turn agent bad">${md(s.resultText)}</div>`
         : job.endedAt === undefined
           ? html`<div class="sub">working ${elapsed(job.startedAt, ctx)}…</div>`
           : null;
   return html`${head}<div class="convo">${a.prompt ? html`<div class="turn user prompt" data-expand title="Click to expand">${md(a.prompt)}</div>` : null}${groups.map((g, n) =>
-    g[0].kind === "call" ? callRun(g as Extract<Turn, { kind: "call" }>[]) : turnHtml(g[0], n),
+    g[0].kind === "call" ? callRun(g as Extract<Turn, { kind: "call" }>[]) : turnHtml(g[0], n, file),
   )}${end}</div>`;
 }
 
-function turnHtml(t: Exclude<Turn, { kind: "call" }>, n: number): Html {
+function turnHtml(t: Exclude<Turn, { kind: "call" }>, n: number, file?: FileLink): Html {
   if (t.kind === "said") {
-    return html`<div class="turn agent">${md(t.text)}</div>`;
+    return html`<div class="turn agent">${md(t.text, [], file)}</div>`;
   }
   return t.synthetic
     ? html`<div class="calls"><details class="call" data-more="loaded-${n}"><summary>${t.text.startsWith("Base directory for this skill") ? "the skill's instructions" : "instructions"}</summary><pre class="out">${clip(t.text)}</pre></details></div>`
@@ -228,27 +230,27 @@ function clip(text: string): string {
 
 // A report in words: its fields as headings, lists as lists; empty fields left out, the agent's
 // feedback on the factory last.
-function reportHtml(v: unknown): Html | null {
+function reportHtml(v: unknown, file?: FileLink): Html | null {
   if (v === null || v === undefined || v === "" || (Array.isArray(v) && !v.length)) {
     return null;
   }
   if (Array.isArray(v)) {
-    return html`<ul>${v.map((x) => html`<li>${x !== null && typeof x === "object" && !Array.isArray(x) ? inline(x as Record<string, unknown>) : reportHtml(x)}</li>`)}</ul>`;
+    return html`<ul>${v.map((x) => html`<li>${x !== null && typeof x === "object" && !Array.isArray(x) ? inline(x as Record<string, unknown>, file) : reportHtml(x, file)}</li>`)}</ul>`;
   }
   if (typeof v === "object") {
     const entries = Object.entries(v as Record<string, unknown>).filter(([, x]) => reportHtml(x) !== null);
     const sorted = [...entries.filter(([k]) => k !== "feedback"), ...entries.filter(([k]) => k === "feedback")];
-    return html`<dl>${sorted.map(([k, x]) => html`<dt>${inWords(k)}</dt><dd>${reportHtml(x)}</dd>`)}</dl>`;
+    return html`<dl>${sorted.map(([k, x]) => html`<dt>${inWords(k)}</dt><dd>${reportHtml(x, file)}</dd>`)}</dl>`;
   }
-  return typeof v === "string" ? html`<div class="rtext">${md(v)}</div>` : html`<span class="rtext">${String(v)}</span>`;
+  return typeof v === "string" ? html`<div class="rtext">${md(v, [], file)}</div>` : html`<span class="rtext">${String(v)}</span>`;
 }
 
 // A list item's short fields on one line ("must-fix · foo.js · 12"), its long text after them.
-function inline(o: Record<string, unknown>): Html {
+function inline(o: Record<string, unknown>, file?: FileLink): Html {
   const short = Object.entries(o).filter(([, x]) => (typeof x === "string" && x.length <= 60) || typeof x === "number" || typeof x === "boolean");
   const rest = Object.entries(o).filter(([k]) => !short.some(([s]) => s === k));
-  return html`${short.length ? html`<span class="sub">${short.map(([, x]) => String(x)).join(" · ")}</span> ` : null}${rest.map(([k, x]) =>
-    typeof x === "string" ? html`<div class="rtext">${md(x)}</div>` : reportHtml(x) === null ? null : html`<div><b>${inWords(k)}</b> ${reportHtml(x)}</div>`,
+  return html`${short.length ? html`<span class="sub">${join(short.map(([, x]) => linkify(String(x), [], file)), " · ")}</span> ` : null}${rest.map(([k, x]) =>
+    typeof x === "string" ? html`<div class="rtext">${md(x, [], file)}</div>` : reportHtml(x) === null ? null : html`<div><b>${inWords(k)}</b> ${reportHtml(x, file)}</div>`,
   )}`;
 }
 
