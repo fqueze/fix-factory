@@ -328,6 +328,40 @@
         "debug"
       ],
       "description": "With state \"needs a build\": the build compiled locally your change to native code needs (debug for assertions and leak checks)."
+    },
+    "followUpBugs": {
+      "type": "array",
+      "description": "Only with state \"fix verified locally\": a real issue you found on the way that is unrelated to this failure, for someone to fix later; never what this failure's fix needs. A draft the user files, its number then sent to you. Not a file.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "product": {
+            "type": "string"
+          },
+          "component": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string",
+            "description": "Markdown: code identifiers in backticks."
+          },
+          "unrelatedBecause": {
+            "type": "string",
+            "description": "Why fixing it isn't part of fixing this failure."
+          }
+        },
+        "required": [
+          "product",
+          "component",
+          "summary",
+          "description",
+          "unrelatedBecause"
+        ],
+        "additionalProperties": false
+      }
     }
   },
   "required": [

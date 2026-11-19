@@ -157,6 +157,11 @@ describe("forms", () => {
     ]);
   });
 
+  it("reads a follow-up bug's number however it was pasted", () => {
+    const template = JSON.stringify({ cmd: "follow-up-bug", request: R, item: "i-a", key: "follow-up-bug:j:0" });
+    assert.deepEqual(commandsFromForm(new URLSearchParams({ command: template, bugOrText: "https://bugzil.la/2081216" })), [{ cmd: "follow-up-bug", request: R, item: "i-a", key: "follow-up-bug:j:0", bug: 2081216 }]);
+  });
+
   it("fills the revise box's text into revise-push; no form field turns one command into another", () => {
     const template = JSON.stringify({ cmd: "revise-push", request: R, push: "A" });
     assert.deepEqual(commandsFromForm(new URLSearchParams({ command: template, text: "on mac" })), [{ cmd: "revise-push", request: R, push: "A", text: "on mac" }]);

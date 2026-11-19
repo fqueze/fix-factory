@@ -420,6 +420,13 @@ function authorReport(input: HandlerInput, ev: <T extends EventInput["type"]>(ty
   switch (job.name) {
     case "investigate-and-fix": {
       const r = input.report as InvestigateReport;
+      // A follow-up bug is for an issue found on the way, never a way to put off fixing the failure: only with its fix.
+      if (r.followUpBugs?.length && r.state !== "fix verified locally") {
+        throw new InvalidReport(`followUpBugs only come with your fix of this failure ("fix verified locally"), for issues unrelated to it: fix the failure, or drop them and say in \`summary\` what stops you.`);
+      }
+      r.followUpBugs?.forEach(({ unrelatedBecause, ...draft }, i) =>
+        ev("needs-user", { key: `follow-up-bug:${job.job}:${i}`, action: "File the follow-up bug its author suggests", detail: `${draft.summary} (${draft.product} :: ${draft.component}). Unrelated to this failure: ${unrelatedBecause}`.slice(0, 600), item, bugDraft: draft }),
+      );
       // One failure's fix is on one bug: a commit added after its first one had a bug doesn't get a bug of its own. A
       // first commit that is to file replaces the one that had it (a fix redone elsewhere, on a bug of its own).
       const first = input.state.patches[patchId(item, 0)];
@@ -513,7 +520,14 @@ function authorReport(input: HandlerInput, ev: <T extends EventInput["type"]>(ty
         return;
       }
       const patch = job.purpose.patch!;
+      // A follow-up bug only for a reviewer who asked for one: never a way to put off what they asked to fix.
+      const asked = new Set(job.purpose.comments ?? []);
+      const unasked = (r.followUpBugs ?? []).filter((b) => !asked.has(b.commentId));
+      if (unasked.length) throw new InvalidReport(`followUpBugs is only for a bug a reviewer's comment asks you to file, by that comment's id (${[...asked].join(", ")}); ${unasked.map((b) => b.commentId).join(", ")} isn't one. Fix what you were asked to fix, then end with the JSON report again.`);
       for (const reply of r.replies) ev("reply-draft", { patch, commentId: reply.commentId, text: reply.text.slice(0, 2500) });
+      (r.followUpBugs ?? []).forEach(({ commentId, ...draft }, i) =>
+        ev("needs-user", { key: `follow-up-bug:${job.job}:${i}`, action: "File the follow-up bug the reviewer asked for", detail: `${draft.summary} (${draft.product} :: ${draft.component}), for comment ${commentId}`.slice(0, 500), item, patch, bugDraft: draft }),
+      );
     }
   }
 }

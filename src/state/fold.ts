@@ -428,7 +428,7 @@ export function folder(first: Event): { apply(events: readonly Event[]): void; s
         }
         case "needs-user": {
           const open = s.needsUser.find((n) => n.key === e.key);
-          const n = { key: e.key, action: e.action, detail: e.detail, item: e.item, patch: e.patch, push: e.push, stack: e.stack, job: e.job };
+          const n = { key: e.key, action: e.action, detail: e.detail, item: e.item, patch: e.patch, push: e.push, stack: e.stack, job: e.job, ...(e.bugDraft ? { bugDraft: e.bugDraft } : {}) };
           if (open) {
             // Re-raising keeps the original since: it measures how long you've been needed.
             Object.assign(open, n);

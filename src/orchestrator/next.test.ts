@@ -4434,6 +4434,35 @@ describe("9. review comments", () => {
     assert.deepEqual([yours.agent?.vars, yours.files, yours.purpose.retried], [first.agent?.vars, first.files, true]);
   });
 
+  it("a follow-up bug the reviewer asked for is a ⚑ to file it, whose number goes to its author; one nobody asked for goes back", () => {
+    const sc = inReview();
+    sc.complete("poll:0", { output: polled("needs-revision", [{ id: 7, author: "smaug", file: "a/test_a.js", line: 3, length: 1, text: "File a follow-up for the other callers", done: false }], "blocking") });
+    const [classify] = sc.settle();
+    sc.complete(classify, { report: { comments: [{ id: 7, kind: "change request", impliesChange: true }], feedback: [] } });
+    const [address] = sc.settle();
+    const draft = { product: "Firefox", component: "Address Bar", summary: "Other callers leak", description: "d" };
+    const report = (commentId: number) => ({ state: "addressed", summary: "s", commits: [sha("7")], replies: [], followUpBugs: [{ commentId, ...draft }], feedback: [] });
+    assert.throws(() => sc.complete(address, { report: report(9) }), (e: Error) => e instanceof InvalidReport && /only for a bug a reviewer's comment asks you to file/.test(e.message));
+    const job = sc.complete(address, { report: report(7) });
+    const flag = sc.state().needsUser.find((n) => n.key === `follow-up-bug:${job}:0`)!;
+    assert.deepEqual([flag.item, flag.bugDraft, flag.detail], ["i-test-a", draft, "Other callers leak (Firefox :: Address Bar), for comment 7"]);
+    command(sc, { cmd: "follow-up-bug", item: "i-test-a", key: flag.key, bug: 2012345 });
+    assert.ok(!sc.state().needsUser.some((n) => n.key === flag.key));
+    const told = sc.state().queuedAuthors?.at(-1)?.message ?? [...sc.plans.values()].at(-1)?.agent?.message ?? "";
+    assert.match(told, /You suggested the follow-up bug “Other callers leak”: it is filed as bug 2012345\./);
+  });
+
+  it("an investigation's follow-up bugs only come with its fix, saying why they're unrelated to the failure", () => {
+    const sc = workList([group("ka", "a/test_a.js", "boom")]);
+    investigating(sc, "i-test-a");
+    const followUpBugs = [{ product: "Core", component: "DOM", summary: "Leaky helper", description: "d", unrelatedBecause: "another test's helper" }];
+    assert.throws(() => sc.complete("author:i-test-a:initial", { report: { ...fixed([], { state: "left as-is" }), followUpBugs } }), /only come with your fix of this failure/);
+    const job = sc.complete("author:i-test-a:initial", { report: fixed([sha("1")], { followUpBugs }) });
+    const flag = sc.state().needsUser.find((n) => n.key === `follow-up-bug:${job}:0`)!;
+    assert.equal(flag.detail, "Leaky helper (Core :: DOM). Unrelated to this failure: another test's helper");
+    assert.equal(flag.bugDraft?.summary, "Leaky helper");
+  });
+
   it("classifies new comments, the author addresses them first, then the stack is rewritten and you resubmit", () => {
     const sc = inReview();
     const comment = { id: 7, author: "smaug", file: "a/test_a.js", line: 3, length: 1, text: "Use waitForCondition", done: false };

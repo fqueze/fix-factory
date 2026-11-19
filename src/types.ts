@@ -230,7 +230,7 @@ export type Event =
   | (EventBase & { type: "try-finished"; push: PushId; result: "green" | "failures"; summary: string })
   | (EventBase & { type: "review-status"; patch: PatchId; revision: number; status: string; reviewers: ReviewerStatus[]; comments: InlineComment[]; diff?: PhabDiff; author?: string; reopenedAt?: Iso; parent?: number })
   | (EventBase & { type: "reply-draft"; patch: PatchId; commentId: number; text: string })
-  | (EventBase & { type: "needs-user"; key: string; action: string; detail: string; item?: ItemId; patch?: PatchId; push?: PushId; stack?: string; job?: JobId })
+  | (EventBase & { type: "needs-user"; key: string; action: string; detail: string; item?: ItemId; patch?: PatchId; push?: PushId; stack?: string; job?: JobId; bugDraft?: BugDraft })
   | (EventBase & { type: "user-done"; key: string; byFactory?: true; reorg?: true; text?: string }) // clears a needs-user with the same key; byFactory: the factory found it moot, not your answer; reorg: you copied the moz-phab reorg command; text: what you said with your answer
   | (EventBase & { type: "command-executed"; command: string; ok: boolean; detail?: string; cmd?: Command["cmd"]; item?: ItemId; job?: JobId })
   | (EventBase & { type: "recovery-plan"; job: JobId; text: string; answer?: string; plan: PlannedCommand[]; cannotDo: string[]; questions: string[] })
@@ -280,6 +280,7 @@ export type Command =
   // The ways out of a ⚑, from its buttons.
   | (CommandBase & { cmd: "accept-review"; item: ItemId }) // the item is reviewed despite its critical review findings
   | (CommandBase & { cmd: "allow-push"; item: ItemId }) // its author's session may make one try push
+  | (CommandBase & { cmd: "follow-up-bug"; item: ItemId; key: string; bug: number }) // the follow-up bug you filed from its author's draft
   | (CommandBase & { cmd: "continue"; item: ItemId; text: string }) // resumes the item's author session with your message
   | (CommandBase & { cmd: "retry"; job: JobId }) // what retry-job does, except for try pushes
   | (CommandBase & { cmd: "stop"; job: JobId }) // cancels a running job; its item waits for a continue
@@ -312,12 +313,21 @@ export interface Feedback {
   text: string;
 }
 
+// A bug for someone else to fix later, its author's draft: filed by you, its number sent back to the author.
+export interface FollowUpBug {
+  product: string;
+  component: string;
+  summary: string;
+  description: string;
+}
+
 export interface InvestigateReport {
   state: "fix verified locally" | "left as-is" | "handed back" | "blocked" | "not reproduced" | "needs a try repro" | "needs a build"; // needs a try repro: commits are DEBUG commits widening the race; needs a build: build says which
   build?: "opt" | "debug"; // the build compiled locally it needs (native code): its worktree moves onto one, at the same path
   summary: string; // one line, shown on the status page
   disagreement?: string; // why it didn't follow your message: the factory stops and asks you
   question?: string; // a decision it leaves to you: a ⚑ on its group
+  followUpBugs?: (FollowUpBug & { unrelatedBecause: string })[]; // issues found on the way, unrelated to this failure: only with its fix
   otherFailures?: { test: string; message: string; configs: string[] }[]; // other tests' failures the request covers: work items of their own
   cause: string;
   evidence?: { source: "profile" | "log" | "local run" | "code reading"; ref?: string; finding: string }[]; // absent from reports older than it; ref: in the first ones
@@ -511,6 +521,7 @@ export interface NeedsUser {
   push?: PushId;
   stack?: string;
   job?: JobId;
+  bugDraft?: BugDraft; // a follow-up bug a reviewer asked for, to file
   since: Iso;
 }
 
@@ -580,6 +591,7 @@ export interface AddressReviewReport {
   summary: string;
   commits: string[]; // the amended commit(s), oldest first
   replies: { commentId: number; text: string }[]; // only where the code doesn't speak for itself
+  followUpBugs?: (FollowUpBug & { commentId: number })[]; // only those a reviewer's comment asks for
   tryRequest?: string; // as InvestigateReport's
   feedback: Feedback[];
 }

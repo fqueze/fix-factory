@@ -472,6 +472,19 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.doesNotMatch(row, />(Dismiss|Close)</);
   });
 
+  it("a follow-up bug to file: its form, not assigned to you, the box for its number, and Don't file it", () => {
+    const D = "r-20261015-downloads-stuck";
+    const r = structuredClone(get(D));
+    const bugDraft = { product: "Firefox", component: "Address Bar", summary: "Other callers leak", description: "d" };
+    r.needsUser.push({ key: "follow-up-bug:j-x:0", action: "File the follow-up bug the reviewer asked for", detail: "Other callers leak (Firefox :: Address Bar), for comment 7", item: "i-idle", bugDraft, since: r.createdAt });
+    const row = rowOf(renderRequest(r, { ...ctx, bugzillaEmail: "me@mozilla.com" }, true).value, "item-i-idle");
+    const link = row.match(/<a class="btn small" href="([^"]*)"[^>]*>Bug to file ↗<\/a>/)![1].replaceAll("&amp;", "&");
+    const params = new URL(link).searchParams;
+    assert.deepEqual([params.get("short_desc"), params.get("component"), params.get("assigned_to"), params.get("bug_status")], ["Other callers leak", "Address Bar", null, null]);
+    assert.ok(row.includes(cmd({ cmd: "follow-up-bug", request: D, item: "i-idle", key: "follow-up-bug:j-x:0" })));
+    assert.match(row, />Don&#39;t file it</);
+  });
+
   it("shows a fix of two patches as one row, a line per patch in sight, its question asked once", () => {
     const T = "r-20261013-tab-failures";
     const r = structuredClone(get(T));

@@ -104,6 +104,7 @@ const SPECS: Record<Command["cmd"], Record<string, Field>> = {
   "verify-stack": { reason: "string" },
   "accept-review": { item: "string" },
   "allow-push": { item: "string" },
+  "follow-up-bug": { item: "string", key: "string", bug: "int" },
   continue: { item: "string", text: "string" },
   retry: { job: "string" },
   stop: { job: "string" },
@@ -137,6 +138,7 @@ const NEEDS_REQUEST = new Set<string>([
   "start-now",
   "accept-review",
   "allow-push",
+  "follow-up-bug",
   "continue",
   "retry",
   "stop",
@@ -341,6 +343,10 @@ export function commandsFromForm(form: URLSearchParams): unknown[] {
     }
     if (text !== null) {
       c.text = text;
+    }
+    // A follow-up bug's number, however you pasted it: a link, "Bug 123".
+    if (bugOrText !== null && c.cmd === "follow-up-bug") {
+      return { ...c, bug: parseBugNumber(bugOrText) ?? bugOrText };
     }
     if (bugOrText !== null && c.cmd === "set-bug") {
       const bug = parseBugNumber(bugOrText);

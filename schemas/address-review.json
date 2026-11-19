@@ -69,6 +69,40 @@
     "tryRequest": {
       "type": "string",
       "description": "A try push you need (a platform you don't have, or a reviewer asks for one): what it should run and why. The factory plans it, the user approves it, and you're resumed with the results."
+    },
+    "followUpBugs": {
+      "type": "array",
+      "description": "Only a bug a reviewer's comment asks you to file (a follow-up for later), never to put off what they asked you to change: a draft the user files, its number then sent to you. Not a file.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "commentId": {
+            "type": "integer",
+            "description": "The reviewer's comment asking for this bug."
+          },
+          "product": {
+            "type": "string"
+          },
+          "component": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string",
+            "description": "Markdown: code identifiers in backticks."
+          }
+        },
+        "required": [
+          "commentId",
+          "product",
+          "component",
+          "summary",
+          "description"
+        ],
+        "additionalProperties": false
+      }
     }
   },
   "required": [

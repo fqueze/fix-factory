@@ -17,7 +17,7 @@ export function renderAction(r: RequestState, n: NeedsUser, ctx: RenderContext):
 }
 
 // ⚑s asking you to do something the factory expected of you, not saying something went wrong.
-const ASKS: ActionKind[] = ["approve-push", "take-it", "file-bug", "meta-bug", "approve", "submit", "resubmit", "reply", "reopen-bug", "land", "reviewers"];
+const ASKS: ActionKind[] = ["approve-push", "take-it", "file-bug", "follow-up-bug", "meta-bug", "approve", "submit", "resubmit", "reply", "reopen-bug", "land", "reviewers"];
 
 // ⧉: what a ⚑ saying something went wrong says, and what it's about by id, to paste to whoever looks into it.
 // Without a key: what an item's row asks of you on its own (it stalled), not a ⚑.
@@ -116,6 +116,13 @@ export function flagControls(r: RequestState, n: NeedsUser, ctx: RenderContext):
         : null;
       break;
     }
+    // Not assigned to you: nobody is writing its patch. Dismissing it is not filing it.
+    case "follow-up-bug":
+      controls =
+        n.bugDraft && item !== undefined
+          ? html`<a class="btn small" href="${enterBugUrl(n.bugDraft, { ...ctx, bugzillaEmail: undefined })}" target="_blank" rel="noopener">Bug to file ↗</a><form class="inline cmd" method="post" action="/api/commands">${commandFields([{ cmd: "follow-up-bug", request: r.id, item, key: n.key }], back)}<input type="text" name="bugOrText" required placeholder="Paste the bug number"><button class="btn small" title="Its author references it">Send</button></form>${commandButton(r.id, { cmd: "dismiss", key: n.key }, "Don't file it", back)}`
+          : null;
+      break;
     case "meta-bug": {
       const draft = r.metaBug?.draft;
       const stack = findStack(r, n);

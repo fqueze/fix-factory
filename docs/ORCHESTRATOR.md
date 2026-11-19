@@ -22,6 +22,10 @@ A tick runs on any change to `commands.jsonl` or a job file, and at least every 
   its findings back, for at most 3 rounds; one with only nits gets a single author pass, then only the lint again,
   and isn't a round. After that, it comes to you.
 - **Authors** are resumed in their own session. They never push: a hook refuses any push from an agent.
+- **Follow-up bugs:** an author drafts one in `followUpBugs`: in address-review only for a reviewer comment that asks
+  for it (by its id), in investigate-and-fix only with its fix and for an issue unrelated to the failure (else the
+  report goes back). Each is a `follow-up-bug:<job>:<n>` ⚑ with the prefilled form, not assigned to you; the number you
+  paste goes to the author, to reference where it said it would.
 - **Try pushes** wait for your approval. A push you decline, with a reason, isn't made; the plan's others still
   wait for you. A stack's reviews and verification pushes are keyed
   by its code (git patch-id), not its commit ids: rewording a commit plans no new push. Pushes planned for code

@@ -294,6 +294,7 @@ export const COMMAND_LABELS: Record<Command["cmd"], string> = {
   "set-test-plan": "setting the test plan on Phabricator",
   "revise-test-plan": "revising the test plan",
   "set-reviewer": "reviewer",
+  "follow-up-bug": "follow-up bug number",
   "draft-meta-bug": "meta bug draft",
   "tell-factory": "message to the factory",
   "reply-recovery": "reply to the recovery plan",
@@ -321,8 +322,8 @@ export const COMMAND_LABELS: Record<Command["cmd"], string> = {
   dismiss: "dismiss",
 };
 
-export type ActionKind = "approve-push" | "take-it" | "file-bug" | "meta-bug" | "approve" | "submit" | "resubmit" | "reply" | "reopen-bug" | "land" | "recovery" | "failed" | "stopped" | "disagrees" | "question" | "reviewers" | "other";
-const ACTION_KINDS: ActionKind[] = ["approve-push", "take-it", "file-bug", "meta-bug", "approve", "submit", "resubmit", "reply", "reopen-bug", "land", "recovery", "failed", "stopped", "disagrees", "question", "reviewers"];
+export type ActionKind = "approve-push" | "take-it" | "file-bug" | "follow-up-bug" | "meta-bug" | "approve" | "submit" | "resubmit" | "reply" | "reopen-bug" | "land" | "recovery" | "failed" | "stopped" | "disagrees" | "question" | "reviewers" | "other";
+const ACTION_KINDS: ActionKind[] = ["approve-push", "take-it", "file-bug", "follow-up-bug", "meta-bug", "approve", "submit", "resubmit", "reply", "reopen-bug", "land", "recovery", "failed", "stopped", "disagrees", "question", "reviewers"];
 
 // The key's "<kind>:" prefix names the buttons of a needs-user entry, and the ids
 // it carries (push, item, patch, stack, job) say what they act on. Entries with

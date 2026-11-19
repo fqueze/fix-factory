@@ -107,6 +107,23 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
     });
     return { key };
   };
+  // Your message to an item's author: its running session is told now, after its current tool call (inbox.ts); else
+  // the session is resumed with it.
+  const tell = (item: ItemId, text: string): [boolean, string | undefined] => {
+    const running = authorJobsOf(view!, item).at(-1);
+    if (running && running.end === undefined && running.sessionId) {
+      ev({ type: "agent-message", item, job: running.job, session: running.sessionId, msg: c.id, text });
+      effects.push({ type: "inbox", session: running.sessionId, message: { id: c.id, text, t: c.t } });
+      return [true, undefined];
+    }
+    const error = resume(item, "continue", `A message from the user:\n${text}\n\nDo what it says, amending your commit if your fix changes, then end with the JSON report again. If you think it is wrong, don't do it: leave your commits as they are and say why in \`disagreement\`.${draftsNote(s!, item)}`);
+    if (!error) {
+      clearItemFlags(item);
+      // Its author's cancelled runs aren't reopened: this run is their answer, and two would resume one session.
+      reopen(item, (j) => j.purpose.what !== "author");
+    }
+    return [!error, error];
+  };
   // The ⚑s that wait on an item's way forward.
   const clearItemFlags = (item: ItemId) => {
     for (const n of s!.needsUser.filter((x) => x.item === item && ["failed:", "stopped:", "disagrees:", "question:"].some((k) => x.key.startsWith(k)))) ev({ type: "user-done", key: n.key });
@@ -620,22 +637,19 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
       done(true);
       break;
     }
-    case "continue": {
-      // Its author running: told now, after its current tool call (inbox.ts).
-      const running = authorJobsOf(view!, c.item).at(-1);
-      if (running && running.end === undefined && running.sessionId) {
-        ev({ type: "agent-message", item: c.item, job: running.job, session: running.sessionId, msg: c.id, text: c.text });
-        effects.push({ type: "inbox", session: running.sessionId, message: { id: c.id, text: c.text, t: c.t } });
-        done(true);
+    case "continue":
+      done(...tell(c.item, c.text));
+      break;
+    // Its author is told the number, to reference it where it said it would.
+    case "follow-up-bug": {
+      const n = s.needsUser.find((x) => x.key === c.key && x.item === c.item);
+      if (!n?.bugDraft) {
+        done(false, `${c.key} is no follow-up bug to file`);
         break;
       }
-      const error = resume(c.item, "continue", `A message from the user:\n${c.text}\n\nDo what it says, amending your commit if your fix changes, then end with the JSON report again. If you think it is wrong, don't do it: leave your commits as they are and say why in \`disagreement\`.${draftsNote(s, c.item)}`);
-      if (!error) {
-        clearItemFlags(c.item);
-        // Its author's cancelled runs aren't reopened: this run is their answer, and two would resume one session.
-        reopen(c.item, (j) => j.purpose.what !== "author");
-      }
-      done(!error, error);
+      const [ok, error] = tell(c.item, `You suggested the follow-up bug “${n.bugDraft.summary}”: it is filed as bug ${c.bug}. Reference it where you said you would (a comment in the code, your reply to the reviewer), and change nothing else.`);
+      if (ok) ev({ type: "user-done", key: c.key });
+      done(ok, error);
       break;
     }
     case "dismiss":
