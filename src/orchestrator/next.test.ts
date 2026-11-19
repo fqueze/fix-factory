@@ -2728,7 +2728,7 @@ describe("6. verify on try, again", () => {
     assert.equal(sc.purpose(dry2).push, `${first}-v2`);
   });
 
-  it("verifies nothing while an un-skip push that you didn't decline has no result", () => {
+  it("verifies nothing until the work list read an un-skip push you didn't decline, at half its tests, not at its end", () => {
     const sc = stacked();
     sc.add({ type: "try-planned", request: ID, push: "unskip", purpose: "reproduce", command: ["./mach", "try"] });
     sc.add({ type: "try-pushed", request: ID, push: "unskip", rev: "def", url: "u" });
@@ -2736,7 +2736,11 @@ describe("6. verify on try, again", () => {
     const planKey = sc.view().jobs.find((j) => j.purpose.what === "plan-pushes")!.purpose.key;
     sc.complete(planKey, { report: { pushes: [{ purpose: "verify", tryArgs: ["fuzzy", "-q", "x"], rebuild: 5 }], feedback: [] } });
     assert.ok(!sc.settle().some((k) => k.startsWith("dry-run:")), "waits for the un-skip push's results");
-    sc.add({ type: "try-finished", request: ID, push: "unskip", result: "green", summary: "green" });
+    // Half its tests ran (the rest waiting on a slow pool): read once, then verification goes on.
+    sc.add({ type: "try-progress", request: ID, push: "unskip", done: 10, total: 20, failures: 0, tests: { done: 10, total: 20 } });
+    assert.ok(!sc.settle().some((k) => k.startsWith("dry-run:")), "not while the work list reads it");
+    sc.complete("try-table:unskip:early", { output: { rev: "def", pushId: 1, project: "try", complete: false, pending: 10, configs: [], rows: [], unparsed: [] } });
+    sc.complete("collect:unskip:early", { output: [] });
     assert.ok(sc.settle().some((k) => k.startsWith("dry-run:")));
   });
 

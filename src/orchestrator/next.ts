@@ -408,6 +408,9 @@ class Planner {
   private readonly newItems = new Map<ItemId, FailureGroup>();
   // Set by the work list: a run of it hasn't finished, or a signal push hasn't, whose final run may add items.
   private workListPending = false;
+  // Also set by the work list: a run of it hasn't finished, or a signal push has had none yet (not half its tests
+  // done, nor 2 h old).
+  private workListUnread = false;
   private stepSet = false;
   private readonly stackInfos = new Map<string, StackInfo>();
   private removing = false; // a burndown's skip-if removal isn't in its stack yet
@@ -1110,23 +1113,25 @@ class Planner {
     const e = this.stepEpoch("work list");
     let firstRunDone = false;
     this.workListPending = false;
+    this.workListUnread = false;
     // A burndown's work list has the folder's failures on central too: its pushes only show what they ran.
     if (this.s.kind === "burndown") {
       const groups = this.groups("folder", `folder${e}`, this.s.folder ?? "");
       if (groups) {
         this.createItems(groups);
         firstRunDone = true;
-      } else this.workListPending = true;
+      } else this.workListPending = this.workListUnread = true;
     }
     for (const push of pushes) {
       const rev = this.s.pushes[push].rev!;
       const runs = this.pushRuns(push, e);
       if (!runs.some((r) => r.startsWith("final"))) this.workListPending = true;
+      if (!runs.length) this.workListUnread = true;
       for (const run of runs) {
         const groups = this.groups(push, run, rev);
         const table = this.want(`try-table:${push}:${run}`, () => this.cli("try-table", "failures.ts", ["try-table", rev], { purpose: { push } }));
         if (!groups || !table) {
-          this.workListPending = true;
+          this.workListPending = this.workListUnread = true;
           continue;
         }
         this.createItems(groups);
@@ -1134,7 +1139,7 @@ class Planner {
         if (t.unparsed.length > 0) {
           const triage = this.wantAgent(`triage:${push}:${run}`, "triage", "triage-try", { rev, goal, tableFile: outPath(this.config, table.job), logsDir: artifactsDir(this.config) }, { purpose: { push } });
           if (!triage) {
-            this.workListPending = true;
+            this.workListPending = this.workListUnread = true;
             continue;
           }
           this.itemsFromTriage(this.rep<TriageTryReport>(triage));
@@ -2794,8 +2799,10 @@ class Planner {
       this.askedVerify(this.fixesToVerify());
       return;
     }
-    // An un-skip push may still add groups to the stack: verifying it waits for its results.
-    if (this.signalPushes().some((id) => id !== "initial" && this.s.pushes[id].result === undefined)) return;
+    // An un-skip push may still add groups to the stack: verifying it waits for the work list to read its results, once
+    // half its tests ran or after 2 h, as the work list does: a slow pool doesn't hold it up. What its final run adds
+    // gets a verification of its own.
+    if (this.workListUnread) return;
     let green = this.stackInfos.size > 0;
     for (const info of this.stackInfos.values()) {
       const plan = info.ready ? this.verifyPushes(info) : undefined;

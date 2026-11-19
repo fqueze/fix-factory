@@ -44,7 +44,8 @@ A tick runs on any change to `commands.jsonl` or a job file, and at least every 
     to the authors.
 - **When step 3 runs:** at whichever comes first, the push finishing or 2 h after it started, so slow pools don't
   hold everything up. It runs again when the push finishes, adding new groups. While a push or a run is pending,
-  the request doesn't end for lack of items. A burndown's work list also has its folder's failures on central.
+  the request doesn't end for lack of items. A burndown's work list also has its folder's failures on central. Stack
+  verification waits for the work list's first run on each un-skip push, not for the push to finish.
 - **Try failures:**
   - **Matched:** a failure in a test that a patch touches, or that its group fixes, goes to that patch's author (not
     by folder: a burndown's patches share one). If the author says it isn't its patch's, it's triaged as unmatched.
