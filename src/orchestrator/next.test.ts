@@ -5197,6 +5197,7 @@ describe("burndown verification", () => {
     sc.complete("push:unskip", { output: { rev: "def", landoJobId: 1, treeherderUrl: "t" } });
     sc.settle();
     assert.equal(sc.state().step, "work list");
+    sc.complete("collect:folder:folder", { output: [] });
     sc.complete("watch:unskip", { output: "" });
     sc.add({ type: "try-finished", request: ID, push: "unskip", result: "failures", summary: "s" });
     sc.settle();
@@ -5254,6 +5255,45 @@ describe("burndown verification", () => {
     if (check) assert.equal(sc.state().step, "meta bug");
     return { sc, push };
   };
+
+  it("an early run of the un-skip push that finds nothing waits for its final run, and the folder's failures on central are in the work list", () => {
+    const sc = new Scenario("burndown", { folder: "a" });
+    sc.step();
+    sc.settle();
+    sc.complete("wt:signal", { output: { name: `${ID}-signal`, path: `/wt/${ID}-signal`, branch: `${ID}-signal` } });
+    sc.settle();
+    sc.complete("annotations", { output: [{ manifest: "a/xpcshell.toml", test: "test_a.js", kind: "skip-if", condition: "os == 'win'", line: 2, commit: null, bug: null, commentBugs: [] }] });
+    sc.settle();
+    sc.complete("classify:0", { report: { kind: "flakiness", reason: "intermittent", feedback: [] } });
+    sc.settle();
+    sc.complete("author:i-annotations:initial", { report: { debug: sha("9"), summary: "un-skip", feedback: [] } });
+    sc.settle();
+    sc.complete("plan:unskip", { report: { pushes: [{ purpose: "reproduce", tryArgs: ["fuzzy", "-q", "xpcshell"], rebuild: 10 }], feedback: [] } });
+    sc.settle();
+    sc.complete("dry-run:unskip", { output: { command: ["./mach", "try", "fuzzy"], taskCount: 4, tasks: [], tryTaskConfig: {}, commits: [sha("9")], warnings: [] } });
+    sc.add({ type: "user-done", request: ID, key: "approve-push:unskip" });
+    sc.settle();
+    sc.complete("push:unskip", { output: { rev: "def", landoJobId: 1, treeherderUrl: "t" } });
+    sc.settle();
+    assert.equal(sc.plan("collect:folder:folder").cli?.args.join(" "), "collect a");
+    sc.complete("collect:folder:folder", { output: [] });
+    sc.add({ type: "try-progress", request: ID, push: "unskip", done: 10, total: 20, failures: 0, tests: { done: 10, total: 20 } });
+    sc.settle();
+    sc.complete("try-table:unskip:early", { output: table() });
+    sc.complete("collect:unskip:early", { output: [] });
+    sc.settle();
+    assert.notEqual(sc.state().step, "done", "the push is still running");
+    sc.add({ type: "try-finished", request: ID, push: "unskip", result: "failures", summary: "s" });
+    sc.settle();
+    sc.complete("try-table:unskip:final", { output: table() });
+    sc.complete("collect:unskip:final", { output: [failure("a/test_a.js", "boom")] });
+    sc.settle();
+    assert.notEqual(sc.state().step, "done", "its final run is still clustering");
+    sc.complete("cluster:unskip:final", { output: { groups: [group("ka", "a/test_a.js", "boom")], singles: [] } });
+    sc.settle();
+    assert.equal(sc.state().step, "investigate and fix");
+    assert.ok(sc.state().items["i-test-a"]);
+  });
 
   it("pushes the stack with the DEBUG commit on top, then checks the stack branch out again before submitting", () => {
     const { sc } = verified(true);

@@ -406,6 +406,8 @@ class Planner {
   private readonly raisedKeys = new Set<string>();
   private readonly itemStates = new Map<ItemId, ItemState>();
   private readonly newItems = new Map<ItemId, FailureGroup>();
+  // Set by the work list: a run of it hasn't finished, or a signal push hasn't, whose final run may add items.
+  private workListPending = false;
   private stepSet = false;
   private readonly stackInfos = new Map<string, StackInfo>();
   private removing = false; // a burndown's skip-if removal isn't in its stack yet
@@ -1107,32 +1109,43 @@ class Planner {
     const goal = this.s.text.trim() || "find the failures to fix";
     const e = this.stepEpoch("work list");
     let firstRunDone = false;
-    // Without an un-skip push, from the folder's failures on central too.
-    if (pushes.every((id) => id.startsWith("verifypath")) && this.s.kind === "burndown") {
+    this.workListPending = false;
+    // A burndown's work list has the folder's failures on central too: its pushes only show what they ran.
+    if (this.s.kind === "burndown") {
       const groups = this.groups("folder", `folder${e}`, this.s.folder ?? "");
       if (groups) {
         this.createItems(groups);
         firstRunDone = true;
-      }
+      } else this.workListPending = true;
     }
     for (const push of pushes) {
       const rev = this.s.pushes[push].rev!;
-      for (const run of this.pushRuns(push, e)) {
+      const runs = this.pushRuns(push, e);
+      if (!runs.some((r) => r.startsWith("final"))) this.workListPending = true;
+      for (const run of runs) {
         const groups = this.groups(push, run, rev);
         const table = this.want(`try-table:${push}:${run}`, () => this.cli("try-table", "failures.ts", ["try-table", rev], { purpose: { push } }));
-        if (!groups || !table) continue;
+        if (!groups || !table) {
+          this.workListPending = true;
+          continue;
+        }
         this.createItems(groups);
         const t = this.out<TryTable>(table);
         if (t.unparsed.length > 0) {
           const triage = this.wantAgent(`triage:${push}:${run}`, "triage", "triage-try", { rev, goal, tableFile: outPath(this.config, table.job), logsDir: artifactsDir(this.config) }, { purpose: { push } });
-          if (!triage) continue;
+          if (!triage) {
+            this.workListPending = true;
+            continue;
+          }
           this.itemsFromTriage(this.rep<TriageTryReport>(triage));
         }
         firstRunDone = true;
       }
     }
     if (this.s.step === "work list" && firstRunDone) {
+      // An early run that found nothing waits for the pushes to finish: their final runs may.
       if (Object.keys(this.s.items).length + this.newItems.size === 0) {
+        if (this.workListPending) return;
         this.note("No failure to fix.");
         this.setStep("done");
       } else {
@@ -1921,6 +1934,7 @@ class Planner {
         // DEBUG commits go to try on top of the stack: without one, nothing carries them but a push of their own.
         if (unpushed.length) this.raise("repro-only", { action: "Only DEBUG commits are left, and no stack to push them with", detail: `${unpushed.map((g) => basename(g.item.group.tests[0])).join(", ")}: Push now on their rows pushes them on their own, or close these items.` });
       } else if (items.every((i) => !WITH_PATCHES.includes(i.state))) {
+        if (this.workListPending) return;
         this.note("Every item ended without a patch.");
         this.setStep("done");
       } else {
