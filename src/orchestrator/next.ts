@@ -3018,7 +3018,8 @@ class Planner {
       if (!ids.length || made.some((x) => x.p.result === undefined)) continue;
       // Pushes discarded (or withdrawn by the factory) say nothing: the DEBUG commits wait for the stack's next push.
       // Only your reason for declining one goes to them.
-      const declined = dries.filter((x) => x.p.declined !== undefined && x.p.declined !== "discarded" && !x.p.withdrawn);
+      // Nor one you asked to revise: its revision carries them.
+      const declined = dries.filter((x) => x.p.declined !== undefined && x.p.declined !== "discarded" && !x.p.withdrawn && !x.p.replan);
       if (!made.length && !declined.length) continue;
       const onto = [...new Set(made.map((x) => x.onto))];
       const where = onto.length !== 1 ? "" : onto[0] === "central" ? " on top of central, without the stack" : ` on top of ${onto[0]}`;

@@ -1682,8 +1682,8 @@ describe("4b. try repro", () => {
     assert.match(sc.plan(resumed[0]).agent?.message ?? "", /^The factory pushed your DEBUG commits to try on top of the stack: (fed \(3 failures\), abc \(all green\)|abc \(all green\), fed \(3 failures\))\./);
   });
 
-  it("a waiting group's author hears nothing when the stack's push is discarded; your reason when it's declined", () => {
-    for (const declined of ["discarded", "not now"]) {
+  it("a waiting group's author hears nothing when the stack's push is discarded or sent back to its planner; your reason when it's declined", () => {
+    for (const declined of ["discarded", "not now", "tv not tvp"]) {
       const sc = waitingStack();
       const tb = keyOf(sc, "try-branch:root:");
       sc.complete(tb, { output: { branch: `${ID}-root-try-${tb.split(":")[2]}`, head: sha("f"), commits: [{ sha: sha("d"), newSha: sha("f") }] } });
@@ -1693,10 +1693,10 @@ describe("4b. try repro", () => {
       const [dry] = sc.settle();
       const push = sc.purpose(dry).push!;
       sc.complete(dry, { output: { command: ["./mach", "try", "fuzzy"], taskCount: 5, tasks: [], tryTaskConfig: {}, commits: [sha("f"), sha("b")], warnings: [] } });
-      sc.add({ type: "try-declined", request: ID, push, text: declined });
+      sc.add({ type: "try-declined", request: ID, push, text: declined, ...(declined === "tv not tvp" ? { replan: true as const } : {}) });
       sc.settle();
       const resumed = open(sc).filter((k) => k.startsWith("author:i-test-a:"));
-      if (declined === "discarded") assert.deepEqual(resumed, []);
+      if (declined !== "not now") assert.deepEqual(resumed, [], declined);
       else assert.match(sc.plan(resumed[0]).agent?.message ?? "", /^The user declined the stack's try push your DEBUG commits were to go on: “not now”/);
     }
   });
