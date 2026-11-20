@@ -1390,10 +1390,13 @@ function toItems(r: RequestState, p: PushView): { test: string; configs: string[
   const triaged = new Set((p.analysis ?? []).map((c) => testKey(c.test ?? "")));
   return (p.failing ?? [])
     .filter((f) => !triaged.has(testKey(f.test)))
-    .map((f) => {
-      const all = Object.values(r.items).filter((i) => i.group.tests.some((t) => testKey(t) === testKey(f.test)));
-      return { ...f, item: all.findLast((i) => i.state !== "left as-is") ?? all.at(-1) };
-    });
+    .map((f) => ({ ...f, item: itemOfTest(r, f.test) }));
+}
+
+// A test's latest work item, not one merged into another (closed as left as-is): the one it was merged into.
+function itemOfTest(r: RequestState, test: string): ItemView | undefined {
+  const all = Object.values(r.items).filter((i) => i.group.tests.some((t) => testKey(t) === testKey(test)));
+  return all.findLast((i) => i.state !== "left as-is") ?? all.at(-1);
 }
 
 // Each failure no patch's tests matched, as triage saw it, with what it rests on.
@@ -1430,7 +1433,7 @@ function pushAnalysis(r: RequestState, p: PushView, ctx: RenderContext): Html | 
   const next = (g: { verdict: string; test: string; pids: string[] }): Html | null => {
     // A test failing with no patch to blame: the fix it has (the one of its group, or one made for it from this push).
     if (g.verdict === "still failing") {
-      const item = Object.values(r.items).findLast((i) => i.group.tests.some((t) => testKey(t) === testKey(g.test)));
+      const item = itemOfTest(r, g.test);
       if (!item) return html`no fix for it yet`;
       const fixed = Object.values(r.patches).some((x) => x.item === item.id);
       return html`${fixed ? "its fix" : "looked into"}: <a href="#${itemAnchor(r, item)}">${stateText(r, item, ctx)}</a>`;
