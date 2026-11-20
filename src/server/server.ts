@@ -161,6 +161,16 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
     return diffStats.get(p.sha);
   }
 
+  // A commit's subject (a DEBUG commit's, which the state has only by its sha): worktrees share the repository's objects.
+  const titles = new Map<string, string | undefined>();
+  function commitTitle(sha: string): string | undefined {
+    if (!titles.has(sha)) {
+      const out = spawnSync("git", ["log", "-1", "--format=%s", sha], { cwd: opts.config.firefoxRepo, encoding: "utf8" });
+      titles.set(sha, out.status === 0 ? out.stdout.trim() || undefined : undefined);
+    }
+    return titles.get(sha);
+  }
+
   // The Treeherder link mach try prints once Lando took the push (its landoCommitID), from the push job's logs.
   function landoUrl(job: JobView): string | undefined {
     for (const log of ["err.log", "out.log"]) {
@@ -336,6 +346,7 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
       bugzillaEmail: opts.config.bugzillaEmail,
       mozPhab: opts.config.mozPhabCommand,
       interdiff: readInterdiff,
+      commitTitle,
       activity: (request, job) => renderActivity(request, job, activity(request, job, req), ctx(req)),
       sessionCost,
       diffStat,

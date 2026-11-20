@@ -21,6 +21,7 @@ export interface RenderContext {
   mozPhab?: string; // the moz-phab the commands you copy run (config mozPhabCommand)
   // The text of a patch's interdiffFile, read by the server inside stateDir.
   interdiff?: (p: PatchView) => string | undefined;
+  commitTitle?: (sha: string) => string | undefined; // a commit's subject, read by the server from the repository
   // The lines its commit adds and removes, read with git.
   diffStat?: (p: PatchView) => { added: number; removed: number } | undefined;
   landoUrl?: (job: JobView) => string | undefined; // Treeherder by landoCommitID, once Lando took a push

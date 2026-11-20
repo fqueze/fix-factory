@@ -450,7 +450,9 @@ function itemRows(r: RequestState, i: ItemView, ctx: RenderContext): Html {
   const stacked = new Set(Object.values(r.stacks).flatMap((s) => s.order));
   const own = Object.values(r.patches).filter((p) => p.item === i.id && !isDraft(r, p) && !isDropped(r, p));
   const live = own.some((p) => stacked.has(p.id)) ? own.filter((p) => stacked.has(p.id)) : own;
-  return live.length ? patchRows(r, live, ctx) : groupRow(r, i, ctx);
+  // Patches still drafts (their critical review hasn't passed) get the rows of patches all the same: a line each.
+  const drafts = Object.values(r.patches).filter((p) => p.item === i.id && isDraft(r, p) && !isDropped(r, p));
+  return live.length ? patchRows(r, live, ctx) : drafts.length ? patchRows(r, drafts, ctx) : groupRow(r, i, ctx);
 }
 
 // What the rows a fold hides cost, on its summary.
@@ -545,25 +547,28 @@ function groupRow(r: RequestState, i: ItemView, ctx: RenderContext): Html {
   // Its author can't be resumed once its worktree was removed to free the disk.
   const removed = Object.values(r.jobs).some((j) => j.item === i.id && j.name === "worktree.ts remove" && j.exitCode === 0);
   const reopen = stateClass(i.state) === "closed" && hasAuthorSession(r, i.id) && !removed && !r.needsUser.some((n) => n.item === i.id);
+  const debug = i.state === "waiting for a try repro" ? ((i.lastReport?.report as { commits?: string[] } | undefined)?.commits ?? []) : [];
+  const debugTitles = debug.map((sha) => ctx.commitTitle?.(sha)).filter((t) => t !== undefined);
+  const named = debugTitles.length === debug.length ? debugTitles : [];
   return row({
     anchor: html`id="item-${i.id}" data-item="${i.id}"`,
     fold: `item-${i.id}`,
     bucket: itemBucket(r, i, ctx),
     cls: rowClass(r, i, ctx),
     tip: closedTip(r, i) ?? (rowClass(r, i, ctx) === "abandoned" ? "Closed without a fix" : waitTip(r, i, ctx)),
-    name: html`${groupLabel(r, i)}`,
+    // Named by the DEBUG commits it waits with, a line each as a fix's patches, the tests in its state; otherwise by its
+    // tests. Tests are linked to their failures on tests.firefox.dev.
+    name: named.length ? html`<span class="patchlines">${named.map((t) => html`<span class="patchline"><span class="pphab"></span><span class="pbug"></span><span class="pname" title="${t}">${t}</span><span class="end"></span></span>`)}</span>` : groupLinks(r, i),
     title: [...i.group.tests, i.group.configs.join(", ")].join("\n"),
     // Redo is on the top line: the group's patches are in its folded body, and it's what you'd want of it.
     end: i.id === ANNOTATIONS_ITEM && !Object.values(r.jobs).some((j) => j.item === i.id && j.endedAt === undefined)
       ? html`${redoAnnotationsButton(r.id, requestUrl(r.id))} ${costLabel(r, i, ctx)}`
-      : html`${closable(r, i, ctx) ? html`<span class="onhover">${closeButton(r, i)}</span>` : null}${patches.filter((p) => isDraft(r, p)).map((p) => viewLink(r, p))}${debugLink(r, i)}${costLabel(r, i, ctx)}`,
-    state: stateText(r, i, ctx),
+      : html`${closable(r, i, ctx) ? html`<span class="onhover">${closeButton(r, i)}</span>` : null}${debugLink(r, i)}${costLabel(r, i, ctx)}`,
+    state: named.length ? html`${stateText(r, i, ctx)} · for <b>${groupLinks(r, i)}</b>` : stateText(r, i, ctx),
     trust: trustLine(r, i, ctx),
-    ask: askBlock(r, i, ctx, patches.filter((p) => isDraft(r, p))),
+    ask: askBlock(r, i, ctx, []),
     lazy: { r, ctx },
     body: () => html`${failure(r, i)}${investigationHtml(i) ? html`<h4 class="part">The fix</h4>${investigationHtml(i)}` : null}${debugCommitsHtml(r, i)}${talkBox(r, i, ctx)}${sentence.ask ? null : sentence.controls ? html`<div class="jobctl">${sentence.controls}</div>` : null}${patches
-      .filter((p) => isDraft(r, p))
-      .map((p) => html`<div>Draft patch, its critical review hasn't passed yet: “${patchTitle(p)}” ${viewLink(r, p)}</div>`)}${patches
       .filter((p) => isDropped(r, p))
       .map((p) => html`<div>Dropped patch: “${patchTitle(p)}” ${viewLink(r, p)}</div>`)}${
       reopen ? html`<details class="reopen" data-fold="reopen-${i.id}"><summary class="btn small">Reopen…</summary>${continueBox(r.id, i.id, requestUrl(r.id))}</details>` : null
@@ -666,7 +671,7 @@ function patchParts(r: RequestState, p: PatchView, ctx: RenderContext) {
   const landable = isLandable(r, p);
   // Patches sharing a bug draft have it filed once, from the first one's row.
   const first = sameBugDraft(r, p.id)[0];
-  const bugBoxShown = !hasBug(p) && p.bugDraft !== undefined && first.id === p.id;
+  const bugBoxShown = !hasBug(p) && p.bugDraft !== undefined && first.id === p.id && !isDraft(r, p);
   // What it waits for you to do (resubmit after review fixes, file its bug…), said on the row; those about no group are
   // asked right under it.
   const yours = r.needsUser.filter((n) => n.patch === p.id);
@@ -721,7 +726,9 @@ function patchRow(r: RequestState, p: PatchView, ctx: RenderContext): Html {
   // A group's question is asked once, on the row of its first patch.
   // A blocked group's patch still in its stack counts: that row is the only one it has.
   const stacked = new Set(Object.values(r.stacks).flatMap((st) => st.order));
-  const asks = item !== undefined && Object.values(r.patches).find((x) => x.item === item.id && (!isDraft(r, x) || stacked.has(x.id)) && !isDropped(r, x)) === p;
+  // An item whose patches are all drafts asks on its first draft's row.
+  const mine = item === undefined ? [] : Object.values(r.patches).filter((x) => x.item === item.id && !isDropped(r, x));
+  const asks = item !== undefined && (mine.find((x) => !isDraft(r, x) || stacked.has(x.id)) ?? mine[0]) === p;
   return row({
     you: parts.yours.some((n) => !selfReview(n, r)) || (asks && item !== undefined && r.needsUser.some((n) => flagItemOf(r, n) === item.id && !selfReview(n, r))),
     anchor: html`id="patch-${p.id}" data-patch="${p.id}"`,
@@ -868,6 +875,10 @@ function testPlanSection(r: RequestState, p: PatchView, back: string): Html | nu
 function bugLabel(r: RequestState, p: PatchView, ctx: RenderContext): Html | null {
   if (hasBug(p)) {
     return html`<a class="bug" href="${bugUrl(p.bug)}" target="_blank" rel="noopener">Bug ${p.bug}</a>`;
+  }
+  // Filed once its critical review passed: it may still be dropped.
+  if (p.bugDraft && isDraft(r, p)) {
+    return html`<span class="bug none" title="To file once its critical review passes">bug to file</span>`;
   }
   if (p.bugDraft) {
     return html`<a class="bug tofile" data-patch="${p.id}" href="${enterBugUrl(p.bugDraft, ctx)}" data-bug-draft="${bugDraftData(r, p, p.bugDraft)}" target="_blank" rel="noopener" title="Opens a prefilled enter_bug.cgi; back here, paste its number in the field it leaves in its place">Bug to file</a>`;

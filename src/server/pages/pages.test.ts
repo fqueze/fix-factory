@@ -377,7 +377,7 @@ describe("one fixture per step of docs/MVP.md", () => {
     for (const key of ["failed:j-review-race", "failed:j-fetch", "stopped:j-author-slow"]) {
       assert.equal(flag(key), "", `${key} is on its group's row`);
     }
-    const race = rowOf(h, "item-i-race");
+    const race = rowOf(h, "patch-p-race");
     assert.ok(has(race, { cmd: "accept-review", item: "i-race", request: D }));
     assert.ok(has(race, { cmd: "continue", request: D, item: "i-race" }));
     assert.doesNotMatch(race, />(Retry|Dismiss)</);
@@ -419,11 +419,11 @@ describe("one fixture per step of docs/MVP.md", () => {
   it("each group row says in plain words what is happening, what is stuck and what has stalled", () => {
     const h = expanded("r-20261015-downloads-stuck");
     const state = (item: string, html = h) => /<span class="state">(.*?)<\/span><\/summary>/.exec(rowOf(html, `item-${item}`))?.[1];
-    assert.equal(state("i-race"), "needs you: critical reviews didn&#39;t pass");
-    assert.match(rowOf(h, "item-i-race"), /<\/details><div class="ask-you"><p>Its critical reviews still find problems[^<]*<\/p><ul class="findings"><li>[^<]+<\/li>/, "the question in sight, without opening the row");
-    assert.match(rowOf(h, "item-i-race"), /<span class="st find" title="Needs you"><\/span>/);
-    assert.match(rowOf(h, "item-i-race"), />Accept the patch as it is</);
-    assert.ok(rowOf(h, "item-i-race").includes(cmd({ cmd: "continue", request: "r-20261015-downloads-stuck", item: "i-race" })), "or tell its author what to change");
+    assert.match(/<span class="state">(.*?)<\/span>/.exec(rowOf(h, "patch-p-race"))?.[1] ?? "", /^needs you: critical reviews didn&#39;t pass · fixes <b><a href="https:\/\/tests\.firefox\.dev\/test\.html\?test=[^"]*browser_download_race\.js"[^>]*>browser_download_race\.js<\/a><\/b>/, "its draft patch has its patch row, the tests it fixes linked");
+    assert.match(rowOf(h, "patch-p-race"), /<\/details><div class="ask-you"><p>Its critical reviews still find problems[^<]*<\/p><ul class="findings"><li>[^<]+<\/li>/, "the question in sight, without opening the row");
+    assert.match(rowOf(h, "patch-p-race"), /<span class="st find" title="Needs you"><\/span>/);
+    assert.match(rowOf(h, "patch-p-race"), />Accept the patch as it is</);
+    assert.ok(rowOf(h, "patch-p-race").includes(cmd({ cmd: "continue", request: "r-20261015-downloads-stuck", item: "i-race" })), "or tell its author what to change");
     assert.equal(state("i-idle"), "stalled: nothing running");
     assert.match(rowOf(h, "item-i-idle"), /title="Resumes its author(?:'|&#39;)s session with your message; its patch then goes through lint and critical review again">Send</);
     assert.ok(rowOf(h, "item-i-idle").includes(cmd({ cmd: "continue", request: "r-20261015-downloads-stuck", item: "i-idle" })));
@@ -552,7 +552,7 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.equal(runningSentence({ ...job, name: "failures.ts cluster" }), "cluster failures");
   });
 
-  it("a patch whose critical review hasn't passed is a draft on its group row, without a bug to file", () => {
+  it("a patch whose critical review hasn't passed has its patch row, without a bug to file", () => {
     const r = structuredClone(get("r-20261013-tab-failures"));
     r.patches["p-drag"] = {
       id: "p-drag",
@@ -566,13 +566,14 @@ describe("one fixture per step of docs/MVP.md", () => {
       replyDrafts: [],
     };
     const h = renderRequest(r, ctx, true).value;
-    assert.doesNotMatch(h, /data-patch="p-drag"/);
+    // A line of its own, as a reviewed patch has, with its bug to file only once its critical review passed.
+    assert.match(rowOf(h, "patch-p-drag"), /<span class="name" title="[^"]*"><span class="bug none" title="To file once its critical review passes">bug to file<\/span><span class="ptitle">Close the drag session on failure/);
+    assert.doesNotMatch(h, /data-item="i-drag"/, "instead of its group's row");
     assert.match(h, /data-patch="p-close"/, "a reviewed patch replaces its group's row");
     assert.doesNotMatch(h, /data-item="i-close"/);
-    assert.match(rowOf(h, "item-i-drag"), /<div>Draft patch, its critical review hasn't passed yet: “Close the drag session on failure, r=dao\.” <a href="\/requests\/[^"]+\/patches\/p-drag\/view"/);
     assert.doesNotMatch(h, /Drag\+session\+left\+open/, "no Bug to file link");
     r.items["i-drag"].state = "blocked";
-    assert.doesNotMatch(renderRequest(r, ctx, true).value, /data-patch="p-drag"/, "blocked after the review limit: still a draft");
+    assert.doesNotMatch(renderRequest(r, ctx, true).value, /Drag\+session\+left\+open/, "blocked after the review limit: still a draft");
     r.items["i-drag"].state = "reviewed";
     const reviewed = renderRequest(r, ctx, true).value;
     assert.match(rowOf(reviewed, "patch-p-drag"), /<span class="name" title="[^"]*"><a class="bug tofile" data-patch="p-drag" href="https:\/\/bugzilla\.mozilla\.org\/enter_bug\.cgi\?[^"]*Drag\+session\+left\+open[^"]*"[^>]*>Bug to file<\/a><span class="ptitle">Close the drag session/);
@@ -635,6 +636,11 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.match(row, /<span class="end">[^]*?<a href="\/requests\/r-20261013-dom-indexeddb\/items\/i-idb-upgrade\/debug"[^>]*>review<\/a>/, "in its row's corner too");
     assert.ok(row.includes(cmd({ cmd: "push-debug", item: "i-idb-upgrade", request: r.id })), "Push now, without waiting for the stack");
     assert.match(row, /title="Plans a try push now of the DEBUG commits of every item waiting for a try repro[^"]*">Push now<\/button>/);
+    // Named by its DEBUG commits, its tests linked in its state.
+    const titles: Record<string, string> = { aaaaaaaaaaaaaaaa: "DEBUG - Log the upgrade", bbbbbbbbbbbbbbbb: "DEBUG - Log the open" };
+    const named = rowOf(renderRequest(r, { ...ctx, commitTitle: (sha) => titles[sha] }, true).value, "item-i-idb-upgrade");
+    assert.match(named, /<span class="name"[^>]*><span class="patchlines"><span class="patchline">[^]*?<span class="pname" title="DEBUG - Log the upgrade">DEBUG - Log the upgrade<\/span>[^]*?<span class="pname" title="DEBUG - Log the open">DEBUG - Log the open<\/span>/, "a line each");
+    assert.match(named, /<span class="state">[^<]* · for <b><a href="https:\/\/tests\.firefox\.dev\/test\.html\?test=[^"]+"/);
     // Once a push of their own is planned, it says so instead.
     r.jobs["j-2"] = { ...r.jobs[Object.keys(r.jobs)[0]], job: "j-2", startedAt: "2099-01-01T00:00:00.000Z", purpose: { key: "plan:debug:abc123", what: "plan-pushes", items: ["i-idb-upgrade"], onto: "central" } };
     r.pushes["debug-abc123-1"] = { id: "debug-abc123-1", purpose: "repro", command: [] };
@@ -1227,8 +1233,8 @@ describe("a burndown with closed groups, running agents and a dropped patch", ()
   });
   it("names tests relative to the request's folder, with the full path in its tooltip and the message under it", () => {
     const row = rowOf(h, "item-i-browser-policy-trackingprotection");
-    assert.match(row, /<span class="name" title="browser\/components\/enterprisepolicies\/tests\/browser\/trackingprotection\/browser_policy_trackingprotection\.js\n[^"]*">trackingprotection\/browser_policy_trackingprotection\.js<\/span>/);
-    assert.match(h, />browser_policy_sitepolicies_jit\.js<\/span>/);
+    assert.match(row, /<span class="name" title="browser\/components\/enterprisepolicies\/tests\/browser\/trackingprotection\/browser_policy_trackingprotection\.js\n[^"]*"><a href="https:\/\/tests\.firefox\.dev\/test\.html\?test=[^"]*"[^>]*>trackingprotection\/browser_policy_trackingprotection\.js<\/a><\/span>/);
+    assert.match(h, />browser_policy_sitepolicies_jit\.js<\/a><\/span>/);
     assert.match(row, /<div class="rowbody"><h4 class="part">The failure<\/h4><div class="failure">leaked 1 window\(s\) until shutdown \[url = about:preferences#etp\]<\/div>/);
   });
   it("a waiting row's icon says what it waits for", () => {
@@ -1274,7 +1280,7 @@ describe("a burndown with closed groups, running agents and a dropped patch", ()
     assert.doesNotMatch(h, /Workers start slowly|enter_bug|tofile/);
   });
   it("lists the file names of a small group", () => {
-    assert.match(h, /">browser_policy_managedbookmarks\.js, browser_policy_search_engine\.js<\/span>/);
+    assert.match(h, />browser_policy_managedbookmarks\.js<\/a>, <a [^>]*>browser_policy_search_engine\.js<\/a><\/span>/);
   });
   it("lists a group's agents under it, newest first, with the scripts that run or failed, and folds the request's own jobs", () => {
     const row = rowOf(h, "item-i-browser-policy-sitepolicies-serviceworke-2");
