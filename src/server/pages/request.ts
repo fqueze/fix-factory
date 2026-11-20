@@ -570,7 +570,7 @@ function groupRow(r: RequestState, i: ItemView, ctx: RenderContext): Html {
     body: () => html`${failure(r, i)}${investigationHtml(i) ? html`<h4 class="part">The fix</h4>${investigationHtml(i)}` : null}${debugCommitsHtml(r, i)}${talkBox(r, i, ctx)}${sentence.ask ? null : sentence.controls ? html`<div class="jobctl">${sentence.controls}</div>` : null}${patches
       .filter((p) => isDropped(r, p))
       .map((p) => html`<div>Dropped patch: “${patchTitle(p)}” ${viewLink(r, p)}</div>`)}${
-      reopen ? html`<details class="reopen" data-fold="reopen-${i.id}"><summary class="btn small">Reopen…</summary>${continueBox(r.id, i.id, requestUrl(r.id))}</details>` : null
+      reopen ? html`<div class="jobctl">${continueBox(r.id, i.id, requestUrl(r.id), false, "Reopen it: tell its author what to do…")}</div>` : null
     }${itemJobs(r, i, ctx)}`,
   });
 }

@@ -222,10 +222,6 @@ ul.plan .reason { display: block; color: var(--text-muted); font-size: 12px; pad
 .call pre.out { color: var(--text-secondary); }
 .jobs .talk { margin: 4px 0 6px; }
 .jobs .talk input[type=text], .jobs .talk textarea.oneline { width: 32em; max-width: 60vw; }
-details.reopen { display: inline-block; }
-details.reopen > summary { list-style: none; }
-details.reopen > summary::-webkit-details-marker { display: none; }
-details.reopen[open] > summary { display: none; }
 /* Progress per request and for the factory: a bar, then the counts. */
 .pbar { display: inline-flex; width: 120px; height: 8px; border-radius: 4px; overflow: hidden; background: var(--track); vertical-align: middle; margin-right: 8px; }
 .pbar > span { min-width: 3px; }
