@@ -2570,14 +2570,6 @@ describe("patches submitted before the rest", () => {
 });
 
 describe("review fixes", () => {
-  it("a fix made without reproducing the failure waits for you: no import, no review", () => {
-    const sc = workList([group("ka", "a/test_a.js", "boom")]);
-    investigating(sc, "i-test-a");
-    sc.complete("author:i-test-a:initial", { report: fixed([sha("1")], { reproduction: { reproduced: false } }) });
-    assert.equal(sc.state().items["i-test-a"].state, "blocked");
-    assert.ok(!sc.settle().some((k) => k.startsWith("import:")));
-  });
-
   it("asks you for a reviewer when mach's suggestion is the one Phabricator doesn't know", () => {
     const sc = submitting();
     const { deps: _d, review: _r, replyDrafts: _rd, id, ...p } = sc.state().patches["p-test-a"];
@@ -3680,15 +3672,8 @@ describe("4. the worktree pool: an item moved from another request", () => {
 });
 
 describe("4. a fix of a failure its author couldn't reproduce", () => {
-  it("waits for you; Take its patch sends it on to critical review, told so, and a later not reproduced from its author is a fix", () => {
-    const sc = workList([group("ka", "a/test_a.js", "boom")]);
-    investigating(sc, "i-test-a");
-    const job = sc.complete("author:i-test-a:initial", { report: fixed([sha("1")], { state: "not reproduced", reproduction: { reproduced: false }, bugDraft: { product: "Core", component: "XPCOM", summary: "s", description: "d" } }) });
-    assert.equal(sc.state().items["i-test-a"].state, "blocked");
-    assert.ok(sc.open().includes(`failed:${job}`));
-    command(sc, { cmd: "take-patch", item: "i-test-a" });
-    assert.equal(sc.state().items["i-test-a"].state, "fix verified locally");
-    assert.ok(!sc.open().includes(`failed:${job}`));
+  // Through import and lint to its critical review.
+  const toReview = (sc: Scenario) => {
     assert.ok(sc.settle().some((k) => k.startsWith("import:")), "its commits are imported");
     sc.complete(keyOf(sc, "import:"), { output: [{ sha: sha("1"), title: "Bug XXXXXXX - Fix it, r=x.", bug: null, reviewers: ["x"], files: ["a/test_a.js"], insertions: 1, deletions: 0, testOnly: true }] });
     sc.settle();
@@ -3696,17 +3681,51 @@ describe("4. a fix of a failure its author couldn't reproduce", () => {
       for (const k of sc.view().jobs.filter((j) => !j.end && (j.purpose.what === "msg" || j.purpose.what === "lint")).map((j) => j.purpose.key)) sc.complete(k, { output: k.startsWith("msg:") ? "Bug XXXXXXX - Fix it, r=x.\n" : { ok: true, violations: [] } });
       sc.settle();
     }
-    const review = sc.view().jobs.find((j) => j.purpose.what === "review")!;
-    assert.match(String(sc.plan(review.purpose.key).agent?.vars?.comments), /The user took this fix without a reproduction of the failure: a missing reproduction isn't a finding/);
+    return sc.view().jobs.find((j) => j.purpose.what === "review" && !j.end)!.purpose.key;
+  };
+  const bugDraft = { product: "Core", component: "XPCOM", summary: "s", description: "d" };
+
+  it("goes on to its critical review, which is told nobody reproduced it and drops it when its evidence doesn't hold it up", () => {
+    for (const report of [fixed([sha("1")], { state: "not reproduced", reproduction: { reproduced: false }, bugDraft }), fixed([sha("1")], { reproduction: { reproduced: false }, bugDraft })]) {
+      const sc = workList([group("ka", "a/test_a.js", "boom")]);
+      investigating(sc, "i-test-a");
+      sc.complete("author:i-test-a:initial", { report });
+      assert.equal(sc.state().items["i-test-a"].state, "fix verified locally");
+      assert.ok(!sc.open().some((k) => k.startsWith("failed:")), "nothing to ask you");
+      const review = toReview(sc);
+      assert.match(String(sc.plan(review).agent?.vars?.comments), /Nobody reproduced the failure, locally or on try[^]*verdict `drop`/);
+      sc.complete(review, { report: { verdict: "drop", dropReason: "the log shows another crash", findings: [], feedback: [] } });
+      sc.settle();
+      assert.deepEqual([sc.state().items["i-test-a"].state, sc.state().items["i-test-a"].detail], ["left as-is", "dropped by its critical review: the log shows another crash"]);
+    }
   });
 
-  it("refuses Take its patch when its author left no commit", () => {
+  it("one its critical review accepts goes on to the stack", () => {
     const sc = workList([group("ka", "a/test_a.js", "boom")]);
     investigating(sc, "i-test-a");
-    sc.complete("author:i-test-a:initial", { report: fixed([], { state: "not reproduced", reproduction: { reproduced: false } }) });
-    command(sc, { cmd: "take-patch", item: "i-test-a" });
-    assert.equal(sc.state().items["i-test-a"].state, "blocked");
-    assert.match(JSON.stringify(sc.events.at(-1)), /has no fix to take/);
+    sc.complete("author:i-test-a:initial", { report: fixed([sha("1")], { state: "not reproduced", reproduction: { reproduced: false }, bugDraft }) });
+    sc.complete(toReview(sc), { report: ok });
+    sc.settle();
+    assert.equal(sc.state().items["i-test-a"].state, "reviewed");
+  });
+
+  it("only a fix nobody reproduced can be dropped: otherwise the reason goes back to its author as a must-fix", () => {
+    const sc = workList([group("ka", "a/test_a.js", "boom")]);
+    investigating(sc, "i-test-a");
+    sc.complete("author:i-test-a:initial", { report: fixed([sha("1")], { reproduction: { reproduced: true, before: "3/10" }, bugDraft }) });
+    const review = toReview(sc);
+    assert.doesNotMatch(String(sc.plan(review).agent?.vars?.comments), /verdict `drop`/);
+    sc.complete(review, { report: { verdict: "drop", dropReason: "no", findings: [], feedback: [] } });
+    const [back] = sc.settle();
+    assert.match(String(sc.plan(back).agent?.message), /\[must-fix\] no/);
+  });
+
+  it("with nothing to change, the item closes with what its author found, asking you nothing", () => {
+    const sc = workList([group("ka", "a/test_a.js", "boom")]);
+    investigating(sc, "i-test-a");
+    sc.complete("author:i-test-a:initial", { report: fixed([], { state: "not reproduced", summary: "a victim of the GPU process crash", reproduction: { reproduced: false } }) });
+    assert.deepEqual([sc.state().items["i-test-a"].state, sc.state().items["i-test-a"].detail], ["left as-is", "a victim of the GPU process crash"]);
+    assert.deepEqual(sc.open().filter((k) => k.startsWith("failed:")), []);
   });
 });
 

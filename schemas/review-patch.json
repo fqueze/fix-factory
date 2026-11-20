@@ -5,7 +5,8 @@
       "type": "string",
       "enum": [
         "ok",
-        "findings"
+        "findings",
+        "drop"
       ]
     },
     "findings": {
@@ -63,6 +64,10 @@
         ],
         "additionalProperties": false
       }
+    },
+    "dropReason": {
+      "type": "string",
+      "description": "With verdict \"drop\", only when told nobody reproduced the failure: why the evidence doesn't show this fix is worth landing."
     }
   },
   "required": [

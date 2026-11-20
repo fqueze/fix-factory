@@ -20,7 +20,7 @@ function exact<T>() {
 
 const feedbackTargets = exact<Feedback["target"]>()(["fx-tests", "profiler-cli", "searchfox-cli", "factory", "inputs"]);
 const investigateStates = exact<InvestigateReport["state"]>()(["fix verified locally", "left as-is", "handed back", "blocked", "not reproduced", "needs a try repro", "needs a build"]);
-const verdicts = exact<ReviewPatchReport["verdict"]>()(["ok", "findings"]);
+const verdicts = exact<ReviewPatchReport["verdict"]>()(["ok", "findings", "drop"]);
 const severities = exact<ReviewPatchReport["findings"][number]["severity"]>()(["must-fix", "nit"]);
 const plannedCmds = exact<PlannedCommand["cmd"]>()([
   "retry-job", "cancel-job", "resume-agent", "start-agent", "set-state", "redo-step", "edit-config", "shell", "hand-off", "split-request", "move-groups", "split-off", "fix-tests", "verify-stack",

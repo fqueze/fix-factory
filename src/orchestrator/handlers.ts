@@ -464,17 +464,10 @@ function authorReport(input: HandlerInput, ev: <T extends EventInput["type"]>(ty
       if (r.state === "not reproduced" && r.reproduction?.reproduced && r.reproduction.where === "on try" && r.commits.length) {
         throw new InvalidReport(`The failure reproduced on try and you committed a fix you can't run here: report it as "fix verified locally", your \`verification\` saying it wasn't run and what the stack's try push must check. "not reproduced" is for a failure nobody saw happen.`);
       }
-      // A fix for a failure nobody saw happen can't be trusted, unless you took it as it is (take-patch).
-      const taken = input.view.done.has(`take-patch:${item}`) && r.commits.length > 0;
-      const reported = r.state === "not reproduced" && taken ? "fix verified locally" : r.state;
-      if (reported === "not reproduced") {
-        blocked(r.summary, "The author couldn't reproduce the failure");
-        return;
-      }
-      if (r.state === "fix verified locally" && r.reproduction?.reproduced === false && !taken) {
-        blocked(r.summary, "Fixed without reproducing the failure");
-        return;
-      }
+      // A fix for a failure nobody reproduced goes on like any other: its critical review judges whether its evidence
+      // makes it worth landing (or drops it), and its test plan says it wasn't reproduced. With nothing to change (a
+      // victim of another failure, say), the item is closed with what its author found.
+      const reported = r.state === "not reproduced" && r.commits.length > 0 ? "fix verified locally" : r.state === "not reproduced" ? "left as-is" : r.state;
       // Covered by a patch of the stack: that patch's row and test plan name this group's tests too.
       let coveredBy: PatchId | undefined;
       if (r.state === "left as-is" && r.coveredBy) {

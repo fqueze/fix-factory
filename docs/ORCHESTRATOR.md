@@ -30,6 +30,10 @@ A tick runs on any change to `commands.jsonl` or a job file, and at least every 
   wait for you. A stack's reviews and verification pushes are keyed
   by its code (git patch-id), not its commit ids: rewording a commit plans no new push. Pushes planned for code
   the stack no longer has, and not made, are withdrawn.
+- **Not reproduced:** a fix nobody reproduced, locally or on try, goes on like any other: its critical review is told,
+  and takes it (its test plan then says it wasn't reproduced and why it's worth landing) or drops it (`drop`, which
+  closes the item with why). A "not reproduced" report with nothing to change (a victim of another failure) closes
+  the item with what its author found. Neither asks you.
 - **Try repro:** an author that can only reproduce on CI hands back a DEBUG commit that logs and widens the race
   ("needs a try repro"). Once the folder's other groups are settled, their DEBUG commits go on one branch and one
   push, planned like the others and approved by you. Once every push that carried them has finished (also after the stack was verified), each author is resumed with their results.

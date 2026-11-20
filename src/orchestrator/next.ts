@@ -268,12 +268,12 @@ export function folderOf(test: string): string {
 }
 
 // The commits an author's report hands over, by the prompt that produced it.
-// taken: you took the item's fix without a reproduction (take-patch), so a "not reproduced" report's commits count.
-export function commitsOf(name: string, report: unknown, taken = false): string[] {
+// A "not reproduced" report's commits are a fix like any other: its critical review judges it.
+export function commitsOf(name: string, report: unknown): string[] {
   switch (name) {
     case "investigate-and-fix": {
       const r = report as InvestigateReport;
-      return r.state === "fix verified locally" || (taken && r.state === "not reproduced") ? r.commits : [];
+      return r.state === "fix verified locally" || r.state === "not reproduced" ? r.commits : [];
     }
     case "write-annotation-patches": {
       const r = report as WriteAnnotationPatchesReport;
@@ -1287,7 +1287,7 @@ class Planner {
   // The author's latest successful report, with the commits it hands over.
   // A run's commits: its fix's, a fix you took without a reproduction included.
   private jobCommits(j: JobRecord): string[] {
-    return commitsOf(j.name, this.rep(j), j.item !== undefined && this.view.done.has(`take-patch:${j.item}`));
+    return commitsOf(j.name, this.rep(j));
   }
 
   private authorReport(item: ItemId): { job: JobRecord; commits: string[] } | undefined {
@@ -1782,11 +1782,19 @@ class Planner {
     }
     // A patch whose code an earlier critical review accepted (its author changed another one), or whose code is what
     // Phabricator has, isn't reviewed again.
+    const investigation = this.authorJobs(item.id).filter((j) => j.name === "investigate-and-fix" && succeeded(j)).at(-1);
+    const inv = investigation && this.rep<InvestigateReport>(investigation);
+    const unreproduced = inv !== undefined && (inv.state === "not reproduced" || inv.reproduction?.reproduced === false);
     const reviews = patches.filter((p) => !this.acceptedPatch(item.id, author, p.id, phabCode.get(p.id))).map((p) => {
       const comments = (this.s.patches[p.id]?.review?.comments ?? []).filter((c) => answered.includes(c.id));
       const file = dataPath(this.config, this.s.id, `review-comments-${p.id}-${author.job}.json`);
-      // You took its fix without a reproduction: the missing reproduction is your call, not a finding.
-      const taken = this.view.done.has(`take-patch:${item.id}`) ? " The user took this fix without a reproduction of the failure: a missing reproduction isn't a finding; review the fix itself." : "";
+      // You took its fix without a reproduction: the missing reproduction is your call, not a finding. Otherwise this
+      // review decides whether a fix nobody reproduced is worth landing.
+      const taken = this.view.done.has(`take-patch:${item.id}`)
+        ? " The user took this fix without a reproduction of the failure: a missing reproduction isn't a finding; review the fix itself."
+        : unreproduced
+          ? " Nobody reproduced the failure, locally or on try: the missing reproduction isn't a finding on its own. Judge whether the evidence (logs, minidumps, profiles, the code) shows the mechanism this fix addresses, so that it's worth landing as it is: if it is, review it as usual (its test plan will say it wasn't reproduced); if it isn't (a guess, or a change that can't help with what was seen), verdict `drop` with why in `dropReason`."
+          : "";
       const vars = { sha: p.sha, worktree: cwd, report: reportPath(this.config, this.s.id, author.job), comments: `${comments.length ? ` It answers the review comments in ${file}: check each one is really dealt with as its reviewer asked, in the code or in a reply in the report; a change the report claims but the diff doesn't make is a must-fix.` : ""}${taken}` };
       return this.wantAgent(`review:${p.id}:${author.job}`, "review", "review-patch", vars, {
         cwd,
@@ -1798,8 +1806,16 @@ class Planner {
       });
     });
     if (reviews.some((r) => !r)) return;
+    // A fix nobody reproduced whose evidence doesn't hold it up: dropped, the item closed with why.
+    const dropped = unreproduced && !this.view.done.has(`take-patch:${item.id}`) ? reviews.map((r) => this.rep<ReviewPatchReport>(r!)).find((rep) => rep.verdict === "drop") : undefined;
+    if (dropped) {
+      this.setItem(item.id, "left as-is", `dropped by its critical review: ${dropped.dropReason ?? ""}`.slice(0, 300));
+      return;
+    }
     const findings = reviews.flatMap((r) => {
       const rep = this.rep<ReviewPatchReport>(r!);
+      // Only a fix nobody reproduced can be dropped: otherwise its reason is a must-fix.
+      if (rep.verdict === "drop") return [{ severity: "must-fix" as const, text: rep.dropReason ?? "drop it", job: r! }];
       return rep.verdict === "findings" ? rep.findings.map((f) => ({ ...f, job: r! })) : [];
     });
     if (findings.length === 0) {

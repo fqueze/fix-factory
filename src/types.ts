@@ -348,7 +348,8 @@ export interface InvestigateReport {
 }
 
 export interface ReviewPatchReport {
-  verdict: "ok" | "findings";
+  verdict: "ok" | "findings" | "drop"; // drop: only for a fix nobody reproduced, whose evidence doesn't hold it up
+  dropReason?: string;
   findings: { severity: "must-fix" | "nit"; file?: string; line?: number; text: string }[];
   feedback: Feedback[];
 }
