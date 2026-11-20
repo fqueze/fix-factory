@@ -4831,8 +4831,17 @@ describe("9. changes after submission", () => {
     sc.settle();
     sc.complete(`msg:p-test-a:${sha("9")}`, { output: "m" });
     sc.settle();
+    // Earlier versions ran it in the author's worktree: freed since, it couldn't start twice. It's made again where it can.
+    for (let n = 0; n < 2; n++) {
+      sc.startJob({ purpose: { key: `patch-id:${sha("8")}`, what: "patch-id", item: "i-test-a" }, kind: "script", name: "stack.ts patch-id", item: "i-test-a", cwd: "/wt/gone", cli: { tool: "stack.ts", args: ["patch-id"] } });
+      sc.complete(`patch-id:${sha("8")}`, { exitCode: 1, error: `job-wrapper: cannot run ["node"] in /wt/gone: spawn node ENOENT` });
+    }
     sc.complete(`lint:p-test-a:${sha("9")}`, { output: lintOk });
     sc.settle();
+    assert.ok(!sc.open().some((k) => k.startsWith("failed:")));
+    // In the repository: the author's worktree may have been freed since it wrote the commit.
+    assert.deepEqual([sc.plan(`patch-id:${sha("8")}`).cwd, sc.plan(`patch-id:${sha("8")}`).cli?.args], ["/ff", ["patch-id", "--cwd", "/ff", sha("8")]]);
+    assert.equal(sc.plan(`msg:p-test-a:${sha("9")}`).cwd, "/ff");
     sc.complete(`patch-id:${sha("8")}`, { output: { patchId: "same code" } });
     assert.deepEqual(sc.settle(), [`rewrite-review:root:${again}:v2`]);
   });

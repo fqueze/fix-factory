@@ -165,6 +165,7 @@ export const SUBMIT_IMPORT_SOON_MS = 20_000; // the first minutes after you copy
 export const SUBMIT_WATCH_MS = 60 * 60_000; // after you copy the moz-phab command
 export { ANNOTATIONS_ITEM };
 export const LINT_ROUNDS = 2;
+const CANNOT_RUN = "job-wrapper: cannot run "; // src/state/job-wrapper.ts, when a job can't be spawned
 // Lint rules about style alone, or wording that can be right (a commit message saying what its evidence doesn't show):
 // once the author's rounds are spent, they no longer hold a patch back. You judge them in review.
 const SOFT_LINT_RULES = ["bodyLength", "noHedging"];
@@ -661,6 +662,16 @@ class Planner {
     }
     // The branch is read first (submitted()); the job is made again from what it has, under another key.
     if (last.end.error?.includes(BRANCH_MOVED)) return undefined;
+    // It couldn't start (its directory gone: a freed worktree): made again from what it has now, when that runs
+    // elsewhere, whatever its earlier tries.
+    if (make && last.end.error?.startsWith(CANNOT_RUN)) {
+      const again = make();
+      if (again.cwd !== last.cwd) {
+        this.clear(`failed:${last.job}`);
+        this.start(key, again);
+        return undefined;
+      }
+    }
     if (jobs.length < 2 && !NO_RETRY.has(last.purpose.what)) {
       const retry = this.retryPlan(last, make);
       if (retry) this.start(key, retry);
@@ -1686,7 +1697,7 @@ class Planner {
     const lints: { job: JobRecord; what: string; skip?: string }[] = [];
     let pending = false;
     for (const p of patches) {
-      const msg = this.want(`msg:${p.id}:${p.sha}`, () => this.cli("msg", "git", ["log", "-1", "--format=%B", p.sha], { cwd, item: item.id, priority, purpose: { item: item.id, patch: p.id } }));
+      const msg = this.want(`msg:${p.id}:${p.sha}`, () => this.cli("msg", "git", ["log", "-1", "--format=%B", p.sha], { cwd: this.config.firefoxRepo, item: item.id, priority, purpose: { item: item.id, patch: p.id } }));
       const lint = msg && this.want(`lint:${p.id}:${p.sha}`, () => this.cli("lint", "lint-text.ts", ["--kind", "commit", outPath(this.config, msg.job)], { item: item.id, priority, purpose: { item: item.id, patch: p.id } }));
       // Once submitted, its reviewers are the stack's, which replaces the commit's.
       if (lint) lints.push({ job: lint, what: `the commit message of ${p.sha.slice(0, 12)}`, ...(this.s.patches[p.id]?.revision !== undefined ? { skip: "unknownReviewer" } : {}) });
@@ -1777,7 +1788,9 @@ class Planner {
       const pv = this.s.patches[p.id];
       const base = pv && this.phabBase(pv);
       if (!base) continue;
-      const job = this.want(`patch-id:${base}`, () => this.cli("patch-id", "stack.ts", ["patch-id", "--cwd", cwd, base], { cwd, priority, item: item.id, purpose: { item: item.id, patch: p.id } }));
+      // In the repository, whose objects every worktree shares: the author's worktree may have been freed since.
+      const repo = this.config.firefoxRepo;
+      const job = this.want(`patch-id:${base}`, () => this.cli("patch-id", "stack.ts", ["patch-id", "--cwd", repo, base], { cwd: repo, priority, item: item.id, purpose: { item: item.id, patch: p.id } }));
       if (!job) return;
       phabCode.set(p.id, this.out<{ patchId: string }>(job).patchId);
     }
