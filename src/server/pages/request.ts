@@ -610,14 +610,15 @@ function failure(r: RequestState, i: ItemView, prefix: string | null = "The fail
   const tests = g.tests.length > 1 ? g.tests.map((t) => (r.folder && t.startsWith(`${r.folder}/`) ? t.slice(r.folder.length + 1) : t)).join(", ") : null;
   const dashboard = /\.(toml|ini)$/.test(g.tests[0]) ? null : html` · <a href="https://tests.firefox.dev/test.html?test=${encodeURIComponent(g.tests[0])}" target="_blank" rel="noopener">rates on tests.firefox.dev ↗</a>`;
   const rate = g.ratePerWeek === undefined ? null : html` · ${g.ratePerWeek} failures/week`;
-  return html`${prefix === null ? null : html`<h4 class="part">${prefix}</h4>`}<div class="failure">${g.message}</div>${tests ? html`<div class="sub">${tests}</div>` : null}${
+  const body = html`<div class="failure">${g.message}</div>${tests ? html`<div class="sub">${tests}</div>` : null}${
     g.configs.length ? html`${configTable(g.configs)}<div class="sub">${plural(g.configs.length, "config")}${rate}${dashboard}</div>` : null
   }`;
+  return prefix === null ? body : html`<h4 class="part">${prefix}</h4><div class="partbody">${body}</div>`;
 }
 
 // On a patch's row: its cause, then the failure in one sentence and where it failed.
 function whyPart(r: RequestState, i: ItemView): Html {
-  return html`${investigationHtml(i)}<h4 class="part">The failure</h4>${failureLine(r, i)}`;
+  return html`${investigationHtml(i)}<h4 class="part">The failure</h4><div class="partbody">${failureLine(r, i)}</div>`;
 }
 
 // The harness's words for a failure it retried in a fresh browser, which say nothing on their own.

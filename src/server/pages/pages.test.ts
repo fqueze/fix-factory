@@ -698,7 +698,7 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.match(renderRequest(r, ctx, true).value, /<span class="bug none" title="Goes under the meta bug">meta bug<\/span><span class="ptitle">Save the prefs file/);
     assert.match(h, /⛔ hard: needs “Make nsLocalFile::CopyDirectoryTo/);
     assert.match(h, /🔗 soft: needs a newer sqlite on the try builders \(the vacuum test is slow without it\)/);
-    assert.match(rowOf(h, "patch-p-prefs"), /<h4 class="part">The failure<\/h4><div class="failure">Test wrote into its own directory · 31 failures\/week · <a href="https:\/\/tests\.firefox\.dev\/test\.html\?test=storage%2Ftest%2Funit%2Ftest_libPrefs\.js"[^>]*>rates on tests\.firefox\.dev ↗<\/a><\/div><div class="sub">linux64\/debug, windows11-64\/opt<\/div>/);
+    assert.match(rowOf(h, "patch-p-prefs"), /<h4 class="part">The failure<\/h4><div class="partbody"><div class="failure">Test wrote into its own directory · 31 failures\/week · <a href="https:\/\/tests\.firefox\.dev\/test\.html\?test=storage%2Ftest%2Funit%2Ftest_libPrefs\.js"[^>]*>rates on tests\.firefox\.dev ↗<\/a><\/div><div class="sub">linux64\/debug, windows11-64\/opt<\/div>/);
     assert.match(rowOf(h, "patch-p-prefs"), /<span class="onhover"><span>review effort 1\/5<\/span>/);
     assert.match(h, /<div class="failure">[^<]* · 40 failures\/week · /);
     assert.doesNotMatch(h, /Allow one try push/);
@@ -1238,7 +1238,7 @@ describe("a burndown with closed groups, running agents and a dropped patch", ()
     const row = rowOf(h, "item-i-browser-policy-trackingprotection");
     assert.match(row, /<span class="name" title="browser\/components\/enterprisepolicies\/tests\/browser\/trackingprotection\/browser_policy_trackingprotection\.js\n[^"]*"><a href="https:\/\/tests\.firefox\.dev\/test\.html\?test=[^"]*"[^>]*>trackingprotection\/browser_policy_trackingprotection\.js<\/a><\/span>/);
     assert.match(h, />browser_policy_sitepolicies_jit\.js<\/a><\/span>/);
-    assert.match(row, /<div class="rowbody"><h4 class="part">The failure<\/h4><div class="failure">leaked 1 window\(s\) until shutdown \[url = about:preferences#etp\]<\/div>/);
+    assert.match(row, /<div class="rowbody"><h4 class="part">The failure<\/h4><div class="partbody"><div class="failure">leaked 1 window\(s\) until shutdown \[url = about:preferences#etp\]<\/div>/);
   });
   it("a waiting row's icon says what it waits for", () => {
     const r = structuredClone(get(ID));
@@ -1381,7 +1381,7 @@ describe("a burndown with closed groups, running agents and a dropped patch", ()
     assert.doesNotMatch(rowOf(renderRequest(r, ctx, true).value, `item-${i.id}`), /The fix/, "nothing to show before a cause");
     i.investigation = { state: "fix verified locally", summary: "s", cause: "the query holds the window", verification: "ran it 50 times", commits: [], landsAfter: [], feedback: [] };
     const row = rowOf(renderRequest(r, ctx, true).value, `item-${i.id}`);
-    assert.match(row, /<\/h4><div class="failure">[^]*<h4 class="part">The fix<\/h4><div class="why"><div class="md"><p>Cause: the query holds the window<\/p><\/div><\/div>/);
+    assert.match(row, /<\/h4><div class="partbody"><div class="failure">[^]*<h4 class="part">The fix<\/h4><div class="why"><div class="md"><p>Cause: the query holds the window<\/p><\/div><\/div>/);
     assert.doesNotMatch(row, /ran it 50 times/);
     assert.doesNotMatch(row, /Allow one try push|allow-push/);
   });

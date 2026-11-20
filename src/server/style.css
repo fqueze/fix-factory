@@ -289,6 +289,8 @@ details.row .state .working { color: var(--accent); font-weight: 600; }
 details.row[open] > :is(.under, .rowbody) { position: relative; }
 details.row[open] > :is(.under, .rowbody)::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 38px; cursor: pointer; }
 .rowbody > details.fold > summary { padding: 4px 0; }
+/* Its text lines up with the bullets of the test plan under it. */
+.partbody { padding-left: 8px; }
 .rowbody .failure { overflow-wrap: anywhere; }
 .jobs { display: flex; flex-direction: column; gap: 2px; font-size: 12px; margin-top: 4px; }
 .jobs .job { font-weight: normal; }
