@@ -472,6 +472,21 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.doesNotMatch(row, />(Dismiss|Close)</);
   });
 
+  it("a row asking you something shows how we know at its usual place, its files linked, without opening it; not in the question", () => {
+    const D = "r-20261015-downloads-stuck";
+    const r = structuredClone(get(D));
+    const i = r.items["i-idle"];
+    i.investigation = { state: "not reproduced", summary: "s", cause: "c", verification: "v", commits: [], landsAfter: [], feedback: [], evidence: [{ source: "log", finding: "x" }], reproduction: { reproduced: false, before: "0/6" }, files: { evidence: "notes/evidence.md", reproduction: "notes/reproduction.md" } } as typeof i.investigation;
+    r.needsUser.push({ key: "failed:j-x", action: "Something to decide", detail: "d", job: "j-x", item: "i-idle", since: r.createdAt });
+    const h = renderRequest(r, ctx, true).value;
+    const asks = h.slice(h.lastIndexOf('<div class="asks">', h.indexOf('id="item-i-idle"')));
+    const summary = asks.slice(0, asks.indexOf("</summary>"));
+    assert.match(summary, /<span class="trust"><a href="\/requests\/[^"]+\/items\/i-idle\/files\/evidence"[^>]*>Evidence<\/a>: log · <span class="bad"><a href="[^"]+\/files\/reproduction"[^>]*>Not reproduced<\/a><\/span>/);
+    const ask = asks.slice(asks.indexOf('<div class="ask-you">'));
+    assert.doesNotMatch(ask.slice(0, ask.indexOf('<div class="jobctl">')), /Not reproduced/);
+    assert.match(readFileSync(resolve(import.meta.dirname, "../style.css"), "utf8"), /div\.asks > details\.row > summary > \.trust \{ display: block; \}/, "shown closed");
+  });
+
   it("a follow-up bug to file: its form, not assigned to you, the box for its number, and Don't file it", () => {
     const D = "r-20261015-downloads-stuck";
     const r = structuredClone(get(D));

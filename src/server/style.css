@@ -275,8 +275,10 @@ form.revise textarea { flex: 1; font: inherit; }
 details.row .state { grid-column: 2 / -1; font-size: 12px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 details.row[open] > summary .state, details.row[open] > summary .name { white-space: normal; overflow-wrap: anywhere; }
 details.row .st.find ~ .state { color: var(--serious); }
-/* Its evidence once opened; what it waits for you to do on Phabricator always, on a line of its own. */
+/* Its evidence once opened, or while it asks you something (what you decide on); what it waits for you to do on
+   Phabricator always, on a line of its own. */
 details.row:not([open]) > summary > .trust { display: none; }
+div.asks > details.row > summary > .trust { display: block; }
 details.row .rowflag { grid-column: 2 / -1; display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; font-size: 12px; margin-top: 2px; }
 details.row .rowflag b { color: var(--text-primary); }
 details.row .rowflag form { display: inline; }
