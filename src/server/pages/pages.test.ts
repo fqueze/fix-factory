@@ -1381,7 +1381,7 @@ describe("a burndown with closed groups, running agents and a dropped patch", ()
     assert.doesNotMatch(rowOf(renderRequest(r, ctx, true).value, `item-${i.id}`), /The fix/, "nothing to show before a cause");
     i.investigation = { state: "fix verified locally", summary: "s", cause: "the query holds the window", verification: "ran it 50 times", commits: [], landsAfter: [], feedback: [] };
     const row = rowOf(renderRequest(r, ctx, true).value, `item-${i.id}`);
-    assert.match(row, /<\/h4><div class="partbody"><div class="failure">[^]*<h4 class="part">The fix<\/h4><div class="why"><div class="md"><p>Cause: the query holds the window<\/p><\/div><\/div>/);
+    assert.match(row, /<\/h4><div class="partbody"><div class="failure">[^]*<h4 class="part">The fix<\/h4><div class="why cause"><span>Cause:<\/span><div class="md"><p>the query holds the window<\/p><\/div><\/div>/);
     assert.doesNotMatch(row, /ran it 50 times/);
     assert.doesNotMatch(row, /Allow one try push|allow-push/);
   });

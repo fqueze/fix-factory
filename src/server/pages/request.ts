@@ -972,7 +972,7 @@ function investigationHtml(i: ItemView): Html | null {
   if (!inv?.cause) {
     return null;
   }
-  return html`<div class="why">${md(`Cause: ${inv.cause}`, i.group.tests)}</div>`;
+  return html`<div class="why cause"><span>Cause:</span>${md(inv.cause, i.group.tests)}</div>`;
 }
 
 const ASK_EVIDENCE =
