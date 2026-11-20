@@ -360,6 +360,9 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.match(rowOf(c, "item-i-spinner"), /<summary class="btn small">Reopen…<\/summary>/);
     assert.ok(rowOf(c, "item-i-spinner").includes(cmd({ cmd: "continue", request: "r-20261013-tab-failures", item: "i-spinner" })));
     assert.ok(!c.includes(cmd({ cmd: "continue", request: "r-20261013-tab-failures", item: "i-mute" })), "no author session to talk to");
+    // Its worktree removed once it closed: reopening restores it.
+    closed.jobs["j-rm-spinner"] = { ...closed.jobs["j-inv-spinner"], job: "j-rm-spinner", kind: "script", name: "worktree.ts remove", exitCode: 0 };
+    assert.match(rowOf(renderRequest(closed, ctx, true).value, "item-i-spinner"), /<summary class="btn small">Reopen…<\/summary>/);
     const jobs = h.slice(h.indexOf('data-fold="jobs"'));
     assert.match(jobs, /<span class="res ok">answering you<\/span> <span class="sub">Opus · 4 min · <a class="cost" href="http:\/\/localhost:4242\/from-url\/[^"]*%2Fprofile\?thread=0" target="_blank" rel="noopener" title="Its profile">\$0\.88<\/a><\/span>/);
     assert.ok(!jobs.includes(cmd({ cmd: "stop", job: "j-recover", request: "r-20261013-tab-failures" })), "finished jobs can't be stopped");

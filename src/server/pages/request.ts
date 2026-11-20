@@ -544,9 +544,8 @@ function rowClass(r: RequestState, i: ItemView, ctx: RenderContext): StateClass 
 function groupRow(r: RequestState, i: ItemView, ctx: RenderContext): Html {
   const sentence = itemSentence(r, i, ctx);
   const patches = Object.values(r.patches).filter((p) => p.item === i.id);
-  // Its author can't be resumed once its worktree was removed to free the disk.
-  const removed = Object.values(r.jobs).some((j) => j.item === i.id && j.name === "worktree.ts remove" && j.exitCode === 0);
-  const reopen = stateClass(i.state) === "closed" && hasAuthorSession(r, i.id) && !removed && !r.needsUser.some((n) => n.item === i.id);
+  // Its worktree may have been removed: reopening restores it first.
+  const reopen = stateClass(i.state) === "closed" && hasAuthorSession(r, i.id) && !r.needsUser.some((n) => n.item === i.id);
   const debug = i.state === "waiting for a try repro" ? ((i.lastReport?.report as { commits?: string[] } | undefined)?.commits ?? []) : [];
   const debugTitles = debug.map((sha) => ctx.commitTitle?.(sha)).filter((t) => t !== undefined);
   const named = debugTitles.length === debug.length ? debugTitles : [];
