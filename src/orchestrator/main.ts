@@ -510,12 +510,15 @@ export class Orchestrator {
 // One job at a time changes or reads a worktree's checkout (a push detaches it at the approved commits): the
 // returned function takes a plan's worktree, or says it's busy and the plan waits for a later tick. Authors work
 // in their own worktrees.
-// A script or build in a worktree: one at a time there.
-function inWorktree(config: FactoryConfig, j: { kind: string; cwd: string }): boolean {
-  return j.kind !== "agent" && j.cwd.startsWith(join(config.worktreesDir, "/"));
+// A script or build in a worktree: one at a time there. Of agents, only resolve-conflict holds it: it works on the
+// cherry-pick a script left in progress, which any other script there would refuse.
+type Locking = { kind: JobPlan["kind"]; cwd: string; purpose?: { what: string } };
+
+function inWorktree(config: FactoryConfig, j: Locking): boolean {
+  return (j.kind !== "agent" || j.purpose?.what === "resolve") && j.cwd.startsWith(join(config.worktreesDir, "/"));
 }
 
-export function worktreeLock(config: FactoryConfig, running: Pick<JobView, "kind" | "cwd">[]): (plan: Pick<JobPlan, "kind" | "cwd">) => boolean {
+export function worktreeLock(config: FactoryConfig, running: Locking[]): (plan: Locking) => boolean {
   const busy = new Set(running.filter((j) => inWorktree(config, j)).map((j) => j.cwd));
   return (plan) => {
     if (!inWorktree(config, plan)) return true;

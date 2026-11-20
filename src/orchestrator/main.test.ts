@@ -373,5 +373,11 @@ describe("Orchestrator", () => {
     assert.equal(worktreeLock(config, [push])(rewrite), false);
     assert.equal(worktreeLock(config, [{ kind: "agent", cwd: "/wt/stack-a" }])(rewrite), true);
     assert.equal(worktreeLock(config, [])(rewrite), true);
+    // resolve-conflict works on the cherry-pick a script left there: nothing else starts there until it's done.
+    const resolve = { kind: "agent" as const, cwd: "/wt/stack-a", purpose: { what: "resolve" } };
+    assert.equal(worktreeLock(config, [resolve])(rewrite), false);
+    const tick2 = worktreeLock(config, []);
+    assert.equal(tick2(resolve), true);
+    assert.equal(tick2(rewrite), false);
   });
 });
