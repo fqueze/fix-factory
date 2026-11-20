@@ -2210,6 +2210,14 @@ class Planner {
       const byItem = new Map<ItemId, string[]>();
       for (const f of mustFix) {
         const p = this.patchBySha(f.patch);
+        // A change that belongs in another item's commit goes to that commit's author, the only one who can amend it:
+        // once it has it, the assembly finds the flagged patch covered, and its author drops what it no longer adds.
+        const into = f.into ? this.patchBySha(f.into) : undefined;
+        if (into?.item && into.item !== p?.item && !TERMINAL.includes(this.s.items[into.item]?.state)) {
+          const line = `- ${into.title}: take in the change of “${p?.title ?? f.patch}” (\`git show ${f.patch.slice(0, 12)}\`, another item's patch, which its author then drops): ${f.text}`;
+          byItem.set(into.item, [...(byItem.get(into.item) ?? []), line]);
+          continue;
+        }
         const item = p?.item ?? inStack[0].item;
         byItem.set(item, [...(byItem.get(item) ?? []), `- ${p ? `${p.title}: ` : ""}${f.text}`]);
       }

@@ -732,7 +732,7 @@ export interface EstimateReviewEffortReport {
 }
 
 export interface ReviewStackReport {
-  findings: { patch: string; severity: "must-fix" | "nit"; text: string }[]; // patch: a commit sha of the stack
+  findings: { patch: string; severity: "must-fix" | "nit"; text: string; into?: string }[]; // patch: a commit sha of the stack; into: the commit that should take its change in
   addDeps: { patch: string; needs: string; kind: Dep["kind"]; reason: string }[];
   removeDeps: { patch: string; needs: string; reason: string }[];
   feedback: Feedback[];

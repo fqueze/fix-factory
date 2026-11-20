@@ -2162,6 +2162,25 @@ describe("5. stack", () => {
     assert.equal(sc.state().items["i-test-b"].state, "investigating");
   });
 
+  it("sends a change the stack review wants folded into another item's commit to that commit's author", () => {
+    const sc = twoReviewed();
+    sc.complete("wt:root", { output: { path: `/wt/${ID}-root` } });
+    sc.settle();
+    const key = sc.view().jobs.find((j) => j.purpose.what === "assemble")!.purpose.key;
+    const hash = key.split(":")[2];
+    sc.complete(key, { output: { commits: [{ sha: sha("1"), newSha: sha("a") }, { sha: sha("2"), newSha: sha("b") }] } });
+    sc.settle();
+    sc.complete(`deps:root:${hash}`, { output: [] });
+    sc.complete(`effort:p-test-a:${sha("1")}`, { report: { effort: 2, reason: "r", feedback: [] } });
+    sc.complete(`effort:p-test-b:${sha("2")}`, { report: { effort: 1, reason: "r", feedback: [] } });
+    sc.settle();
+    sc.complete(keyOf(sc, `order:root:${hash}:`), { output: { order: ["p-test-a", "p-test-b"], flippedSoftDeps: [] } });
+    sc.settle();
+    const review = sc.complete(keyOf(sc, `review-stack:root:${hash}:`), { report: { findings: [{ patch: sha("b"), into: sha("a"), severity: "must-fix", text: "the threshold belongs in the GC patch" }], addDeps: [], removeDeps: [], feedback: [] } });
+    assert.deepEqual(sc.settle(), [`author:i-test-a:stack-review:${review}`], "not test_b's author, who can't amend test_a's commit");
+    assert.match(sc.plan(`author:i-test-a:stack-review:${review}`).agent?.message ?? "", new RegExp(`take in the change of [^]*git show ${sha("b").slice(0, 12)}[^]*the threshold belongs in the GC patch`));
+  });
+
   it("a patch the stack review keeps flagging after rounds with its author comes to you on its group's row; the others' authors are still told", () => {
     const sc = twoReviewed();
     sc.complete("wt:root", { output: { path: `/wt/${ID}-root` } });

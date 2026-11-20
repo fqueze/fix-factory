@@ -19,6 +19,10 @@
           },
           "text": {
             "type": "string"
+          },
+          "into": {
+            "type": "string",
+            "description": "When the patch's change belongs in another commit of the stack (the two should be one): that commit's sha. Its author takes the change in; this patch's author then drops what it no longer adds."
           }
         },
         "required": [
