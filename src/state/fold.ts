@@ -142,6 +142,8 @@ export function folder(first: Event): { apply(events: readonly Event[]): void; s
           break;
         case "tests-asked":
           s.askedTests = [...new Set([...(s.askedTests ?? []), ...e.tests])];
+          if (e.reason) s.askedTestsWhy = { ...s.askedTestsWhy, ...Object.fromEntries(e.tests.map((t) => [t, e.reason!])) };
+          s.askedTestsAt = e.t;
           break;
         case "meta-draft-asked":
           s.metaDraftAsked = true;

@@ -149,7 +149,7 @@ export type Event =
   | (EventBase & { type: "split-from"; from: RequestId }) // made by splitting that request
   | (EventBase & { type: "groups-moved"; to: RequestId; items: ItemId[] }) // they go on in that request
   | (EventBase & { type: "meta-draft-asked" }) // you want a meta bug for a stack that doesn't need one
-  | (EventBase & { type: "tests-asked"; tests: string[] }) // failures already on central you want fixed too
+  | (EventBase & { type: "tests-asked"; tests: string[]; reason?: string }) // failures already on central, or a push of yours showed, you want fixed too; why (older events have none)
   | (EventBase & { type: "author-queued"; item: ItemId; key: string; reason: string; message: string; plan?: JobPlan }) // your message to an author whose worktree is restored first; or a run you retried, as it is (plan)
   | (EventBase & { type: "verify-asked"; text: string })
   | (EventBase & { type: "debug-push-asked"; item: ItemId }) // you want the DEBUG commits pushed on their own now (push-debug)
@@ -553,7 +553,9 @@ export interface RequestState {
   splitInto?: RequestId[]; // split into these, and archived
   movedTo?: Record<ItemId, RequestId>; // its groups the split moved, and where
   metaDraftAsked?: boolean; // you asked for a meta bug draft
-  askedTests?: string[]; // failures already on central you asked to fix too, by test path
+  askedTests?: string[]; // failures already on central, or a push of yours showed, you asked to fix too, by test path
+  askedTestsWhy?: Record<string, string>; // why you asked, by test path
+  askedTestsAt?: Iso; // when you last asked
   queuedAuthors?: { item: ItemId; key: string; reason: string; message: string; plan?: JobPlan }[]; // your messages, and runs you retried, waiting for their author's worktree
   verifyAsked?: string[];
   debugPushAsked?: { item: ItemId; t: Iso }; // your last ask for a push of the DEBUG commits of their own, from that item's row

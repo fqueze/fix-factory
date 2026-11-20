@@ -472,7 +472,7 @@ export function commandEffects(c: Command, ctx: CommandContext): Effect[] {
       break;
     }
     case "fix-tests":
-      ev({ type: "tests-asked", tests: c.tests });
+      ev({ type: "tests-asked", tests: c.tests, reason: c.reason });
       done(true, c.reason);
       break;
     case "draft-meta-bug":

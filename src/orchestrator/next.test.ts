@@ -3367,6 +3367,28 @@ function backedOutAndAsked(): Scenario {
 }
 
 describe("10. backouts", () => {
+  it("tests you ask to fix once it's done reopen it, an item each from why you asked, even unseen by its pushes", () => {
+    const sc = inReview();
+    sc.complete("poll:0", { output: polled("published") });
+    sc.settle();
+    assert.equal(sc.state().step, "done");
+    sc.now += 3_600_000;
+    sc.add({ type: "tests-asked", request: ID, tests: ["z/test_z.js"], reason: "fails on its second run in your try push" });
+    sc.settle();
+    const item = Object.values(sc.state().items).find((i) => i.group.tests.includes("z/test_z.js"));
+    assert.equal(item?.group.message, "fails on its second run in your try push");
+    assert.equal(sc.state().step, "landing", "its stack is on Phabricator: the fix goes on top");
+    assert.ok(sc.view().jobs.some((j) => j.purpose.key === `prior-art:${item!.id}`), "its investigation starts");
+    sc.settle();
+    assert.equal(sc.state().step, "landing", "it stays open while the item is fixed");
+    // Done again before its item was worked on (an earlier factory): asking again reopens it.
+    sc.add({ type: "step", request: ID, step: "done" });
+    sc.now += 60_000;
+    sc.add({ type: "tests-asked", request: ID, tests: ["z/test_z.js"], reason: "fails on its second run in your try push" });
+    sc.settle();
+    assert.equal(sc.state().step, "landing");
+  });
+
   it("a backout no poll saw land is found from Phabricator's reopen", () => {
     const sc = inReview();
     sc.complete("poll:0", { output: polled("accepted") });

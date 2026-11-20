@@ -434,6 +434,7 @@ class Planner {
   }
 
   run(): void {
+    this.reopenForAskedTests();
     if (this.s.step === "done") {
       // Landed patches may still be backed out (their revisions reopen): watched for a few days.
       this.pollPhab();
@@ -1253,6 +1254,7 @@ class Planner {
     if (!this.s.askedTests?.length || this.s.step === "done") return;
     const tests = this.knownTests();
     let created = false;
+    const known = (t: string) => [...tests].some((k) => k.endsWith(t) || t.endsWith(k));
     for (const j of this.view.jobs.filter((x) => x.name === "triage-try" && succeeded(x))) {
       for (const c of this.rep<TriageTryReport>(j).cells) {
         if (!c.test || tests.has(c.test) || !this.s.askedTests.some((t) => c.test!.endsWith(t) || t.endsWith(c.test!))) continue;
@@ -1261,9 +1263,27 @@ class Planner {
         this.createItem({ message: c.evidence.slice(0, 300), tests: [c.test], configs: c.config ? [c.config] : [], ...(c.taskId ? { taskIds: [c.taskId] } : {}) });
       }
     }
+    // Those no push of the factory's showed (a push of yours did): an item each, from why you asked.
+    for (const t of this.s.askedTests.filter((x) => !known(x))) {
+      tests.add(t);
+      created = true;
+      this.createItem({ message: (this.s.askedTestsWhy?.[t] ?? "You asked for it to be fixed").slice(0, 300), tests: [t], configs: [] });
+    }
     // Once on Phabricator, the request stays where it is: their patches go on top of the stack (newPatches).
     const submitted = Object.values(this.s.patches).some((p) => p.revision !== undefined);
     if (created && !submitted && at(this.s.step) > at("investigate and fix")) this.setStep("investigate and fix");
+  }
+
+  // Tests you asked to fix once the request was done reopen it: on to landing when it has patches on Phabricator (the
+  // new ones go on top of its stack), otherwise back to fixing.
+  private reopenForAskedTests(): void {
+    const { askedTestsAt, finishedAt } = this.s;
+    if (this.s.step !== "done" || !askedTestsAt || !finishedAt || askedTestsAt <= finishedAt) return;
+    // Those without an item yet, or with one not fixed yet.
+    const items = Object.values(this.s.items);
+    const pending = (t: string) => !items.some((i) => SETTLED.includes(i.state) && i.group.tests.some((k) => k.endsWith(t) || t.endsWith(k)));
+    if (!this.s.askedTests!.some(pending)) return;
+    this.setStep(Object.values(this.s.patches).some((p) => p.revision !== undefined) ? "landing" : "investigate and fix");
   }
 
   // Failures of other tests an author came across that the request covers: work items of their own, the request going
@@ -3994,7 +4014,9 @@ class Planner {
       this.partlySubmitted();
       return;
     }
-    if (patches.length > 0 && patches.every(landed)) {
+    // Not while an item is still being fixed (a test you asked to fix once the others landed): its patches come on top.
+    const fixing = this.newItems.size > 0 || Object.values(this.s.items).some((i) => !SETTLED.includes(i.state) && i.state !== "blocked" || ["reviewed", "in stack", "in try"].includes(i.state));
+    if (patches.length > 0 && patches.every(landed) && !fixing) {
       this.setStep("done");
       return;
     }
