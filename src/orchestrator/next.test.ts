@@ -5318,10 +5318,16 @@ describe("burndown verification", () => {
     assert.notEqual(sc.state().step, "done", "the push is still running");
     sc.add({ type: "try-finished", request: ID, push: "unskip", result: "failures", summary: "s" });
     sc.settle();
-    sc.complete("try-table:unskip:final", { output: table() });
+    const row = (config: string) => ({ test: "a/test_a.js", config, result: "fail", failures: ["boom"], taskIds: ["T1"] });
+    sc.complete("try-table:unskip:final", { output: table([row("win/opt"), row("linux/opt"), row("win/opt")]) });
     sc.complete("collect:unskip:final", { output: [failure("a/test_a.js", "boom")] });
     sc.settle();
     assert.notEqual(sc.state().step, "done", "its final run is still clustering");
+    // Its row says where each test that failed went.
+    assert.deepEqual([sc.state().pushes.unskip.failing, sc.state().pushes.unskip.failingRun], [[{ test: "a/test_a.js", configs: ["linux/opt", "win/opt"] }], "final"]);
+    const recorded = sc.events.filter((e) => e.type === "try-tests").length;
+    sc.settle();
+    assert.equal(sc.events.filter((e) => e.type === "try-tests").length, recorded, "once");
     sc.complete("cluster:unskip:final", { output: { groups: [group("ka", "a/test_a.js", "boom")], singles: [] } });
     sc.settle();
     assert.equal(sc.state().step, "investigate and fix");

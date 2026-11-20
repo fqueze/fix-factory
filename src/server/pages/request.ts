@@ -1374,16 +1374,32 @@ function pushOutcome(r: RequestState, p: PushView): Html {
     const answer = asker.job?.outcome;
     return html`${count} · ${asker.job ? (asker.job.endedAt ? html`its author: ${answer ?? "done"}` : "its author is reading the results") : "results go to its author"}`;
   }
+  const toWork = toItems(r, p).filter((x) => x.item).length;
   const made = [
+    ...(toWork ? [`${plural(toWork, "test")} to their work items`] : []),
     ...(verdicts.length ? [`${plural(verdicts.reduce((n, [, k]) => n + k, 0), "test")}: ${verdicts.map(([v, n]) => `${n} ${v}`).join(", ")}`] : []),
     ...(authors.length ? [`sent to the author${authors.length > 1 ? "s" : ""} of ${authors.map((i) => groupLabel(r, i)).join(", ")}`] : []),
   ];
   return html`${count}${made.length ? html` · ${made.join(" · ")}` : null}`;
 }
 
+// The tests that failed in it and that triage didn't look at, each with the work item it went to: one it found (an
+// un-skip push), one whose DEBUG commits it carried, one whose fix it checked. A test merged into another item's is
+// that item's.
+function toItems(r: RequestState, p: PushView): { test: string; configs: string[]; item?: ItemView }[] {
+  const triaged = new Set((p.analysis ?? []).map((c) => testKey(c.test ?? "")));
+  return (p.failing ?? [])
+    .filter((f) => !triaged.has(testKey(f.test)))
+    .map((f) => {
+      const all = Object.values(r.items).filter((i) => i.group.tests.some((t) => testKey(t) === testKey(f.test)));
+      return { ...f, item: all.findLast((i) => i.state !== "left as-is") ?? all.at(-1) };
+    });
+}
+
 // Each failure no patch's tests matched, as triage saw it, with what it rests on.
 function pushAnalysis(r: RequestState, p: PushView, ctx: RenderContext): Html | null {
-  if (!p.analysis?.length) {
+  const items = toItems(r, p);
+  if (!p.analysis?.length && !items.length) {
     return null;
   }
   // One row per test (its configs and patches together), by verdict, what needs attention first; long lists folded
@@ -1392,7 +1408,7 @@ function pushAnalysis(r: RequestState, p: PushView, ctx: RenderContext): Html | 
   const configsOf = (c: string | undefined) => (c ?? "").split(/[;,]\s*/).map((x) => x.trim().replace(/^test-/, "")).filter(Boolean);
   const patchOf = (ref: string) => r.patches[ref] ?? Object.values(r.patches).find((x) => [x.sha, ...(x.pastShas ?? [])].some((s) => s.startsWith(ref) || ref.startsWith(s)));
   const groups = new Map<string, { verdict: string; test: string; patches: Html[]; seen: Set<string>; configs: string[]; evidence: string; pids: string[] }>();
-  for (const c of p.analysis) {
+  for (const c of p.analysis ?? []) {
     const test = c.test ? relativeTest(r, c.test) : (c.taskId ?? "a job");
     const key = `${c.verdict}\n${testKey(test)}`;
     const g = groups.get(key) ?? { verdict: c.verdict, test, patches: [], seen: new Set<string>(), configs: [], evidence: c.evidence, pids: [] };
@@ -1441,7 +1457,13 @@ function pushAnalysis(r: RequestState, p: PushView, ctx: RenderContext): Html | 
       next(g) ? html`<div class="next">→ ${next(g)}</div>` : null
     }</li>`;
   const all = [...groups.values()];
-  return html`<h4 class="part">What the factory made of its failures</h4>${VERDICT_ORDER.filter((v) => all.some((g) => g.verdict === v)).map((v) => {
+  const toItem = ({ test, configs, item }: (typeof items)[number]) =>
+    html`<li>${relativeTest(r, test)}${configs.length ? html` <span class="sub">on ${configs.map((c) => c.replace(/^test-/, "")).join(", ")}</span>` : null}<div class="next">→ ${
+      item ? html`<a href="#${itemAnchor(r, item)}">${stateText(r, item, ctx)}</a>` : "no work item for it"
+    }</div></li>`;
+  return html`<h4 class="part">What the factory made of its failures</h4>${
+    items.length ? html`<h5 class="verdict">to their work items <span class="count">${plural(items.length, "test")}</span></h5><ul class="analysis">${items.map(toItem)}</ul>` : null
+  }${VERDICT_ORDER.filter((v) => all.some((g) => g.verdict === v)).map((v) => {
     const these = all.filter((g) => g.verdict === v);
     return html`<h5 class="verdict">${v} <span class="count">${plural(these.length, "test")}</span></h5><ul class="analysis">${these.slice(0, 5).map(li)}</ul>${
       these.length > 5 ? html`<details class="fold" data-fold="analysis-${p.id}-${v}"><summary>+${these.length - 5} more</summary><ul class="analysis">${these.slice(5).map(li)}</ul></details>` : null

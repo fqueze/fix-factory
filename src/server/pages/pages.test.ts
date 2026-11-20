@@ -1531,6 +1531,21 @@ describe("a made push's row", () => {
     assert.match(row, /<details class="fold" data-fold="pushjobs-initial"><summary>Its jobs, commits and command<\/summary><pre class="mono command">/);
   });
 
+  it("says which work item each test that failed went to, when triage didn't look at it", () => {
+    const r = made();
+    const item = Object.values(r.items).find((i) => i.group.tests.some((t) => t.endsWith("test_quota.js")))!;
+    r.pushes.initial.failing = [
+      { test: item.group.tests.find((t) => t.endsWith("test_quota.js"))!, configs: ["test-linux/opt-xpcshell", "test-mac/opt-xpcshell"] },
+      { test: "dom/indexedDB/test/unit/test_nobody.js", configs: ["test-linux/opt-xpcshell"] },
+    ];
+    r.pushes.initial.analysis = [cell("test_a.js", "infra")];
+    const row = rowOf(renderRequest(r, ctx, true).value, "push-initial");
+    assert.equal(stateOf(row), "14 failures, 2 groups · 1 test to their work items · 1 test: 1 infra");
+    assert.match(row, new RegExp(`<h5 class="verdict">to their work items <span class="count">2 tests</span></h5><ul class="analysis"><li>test_quota\\.js <span class="sub">on linux/opt-xpcshell, mac/opt-xpcshell</span><div class="next">→ <a href="#[^"]+">`));
+    assert.match(row, /<li>test_nobody\.js <span class="sub">on linux\/opt-xpcshell<\/span><div class="next">→ no work item for it<\/div><\/li>/);
+    assert.ok(row.indexOf("to their work items <") < row.indexOf(">infra <"));
+  });
+
   it("names the groups whose authors got its failures", () => {
     const r = made();
     r.jobs["j-a"] = job("j-a", "i-idb-quota", "try", "author:i-idb-quota:try:initial");

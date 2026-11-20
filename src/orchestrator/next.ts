@@ -411,6 +411,7 @@ class Planner {
   // Also set by the work list: a run of it hasn't finished, or a signal push has had none yet (not half its tests
   // done, nor 2 h old).
   private workListUnread = false;
+
   private stepSet = false;
   private readonly stackInfos = new Map<string, StackInfo>();
   private removing = false; // a burndown's skip-if removal isn't in its stack yet
@@ -459,6 +460,7 @@ class Planner {
     this.debugPushes();
     this.askedTests();
     this.reportedFailures();
+    this.recordFailing();
     // Your messages to authors whose worktree is being restored, and your restarts of them.
     for (const q of this.s.queuedAuthors ?? []) {
       // Superseded by a later run of its author (you restarted it again): that one's outcome is the item's.
@@ -3028,6 +3030,25 @@ class Planner {
         : `The user declined ${declined[0].own ? "the try push of your DEBUG commits" : "the stack's try push your DEBUG commits were to go on"}: “${declined[0].p.declined}”. Go on from what you know: fix it if you can show the cause, or report "not reproduced". End with the JSON report again.`;
       this.resumeAuthor(g.item.id, `author:${g.item.id}${this.itemEpoch(g.item.id)}:repro:${shortHash([...g.commits, ...ids]).slice(0, 8)}`, "repro", message);
     }
+  }
+
+  // The tests that failed in each push, as the latest read of its results (its final one once there) found them, for
+  // its row to say where each went, whatever the step.
+  private recordFailing(): void {
+    for (const p of Object.values(this.s.pushes)) {
+      const reads = this.view.jobs.filter((j) => j.purpose.key.startsWith(`try-table:${p.id}:`) && succeeded(j));
+      const read = reads.findLast((j) => j.purpose.key.split(":")[2].startsWith("final")) ?? reads.at(-1);
+      if (read) this.recordTable(p.id, read.purpose.key.split(":")[2], this.out<TryTable>(read));
+    }
+  }
+
+  private recordTable(push: PushId, run: string, t: TryTable): void {
+    const p = this.s.pushes[push];
+    const configs = new Map<string, string[]>();
+    for (const row of t.rows.filter((x) => x.result === "fail")) configs.set(row.test, [...(configs.get(row.test) ?? []), row.config]);
+    const failing = [...configs].sort(([a], [b]) => a.localeCompare(b)).map(([test, c]) => ({ test, configs: [...new Set(c)].sort() }));
+    if (p.failing && JSON.stringify(p.failing) === JSON.stringify(failing)) return;
+    this.event(this.ev("try-tests", { push, run, failing }));
   }
 
   private routeTryFailures(push: PushId, patches: PatchView[]): void {

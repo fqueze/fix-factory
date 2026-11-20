@@ -396,6 +396,12 @@ export function folder(first: Event): { apply(events: readonly Event[]): void; s
         case "try-progress":
           push(e.push).progress = { done: e.done, total: e.total, failures: e.failures, ...(e.tests ? { tests: e.tests } : {}) };
           break;
+        case "try-tests": {
+          const p = push(e.push);
+          p.failing = e.failing;
+          p.failingRun = e.run;
+          break;
+        }
         case "try-finished": {
           const p = push(e.push);
           p.result = e.result;
