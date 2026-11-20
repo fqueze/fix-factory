@@ -698,7 +698,7 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.match(renderRequest(r, ctx, true).value, /<span class="bug none" title="Goes under the meta bug">meta bug<\/span><span class="ptitle">Save the prefs file/);
     assert.match(h, /⛔ hard: needs “Make nsLocalFile::CopyDirectoryTo/);
     assert.match(h, /🔗 soft: needs a newer sqlite on the try builders \(the vacuum test is slow without it\)/);
-    assert.match(rowOf(h, "patch-p-prefs"), /<summary>The failure and its cause<\/summary><div class="failure">Test wrote into its own directory · 31 failures\/week · <a href="https:\/\/tests\.firefox\.dev\/test\.html\?test=storage%2Ftest%2Funit%2Ftest_libPrefs\.js"[^>]*>rates on tests\.firefox\.dev ↗<\/a><\/div><div class="sub">linux64\/debug, windows11-64\/opt<\/div>/);
+    assert.match(rowOf(h, "patch-p-prefs"), /<h4 class="part">The failure<\/h4><div class="failure">Test wrote into its own directory · 31 failures\/week · <a href="https:\/\/tests\.firefox\.dev\/test\.html\?test=storage%2Ftest%2Funit%2Ftest_libPrefs\.js"[^>]*>rates on tests\.firefox\.dev ↗<\/a><\/div><div class="sub">linux64\/debug, windows11-64\/opt<\/div>/);
     assert.match(rowOf(h, "patch-p-prefs"), /<span class="onhover"><span>review effort 1\/5<\/span>/);
     assert.match(h, /<div class="failure">[^<]* · 40 failures\/week · /);
     assert.doesNotMatch(h, /Allow one try push/);
@@ -1393,7 +1393,7 @@ describe("a burndown with closed groups, running agents and a dropped patch", ()
     const patch = rowOf(h, "patch-p-close");
     assert.match(patch, /review effort \d\/5/);
     assert.match(patch, /<div class="failure">[^<]* · [\d.]+ failures\/week · /);
-    assert.match(patch, /<summary>The failure and its cause<\/summary>[^]*<h4 class="part">What the factory did<\/h4>/, "in that order");
+    assert.match(patch, /<h4 class="part">The failure<\/h4>[^]*<h4 class="part">What the factory did<\/h4>/, "in that order");
     const r = structuredClone(get("r-20261013-tab-failures"));
     delete r.patches["p-close"].effort;
     delete r.items["i-close"].group.ratePerWeek;
@@ -1688,9 +1688,10 @@ describe("test plan", () => {
     const r = structuredClone(get("r-20261005-newtab"));
     r.patches["p-panel"].testPlan = "- Widened the race in `foo()`: 6/6, 0/20 with the fix.";
     let row = rowOf(renderRequest(r, ctx, true).value, "patch-p-panel");
-    assert.ok(row.indexOf('<h4 class="part">Test plan</h4>') > row.indexOf("The failure and its cause"), "after the failure");
+    assert.ok(row.indexOf('<h4 class="part">Test plan</h4>') > row.indexOf('<h4 class="part">The failure</h4>'), "after the failure");
     assert.match(row, /<div class="testplan"><div class="md"><ul><li>Widened the race in <code>foo\(\)<\/code>: 6\/6, 0\/20 with the fix\.<\/li><\/ul><\/div><form class="cmd revise joined"/);
-    assert.match(row, /<textarea hidden id="test-plan-p-panel">- Widened the race in `foo\(\)`: 6\/6, 0\/20 with the fix\.<\/textarea><button type="button" class="btn small" data-copy="test-plan-p-panel">Copy<\/button>/);
+    assert.match(row, /<textarea hidden id="test-plan-p-panel">- Widened the race in `foo\(\)`: 6\/6, 0\/20 with the fix\.<\/textarea>/);
+    assert.match(row, /<form class="cmd revise joined"[^]*?<button type="button" class="btn small" data-copy="test-plan-p-panel">Copy<\/button><textarea name="text"/, "Copy left of the box to revise it");
     assert.ok(row.includes(cmd({ cmd: "set-test-plan", request: r.id, patch: "p-panel", text: r.patches["p-panel"].testPlan })));
     assert.match(row, /Set as D327083(&#39;|')s test plan/);
     assert.ok(row.includes(cmd({ cmd: "revise-test-plan", request: r.id, patch: "p-panel" })));

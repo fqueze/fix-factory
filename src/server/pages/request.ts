@@ -615,9 +615,9 @@ function failure(r: RequestState, i: ItemView, prefix: string | null = "The fail
   }`;
 }
 
-// On a patch's row, folded: the failure in one sentence, then its cause.
-function whyFold(r: RequestState, i: ItemView): Html {
-  return html`<details class="fold" data-fold="why-${i.id}"><summary>The failure and its cause</summary>${failureLine(r, i)}${investigationHtml(i)}</details>`;
+// On a patch's row: its cause, then the failure in one sentence and where it failed.
+function whyPart(r: RequestState, i: ItemView): Html {
+  return html`${investigationHtml(i)}<h4 class="part">The failure</h4>${failureLine(r, i)}`;
 }
 
 // The harness's words for a failure it retried in a fresh browser, which say nothing on their own.
@@ -757,7 +757,7 @@ function patchRow(r: RequestState, p: PatchView, ctx: RenderContext): Html {
     })(),
     under: parts.under,
     lazy: { r, ctx },
-    body: () => html`${item ? whyFold(r, item) : null}${parts.body()}${controls && !sentence?.ask ? html`<div class="jobctl">${controls}</div>` : null}${
+    body: () => html`${item ? whyPart(r, item) : null}${parts.body()}${controls && !sentence?.ask ? html`<div class="jobctl">${controls}</div>` : null}${
       item ? html`<h4 class="part">What the factory did</h4>${itemJobs(r, item, ctx)}${talkBox(r, item, ctx, p)}` : null
     }`,
   });
@@ -814,7 +814,7 @@ function fixRow(r: RequestState, ps: PatchView[], ctx: RenderContext): Html {
     })(),
     under: parts.some((x) => x.under) ? html`${parts.map((x) => x.under)}` : null,
     lazy: { r, ctx },
-    body: () => html`${whyFold(r, item)}${ps.map((p, n) => {
+    body: () => html`${whyPart(r, item)}${ps.map((p, n) => {
       const b = parts[n].body();
       return b.value.trim() ? html`<h4 class="part">${patchTitle(p)}</h4>${b}` : null;
     })}${controls && !sentence.ask ? html`<div class="jobctl">${controls}</div>` : null}<h4 class="part">What the factory did</h4>${itemJobs(r, item, ctx)}${talkBox(r, item, ctx, ps[0])}`,
@@ -867,8 +867,8 @@ function testPlanSection(r: RequestState, p: PatchView, back: string): Html | nu
   const revise =
     p.testPlan === undefined
       ? null
-      : html`<form class="cmd revise joined" method="post" action="/api/commands">${commandFields([{ cmd: "revise-test-plan", request: r.id, patch: p.id }], back)}<textarea name="text" required rows="2" placeholder="What should change? The agent that wrote it gets this"></textarea><button class="btn small" title="Enter sends; Shift+Enter for a new line">Send</button></form>`;
-  return html`<div class="parthead"><h4 class="part">Test plan</h4>${status}<textarea hidden id="${id}">${text}</textarea><button type="button" class="btn small" data-copy="${id}">Copy</button>${set}</div><div class="testplan">${md(text, itemOf(r, p)?.group.tests)}${revise}</div>`;
+      : html`<form class="cmd revise joined" method="post" action="/api/commands">${commandFields([{ cmd: "revise-test-plan", request: r.id, patch: p.id }], back)}<button type="button" class="btn small" data-copy="${id}">Copy</button><textarea name="text" required rows="2" placeholder="What should change? The agent that wrote it gets this"></textarea><button class="btn small" title="Enter sends; Shift+Enter for a new line">Send</button></form>`;
+  return html`<div class="parthead"><h4 class="part">Test plan</h4>${status}<textarea hidden id="${id}">${text}</textarea>${revise ? null : html`<button type="button" class="btn small" data-copy="${id}">Copy</button>`}${set}</div><div class="testplan">${md(text, itemOf(r, p)?.group.tests)}${revise}</div>`;
 }
 
 // The bug its commit message starts with; the link of one to file opens Bugzilla's form prefilled with its draft.

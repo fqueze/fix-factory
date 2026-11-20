@@ -288,6 +288,7 @@ details.row .state .working { color: var(--accent); font-weight: 600; }
 .rowbody { padding: 2px 12px 10px 38px; font-size: 13px; display: flex; flex-direction: column; gap: 4px; }
 details.row[open] > :is(.under, .rowbody) { position: relative; }
 details.row[open] > :is(.under, .rowbody)::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 38px; cursor: pointer; }
+.rowbody > details.fold > summary { padding: 4px 0; }
 .rowbody .failure { overflow-wrap: anywhere; }
 .jobs { display: flex; flex-direction: column; gap: 2px; font-size: 12px; margin-top: 4px; }
 .jobs .job { font-weight: normal; }
@@ -410,8 +411,8 @@ hr.part + .rows { margin-top: 0; }
 .fb { margin: 0 0 14px; }
 .fb .sub code { color: var(--text-muted); }
 header h1 a { color: inherit; text-decoration: none; }
-.testplan { border-left: 3px solid var(--border); padding-left: 8px; }
 .testplan form.revise { margin-top: 6px; }
+.testplan form.revise > .btn[data-copy] { align-self: flex-start; margin: 0 6px 0 0; border-radius: 6px; }
 .parthead { display: flex; gap: 6px; flex-wrap: wrap; align-items: baseline; margin: 10px 0 3px; }
 .rowbody .parthead h4.part { margin: 0 4px 0 0; }
 .rowbody .parthead:first-child { margin-top: 2px; }
