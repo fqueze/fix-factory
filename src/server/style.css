@@ -286,6 +286,8 @@ details.row .rowflag .flagitem { display: flex; flex-wrap: wrap; gap: 4px 8px; a
 /* An agent working on it right now: what you'd look for. */
 details.row .state .working { color: var(--accent); font-weight: 600; }
 .rowbody { padding: 2px 12px 10px 38px; font-size: 13px; display: flex; flex-direction: column; gap: 4px; }
+details.row[open] > :is(.under, .rowbody) { position: relative; }
+details.row[open] > :is(.under, .rowbody)::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 38px; cursor: pointer; }
 .rowbody .failure { overflow-wrap: anywhere; }
 .jobs { display: flex; flex-direction: column; gap: 2px; font-size: 12px; margin-top: 4px; }
 .jobs .job { font-weight: normal; }

@@ -323,6 +323,10 @@
     if (t.closest("summary .action") && !t.closest("button, a, input, textarea, select, label")) {
       event.preventDefault();
     }
+    // The left margin of an open row's body folds it, as its icon does.
+    if (t.matches("details.row[open] > :is(.under, .rowbody)") && event.offsetX < parseFloat(getComputedStyle(t).paddingLeft)) {
+      t.parentElement.open = false;
+    }
     var clamped = t.closest("[data-expand]");
     if (clamped && !t.closest("a")) clamped.classList.toggle("open");
     // Revise… opens its push's row at the box.
