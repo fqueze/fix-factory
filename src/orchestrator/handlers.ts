@@ -126,7 +126,8 @@ export function handleFinished(input: HandlerInput): HandlerResult {
       const cluster = input.view.byKey.get(purpose.key.replace(/^merge:/, "cluster:"))!.findLast(succeeded)!;
       const clusters = (JSON.parse(input.outputOf(cluster.job)) as { groups: ClusterGroup[] }).groups;
       const given = new Set(clusters.flatMap((g) => g.tests));
-      const keys = new Set(clusters.map((g) => g.key));
+      // A cluster is named by its key, or by its message, which agents copy as often.
+      const keys = new Set(clusters.flatMap((g) => [g.key, g.message]));
       const report = input.report as MergeClustersReport;
       const got = new Set(report.groups.flatMap((g) => g.tests));
       const missing = [...given].filter((t) => !got.has(t));

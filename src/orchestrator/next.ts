@@ -1214,7 +1214,8 @@ class Planner {
     const clustersFile = dataPath(this.config, this.s.id, `clusters-${scope}-${run}.json`);
     const merge = this.wantAgent(`merge:${scope}:${run}`, "merge", "merge-clusters", { clustersFile, logsDir: artifactsDir(this.config), request: this.s.text.trim() }, { files: [{ path: clustersFile, content: JSON.stringify({ groups }, null, 2) + "\n" }] });
     if (!merge) return undefined;
-    const byKey = new Map(groups.map((g) => [g.key, g]));
+    // By its key, or its message, which agents copy as often.
+    const byKey = new Map(groups.flatMap((g) => [[g.message, g] as const, [g.key, g] as const]));
     const merged = this.rep<MergeClustersReport>(merge).groups.map((g) => {
       // Where it failed comes from the clusters it merges, never from the agent: one gave every group the folder's
       // configs, and cluster keys that matched none. Those then come from the clusters of its tests.

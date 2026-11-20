@@ -589,6 +589,13 @@ describe("3. work list", () => {
     assert.deepEqual(sc.of("agent-report"), []);
   });
 
+  it("takes a merge-clusters report naming clusters by their messages, as by their keys", () => {
+    const sc = clustered();
+    sc.complete("merge:initial:final", { report: { groups: [{ message: "boom", tests: ["a/test_a.js", "b/test_b.js"], configs: [], from: ["boom", "bang"], reason: "same crash" }], feedback: [] } });
+    sc.step();
+    assert.deepEqual(sc.state().items["i-test-a"].group.configs, ["linux/opt-xpcshell", "mac/opt-xpcshell", "win/debug-xpcshell"]);
+  });
+
   it("takes the configs of a merged group that names no existing cluster from the clusters of its tests", () => {
     const sc = clustered();
     // Recorded before unknown keys were rejected.
