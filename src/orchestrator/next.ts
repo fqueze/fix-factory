@@ -165,8 +165,9 @@ export const SUBMIT_IMPORT_SOON_MS = 20_000; // the first minutes after you copy
 export const SUBMIT_WATCH_MS = 60 * 60_000; // after you copy the moz-phab command
 export { ANNOTATIONS_ITEM };
 export const LINT_ROUNDS = 2;
-// Lint rules about style alone: once the author's rounds are spent, they no longer hold a patch back.
-const SOFT_LINT_RULES = ["bodyLength"];
+// Lint rules about style alone, or wording that can be right (a commit message saying what its evidence doesn't show):
+// once the author's rounds are spent, they no longer hold a patch back. You judge them in review.
+const SOFT_LINT_RULES = ["bodyLength", "noHedging"];
 export const REVIEW_ROUNDS = 3;
 export const STACK_REVIEW_ROUNDS = 3;
 export const CANCELLED = "cancelled by you";
