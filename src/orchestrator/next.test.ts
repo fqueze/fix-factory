@@ -198,6 +198,20 @@ describe("2. first signal", () => {
     assert.deepEqual(sc.settle(), ["annotations"]);
   }
 
+  it("a job that failed twice asks you; once it succeeds (run again by you), what it asked is gone", () => {
+    const sc = burndown();
+    const plan = sc.plan("wt:signal");
+    sc.complete("wt:signal", { exitCode: 1, error: "boom" });
+    sc.settle();
+    sc.complete("wt:signal", { exitCode: 1, error: "boom" });
+    sc.settle();
+    assert.equal(sc.open().filter((k) => k.startsWith("failed:")).length, 1);
+    sc.startJob({ ...plan, purpose: { ...plan.purpose } });
+    sc.complete("wt:signal", { output: { name: `${ID}-signal`, path: `/wt/${ID}-signal`, branch: `${ID}-signal` } });
+    sc.settle();
+    assert.deepEqual(sc.open().filter((k) => k.startsWith("failed:")), []);
+  });
+
   it("lists the skips, classifies each, writes the annotation patches, reviews the run-if and plans the un-skip push", () => {
     const sc = burndown();
     assert.deepEqual(sc.view().jobs.filter((j) => !j.end && !j.purpose.key.startsWith("test-plan:")).map((j) => j.purpose.key), ["wt:signal"]);

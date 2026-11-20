@@ -23,7 +23,7 @@ import type { BugInfo, BugLandings } from "../cli/bugzilla.ts";
 import { itemDir, keptDir } from "../lib/kept.ts";
 import { REQUEST_STEPS } from "../server/commands.ts";
 import { isReviewComment, landingState, unpostedReplies } from "../state/landing.ts";
-import { BRANCH_MOVED, COMMITS_CHANGED, unreachable } from "../state/flags.ts";
+import { BRANCH_MOVED, CANNOT_START, COMMITS_CHANGED, unreachable } from "../state/flags.ts";
 import { ANNOTATIONS_ITEM, lacksBug, needsMetaBug, sameBugDraft } from "../state/meta-bug.ts";
 import type { EventInput } from "../state/events.ts";
 import type {
@@ -165,7 +165,8 @@ export const SUBMIT_IMPORT_SOON_MS = 20_000; // the first minutes after you copy
 export const SUBMIT_WATCH_MS = 60 * 60_000; // after you copy the moz-phab command
 export { ANNOTATIONS_ITEM };
 export const LINT_ROUNDS = 2;
-const CANNOT_RUN = "job-wrapper: cannot run "; // src/state/job-wrapper.ts, when a job can't be spawned
+// src/state/job-wrapper.ts, when a job can't be spawned (CANNOT_START: its directory is gone).
+const CANNOT_RUN = "job-wrapper: cannot run ";
 // Lint rules about style alone, or wording that can be right (a commit message saying what its evidence doesn't show):
 // once the author's rounds are spent, they no longer hold a patch back. You judge them in review.
 const SOFT_LINT_RULES = ["bodyLength", "noHedging"];
@@ -652,7 +653,11 @@ class Planner {
       return undefined;
     }
     if (!last.end) return undefined;
-    if (succeeded(last)) return last;
+    if (succeeded(last)) {
+      // What its earlier failures asked of you is moot.
+      for (const j of jobs) if (j !== last) this.clear(`failed:${j.job}`);
+      return last;
+    }
     // You cancelled it: nothing happens until you say what to do instead (a continue or retry reopens it).
     if (last.end.error?.startsWith(CANCELLED)) {
       if (!this.view.done.has(`reopen:${last.job}`)) return undefined;
@@ -664,7 +669,7 @@ class Planner {
     if (last.end.error?.includes(BRANCH_MOVED)) return undefined;
     // It couldn't start (its directory gone: a freed worktree): made again from what it has now, when that runs
     // elsewhere, whatever its earlier tries.
-    if (make && last.end.error?.startsWith(CANNOT_RUN)) {
+    if (make && (last.end.error?.startsWith(CANNOT_RUN) || last.end.error?.startsWith(CANNOT_START))) {
       const again = make();
       if (again.cwd !== last.cwd) {
         this.clear(`failed:${last.job}`);

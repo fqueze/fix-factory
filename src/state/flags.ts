@@ -22,6 +22,8 @@ export const COMMITS_CHANGED = "not pushed: commits changed";
 // In stack.ts rewrite's error when the branch has commits the factory hasn't read (moz-phab submit gave them their
 // revisions): nothing was rewritten; the branch is read, and the rewrite made again from it.
 export const BRANCH_MOVED = "the branch changed since the factory read it";
+// What job-wrapper.ts writes when a job's directory is gone (a freed worktree): next() makes it again elsewhere.
+export const CANNOT_START = "It couldn't start:";
 
 // A request that never reached the server (no network yet, e.g. just after the computer woke up): Node's fetch says
 // "fetch failed", curl names the step (6: resolving the host, 7: connecting, 28: timed out, 35: TLS, 56: receiving).

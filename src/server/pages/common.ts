@@ -571,6 +571,7 @@ const JOB_LABELS: Record<string, string> = {
   "stack.ts import": "import commits",
   "stack.ts interdiff": "interdiff",
   "stack.ts order": "order stack",
+  "stack.ts patch-id": "compare its code with Phabricator's",
   "stack.ts rewrite": "rewrite stack",
   "stack.ts summary": "meta-bug comment",
   "try.ts dry-run": "try dry run",

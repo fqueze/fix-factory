@@ -11,6 +11,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { appendFileSync, existsSync, openSync, readFileSync } from "node:fs";
 import { constants } from "node:os";
 import { join } from "node:path";
+import { CANNOT_START } from "./flags.ts";
 import type { JobSpec } from "./jobs.ts";
 import { writeFileAtomic } from "./jsonl.ts";
 
@@ -53,7 +54,8 @@ try {
     stdio: [stdin, out, err],
   });
   child.on("error", (e) => {
-    appendFileSync(errPath, `job-wrapper: cannot run ${JSON.stringify(spec.cmd)} in ${spec.cwd}: ${e.message}\n`);
+    // Node says "spawn <program> ENOENT" for a directory that's gone (a freed worktree) as for a missing program.
+    appendFileSync(errPath, existsSync(spec.cwd) ? `job-wrapper: cannot run ${JSON.stringify(spec.cmd)} in ${spec.cwd}: ${e.message}\n` : `${CANNOT_START} ${spec.cwd} doesn't exist anymore\n`);
     finish(127);
   });
   child.on("exit", (code, signal) => {
