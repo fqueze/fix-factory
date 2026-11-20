@@ -104,6 +104,8 @@ describe("pages", () => {
     assert.doesNotMatch(alone, /<!--fold-->|data-request=/);
     const cookie = `opened=${encodeURIComponent(encodeURIComponent(`r-20261005-newtab ${decodeURIComponent(src[2])}`))}`;
     assert.ok((await (await fetch(`${base}/fragments/requests/r-20261005-newtab?open=1`, { headers: { cookie } })).text()).includes(alone));
+    // Told the folds on the way to it (none here), the same, without rendering the others' contents.
+    assert.equal(await (await fetch(`${base}${src[1]}?within=`)).text(), alone);
     assert.equal((await fetch(`${base}/fragments/requests/r-20261005-newtab/folds/nope`)).status, 404);
     assert.match(await (await fetch(`${base}/fragments/strip`)).text(), /id="strip"[^]*disk <b>[\d.]+ [GT]B<\/b> free/);
     assert.match(await (await fetch(`${base}/fragments/main`)).text(), /<h2>Active/);

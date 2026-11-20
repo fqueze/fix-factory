@@ -30,6 +30,7 @@ export interface RenderContext {
   // ones' and onlyFold's (marked), the others a placeholder client.js fills when opened.
   onlyFold?: string;
   insideFold?: boolean; // while onlyFold's contents render
+  onlyFoldWithin?: Set<string>; // the folds on the way to onlyFold, when known: the others' contents aren't rendered
   // A file the factory wrote, by its path relative to stateDir (an interdiff since a push).
   readData?: (rel: string) => string | undefined;
   // An agent's conversation, as its job's activity URL gives it: rendered in the page when its job is open.
@@ -624,7 +625,7 @@ export function plural(n: number, one: string, many = `${one}s`): string {
 export function foldContent(r: RequestState, ctx: RenderContext, fold: string, content: () => Html): Html {
   // Asked for alone: the folds on the way to it are rendered, the ones inside it follow the rules below.
   if (ctx.onlyFold !== undefined && !ctx.insideFold) {
-    if (fold !== ctx.onlyFold) return content();
+    if (fold !== ctx.onlyFold) return !ctx.onlyFoldWithin || ctx.onlyFoldWithin.has(fold) ? content() : html``;
     ctx.insideFold = true;
     try {
       return html`<!--fold-->${content()}<!--/fold-->`;

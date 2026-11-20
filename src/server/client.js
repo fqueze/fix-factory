@@ -272,7 +272,10 @@
       Array.prototype.forEach.call(d.querySelectorAll(".lazy[data-src]"), function (box) {
         if (box.closest("details") !== d || box.dataset.loading) return;
         box.dataset.loading = "1";
-        fetchText(box.dataset.src).then(
+        // The folds on the way to it: the server renders those, not every other fold's contents.
+        var within = [];
+        for (var a = d.parentElement && d.parentElement.closest("details[data-fold]"); a; a = a.parentElement && a.parentElement.closest("details[data-fold]")) within.push("within=" + encodeURIComponent(a.dataset.fold));
+        fetchText(box.dataset.src + "?" + (within.length ? within.join("&") : "within=")).then(
           function (text) {
             if (!box.isConnected) return;
             var fresh = parse(text);

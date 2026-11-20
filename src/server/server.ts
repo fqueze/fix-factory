@@ -418,7 +418,8 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
     if ((m = path.match(/^\/fragments\/requests\/([^/]+)\/folds\/([^/]+)$/))) {
       const r = getRequest(decodeURIComponent(m[1]));
       const fold = decodeURIComponent(m[2]);
-      const page = renderRequest(r, { ...ctx(req), openFolds: openedOf(req).folds, onlyFold: fold }, true).value;
+      const within = url.searchParams.has("within") ? new Set(url.searchParams.getAll("within")) : undefined;
+      const page = renderRequest(r, { ...ctx(req), openFolds: openedOf(req).folds, onlyFold: fold, ...(within ? { onlyFoldWithin: within } : {}) }, true).value;
       const cut = /<!--fold-->([^]*?)<!--\/fold-->/.exec(page);
       if (!cut) throw new HttpError(404, "no such fold");
       return send(res, 200, "text/html; charset=utf-8", cut[1]);
