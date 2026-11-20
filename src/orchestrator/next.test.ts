@@ -2866,8 +2866,10 @@ describe("7. meta bug", () => {
     const [rewrite] = sc.settle();
     assert.match(rewrite, /^rewrite-bugs:root:/);
     assert.deepEqual(JSON.parse(sc.plan(rewrite).files![0].content), { [sha("d")]: { bug: 999 } }, "not test_b's fix, which has no bug");
-    sc.complete(rewrite, { output: { mapping: { [sha("c")]: sha("e"), [sha("d")]: sha("f") } } });
+    sc.complete(rewrite, { output: { mapping: { [sha("c")]: sha("e"), [sha("d")]: sha("f") }, diffChanged: [sha("c")] } });
     assert.equal(sc.state().patches["p-test-a"].title, "Bug 999 - Fix a/test_a.js, r=smaug.");
+    assert.equal(sc.state().patches["p-test-a"].diffSha, sha("d"), "only its message changed: it keeps its diff's commit");
+    assert.equal(sc.state().patches["p-test-b"].diffSha, undefined);
     assert.equal(sc.state().patches["p-test-a"].bug, 999);
     assert.equal(sc.state().patches["p-test-b"].bug, null);
   });
@@ -4248,6 +4250,24 @@ describe("9. a try push of a submitted stack", () => {
     sc.add({ type: "review-status", request: ID, patch: "p-test-a", ...p.review!, diff: { id: 10, commit: past, created: "2026-01-01T00:00:00.000Z" } });
     sc.settle();
     assert.ok(!sc.state().needsUser.some((n) => n.patch === "p-test-a" && n.key.startsWith("resubmit:")), "not asked again");
+  });
+
+  it("a rewrite that leaves a patch's diff as it was doesn't compare it with Phabricator's again; one that changes it does", () => {
+    const sc = inReview();
+    const p = sc.state().patches["p-test-a"];
+    sc.complete("poll:0", { output: polled("needs-review", [], "pending").map((x) => ({ ...x, diff: { id: 9, commit: p.pastShas![0], created: "2026-01-01T00:00:00.000Z" } })) });
+    const inter = sc.settle().find((k) => k.startsWith("interdiff:p-test-a:phab-"))!;
+    sc.complete(inter, { output: { diff: "", method: "same-parent" } });
+    sc.settle();
+    // A rewrite of the stack (its landing order, bug numbers) gives it a new sha with the same diff (handlers: diffSha).
+    const moved = (diffSha: boolean) => {
+      const cur = sc.state().patches["p-test-a"];
+      const { id, deps: _d, review: _r, replyDrafts: _rd, diffSha: _ds, ...rest } = cur;
+      sc.add({ type: "patch", request: ID, patch: id, ...rest, sha: sha(String(cur.sha.charCodeAt(0) + 1)), ...(diffSha ? { diffSha: cur.diffSha ?? cur.sha } : {}) });
+      return sc.settle().filter((k) => k.startsWith("interdiff:p-test-a:phab-") && !k.endsWith(":msg"));
+    };
+    assert.deepEqual(moved(true), [], "the same diff: compared already");
+    assert.equal(moved(false).length, 1, "its diff changed: compared again");
   });
 
   it("a diff submitted from a commit this repository doesn't have is compared with what the factory sent", () => {

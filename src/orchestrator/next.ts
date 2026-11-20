@@ -3643,7 +3643,8 @@ class Planner {
       const item = p.item ? this.s.items[p.item] : undefined;
       if (!st || !base || base === p.sha || item?.state !== "waiting for review" || p.review?.status === "published") continue;
       if (this.s.needsUser.some((n) => n.patch === p.id && (n.key.startsWith("resubmit:") || n.key.startsWith("reply:")))) continue;
-      const inter = this.want(`interdiff:${p.id}:phab-${base.slice(0, 12)}:${p.sha.slice(0, 12)}`, () =>
+      // By its diff's commit: a rewrite that changed only its message or its sha doesn't make it again.
+      const inter = this.want(`interdiff:${p.id}:phab-${base.slice(0, 12)}:${(p.diffSha ?? p.sha).slice(0, 12)}`, () =>
         this.cli("interdiff", "stack.ts", ["interdiff", "--cwd", st.worktree, base, p.sha], { cwd: st.worktree, priority: REVIEW_PRIORITY, purpose: { patch: p.id, stack: st.id } }),
       );
       // You dismissed asking to resubmit that same change: not asked again until it changes (a rebase doesn't).

@@ -202,6 +202,7 @@ export type Event =
       effort?: number; // 1-5
       testOnly?: boolean;
       interdiffFile?: string; // diff against the previously submitted version, relative to stateDir
+      diffSha?: string; // with a new sha: the earlier commit whose diff it still has, context included (a rewrite that kept it)
     })
   | (EventBase & { type: "test-plan"; patch: PatchId; text: string })
   // What changed in a stack since its last push: each patch's commit then and now, the interdiff of those that changed.
@@ -418,6 +419,7 @@ export interface PatchView {
   testOnly?: boolean;
   pastShas?: string[]; // its commit's earlier shas, oldest first
   interdiffFile?: string;
+  diffSha?: string; // the earlier commit whose diff, context included, this one still has: what depends on its diff alone is kept
   deps: Dep[]; // deps where this patch is the dependent one
   review?: { revision: number; status: string; reviewers: ReviewerStatus[]; comments: InlineComment[]; diff?: PhabDiff; author?: string; parent?: number }; // parent: the revision under it on Phabricator
   replyDrafts: { commentId: number; text: string }[];

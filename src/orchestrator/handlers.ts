@@ -78,8 +78,9 @@ export function handleFinished(input: HandlerInput): HandlerResult {
   const ev = <T extends EventInput["type"]>(type: T, fields: Fields<T>) => events.push({ type, request: s.id, ...fields } as unknown as EventInput);
   const json = <T>() => JSON.parse(input.output) as T;
   const patchEvent = (p: PatchView, changes: Partial<PatchView>) => {
-    const { deps: _d, review: _r, replyDrafts: _rd, id, ...rest } = { ...p, ...changes };
-    ev("patch", { patch: id, ...rest });
+    // diffSha only when given: a new sha's diff is another, unless what made it says otherwise.
+    const { deps: _d, review: _r, replyDrafts: _rd, id, diffSha: _ds, ...rest } = { ...p, ...changes };
+    ev("patch", { patch: id, ...rest, ...(changes.diffSha ? { diffSha: changes.diffSha } : {}) });
   };
   // Keyed by the sha an author reported, which may be shorter than 12 characters; the scripts answer with full ones.
   const byShaPrefix = (sha: string): PatchView | undefined => {
@@ -218,7 +219,7 @@ export function handleFinished(input: HandlerInput): HandlerResult {
     }
     case "assemble":
     case "rewrite": {
-      const o = json<{ commits?: { sha: string; newSha: string; title: string }[]; mapping?: Record<string, string>; titles?: Record<string, string> }>();
+      const o = json<{ commits?: { sha: string; newSha: string; title: string }[]; mapping?: Record<string, string>; titles?: Record<string, string>; diffChanged?: string[] }>();
       const pairs = [...(o.commits ?? []).map((c) => [c.sha, c.newSha, c.title] as const), ...Object.entries(o.mapping ?? {}).map(([old, sha]) => [old, sha, o.titles?.[sha]] as const)];
       for (const [old, sha, title] of pairs) {
         const p = byShaPrefix(old);
@@ -227,7 +228,9 @@ export function handleFinished(input: HandlerInput): HandlerResult {
         // kept in p.bug goes back in with the next bug rewrite.
         // (Outputs without titles, as in tests, keep the patch's.)
         const bug = purpose.edits?.[p.id];
-        patchEvent(p, { sha, worktree: job.cwd, title: title ?? purpose.titles?.[p.id] ?? (bug !== undefined ? p.title.replace(/^Bug X+\b/i, `Bug ${bug}`) : p.title), ...(bug !== undefined ? { bug } : {}) });
+        // A rewrite says whose diff it changed: the others still have their earlier commit's.
+        const kept = o.diffChanged !== undefined && old !== sha && !o.diffChanged.includes(old) && p.sha === old;
+        patchEvent(p, { ...(kept ? { diffSha: p.diffSha ?? old } : {}), sha, worktree: job.cwd, title: title ?? purpose.titles?.[p.id] ?? (bug !== undefined ? p.title.replace(/^Bug X+\b/i, `Bug ${bug}`) : p.title), ...(bug !== undefined ? { bug } : {}) });
       }
       break;
     }

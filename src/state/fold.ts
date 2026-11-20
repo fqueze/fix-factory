@@ -288,6 +288,8 @@ export function folder(first: Event): { apply(events: readonly Event[]): void; s
             effort: e.effort,
             testOnly: e.testOnly,
             interdiffFile: e.interdiffFile,
+            // Kept while its sha is; a new sha has it only when its event says so.
+            ...((e.sha === before?.sha ? before.diffSha : e.diffSha) ? { diffSha: e.sha === before?.sha ? before!.diffSha : e.diffSha } : {}),
             ...(submittedAt ? { submittedAt } : {}),
             ...(sentSha ? { sentSha } : {}),
             // Its commit's earlier shas (before rebases and rewrites): what agents may still call it by.
