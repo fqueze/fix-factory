@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { runInNewContext } from "node:vm";
-import { injectSendButton } from "./stack-review.ts";
+import { injectSendButton, sendFromReviewBar } from "./stack-review.ts";
 import type { Annotations } from "./review-annotations.ts";
 
 const SHA = "a".repeat(40);
@@ -97,5 +97,12 @@ describe("the review page's script", () => {
     p.fire("mdv-link", { commit: SHA, text: "⚑ Bug to file", href: "x" });
     assert.equal(p.filing.length, 2, "the panel's link too");
     assert.deepEqual(JSON.parse(JSON.stringify(p.updated[0][1].titleLinks)), [{ text: "Bug XXXXXXX", href: "https://bugzilla.mozilla.org/show_bug.cgi?id=2000001", label: "Bug 2000001", tooltip: "The factory puts it in the commit message" }], "the link goes to the bug, under its number");
+  });
+});
+
+describe("a commit's frame", () => {
+  it("makes md-viewer's floating Copy review the factory's Send, before </body>", () => {
+    const page = sendFromReviewBar('<body><div id="mdv-review"><button class="mdv-review-copy">Copy review</button></div></body>');
+    assert.match(page, /<script>[^]*\.mdv-review-copy[^]*data-action="send"[^]*Send comments to the factory[^]*<\/script><\/body>$/);
   });
 });

@@ -18,7 +18,7 @@ import { renderMain, renderOverview, renderStrip } from "./pages/overview.ts";
 import { renderRequest } from "./pages/request.ts";
 import { buildRequestProfile } from "./request-profile.ts";
 import type { NetEntry } from "../lib/netlog.ts";
-import { buildPatchView, buildPushView, buildStackReview, isRevName, takesAnnotations, type Served } from "./stack-review.ts";
+import { buildPatchView, buildPushView, buildStackReview, isRevName, sendFromReviewBar, takesAnnotations, type Served } from "./stack-review.ts";
 import { commitAnnotation, gitIn, type AnnotationIo } from "./review-annotations.ts";
 import { reviewApi, reviewPages, type ReviewPages } from "./review-pages.ts";
 import { fingerprinter } from "../lib/fingerprint.ts";
@@ -533,7 +533,7 @@ export function createFactoryServer(opts: ServerOptions): FactoryServer {
       } catch (e) {
         throw new HttpError(502, errorMessage(e));
       }
-      return send(res, 200, "text/html; charset=utf-8", page);
+      return send(res, 200, "text/html; charset=utf-8", io ? sendFromReviewBar(page) : page);
     }
     if ((m = path.match(/^\/requests\/([^/]+)\/stacks\/([^/]+)\/review$/))) {
       const request = getRequest(decodeURIComponent(m[1]));

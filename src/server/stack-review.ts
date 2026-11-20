@@ -382,6 +382,36 @@ function bugDraftsOf(request: RequestState, patches: PatchId[]): Record<PatchId,
   );
 }
 
+// In a commit's frame, md-viewer's floating Copy review is the factory's Send: the end of the page's, which it clicks
+// and whose label it shows (Sending…, Sent), so it is at hand at any point of a long patch.
+const BAR_SEND_SCRIPT = `
+(function () {
+  var copy = document.querySelector("#mdv-review .mdv-review-copy");
+  if (!copy) return;
+  var send = function () { return document.querySelector('.mdv-actions-end button[data-action="send"]'); };
+  var mirror = function () {
+    var b = send();
+    var label = b ? b.textContent : ${JSON.stringify(SEND_LABEL)};
+    if (copy.textContent !== label) copy.textContent = label;
+    if (copy.disabled !== Boolean(b && b.disabled)) copy.disabled = Boolean(b && b.disabled);
+  };
+  document.addEventListener("click", function (event) {
+    if (!event.target.closest || event.target.closest(".mdv-review-copy") !== copy) return;
+    event.stopImmediatePropagation();
+    var b = send();
+    if (b) b.click();
+  }, true);
+  new MutationObserver(mirror).observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ["disabled"] });
+  mirror();
+})();
+`;
+
+export function sendFromReviewBar(page: string): string {
+  const i = page.lastIndexOf("</body>");
+  const snippet = `<script>${BAR_SEND_SCRIPT}</script>`;
+  return i < 0 ? page + snippet : page.slice(0, i) + snippet + page.slice(i);
+}
+
 export function injectSendButton(
   page: string,
   cfg: { request: string; stack?: string; patch?: string; shas: Record<string, string>; annotations?: Annotations; bugDrafts?: Record<PatchId, { summary: string; title: string; patches: PatchId[] }> },
