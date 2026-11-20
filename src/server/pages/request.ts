@@ -1105,7 +1105,7 @@ function reviewBox(r: RequestState, p: PatchView, interdiff: string | undefined)
     shown.length ? html`<h4 class="part">Review comments</h4>` : null
   }${shown.map((c) => {
     const draft = drafts.get(c.id);
-    return html`<div class="thread" data-comment="${c.id}"><div class="comment"><b>${c.author}</b>${c.file ? html` <span class="sub mono">${c.file}${c.line ? `:${c.line}` : ""}</span>` : null}${c.kind ? html` <span class="sub">(${c.kind})</span>` : null}: ${c.text}${
+    return html`<div class="thread" data-comment="${c.id}"><div class="comment"><b>${c.author}</b>${c.file ? html` <span class="sub mono">${c.file}${c.line ? `:${c.line}` : ""}</span>` : null}${c.kind ? html` <span class="sub">(${c.kind})</span>` : null}${md(c.text)}${
       c.suggestion ? html`<pre class="diff">${c.suggestion}</pre>` : null
     }</div>${c.author === p.review?.author ? null : answer(c.id)}${
       draft !== undefined

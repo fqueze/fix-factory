@@ -540,8 +540,9 @@ function toInline(c: PollResult["comments"][number], kind: InlineComment["kind"]
     author: c.author,
     ...(c.file ? { file: c.file } : {}),
     ...(c.line ? { line: c.line } : {}),
-    text: c.text.slice(0, 1000),
-    ...(c.suggestion ? { suggestion: c.suggestion.slice(0, 1000) } : {}),
+    // Whole: a reviewer's comment often carries the code it suggests.
+    text: c.text.slice(0, 20000),
+    ...(c.suggestion ? { suggestion: c.suggestion.slice(0, 20000) } : {}),
     done: c.done,
     ...(kind ? { kind } : {}),
   };

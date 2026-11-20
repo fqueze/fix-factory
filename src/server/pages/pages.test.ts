@@ -848,11 +848,14 @@ describe("one fixture per step of docs/MVP.md", () => {
     r.patches["p-focus"].replyDrafts = [{ commentId: 7, text: "Menus don't follow their anchor." }, { commentId: 10, text: "Moved it." }, { commentId: 12, text: "Its tail is now shared." }];
     r.jobs["j-ans"] = { job: "j-ans", kind: "agent", name: "address-review", item: r.patches["p-focus"].item, cwd: "/wt", cmd: [], startedAt: "2026-10-07T10:00:00.000Z", endedAt: "2026-10-07T10:05:00.000Z", exitCode: 0, purpose: { key: "k", what: "author", patch: "p-focus", comments: [7, 9, 10] }, said: "Renamed it, answered the rest." } as never;
     const row = rowOf(renderRequest(r, ctx, true).value, "patch-p-focus");
-    assert.match(row, /Why not CheckForAnchorChange\?<\/div><div class="draftreply">/, "its draft reply is its answer");
-    assert.match(row, /And this\?<\/div><div class="answer sub">not answered yet<\/div>/);
-    assert.match(row, /Rename it<\/div><div class="answer sub" title="Renamed it, answered the rest.">handled in the code, no reply<\/div>/);
+    assert.match(row, /Why not CheckForAnchorChange\?<\/p><\/div><\/div><div class="draftreply">/, "its draft reply is its answer");
+    assert.match(row, /And this\?<\/p><\/div><\/div><div class="answer sub">not answered yet<\/div>/);
+    assert.match(row, /Rename it<\/p><\/div><\/div><div class="answer sub" title="Renamed it, answered the rest.">handled in the code, no reply<\/div>/);
     assert.doesNotMatch(row, /Why here\?|Moved it/, "its reply is on Phabricator already");
     assert.doesNotMatch(row, /Why new code\?|tail is now shared/, "replied to and marked done there: a later draft is moot");
+    // Its text as Phabricator shows it: code in backticks and fenced blocks.
+    r.patches["p-focus"].review!.comments[1].text = "Use `mCount`:\n```\nuint32_t mCount = 0;\n```";
+    assert.match(rowOf(renderRequest(r, ctx, true).value, "patch-p-focus"), /<div class="md"><p>Use <code>mCount<\/code>:<\/p><pre>uint32_t mCount = 0;<\/pre><\/div>/);
   });
 
   it("9. review comments: a critical review's findings no author run took up are shown on the patch", () => {
