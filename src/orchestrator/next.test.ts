@@ -5220,6 +5220,34 @@ describe("10. landing: the reorg flag", () => {
     assert.deepEqual(sc.open().filter((k) => k.startsWith("land:")), [], "Phabricator has that order already");
   });
 
+  it("a rewrite that failed twice asks you; a later rewrite of the stack in another order that goes through answers it", () => {
+    const sc = inReview();
+    const [d100, d101] = polled("accepted");
+    sc.complete("poll:0", { output: [{ ...d100, status: "needs-review", reviewers: [{ name: "smaug", status: "pending" }] }, d101] });
+    sc.settle();
+    const key = sc.view().jobs.find((j) => j.purpose.key.startsWith("order-landable:"))!.purpose.key;
+    sc.complete(key, { output: { order: ["p-test-a", "p-test-b"], flippedSoftDeps: [], landable: ["p-test-a"] } });
+    const [rewrite] = sc.settle();
+    sc.complete(rewrite, { exitCode: 1, error: "a cherry-pick is in progress" });
+    sc.settle();
+    sc.complete(rewrite, { exitCode: 1, error: "a cherry-pick is in progress" });
+    sc.settle();
+    assert.equal(sc.open().filter((k) => k.startsWith("failed:")).length, 1);
+    // D100 gets accepted too: the stack is rewritten in another order, which goes through.
+    sc.now += 10 * 60_000;
+    sc.settle();
+    sc.complete("poll:1", { output: polled("accepted") });
+    sc.settle();
+    const again = sc.view().jobs.find((j) => j.purpose.key.startsWith("order-landable:") && j.purpose.key !== key)!.purpose.key;
+    sc.complete(again, { output: { order: ["p-test-a", "p-test-b"], flippedSoftDeps: [], landable: ["p-test-a", "p-test-b"] } });
+    const back = sc.settle().find((k) => k.startsWith("rewrite-land:"))!;
+    assert.notEqual(back, rewrite);
+    assert.equal(sc.open().filter((k) => k.startsWith("failed:")).length, 1, "still asked while the new one runs");
+    sc.complete(back, { output: { mapping: { [sha("f")]: sha("7"), [sha("e")]: sha("8") } } });
+    sc.settle();
+    assert.deepEqual(sc.open().filter((k) => k.startsWith("failed:")), []);
+  });
+
   it("asks for no reorg when the landing reorder gives back the order you submitted", () => {
     const { sc, key } = accepted();
     const { id, ...rest } = sc.state().stacks.root;

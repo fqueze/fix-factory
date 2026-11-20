@@ -402,6 +402,7 @@ function hasMessage(merged: string, message: string): boolean {
 class Planner {
   readonly actions: Action[] = [];
   private readonly startedKeys = new Set<string>();
+  private readonly wantedKeys = new Set<string>(); // the keys this run asked for (want)
   // Pushes whose failures are all pre-existing or infra (routeTryFailures, before stackGreen reads it).
   private readonly passing = new Set<PushId>();
   // Pushes whose final results were read, with the groups their failures point at (routeTryFailures).
@@ -489,6 +490,18 @@ class Planner {
     this.backouts();
     this.landing();
     this.testPlans();
+    this.supersededFailures();
+  }
+
+  // A ⚑ about a stack's job that failed, made moot by a later one of the same kind on the same stack that went
+  // through (a rewrite in another order): once nothing asks for the failed one's key anymore, it goes away.
+  private supersededFailures(): void {
+    for (const n of this.s.needsUser) {
+      const j = n.key.startsWith("failed:") ? this.view.jobs.find((x) => x.job === n.job) : undefined;
+      if (!j?.purpose.stack || this.wantedKeys.has(j.purpose.key)) continue;
+      const later = this.view.jobs.some((x) => x.purpose.what === j.purpose.what && x.purpose.stack === j.purpose.stack && x.startedAt > j.startedAt && succeeded(x));
+      if (later) this.clear(n.key);
+    }
   }
 
   // Each accepted patch's test plan for its revision: what showed the cause, the reproduction's rates, the try runs.
@@ -646,6 +659,7 @@ class Planner {
   // The latest successful job of the key; undefined while it's missing, running or failed.
   // Starts it when missing (make), retries a failure once, then raises failed:<job>.
   want(key: string, make?: () => JobPlan): JobRecord | undefined {
+    this.wantedKeys.add(key);
     if (this.startedKeys.has(key)) return undefined;
     const jobs = this.view.byKey.get(key) ?? [];
     const last = jobs.at(-1);
