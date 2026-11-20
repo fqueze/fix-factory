@@ -92,6 +92,7 @@ Cheapest first:
   needing a fresh session — one reproduced 4/15 in fresh runs and 0/20 under `--repeat`. A
   clean `--repeat` is not evidence.
 - On Linux, **`taskset -c 0,1`** emulates a saturated CI worker.
+- A slow CI disk: `--debugger=strace --debugger-args="-f -e inject=fsync,fdatasync:delay_exit=300000"`.
 
 Instrumentation can hide a race as easily as widen it. If it goes quiet when you add logging,
 consider logging into memory and printing later instead of doing I/O from the path you suspect.
