@@ -944,6 +944,14 @@ describe("one fixture per step of docs/MVP.md", () => {
     assert.doesNotMatch(focus, /meta-bug comment/i);
     // Its agent drafts one when you ask.
     assert.match(focus, /A meta bug is optional here: <form class="inline cmd"[^>]*><input type="hidden" name="command" value="\{&quot;cmd&quot;:&quot;draft-meta-bug&quot;[^>]*>.*?<button class="btn small">Draft it<\/button><\/form>, or paste the number of one you filed/);
+    // Asked, it says what the draft waits for rather than offering it again.
+    const asked = structuredClone(get("r-20261007-focus"));
+    asked.metaDraftAsked = true;
+    const item = Object.values(asked.items)[0];
+    item.state = "investigating";
+    assert.match(renderRequest(asked, ctx, true).value, new RegExp(`A meta bug is optional here: its draft is written once ${item.group.tests[0].split("/").pop()!.replace(/\./g, "\\.")} is done, or paste`));
+    item.state = "in stack";
+    assert.match(renderRequest(asked, ctx, true).value, /A meta bug is optional here: its draft is written once the stack is assembled, or paste/);
   });
 
   it("7. meta bug: its box says when it's optional, waits for the stack's other bugs, then links to file it", () => {

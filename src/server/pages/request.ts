@@ -7,6 +7,7 @@ import { isAnswered } from "../../state/landing.ts";
 import { escapeHtml, html, join, raw, type Html } from "../html.ts";
 import { actionsSummary, flagCopy, flagPlaceOf, renderAction, recoveryAnswers, pollPhabButton, pushDebugButton, verifyStackButton, redoAnnotationsButton, approvePushControls, bugBox, continueBox, copyButton, handBackButton, flagControls, flagItemOf, flagText, plannedLabel, recoveryPlanFor, hasAuthorSession, stackViewerLink, submitControls, summaryId, untakenFix } from "./actions.ts";
 import { answerTo } from "../review-annotations.ts";
+import { SETTLED } from "../../orchestrator/next.ts";
 import { groupJobs, jobLine } from "./activity.ts";
 import { flagAsk, itemBucket, itemSentence, needsYouDetail, progressLine, requestProgress, submittedDetail, type Bucket } from "./progress.ts";
 import {
@@ -339,10 +340,17 @@ function optionalMetaBug(r: RequestState, s: StackView, ctx: RenderContext): Htm
   if (r.metaBug || r.kind === "burndown") return null;
   const lead = stackNeedsMetaBug(stackPatches(r, s)) ? "This stack needs a meta bug, for its annotation patches" : "A meta bug is optional here";
   const drafting = Object.values(r.jobs).some((j) => j.name === "write-meta-bug" && j.endedAt === undefined);
+  // Asked, it's drafted from the stack once its items are done: until then, what it waits for.
+  const unsettled = Object.values(r.items).filter((i) => !SETTLED.includes(i.state));
+  const names = unsettled.map((i) => i.group.tests[0].split("/").pop()).join(", ");
   return html`<div class="metabug sub">${lead}: ${
     drafting
       ? "its draft is being written"
-      : html`<form class="inline cmd" method="post" action="/api/commands">${commandFields([{ cmd: "draft-meta-bug", request: r.id }], requestUrl(r.id))}<button class="btn small">Draft it</button></form>`
+      : r.metaDraftAsked
+        ? unsettled.length
+          ? `its draft is written once ${names} ${unsettled.length > 1 ? "are" : "is"} done`
+          : "its draft is written once the stack is assembled"
+        : html`<form class="inline cmd" method="post" action="/api/commands">${commandFields([{ cmd: "draft-meta-bug", request: r.id }], requestUrl(r.id))}<button class="btn small">Draft it</button></form>`
   }, or paste the number of one you filed ${bugBox(r.id, "meta", requestUrl(r.id))}</div>`;
 }
 
