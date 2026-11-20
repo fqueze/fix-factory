@@ -23,7 +23,7 @@
     },
     "question": {
       "type": "string",
-      "description": "A decision you leave to the user (something you found but didn't do, that's theirs to choose): the question, with the choices and what each means. The factory shows it to them as a flag on your group and resumes you with their answer. Not for anything you can decide yourself, nor for failures of other tests: those go in otherFailures."
+      "description": "A decision you leave to the user (something you found but didn't do, that's theirs to choose): the question, then the choices as a Markdown list, one per line, each saying what it means. The factory shows it to them as a flag on your group and resumes you with their answer. Not for anything you can decide yourself, nor for failures of other tests: those go in otherFailures."
     },
     "otherFailures": {
       "type": "array",
