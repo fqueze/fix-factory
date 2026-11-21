@@ -45,6 +45,20 @@
   }
   headerHeight();
   new ResizeObserver(headerHeight).observe(header);
+  // A link to a part of the page (the agents list's, a ⚑'s) opens it and the folds it's in, its request first, then
+  // scrolls to it: inside a closed one, it would land wherever that fold is. Its dropdown closes.
+  function goTo(target) {
+    for (var d = target.closest("details"); d; d = d.parentElement && d.parentElement.closest("details")) d.open = true;
+    target.scrollIntoView();
+  }
+  document.addEventListener("click", function (event) {
+    var a = event.target.closest && event.target.closest('a[href^="#"]');
+    var target = a && a.hash.length > 1 && document.getElementById(decodeURIComponent(a.hash.slice(1)));
+    if (!target) return;
+    event.preventDefault();
+    a.blur();
+    goTo(target);
+  });
   // What you opened (requests, and folded parts of them: rows, closed groups, an agent's activity) stays
   // open when a request is re-rendered, and in the URL's hash, so a reload (after the server restarted on
   // new code) opens it again.
