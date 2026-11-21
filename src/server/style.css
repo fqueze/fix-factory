@@ -21,6 +21,8 @@ a { color: var(--link); text-decoration: none; }
 a:visited:not(.btn) { color: var(--visited); }
 a:hover { text-decoration: underline; }
 code, .mono { font-family: ui-monospace, Menlo, monospace; font-size: 12px; }
+/* A link to a part of the page scrolls it under the sticky header, not behind it. */
+html { scroll-padding-top: calc(var(--header-height, 48px) + 8px); }
 header { background: var(--surface-1); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 2; }
 .hwrap { max-width: 1100px; margin: 0 auto; padding: 8px 12px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
 header h1 { font-size: 16px; margin: 0; }

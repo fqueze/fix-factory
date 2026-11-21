@@ -21,6 +21,8 @@ function loadPage(visibilityState: "visible" | "hidden", fields: Field[] = []) {
     visibilityState,
     body: { dataset: { boot: "1" } },
     activeElement: null as Field | null,
+    documentElement: { style: { setProperty() {} } },
+    querySelector: (selector: string) => (selector === "header" ? { offsetHeight: 48 } : null),
     querySelectorAll: (selector: string) => {
       selectors.push(selector);
       return selector === "input[type=text], textarea:not([hidden])" ? fields.filter((f) => !f.hidden) : [];
@@ -43,6 +45,9 @@ function loadPage(visibilityState: "visible" | "hidden", fields: Field[] = []) {
     fetch(url: string, init: { body: string; keepalive?: boolean }) {
       sent.push({ url, body: JSON.parse(init.body), keepalive: init.keepalive });
       return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true }) });
+    },
+    ResizeObserver: class {
+      observe() {}
     },
     setInterval,
     clearInterval,

@@ -38,6 +38,13 @@
     });
   }
 
+  // The header's height, which wraps on narrow windows, for the room scrolling to a link leaves above it.
+  var header = document.querySelector("header");
+  function headerHeight() {
+    document.documentElement.style.setProperty("--header-height", header.offsetHeight + "px");
+  }
+  headerHeight();
+  new ResizeObserver(headerHeight).observe(header);
   // What you opened (requests, and folded parts of them: rows, closed groups, an agent's activity) stays
   // open when a request is re-rendered, and in the URL's hash, so a reload (after the server restarted on
   // new code) opens it again.
